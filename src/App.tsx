@@ -29,7 +29,7 @@ export default function App() {
     <main className="app-shell">
       <div className="topbar">
         <strong>Dawnreach</strong>
-        <span>POC 0.1 — click-to-move</span>
+        <span>POC 0.3 — Alden 3D refinement</span>
       </div>
       <div ref={hostRef} className="game-host" />
       <div className="hint">Right click anywhere on the arena to move Alden.</div>
