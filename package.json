@@ -1,7 +1,7 @@
 {
   "name": "dawnreach",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,8 @@
     "@tauri-apps/api": "^2.0.0",
     "pixi.js": "^8.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
