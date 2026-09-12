@@ -31,7 +31,7 @@ const VIEW_HEIGHT = 18;
 export async function createDawnreachGame(host: HTMLDivElement) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a2820);
-  scene.fog = new THREE.Fog(0x1a2820, 22, 42);
+  scene.fog = new THREE.Fog(0x1a2820, 23, 43);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -39,7 +39,7 @@ export async function createDawnreachGame(host: HTMLDivElement) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.08;
   renderer.domElement.className = 'game-canvas';
   renderer.domElement.style.display = 'block';
   renderer.domElement.style.width = '100%';
@@ -54,9 +54,7 @@ export async function createDawnreachGame(host: HTMLDivElement) {
 
   const textures = createProceduralTextures();
   const materials = createHeroMaterials(textures);
-
-  const arena = buildArena(textures);
-  scene.add(arena);
+  scene.add(buildArena(textures));
 
   const hero = buildAlden(materials);
   hero.root.position.set(0, 0.03, 1.2);
@@ -109,7 +107,6 @@ export async function createDawnreachGame(host: HTMLDivElement) {
     camera.top = halfH;
     camera.bottom = -halfH;
     camera.updateProjectionMatrix();
-
     renderer.setSize(width, height, false);
   };
 
@@ -175,16 +172,13 @@ export async function createDawnreachGame(host: HTMLDivElement) {
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       disposeScene(scene);
       renderer.dispose();
-      if (renderer.domElement.parentElement === host) {
-        host.removeChild(renderer.domElement);
-      }
+      if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
     },
   };
 }
 
 function addLighting(scene: THREE.Scene) {
-  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x31402b, 1.45);
-  scene.add(hemi);
+  scene.add(new THREE.HemisphereLight(0xbfd8ff, 0x31402b, 1.45));
 
   const sun = new THREE.DirectionalLight(0xfff0cc, 3.6);
   sun.position.set(-8, 16, 10);
@@ -198,7 +192,7 @@ function addLighting(scene: THREE.Scene) {
   sun.shadow.camera.far = 45;
   scene.add(sun);
 
-  const fill = new THREE.DirectionalLight(0x6f91ff, 0.75);
+  const fill = new THREE.DirectionalLight(0x6f91ff, 0.72);
   fill.position.set(12, 7, -10);
   scene.add(fill);
 }
@@ -233,16 +227,16 @@ function createProceduralTextures() {
 
     steel: makeCanvasTexture(128, (ctx, size) => {
       const gradient = ctx.createLinearGradient(0, 0, size, 0);
-      gradient.addColorStop(0, '#727d86');
-      gradient.addColorStop(0.28, '#e8edf0');
-      gradient.addColorStop(0.48, '#99a4ab');
-      gradient.addColorStop(0.72, '#f0f4f6');
-      gradient.addColorStop(1, '#667078');
+      gradient.addColorStop(0, '#68737d');
+      gradient.addColorStop(0.23, '#eef2f4');
+      gradient.addColorStop(0.46, '#929da5');
+      gradient.addColorStop(0.73, '#f5f7f8');
+      gradient.addColorStop(1, '#626c74');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, size, size);
-      for (let i = 0; i < 160; i += 1) {
+      for (let i = 0; i < 150; i += 1) {
         const y = Math.random() * size;
-        ctx.strokeStyle = `rgba(255,255,255,${Math.random() * 0.10})`;
+        ctx.strokeStyle = `rgba(255,255,255,${Math.random() * 0.09})`;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(size, y + (Math.random() - 0.5) * 2);
@@ -252,27 +246,27 @@ function createProceduralTextures() {
 
     gold: makeCanvasTexture(128, (ctx, size) => {
       const gradient = ctx.createLinearGradient(0, 0, size, size);
-      gradient.addColorStop(0, '#a77121');
-      gradient.addColorStop(0.32, '#f6d77b');
-      gradient.addColorStop(0.55, '#c99334');
-      gradient.addColorStop(0.82, '#ffe59b');
-      gradient.addColorStop(1, '#8f611e');
+      gradient.addColorStop(0, '#9e6b20');
+      gradient.addColorStop(0.3, '#f7dc83');
+      gradient.addColorStop(0.55, '#c89232');
+      gradient.addColorStop(0.82, '#ffe79f');
+      gradient.addColorStop(1, '#8b5d1b');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, size, size);
     }, 2, 2),
 
     cloth: makeCanvasTexture(128, (ctx, size) => {
-      ctx.fillStyle = '#2457a1';
+      ctx.fillStyle = '#2257a4';
       ctx.fillRect(0, 0, size, size);
       for (let x = 0; x < size; x += 4) {
-        ctx.strokeStyle = x % 8 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.035)';
+        ctx.strokeStyle = x % 8 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, size);
         ctx.stroke();
       }
       for (let y = 0; y < size; y += 5) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.018)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.02)';
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(size, y);
@@ -281,7 +275,7 @@ function createProceduralTextures() {
     }, 3, 3),
 
     leather: makeCanvasTexture(128, (ctx, size) => {
-      ctx.fillStyle = '#664426';
+      ctx.fillStyle = '#654326';
       ctx.fillRect(0, 0, size, size);
       for (let i = 0; i < 250; i += 1) {
         const x = Math.random() * size;
@@ -319,6 +313,7 @@ function makeCanvasTexture(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   draw(ctx, size);
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
@@ -330,14 +325,14 @@ function makeCanvasTexture(
 
 function createHeroMaterials(textures: ReturnType<typeof createProceduralTextures>): DawnreachMaterials {
   return {
-    steel: new THREE.MeshStandardMaterial({ map: textures.steel, metalness: 0.72, roughness: 0.28 }),
-    steelDark: new THREE.MeshStandardMaterial({ color: 0x49515a, metalness: 0.6, roughness: 0.38 }),
-    gold: new THREE.MeshStandardMaterial({ map: textures.gold, metalness: 0.72, roughness: 0.24 }),
-    blue: new THREE.MeshStandardMaterial({ map: textures.cloth, color: 0xffffff, roughness: 0.82 }),
-    blueDark: new THREE.MeshStandardMaterial({ color: 0x163b73, roughness: 0.86 }),
-    leather: new THREE.MeshStandardMaterial({ map: textures.leather, roughness: 0.9 }),
+    steel: new THREE.MeshStandardMaterial({ map: textures.steel, metalness: 0.72, roughness: 0.27 }),
+    steelDark: new THREE.MeshStandardMaterial({ color: 0x46505a, metalness: 0.58, roughness: 0.4 }),
+    gold: new THREE.MeshStandardMaterial({ map: textures.gold, metalness: 0.74, roughness: 0.23 }),
+    blue: new THREE.MeshStandardMaterial({ map: textures.cloth, color: 0xffffff, roughness: 0.84 }),
+    blueDark: new THREE.MeshStandardMaterial({ color: 0x15396e, roughness: 0.88 }),
+    leather: new THREE.MeshStandardMaterial({ map: textures.leather, roughness: 0.92 }),
     chain: new THREE.MeshStandardMaterial({ map: textures.chain, metalness: 0.35, roughness: 0.62 }),
-    visor: new THREE.MeshStandardMaterial({ color: 0x100e0b, metalness: 0.1, roughness: 0.35 }),
+    visor: new THREE.MeshStandardMaterial({ color: 0x100e0b, metalness: 0.12, roughness: 0.34 }),
     skin: new THREE.MeshStandardMaterial({ color: 0xd9b991, roughness: 0.82 }),
   };
 }
@@ -345,14 +340,18 @@ function createHeroMaterials(textures: ReturnType<typeof createProceduralTexture
 function buildArena(textures: ReturnType<typeof createProceduralTextures>) {
   const arena = new THREE.Group();
 
-  const groundMat = new THREE.MeshStandardMaterial({ map: textures.grass, roughness: 1 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(42, 32), groundMat);
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(42, 32),
+    new THREE.MeshStandardMaterial({ map: textures.grass, roughness: 1 }),
+  );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   arena.add(ground);
 
-  const laneMat = new THREE.MeshStandardMaterial({ map: textures.lane, roughness: 0.95 });
-  const lane = new THREE.Mesh(new THREE.PlaneGeometry(34, 5.8), laneMat);
+  const lane = new THREE.Mesh(
+    new THREE.PlaneGeometry(34, 5.8),
+    new THREE.MeshStandardMaterial({ map: textures.lane, roughness: 0.95 }),
+  );
   lane.rotation.x = -Math.PI / 2;
   lane.rotation.z = -0.29;
   lane.position.y = 0.018;
@@ -377,7 +376,6 @@ function buildArena(textures: ReturnType<typeof createProceduralTextures>) {
 
   arena.add(buildPillar(-7.3, -2.8));
   arena.add(buildPillar(8.0, 2.7));
-
   return arena;
 }
 
@@ -397,7 +395,10 @@ function buildTree(x: number, z: number, scale: number) {
   const foliageMat = new THREE.MeshStandardMaterial({ color: 0x285036, roughness: 1 });
   const crownA = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9, 1), foliageMat);
   const crownB = new THREE.Mesh(new THREE.DodecahedronGeometry(0.75, 1), foliageMat);
-  const crownC = new THREE.Mesh(new THREE.DodecahedronGeometry(0.67, 1), new THREE.MeshStandardMaterial({ color: 0x356141, roughness: 1 }));
+  const crownC = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(0.67, 1),
+    new THREE.MeshStandardMaterial({ color: 0x356141, roughness: 1 }),
+  );
   crownA.position.set(0, 1.55, 0);
   crownB.position.set(-0.52, 1.45, 0.12);
   crownC.position.set(0.5, 1.5, -0.1);
@@ -421,6 +422,7 @@ function buildPillar(x: number, z: number) {
   shaft.position.y = 1.0;
   const cap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.22, 0.72), stoneMat);
   cap.position.y = 1.82;
+
   for (const part of [base, shaft, cap]) {
     part.castShadow = true;
     part.receiveShadow = true;
@@ -454,51 +456,88 @@ function buildAlden(materials: DawnreachMaterials): HeroRig {
   root.add(selection);
 
   const label = buildHeroLabel();
-  label.position.set(0, 3.15, 0);
+  label.position.set(0, 3.18, 0);
   root.add(label);
 
   const leftLeg = buildLeg(materials, -0.21);
   const rightLeg = buildLeg(materials, 0.21);
   model.add(leftLeg, rightLeg);
 
-  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.39, 0.35, 10), materials.chain);
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.39, 0.35, 12), materials.chain);
   hips.position.y = 1.1;
-  hips.castShadow = true;
   model.add(hips);
 
   const torso = new THREE.Group();
   torso.position.y = 1.63;
   model.add(torso);
 
-  const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.53, 0.9, 10), materials.steelDark);
-  chest.scale.z = 0.72;
+  const breastplateProfile = [
+    new THREE.Vector2(0.31, -0.43),
+    new THREE.Vector2(0.36, -0.31),
+    new THREE.Vector2(0.41, -0.05),
+    new THREE.Vector2(0.47, 0.24),
+    new THREE.Vector2(0.44, 0.40),
+  ];
+  const chest = new THREE.Mesh(new THREE.LatheGeometry(breastplateProfile, 20), materials.steelDark);
+  chest.scale.z = 0.70;
   chest.castShadow = true;
   torso.add(chest);
 
-  const chestCloth = new THREE.Mesh(new THREE.BoxGeometry(0.57, 0.69, 0.055), materials.blue);
-  chestCloth.position.set(0, -0.02, 0.355);
-  chestCloth.castShadow = true;
-  torso.add(chestCloth);
+  const tabardShape = new THREE.Shape();
+  tabardShape.moveTo(-0.30, 0.31);
+  tabardShape.quadraticCurveTo(-0.28, 0.02, -0.23, -0.37);
+  tabardShape.lineTo(0.23, -0.37);
+  tabardShape.quadraticCurveTo(0.28, 0.02, 0.30, 0.31);
+  tabardShape.closePath();
+  const tabard = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(tabardShape, { depth: 0.035, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.012, bevelSegments: 2 }),
+    materials.blue,
+  );
+  tabard.position.set(0, 0, 0.325);
+  tabard.castShadow = true;
+  torso.add(tabard);
 
-  const goldVertical = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.68, 0.065), materials.gold);
-  goldVertical.position.set(0, -0.02, 0.39);
-  torso.add(goldVertical);
+  const leftTrim = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.68, 0.045), materials.gold);
+  leftTrim.position.set(-0.264, -0.02, 0.365);
+  leftTrim.rotation.z = -0.075;
+  const rightTrim = leftTrim.clone();
+  rightTrim.position.x = 0.264;
+  rightTrim.rotation.z = 0.075;
+  torso.add(leftTrim, rightTrim);
 
-  const waistBelt = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.14, 0.16), materials.leather);
-  waistBelt.position.set(0, -0.47, 0.1);
-  waistBelt.castShadow = true;
+  const emblemShape = new THREE.Shape();
+  emblemShape.moveTo(0, 0.17);
+  emblemShape.lineTo(0.055, 0.055);
+  emblemShape.lineTo(0.022, 0.01);
+  emblemShape.lineTo(0, -0.17);
+  emblemShape.lineTo(-0.022, 0.01);
+  emblemShape.lineTo(-0.055, 0.055);
+  emblemShape.closePath();
+  const chestEmblem = new THREE.Mesh(new THREE.ShapeGeometry(emblemShape), materials.gold);
+  chestEmblem.position.set(0, 0.02, 0.374);
+  torso.add(chestEmblem);
+
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.035, 7, 26, Math.PI), materials.gold);
+  collar.rotation.set(Math.PI / 2, 0, Math.PI);
+  collar.position.set(0, 0.34, 0.10);
+  collar.scale.z = 0.72;
+  torso.add(collar);
+
+  const waistBelt = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.14, 18), materials.leather);
+  waistBelt.scale.z = 0.73;
+  waistBelt.position.y = -0.43;
   torso.add(waistBelt);
 
   const buckle = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.055, 20), materials.gold);
   buckle.rotation.x = Math.PI / 2;
-  buckle.position.set(0, -0.47, 0.42);
+  buckle.position.set(0, -0.43, 0.30);
   torso.add(buckle);
 
-  addShoulder(torso, materials, -0.56);
-  addShoulder(torso, materials, 0.56);
+  addShoulder(torso, materials, -0.53);
+  addShoulder(torso, materials, 0.53);
 
-  const leftArm = buildArm(materials, -0.57, false);
-  const rightArm = buildArm(materials, 0.57, true);
+  const leftArm = buildArm(materials, -0.54, false);
+  const rightArm = buildArm(materials, 0.54, true);
   torso.add(leftArm, rightArm);
 
   const cape = buildCape(materials);
@@ -513,8 +552,8 @@ function buildAlden(materials: DawnreachMaterials): HeroRig {
   torso.add(head);
 
   const sword = buildSword(materials);
-  sword.position.set(0.03, -0.86, 0.04);
-  sword.rotation.set(-0.06, 0, -0.56);
+  sword.position.set(0.02, -1.02, 0.03);
+  sword.rotation.set(-0.10, 0.08, -1.03);
   rightArm.add(sword);
 
   model.traverse((obj) => {
@@ -553,7 +592,6 @@ function buildLeg(materials: DawnreachMaterials, x: number) {
   boot.scale.set(0.9, 0.55, 1.4);
   boot.position.set(0, -1.11, 0.1);
   pivot.add(boot);
-
   return pivot;
 }
 
@@ -561,58 +599,67 @@ function buildArm(materials: DawnreachMaterials, x: number, swordArm: boolean) {
   const pivot = new THREE.Group();
   pivot.position.set(x, 0.28, 0);
 
-  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.52, 10), materials.chain);
+  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.145, 0.51, 12), materials.chain);
   upper.position.y = -0.25;
   pivot.add(upper);
 
-  const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), materials.steel);
+  const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 8), materials.steel);
   elbow.position.y = -0.52;
   pivot.add(elbow);
 
-  const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.145, 0.48, 10), materials.steel);
+  const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.14, 0.47, 12), materials.steel);
   forearm.position.y = -0.75;
   pivot.add(forearm);
 
   const glove = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), materials.leather);
-  glove.scale.y = 0.9;
+  glove.scale.set(0.92, 0.9, 1.08);
   glove.position.y = -1.02;
   pivot.add(glove);
 
   pivot.rotation.z = x < 0 ? 0.08 : -0.08;
-  if (swordArm) pivot.rotation.x = -0.12;
+  if (swordArm) pivot.rotation.x = -0.08;
   return pivot;
 }
 
 function addShoulder(torso: THREE.Group, materials: DawnreachMaterials, x: number) {
-  const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.31, 16, 10), materials.steel);
-  pauldron.scale.set(1.25, 0.62, 1.0);
-  pauldron.position.set(x, 0.3, 0);
+  const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.28, 18, 12), materials.steel);
+  pauldron.scale.set(1.28, 0.62, 1.02);
+  pauldron.position.set(x, 0.28, 0);
   torso.add(pauldron);
 
-  const trim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 7, 18, Math.PI), materials.gold);
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(0.215, 0.032, 7, 20, Math.PI), materials.gold);
   trim.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-  trim.position.set(x, 0.31, 0.02);
+  trim.position.set(x, 0.29, 0.02);
   torso.add(trim);
 }
 
 function buildHelmet(materials: DawnreachMaterials) {
   const group = new THREE.Group();
 
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 14), materials.steel);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), materials.steel);
   helmet.scale.set(0.92, 1.12, 0.93);
   group.add(helmet);
 
-  const facePlate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.36, 0.09), materials.steel);
-  facePlate.position.set(0, -0.06, 0.292);
-  facePlate.rotation.x = -0.06;
+  const facePlateShape = new THREE.Shape();
+  facePlateShape.moveTo(-0.23, 0.15);
+  facePlateShape.lineTo(0.23, 0.15);
+  facePlateShape.lineTo(0.20, -0.15);
+  facePlateShape.lineTo(0, -0.24);
+  facePlateShape.lineTo(-0.20, -0.15);
+  facePlateShape.closePath();
+  const facePlate = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(facePlateShape, { depth: 0.065, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.01, bevelSegments: 2 }),
+    materials.steel,
+  );
+  facePlate.position.set(0, -0.04, 0.285);
   group.add(facePlate);
 
   const visor = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.045, 0.025), materials.visor);
-  visor.position.set(0, 0.02, 0.35);
+  visor.position.set(0, 0.02, 0.36);
   group.add(visor);
 
   const visorVertical = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.026), materials.visor);
-  visorVertical.position.set(0, -0.09, 0.352);
+  visorVertical.position.set(0, -0.09, 0.362);
   group.add(visorVertical);
 
   const crest = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.58, 4), materials.gold);
@@ -621,58 +668,82 @@ function buildHelmet(materials: DawnreachMaterials) {
   group.add(crest);
 
   const brow = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.055, 0.06), materials.gold);
-  brow.position.set(0, 0.11, 0.33);
+  brow.position.set(0, 0.11, 0.34);
   group.add(brow);
-
   return group;
 }
 
 function buildCape(materials: DawnreachMaterials) {
   const group = new THREE.Group();
-  group.position.set(0, 0.08, -0.39);
-  group.rotation.x = 0.10;
+  group.position.set(0, 0.20, -0.34);
+  group.rotation.x = 0.11;
 
-  const geometry = new THREE.PlaneGeometry(1.08, 1.65, 4, 6);
+  const width = 1.28;
+  const height = 1.82;
+  const geometry = new THREE.PlaneGeometry(width, height, 8, 10);
   const pos = geometry.attributes.position as THREE.BufferAttribute;
+
   for (let i = 0; i < pos.count; i += 1) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const normalized = (y + 0.825) / 1.65;
-    const curve = (1 - normalized) * 0.16;
-    pos.setZ(i, -curve - Math.abs(x) * 0.04);
+    const originalX = pos.getX(i);
+    const originalY = pos.getY(i);
+    const t = (originalY + height / 2) / height;
+    const halfBase = width / 2;
+    const normalizedX = originalX / halfBase;
+    const widthScale = 1.00 - t * 0.30;
+    const shapedX = originalX * widthScale;
+    const sideLift = Math.pow(Math.abs(normalizedX), 1.8) * (1 - t) * 0.13;
+    const bottomWave = (1 - t) * (0.035 * Math.cos(normalizedX * Math.PI * 2));
+    const shapedY = originalY + sideLift + bottomWave;
+    const drape = -(1 - t) * 0.22 - Math.abs(normalizedX) * 0.045;
+    const fold = Math.sin(normalizedX * Math.PI * 2.2) * 0.035 * (1 - t * 0.35);
+    pos.setXYZ(i, shapedX, shapedY, drape + fold);
   }
   geometry.computeVertexNormals();
 
-  const capeMesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({
-      map: materials.blue.map,
-      color: 0xffffff,
-      roughness: 0.88,
-      side: THREE.DoubleSide,
-    }),
-  );
-  capeMesh.position.y = -0.35;
+  const capeMat = new THREE.MeshStandardMaterial({
+    map: materials.blue.map,
+    color: 0xffffff,
+    roughness: 0.9,
+    side: THREE.DoubleSide,
+  });
+  const capeMesh = new THREE.Mesh(geometry, capeMat);
+  capeMesh.position.y = -0.57;
   group.add(capeMesh);
 
-  const trimLeft = new THREE.Mesh(new THREE.BoxGeometry(0.045, 1.5, 0.025), materials.gold);
-  const trimRight = trimLeft.clone();
-  trimLeft.position.set(-0.49, -0.35, 0.005);
-  trimRight.position.set(0.49, -0.35, 0.005);
-  group.add(trimLeft, trimRight);
+  const edgeLeft = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.43, 0.29, 0.015),
+    new THREE.Vector3(-0.50, -0.25, -0.07),
+    new THREE.Vector3(-0.61, -1.40, -0.23),
+  ]);
+  const edgeRight = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.43, 0.29, 0.015),
+    new THREE.Vector3(0.50, -0.25, -0.07),
+    new THREE.Vector3(0.61, -1.40, -0.23),
+  ]);
+  const bottomEdge = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.61, -1.40, -0.23),
+    new THREE.Vector3(-0.31, -1.48, -0.27),
+    new THREE.Vector3(0, -1.50, -0.28),
+    new THREE.Vector3(0.31, -1.48, -0.27),
+    new THREE.Vector3(0.61, -1.40, -0.23),
+  ]);
+
+  for (const curve of [edgeLeft, edgeRight, bottomEdge]) {
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.022, 6, false), materials.gold));
+  }
 
   const emblemShape = new THREE.Shape();
-  emblemShape.moveTo(0, 0.26);
-  emblemShape.lineTo(0.11, 0.03);
+  emblemShape.moveTo(0, 0.28);
+  emblemShape.lineTo(0.11, 0.04);
   emblemShape.lineTo(0.05, -0.02);
-  emblemShape.lineTo(0, -0.22);
+  emblemShape.lineTo(0, -0.25);
   emblemShape.lineTo(-0.05, -0.02);
-  emblemShape.lineTo(-0.11, 0.03);
+  emblemShape.lineTo(-0.11, 0.04);
   emblemShape.closePath();
   const emblem = new THREE.Mesh(new THREE.ShapeGeometry(emblemShape), materials.gold);
-  emblem.position.set(0, -0.3, 0.018);
+  emblem.position.set(0, -0.43, -0.235);
   emblem.rotation.y = Math.PI;
-  emblem.scale.setScalar(1.3);
+  emblem.scale.setScalar(1.35);
   group.add(emblem);
 
   return group;
@@ -681,26 +752,43 @@ function buildCape(materials: DawnreachMaterials) {
 function buildSword(materials: DawnreachMaterials) {
   const sword = new THREE.Group();
 
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.11, 1.28, 0.055), materials.steel);
-  blade.position.y = -0.74;
-  sword.add(blade);
-
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.078, 0.28, 4), materials.steel);
-  tip.position.y = -1.52;
-  tip.rotation.y = Math.PI / 4;
-  sword.add(tip);
-
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.09, 0.10), materials.gold);
-  guard.position.y = -0.05;
-  sword.add(guard);
-
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.35, 10), materials.leather);
-  grip.position.y = 0.17;
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.32, 10), materials.leather);
+  grip.position.y = 0;
   sword.add(grip);
 
-  const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), materials.gold);
-  pommel.position.y = 0.39;
+  const gripWrap = new THREE.Mesh(new THREE.TorusGeometry(0.057, 0.013, 5, 12), materials.gold);
+  gripWrap.rotation.x = Math.PI / 2;
+  gripWrap.position.y = 0.10;
+  sword.add(gripWrap);
+
+  const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.105, 0), materials.gold);
+  pommel.position.y = -0.23;
   sword.add(pommel);
+
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.085, 0.11), materials.gold);
+  guard.position.y = 0.22;
+  sword.add(guard);
+
+  const guardTipsLeft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.20, 5), materials.gold);
+  guardTipsLeft.rotation.z = -Math.PI / 2;
+  guardTipsLeft.position.set(-0.34, 0.22, 0);
+  const guardTipsRight = guardTipsLeft.clone();
+  guardTipsRight.rotation.z = Math.PI / 2;
+  guardTipsRight.position.x = 0.34;
+  sword.add(guardTipsLeft, guardTipsRight);
+
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.22, 0.055), materials.steel);
+  blade.position.y = 0.875;
+  sword.add(blade);
+
+  const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.024, 1.10, 0.061), materials.steelDark);
+  fuller.position.set(0, 0.86, 0);
+  sword.add(fuller);
+
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.086, 0.30, 4), materials.steel);
+  tip.position.y = 1.63;
+  tip.rotation.y = Math.PI / 4;
+  sword.add(tip);
 
   return sword;
 }
@@ -764,7 +852,6 @@ function buildTargetMarker() {
   inner.rotation.x = -Math.PI / 2;
   inner.position.y = 0.003;
   group.add(inner);
-
   return group;
 }
 
@@ -776,37 +863,44 @@ function animateHero(rig: HeroRig, elapsed: number, moving: boolean) {
 
     rig.leftLeg.rotation.x = stride * 0.47;
     rig.rightLeg.rotation.x = counter * 0.47;
-    rig.leftArm.rotation.x = counter * 0.25;
-    rig.rightArm.rotation.x = stride * 0.18 - 0.12;
+    rig.leftArm.rotation.x = counter * 0.24;
+    rig.rightArm.rotation.x = stride * 0.13 - 0.08;
     rig.model.position.y = bob;
     rig.model.rotation.z = stride * 0.018;
-    rig.cape.rotation.x = 0.13 + Math.abs(stride) * 0.07;
-    rig.cape.rotation.z = stride * 0.025;
-    rig.sword.rotation.z = -0.56 + stride * 0.07;
+    rig.cape.rotation.x = 0.13 + Math.abs(stride) * 0.075;
+    rig.cape.rotation.z = stride * 0.026;
+    rig.sword.rotation.z = -1.03 + stride * 0.045;
   } else {
     const breathe = Math.sin(elapsed * 2.25);
     rig.leftLeg.rotation.x *= 0.80;
     rig.rightLeg.rotation.x *= 0.80;
     rig.leftArm.rotation.x *= 0.82;
-    rig.rightArm.rotation.x += (-0.12 - rig.rightArm.rotation.x) * 0.18;
+    rig.rightArm.rotation.x += (-0.08 - rig.rightArm.rotation.x) * 0.18;
     rig.model.position.y = breathe * 0.012;
     rig.model.rotation.z *= 0.85;
-    rig.cape.rotation.x = 0.10 + Math.sin(elapsed * 1.7) * 0.018;
-    rig.cape.rotation.z = Math.sin(elapsed * 1.4) * 0.01;
-    rig.sword.rotation.z += (-0.56 - rig.sword.rotation.z) * 0.18;
+    rig.cape.rotation.x = 0.11 + Math.sin(elapsed * 1.7) * 0.020;
+    rig.cape.rotation.z = Math.sin(elapsed * 1.4) * 0.012;
+    rig.sword.rotation.z += (-1.03 - rig.sword.rotation.z) * 0.18;
   }
 }
 
 function disposeScene(scene: THREE.Scene) {
+  const disposedTextures = new Set<THREE.Texture>();
+  const disposedMaterials = new Set<THREE.Material>();
+
   scene.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh || obj instanceof THREE.Sprite)) return;
-
     if (obj instanceof THREE.Mesh) obj.geometry.dispose();
 
     const material = obj.material;
     const disposeMaterial = (mat: THREE.Material) => {
+      if (disposedMaterials.has(mat)) return;
+      disposedMaterials.add(mat);
       const withMap = mat as THREE.Material & { map?: THREE.Texture | null };
-      withMap.map?.dispose();
+      if (withMap.map && !disposedTextures.has(withMap.map)) {
+        disposedTextures.add(withMap.map);
+        withMap.map.dispose();
+      }
       mat.dispose();
     };
 
