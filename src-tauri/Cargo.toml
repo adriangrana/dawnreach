@@ -1,0 +1,18 @@
+[package]
+name = "dawnreach"
+version = "0.1.0"
+description = "Dawnreach MOBA proof of concept"
+authors = ["Dawnreach"]
+edition = "2021"
+
+[lib]
+name = "dawnreach_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
