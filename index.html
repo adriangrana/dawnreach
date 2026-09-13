@@ -7,10 +7,67 @@
     <meta name="author" content="Dawnreach Team" />
     <meta name="keywords" content="Dawnreach, gaming, immersive experience" />
     <meta name="robots" content="index, follow" />
-    <link rel="icon" href="/public/assets/icon/dawnreach.png" type="image/png" />
+    <link rel="icon" href="/assets/icon/dawnreach.png" type="image/png" />
+    <link
+      rel="preload"
+      href="/assets/images/dawnreach_loading_splash.webp"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+    />
     <title>Dawnreach</title>
+    <style>
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        background: #020712;
+      }
+
+      #dawnreach-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background: #020712;
+        opacity: 1;
+        cursor: wait;
+        transition: opacity 240ms ease;
+      }
+
+      #dawnreach-boot-splash.is-ready {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #dawnreach-boot-splash img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        user-select: none;
+        pointer-events: none;
+      }
+    </style>
   </head>
   <body>
+    <div id="dawnreach-boot-splash" role="status" aria-label="Loading Dawnreach">
+      <img
+        src="/assets/images/dawnreach_loading_splash.webp"
+        alt=""
+        draggable="false"
+        fetchpriority="high"
+        decoding="async"
+      />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
