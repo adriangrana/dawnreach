@@ -21,6 +21,7 @@ import type {
 const TEAMS: readonly TeamId[] = ['dawn', 'dusk'];
 const SLOT_INDEXES: readonly TeamSlotIndex[] = [1, 2, 3, 4, 5];
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
+export const HERO_STARTING_GOLD = 600;
 
 export function createMatchSlots(): MatchSlotState[] {
   return TEAMS.flatMap(team => SLOT_INDEXES.map(index => ({
@@ -121,6 +122,9 @@ export function assignSelectedHeroToPlayer(
     slotId: sourcePlayer.slotId,
     level: 1,
     experience: 0,
+    gold: HERO_STARTING_GOLD,
+    lastHits: 0,
+    denies: 0,
     currentHp: stats.maxHp,
     currentResource: stats.maxResource,
     abilityRanks: createEmptyAbilityRanks(),
@@ -259,6 +263,9 @@ export function validateMatchState(state: MatchState): void {
     const definition = getHeroDefinition(hero.definitionId);
     if (hero.level < 1 || hero.level > definition.maxLevel) {
       throw new Error(`Hero ${hero.heroEntityId} has invalid level ${hero.level}.`);
+    }
+    if (hero.gold < 0 || hero.lastHits < 0 || hero.denies < 0 || hero.experience < 0) {
+      throw new Error(`Hero ${hero.heroEntityId} has invalid progression state.`);
     }
     assertAbilityAllocationFitsLevel(hero, definition, hero.level);
   }
