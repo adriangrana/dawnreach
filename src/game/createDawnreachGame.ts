@@ -228,6 +228,7 @@ export async function createDawnreachGame(
     hero.root.position.z,
     0,
   ) + HERO_GROUND_OFFSET;
+  const heroSpawnSurfaceY = hero.root.position.y;
 
   let destination: Point3 | null = null;
   let currentPath: Point3[] = [];
@@ -448,16 +449,23 @@ export async function createDawnreachGame(
 
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0 && event.button !== 2) return;
-    if (isHeroMovementLocked()) {
-      event.preventDefault();
-      return;
-    }
+    const movementLocked = isHeroMovementLocked();
     setPointerFromEvent(event, renderer.domElement);
     raycaster.setFromCamera(pointer, camera);
 
     if (event.button === 2) {
+      if (movementLocked) {
+        event.preventDefault();
+        return;
+      }
       const ground = pickGround();
       if (ground) issueMoveCommand(ground);
+      return;
+    }
+
+    if (movementLocked) {
+      disarmAttack();
+      selection.pick(raycaster);
       return;
     }
 
@@ -478,13 +486,21 @@ export async function createDawnreachGame(
     if (!minimapHost || !minimapCamera || (event.button !== 0 && event.button !== 2)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (isHeroMovementLocked()) return;
+    const movementLocked = isHeroMovementLocked();
     setPointerFromEvent(event, minimapHost);
     raycaster.setFromCamera(pointer, minimapCamera);
 
     if (event.button === 2) {
+      if (movementLocked) return;
       const ground = pickGround();
       if (ground) issueMoveCommand(ground);
+      return;
+    }
+
+    if (movementLocked) {
+      disarmAttack();
+      const ground = pickGround();
+      if (ground) cameraFocus = { x: ground.x, z: ground.z };
       return;
     }
 
@@ -651,6 +667,17 @@ export async function createDawnreachGame(
       lastVisionUpdate = elapsed;
     }
     selection.update();
+
+    const worldHeroEntity = getGameEntity(hero.root);
+    if (worldHeroEntity?.alive && movementWasLocked) {
+      const atSpawn = Math.hypot(
+        hero.root.position.x - DAWNREACH_LAYOUT.blueSpawn.x,
+        hero.root.position.z - DAWNREACH_LAYOUT.blueSpawn.z,
+      ) <= 0.08;
+      if (atSpawn) hero.root.position.y = heroSpawnSurfaceY;
+      hero.root.visible = true;
+      hero.model.visible = true;
+    }
 
     const movementLocked = isHeroMovementLocked();
     if (movementLocked) {
@@ -939,7 +966,7 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
 
   return {
     update(state: HeroOverlayState | null) {
-      sprite.visible = state !== null;
+      sprite.visible = state !== null && state.hero.currentHp > 0;
       if (!state) return;
       const { hero, stats } = state;
       const nextIconPath = heroIcons[`./heroes/${hero.heroName?.toLowerCase()}/images/${hero.definitionId}I.png`];
