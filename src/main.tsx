@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
+import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import './styles.css';
 import './hud-overrides.css';
@@ -75,6 +76,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 mountCombatStatsOverlay();
 const disposeResponsiveHudScale = mountResponsiveHudScale();
 const disposeGameCameraControls = mountGameCameraControls();
+const disposeMinimapDragCamera = mountMinimapDragCamera();
 
 void waitForDawnreachReady().then(dismissBootSplash);
 
@@ -82,5 +84,6 @@ if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeResponsiveHudScale();
     disposeGameCameraControls();
+    disposeMinimapDragCamera();
   });
 }
