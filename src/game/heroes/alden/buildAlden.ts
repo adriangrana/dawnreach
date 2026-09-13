@@ -18,6 +18,7 @@ export type AldenRig = HumanoidRig & {
   cape: THREE.Group;
   capeMotion: number;
   capePanels: Array<{ geometry: THREE.BufferGeometry; rest: Float32Array }>;
+  swordWrist: THREE.Group;
   sword: THREE.Group;
 };
 
@@ -106,14 +107,20 @@ export function buildAlden(materials: AldenMaterials, options: { armRestAngle?: 
   ]), materials.steelDark);
   mesh(torso, 'folded-blue-mantle', createLoftGeometry(mantleSections), materials.blueDark);
   piping(torso, 'mantle-fold', [new THREE.Vector3(-0.30, 0.40, 0.15), new THREE.Vector3(0, 0.335, 0.235), new THREE.Vector3(0.29, 0.43, 0.15)], materials.blue, 0.028);
-  const clasp = mesh(torso, 'cape-clasp', new THREE.CylinderGeometry(0.087, 0.087, 0.035, 12), materials.gold, -0.30, 0.37, 0.19);
+  const clasp = mesh(torso, 'cape-clasp', new THREE.CylinderGeometry(0.087, 0.087, 0.043, 12), materials.gold, -0.30, 0.37, 0.19);
   clasp.rotation.x = Math.PI / 2;
   mesh(torso, 'clasp-ring', new THREE.TorusGeometry(0.064, 0.009, 4, 12), materials.gold, -0.30, 0.37, 0.218);
 
   buildArm(rig.leftArm, rig.leftForearm, materials, -1, shoulderNeckBlend);
   buildArm(rig.rightArm, rig.rightForearm, materials, 1, shoulderNeckBlend);
-  buildHand(group(rig.sockets.leftHand, 'left-hand'), materials);
-  const sword = buildSword(rig.sockets.rightHand, materials);
+
+  // Alden is canonically left-handed. The weapon hand owns both the gauntlet and the
+  // sword; the right hand remains free and is used as a counter-balance/guard during
+  // combat animation.
+  buildHand(group(rig.sockets.rightHand, 'right-hand'), materials, 1);
+  const swordWrist = group(rig.sockets.leftHand, 'left-wrist-attack-pivot');
+  const sword = buildSword(swordWrist, materials, -1);
+
   head.name = 'helmet';
   buildHelmet(rig.sockets.head, materials);
   const { cape, capePanels } = buildCape(rig.sockets.back, materials, options.capeNeckBlend ?? 1);
@@ -130,7 +137,7 @@ export function buildAlden(materials: AldenMaterials, options: { armRestAngle?: 
 
   return {
     ...rig,
-    cape, capeMotion: 0, capePanels, sword,
+    cape, capeMotion: 0, capePanels, swordWrist, sword,
   };
 }
 
@@ -197,7 +204,7 @@ function buildArm(pivot: THREE.Group, forearm: THREE.Group, materials: AldenMate
   ]), materials.gold);
 }
 
-function buildHand(parent: THREE.Group, materials: AldenMaterials) {
+function buildHand(parent: THREE.Group, materials: AldenMaterials, side = 1) {
   mesh(parent, 'closed-glove', createLoftGeometry([
     { y: -0.078, width: 0.06, front: 0.06, back: 0.055 },
     { y: -0.04, width: 0.075, front: 0.08, back: 0.065 },
@@ -205,13 +212,18 @@ function buildHand(parent: THREE.Group, materials: AldenMaterials) {
     { y: 0.079, width: 0.052, front: 0.055, back: 0.05 },
   ], 8), materials.leather);
   for (const height of [-0.043, -0.003, 0.037]) {
-    piping(parent, 'armored-knuckles', [new THREE.Vector3(-0.065, height, 0.022), new THREE.Vector3(-0.045, height, 0.078), new THREE.Vector3(0.04, height, 0.078)], materials.steelDark, 0.015);
+    piping(parent, 'armored-knuckles', [
+      new THREE.Vector3(-0.065 * side, height, 0.022),
+      new THREE.Vector3(-0.045 * side, height, 0.078),
+      new THREE.Vector3(0.04 * side, height, 0.078),
+    ], materials.steelDark, 0.015);
   }
-  const thumb = mesh(parent, 'glove-thumb', createPlateGeometry([[-0.02, 0.05], [0.02, 0.04], [0.035, -0.03], [0, -0.052], [-0.02, -0.015]], 0.025, 0.006), materials.leather, 0.057, 0, 0.019);
-  thumb.rotation.z = -0.3;
+  const thumb = mesh(parent, 'glove-thumb', createPlateGeometry([[-0.02, 0.05], [0.02, 0.04], [0.035, -0.03], [0, -0.052], [-0.02, -0.015]], 0.025, 0.006), materials.leather, 0.057 * side, 0, 0.019);
+  thumb.scale.x = side;
+  thumb.rotation.z = -0.3 * side;
 }
 
-function buildSword(handSocket: THREE.Group, materials: AldenMaterials) {
+function buildSword(handSocket: THREE.Group, materials: AldenMaterials, handSide = 1) {
   const sword = group(handSocket, 'sword-grip-pivot', 0, 0, 0.008);
   const bladeFrame = new THREE.Matrix4().makeBasis(
     new THREE.Vector3(0, 1, 0),
@@ -221,7 +233,7 @@ function buildSword(handSocket: THREE.Group, materials: AldenMaterials) {
   handSocket.updateWorldMatrix(true, false);
   const wristOrientation = handSocket.getWorldQuaternion(new THREE.Quaternion());
   sword.quaternion.copy(wristOrientation.invert()).multiply(new THREE.Quaternion().setFromRotationMatrix(bladeFrame));
-  buildHand(sword, materials);
+  buildHand(sword, materials, handSide);
   mesh(sword, 'sword-grip', createLoftGeometry([
     { y: -0.16, width: 0.043, front: 0.043, back: 0.043 },
     { y: 0.15, width: 0.039, front: 0.039, back: 0.039 },
