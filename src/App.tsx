@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject, type SyntheticEvent } from 'react';
 import { createDawnreachGame } from './game/createDawnreachGame';
 import './hud-overrides.css';
 
@@ -32,7 +32,7 @@ const abilities = [
 ];
 const inventory = ['⚔', '◆', '◇', '✧', '●', ''];
 
-function hideMissingImage(event: React.SyntheticEvent<HTMLImageElement>) {
+function hideMissingImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none';
 }
 
