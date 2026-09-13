@@ -3,4 +3,5 @@ dist/
 .vite/
 .DS_Store
 *.log
+*.tsbuildinfo
 src-tauri/target/
