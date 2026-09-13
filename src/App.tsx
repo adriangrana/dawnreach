@@ -400,6 +400,16 @@ export default function App() {
       maxResource: overlay.stats.maxResource,
       currentResource: overlay.hero.currentResource,
       alive: overlay.hero.currentHp > 0,
+      statuses: Object.values(overlay.hero.runtime.statuses)
+        .filter(status => status.expiresAtMs > runtime.nowMs)
+        .map(status => ({
+          id: status.id,
+          sourceEntityId: status.sourceHeroEntityId,
+          rank: status.rank,
+          stacks: status.stacks,
+          expiresAtMs: status.expiresAtMs,
+          data: status.data ? { ...status.data } : undefined,
+        })),
     });
   }, [runtime]);
 
