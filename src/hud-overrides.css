@@ -1,0 +1,54 @@
+.top-hero-face {
+  position: relative;
+  overflow: hidden;
+}
+
+.top-hero-face > span {
+  position: relative;
+  z-index: 0;
+}
+
+.top-hero-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  pointer-events: none;
+}
+
+.hero-portrait__image {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  pointer-events: none;
+}
+
+.hero-level {
+  z-index: 5;
+}
+
+.minimap-hero-icon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 30;
+  width: clamp(28px, 2.2vw, 36px);
+  height: clamp(28px, 2.2vw, 36px);
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+  border: 2px solid rgba(132, 213, 255, 0.95);
+  border-radius: 50%;
+  background: rgba(5, 13, 19, 0.95);
+  box-shadow:
+    0 0 0 2px rgba(5, 13, 19, 0.82),
+    0 0 10px rgba(69, 183, 255, 0.9);
+  pointer-events: none;
+  user-select: none;
+}
