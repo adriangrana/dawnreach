@@ -30,118 +30,136 @@ export function makeCanvasTexture(
   return texture;
 }
 
+function wrappedPatch(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  x: number,
+  y: number,
+  radius: number,
+  inner: string,
+) {
+  for (const ox of [-size, 0, size]) {
+    for (const oy of [-size, 0, size]) {
+      const px = x + ox;
+      const py = y + oy;
+      const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius);
+      gradient.addColorStop(0, inner);
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 export function createProceduralTextures() {
   return {
-    grass: makeCanvasTexture(384, (ctx, size) => {
+    grass: makeCanvasTexture(512, (ctx, size) => {
       const random = createSeededRandom(0xdecafbad);
-      const base = ctx.createLinearGradient(0, 0, size, size);
-      base.addColorStop(0, '#3d563b');
-      base.addColorStop(0.45, '#466141');
-      base.addColorStop(1, '#354d37');
-      ctx.fillStyle = base;
+      ctx.fillStyle = '#3f583d';
       ctx.fillRect(0, 0, size, size);
 
-      for (let i = 0; i < 90; i += 1) {
+      // Large colour variation is painted with wrapped copies so the tile has no visible square seams.
+      for (let i = 0; i < 54; i += 1) {
         const x = random() * size;
         const y = random() * size;
-        const radius = 10 + random() * 38;
-        const patch = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        const warm = random() > 0.52;
-        patch.addColorStop(0, warm ? 'rgba(112,125,75,0.10)' : 'rgba(20,48,30,0.14)');
-        patch.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = patch;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
+        const radius = 18 + random() * 54;
+        const warm = random() > 0.55;
+        wrappedPatch(
+          ctx,
+          size,
+          x,
+          y,
+          radius,
+          warm ? 'rgba(124,128,74,0.055)' : 'rgba(13,39,25,0.085)',
+        );
       }
 
-      for (let i = 0; i < 1900; i += 1) {
+      for (let i = 0; i < 3600; i += 1) {
         const x = random() * size;
         const y = random() * size;
-        const length = 1 + random() * 3.5;
-        const alpha = 0.035 + random() * 0.10;
-        ctx.strokeStyle = random() > 0.55
-          ? `rgba(170,190,120,${alpha})`
-          : `rgba(10,38,22,${alpha})`;
-        ctx.lineWidth = 0.45 + random() * 0.55;
+        const length = 0.8 + random() * 3.2;
+        const alpha = 0.025 + random() * 0.075;
+        ctx.strokeStyle = random() > 0.58
+          ? `rgba(173,190,121,${alpha})`
+          : `rgba(7,31,18,${alpha})`;
+        ctx.lineWidth = 0.35 + random() * 0.55;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x + (random() - 0.5) * 1.5, y - length);
+        ctx.lineTo(x + (random() - 0.5) * 1.3, y - length);
         ctx.stroke();
       }
 
-      for (let i = 0; i < 320; i += 1) {
+      for (let i = 0; i < 620; i += 1) {
         const x = random() * size;
         const y = random() * size;
-        const r = 0.4 + random() * 1.35;
-        ctx.fillStyle = random() > 0.5 ? 'rgba(122,104,67,0.16)' : 'rgba(28,48,30,0.18)';
+        const r = 0.35 + random() * 1.15;
+        ctx.fillStyle = random() > 0.55 ? 'rgba(123,102,67,0.10)' : 'rgba(20,42,25,0.14)';
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
-    }, 10, 8),
+    }, 7, 5),
 
-    lane: makeCanvasTexture(384, (ctx, size) => {
+    lane: makeCanvasTexture(512, (ctx, size) => {
       const random = createSeededRandom(0x1a2b3c4d);
-      const base = ctx.createLinearGradient(0, 0, size, size);
-      base.addColorStop(0, '#716958');
-      base.addColorStop(0.5, '#827965');
-      base.addColorStop(1, '#665f50');
-      ctx.fillStyle = base;
+      ctx.fillStyle = '#776d59';
       ctx.fillRect(0, 0, size, size);
 
-      for (let i = 0; i < 170; i += 1) {
+      // Soft earth and worn stone stains. No brick/plank grid: lanes should read as old battlefield roads.
+      for (let i = 0; i < 78; i += 1) {
+        const x = random() * size;
+        const y = random() * size;
+        const radius = 12 + random() * 42;
+        wrappedPatch(
+          ctx,
+          size,
+          x,
+          y,
+          radius,
+          random() > 0.5 ? 'rgba(181,164,124,0.075)' : 'rgba(56,49,39,0.09)',
+        );
+      }
+
+      for (let i = 0; i < 210; i += 1) {
         const cx = random() * size;
         const cy = random() * size;
-        const w = 12 + random() * 28;
-        const h = 7 + random() * 18;
-        const rotation = (random() - 0.5) * 0.7;
+        const rx = 3 + random() * 11;
+        const ry = 1.5 + random() * 5;
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(rotation);
+        ctx.rotate(random() * Math.PI);
+        ctx.fillStyle = random() > 0.5 ? 'rgba(198,183,146,0.07)' : 'rgba(45,39,32,0.085)';
         ctx.beginPath();
-        const sides = 5 + Math.floor(random() * 3);
-        for (let p = 0; p < sides; p += 1) {
-          const a = (p / sides) * Math.PI * 2;
-          const jitter = 0.78 + random() * 0.32;
-          const px = Math.cos(a) * w * 0.5 * jitter;
-          const py = Math.sin(a) * h * 0.5 * jitter;
-          if (p === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        const shade = 96 + Math.floor(random() * 28);
-        ctx.fillStyle = `rgba(${shade + 18},${shade + 13},${shade},${0.12 + random() * 0.16})`;
+        ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(45,40,33,${0.10 + random() * 0.12})`;
-        ctx.lineWidth = 0.8 + random() * 1.1;
-        ctx.stroke();
         ctx.restore();
       }
 
-      for (let i = 0; i < 460; i += 1) {
+      for (let i = 0; i < 260; i += 1) {
         const x = random() * size;
         const y = random() * size;
-        const length = 2 + random() * 8;
+        const length = 3 + random() * 13;
         const angle = random() * Math.PI * 2;
-        ctx.strokeStyle = `rgba(43,37,31,${0.06 + random() * 0.13})`;
-        ctx.lineWidth = 0.45 + random() * 0.7;
+        ctx.strokeStyle = `rgba(45,38,30,${0.045 + random() * 0.08})`;
+        ctx.lineWidth = 0.4 + random() * 0.6;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
         ctx.stroke();
       }
 
-      for (let i = 0; i < 900; i += 1) {
+      for (let i = 0; i < 1500; i += 1) {
         const x = random() * size;
         const y = random() * size;
-        const r = 0.3 + random() * 1.2;
-        ctx.fillStyle = random() > 0.52 ? 'rgba(39,34,28,0.15)' : 'rgba(190,177,142,0.10)';
+        const r = 0.25 + random() * 0.9;
+        ctx.fillStyle = random() > 0.5 ? 'rgba(40,34,28,0.12)' : 'rgba(205,188,146,0.075)';
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
-    }, 7, 2),
+    }, 1.35, 1.05),
 
     steel: makeCanvasTexture(128, (ctx, size) => {
       const random = createSeededRandom(0x33aa55cc);
