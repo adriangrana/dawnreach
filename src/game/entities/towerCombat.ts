@@ -27,6 +27,7 @@ const RESPAWN_RELEASE_KEY = 'dawnreachRespawnReleaseInstalled';
 const DEATH_COUNT_KEY = 'dawnreachDeaths';
 const DEATH_POSITION_KEY = 'dawnreachDeathPosition';
 const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncAtSeconds';
+const LAST_HERO_DEATH_PRESENTATION_KEY = 'dawnreachHeroDeathPresentationElapsed';
 const TRAIL_POINTS = 6;
 const PREWARMED_PROJECTILES_PER_TEAM = 4;
 const PREWARMED_EFFECTS_PER_TEAM = 10;
@@ -161,6 +162,7 @@ export function updateDefenseTowerCombat(
   if (!registry) return;
 
   synchronizeWorldRuntime(worldRoot, registry, elapsed);
+  updateHeroDeathPresentationOnce(worldRoot, registry, elapsed);
 
   const towerEntity = getGameEntity(tower);
   if (!towerEntity || towerEntity.kind !== 'tower') return;
@@ -257,13 +259,42 @@ function synchronizeWorldRuntime(
     }
 
     if (!entity.alive) {
-      entity.root.visible = false;
+      if (entity.kind === 'hero') {
+        entity.root.visible = true;
+        setHeroCorpsePose(entity, true);
+      } else {
+        entity.root.visible = false;
+      }
       holdDeadHeroAtDeathPosition(entity);
     }
   }
 
   updateHeroRespawns(registry, elapsed);
   enforceRespawnHolds(registry);
+}
+
+function updateHeroDeathPresentationOnce(
+  worldRoot: THREE.Object3D,
+  registry: GameEntityRegistry,
+  elapsed: number,
+): void {
+  if (worldRoot.userData[LAST_HERO_DEATH_PRESENTATION_KEY] === elapsed) return;
+  worldRoot.userData[LAST_HERO_DEATH_PRESENTATION_KEY] = elapsed;
+
+  for (const entity of registry.values()) {
+    if (entity.kind !== 'hero') continue;
+    if (!entity.alive) {
+      holdDeadHeroAtDeathPosition(entity);
+      entity.root.visible = true;
+      setHeroCorpsePose(entity, true);
+      continue;
+    }
+
+    if (entity.root.userData[RESPAWN_HOLD_KEY] === true) {
+      entity.root.visible = true;
+      setHeroCorpsePose(entity, false);
+    }
+  }
 }
 
 function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void {
@@ -280,6 +311,7 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
     entity.currentResource = entity.maxResource;
     entity.alive = true;
     entity.root.visible = true;
+    setHeroCorpsePose(entity, false);
     entity.root.userData[RESPAWN_AT_KEY] = undefined;
     entity.root.userData[RESPAWN_HOLD_KEY] = true;
     entity.root.userData[DEATH_POSITION_KEY] = undefined;
@@ -317,6 +349,18 @@ function holdDeadHeroAtDeathPosition(entity: GameEntity): void {
   entity.root.position.copy(deathPosition);
 }
 
+function setHeroCorpsePose(entity: GameEntity, dead: boolean): void {
+  if (entity.kind !== 'hero') return;
+  const expectedModelName = `${entity.root.name}-model`;
+  const model = entity.root.getObjectByName(expectedModelName)
+    ?? entity.root.children.find(child => child.name.endsWith('-model'));
+  if (!model) return;
+
+  // The procedural humanoid animator owns model Y/Z but not X rotation. Using X here keeps
+  // the corpse pose stable without fighting the regular gait animation every frame.
+  model.rotation.x = dead ? -Math.PI * 0.48 : 0;
+}
+
 function installRespawnCommandRelease(entity: GameEntity): void {
   if (typeof window === 'undefined' || entity.root.userData[RESPAWN_RELEASE_KEY] === true) return;
   entity.root.userData[RESPAWN_RELEASE_KEY] = true;
@@ -345,6 +389,8 @@ function scheduleHeroRespawn(entity: GameEntity, elapsed: number): number {
   entity.root.userData[RESPAWN_HOLD_KEY] = false;
   entity.root.userData[DEATH_POSITION_KEY] = entity.root.position.clone();
   entity.root.userData[DEATH_COUNT_KEY] = Number(entity.root.userData[DEATH_COUNT_KEY] ?? 0) + 1;
+  entity.root.visible = true;
+  setHeroCorpsePose(entity, true);
   return respawnSeconds;
 }
 
@@ -680,7 +726,12 @@ function applyTowerProjectileDamage(target: GameEntity, elapsed: number): void {
   }
 
   target.alive = false;
-  target.root.visible = false;
+  if (target.kind === 'hero') {
+    target.root.visible = true;
+    setHeroCorpsePose(target, true);
+  } else {
+    target.root.visible = false;
+  }
   const respawnSeconds = target.kind === 'hero' ? scheduleHeroRespawn(target, elapsed) : undefined;
 
   emitWorldCombatEvent({
