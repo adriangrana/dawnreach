@@ -50,7 +50,7 @@ function ribbon(parent: THREE.Object3D, name: string, surface: Surface, start: [
 
 export function buildAlden(materials: AldenMaterials, options: { armRestAngle?: number; shoulderNeckBlend?: number; capeNeckBlend?: number } = {}): AldenRig {
   const shoulderNeckBlend = options.shoulderNeckBlend ?? 1;
-  const rig = createHumanoidRig({ ...options, name: 'alden' });
+  const rig = createHumanoidRig({ ...options, name: 'H001' });
   const { model, pelvis, torso, head } = rig;
   buildLeg(rig.leftLeg, rig.leftShin, rig.leftFoot, materials);
   buildLeg(rig.rightLeg, rig.rightShin, rig.rightFoot, materials);

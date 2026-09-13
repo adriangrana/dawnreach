@@ -37,7 +37,7 @@ const duskTeam: TeamHero[] = [
   { initial: 'R' },
 ];
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
-const heroImageCodes: Record<string, string> = { alden: 'H001' };
+const heroImageCodes: Record<string, string> = { H001: 'H001' };
 const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
 
 type HudRuntime = { match: MatchState; nowMs: number; feedback: string };
@@ -97,7 +97,7 @@ function GameHud({
 }) {
   const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
     const nowMs = performance.now();
-    return { match: createPlayableMatch('alden', 11, nowMs), nowMs, feedback: '' };
+    return { match: createPlayableMatch('H001', 11, nowMs), nowMs, feedback: '' };
   });
   const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const definition = getHeroDefinition(hero.definitionId);
@@ -203,7 +203,7 @@ function GameHud({
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
                 blockedReason={control.blockedReason} art={abilityArt[key]}
-                image={heroAbilityImages[`./game/heroes/${hero.definitionId}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
+                image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}

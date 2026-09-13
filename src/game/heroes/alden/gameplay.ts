@@ -5,7 +5,7 @@ import type {
   HeroStats,
 } from '../types';
 
-export const ALDEN_ID = 'alden' as const;
+export const ALDEN_ID = 'H001' as const;
 
 export const ALDEN_SKILL_SYSTEM = {
   abilityPointsPerHeroLevel: 1,

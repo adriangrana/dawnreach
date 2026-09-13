@@ -12,7 +12,7 @@ export const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 export const LOCAL_HERO_ENTITY_ID = 'local-player:hero';
 
 export function createPlayableMatch(
-    heroId = 'alden',
+    heroId = 'H001',
     level = 11,
     nowMs = 0,
 ): MatchState {
@@ -82,7 +82,7 @@ export function getAbilityControl(state: MatchState, heroEntityId: string, key: 
     const ability = definition.abilities[key];
     const rank = hero.abilityRanks[key];
     const passive = ability.type === 'passive';
-    const preview = hero.definitionId === 'alden' && !passive
+    const preview = hero.definitionId === 'H001' && !passive
         ? calculateAldenAbilityAtRank(state, heroEntityId, key, Math.max(1, rank) as 1 | 2 | 3 | 4)
         : null;
     const remainingMs = Math.max(0, hero.cooldownReadyAtMs[key] - nowMs);

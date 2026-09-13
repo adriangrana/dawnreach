@@ -24,7 +24,7 @@ try {
     const THREE = await import(moduleUrl);
     const update = THREE.Object3D.prototype.updateMatrixWorld;
     THREE.Object3D.prototype.updateMatrixWorld = function(force) {
-      if (this.isScene && this.getObjectByName('alden')) {
+      if (this.isScene && this.getObjectByName('H001')) {
         this.onAfterRender = (renderer, scene, camera) => {
           window.aldenCheck = { THREE, renderer, scene, camera };
           const model = scene.getObjectByName('alden-model');
@@ -96,7 +96,7 @@ try {
   for (const heading of headings) {
     const destination = await page.evaluate(angle => {
       const { THREE, scene, camera, renderer } = window.aldenCheck;
-      const hero = scene.getObjectByName('alden');
+      const hero = scene.getObjectByName('H001');
       const target = new THREE.Vector3(hero.position.x + Math.sin(angle) * 1.8, 0, hero.position.z + Math.cos(angle) * 1.8);
       const projected = target.clone().project(camera);
       const rect = renderer.domElement.getBoundingClientRect();
@@ -122,7 +122,7 @@ try {
     }
     await page.waitForFunction(({ target, heading }) => {
       const { scene } = window.aldenCheck;
-      const hero = scene.getObjectByName('alden');
+      const hero = scene.getObjectByName('H001');
       const model = hero.getObjectByName('alden-model');
       const yawDelta = Math.atan2(Math.sin(heading - model.rotation.y), Math.cos(heading - model.rotation.y));
       return Math.hypot(hero.position.x - target[0], hero.position.z - target[2]) < 0.04 && Math.abs(yawDelta) < 0.025;
@@ -166,7 +166,7 @@ try {
       if (red > 90 && green > 85 && blueChannel > 60 && red < 200) litSurface += 1;
       colors.add((red >> 4) * 256 + (green >> 4) * 16 + (blueChannel >> 4));
     }
-    const hero = scene.getObjectByName('alden');
+    const hero = scene.getObjectByName('H001');
     return {
       blue, mint, health, litSurface, colors: colors.size, triangles: renderer.info.render.triangles,
       calls: renderer.info.render.calls, label: hero.children.some(child => child.isSprite),
@@ -362,7 +362,7 @@ try {
     const target = await page.evaluate(() => {
       const { THREE, renderer, scene, camera } = window.humanoidCheck;
       const root = scene.getObjectByName('humanoid');
-      if (scene.getObjectByName('alden') || root.getObjectByName('cape') || root.getObjectByName('sword-blade')) throw new Error('Basic body unexpectedly requires Alden or equipment');
+      if (scene.getObjectByName('H001') || root.getObjectByName('cape') || root.getObjectByName('sword-blade')) throw new Error('Basic body unexpectedly requires Alden or equipment');
       const point = root.position.clone().add(new THREE.Vector3(0.7, -root.position.y, -2));
       const projected = point.clone().project(camera);
       const rect = renderer.domElement.getBoundingClientRect();

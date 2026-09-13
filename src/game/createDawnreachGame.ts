@@ -17,7 +17,7 @@ type AttackOrder =
 
 const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
-const CAMERA_OFFSET = new THREE.Vector3(10.5, 14, 12.5);
+const CAMERA_OFFSET = new THREE.Vector3(0, 34, 16.3);
 const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;

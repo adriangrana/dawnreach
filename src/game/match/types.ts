@@ -53,6 +53,7 @@ export interface HeroRuntimeState {
 export interface MatchHeroState {
   heroEntityId: string;
   definitionId: HeroId;
+  heroName: string;
   ownerPlayerId: string;
   team: TeamId;
   slotId: MatchSlotId;

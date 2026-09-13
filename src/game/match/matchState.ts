@@ -108,13 +108,14 @@ export function assignSelectedHeroToPlayer(
   if (sourcePlayer.ownedHeroEntityId) throw new Error(`Player ${playerId} already owns hero ${sourcePlayer.ownedHeroEntityId}.`);
 
   const definition = getHeroDefinition(sourcePlayer.selectedHeroId);
-  const stats = sourcePlayer.selectedHeroId === 'alden'
+  const stats = sourcePlayer.selectedHeroId === 'H001'
     ? getAldenStatsAtLevel(1)
     : definition.baseStats;
 
   const hero: MatchHeroState = {
     heroEntityId,
     definitionId: definition.id,
+    heroName: definition.displayName,
     ownerPlayerId: playerId,
     team: sourcePlayer.team,
     slotId: sourcePlayer.slotId,
@@ -152,8 +153,8 @@ export function setHeroLevel(state: MatchState, heroEntityId: string, level: num
 
   assertAbilityAllocationFitsLevel(hero, definition, level);
 
-  const before = hero.definitionId === 'alden' ? getAldenStatsAtLevel(hero.level) : definition.baseStats;
-  const after = hero.definitionId === 'alden' ? getAldenStatsAtLevel(level) : definition.baseStats;
+  const before = hero.definitionId === 'H001' ? getAldenStatsAtLevel(hero.level) : definition.baseStats;
+  const after = hero.definitionId === 'H001' ? getAldenStatsAtLevel(level) : definition.baseStats;
   const hpRatio = before.maxHp > 0 ? hero.currentHp / before.maxHp : 1;
   const resourceRatio = before.maxResource > 0 ? hero.currentResource / before.maxResource : 1;
 
@@ -182,7 +183,7 @@ export function upgradeHeroAbility(state: MatchState, heroEntityId: string, key:
   if (currentRank >= maxRank) throw new Error(`${key} is already rank ${maxRank}.`);
 
   let availableRank = ability.unlockLevels.filter(level => level <= hero.level).length;
-  if (hero.definitionId === 'alden') availableRank = getAldenAvailableAbilityRank(key, hero.level);
+  if (hero.definitionId === 'H001') availableRank = getAldenAvailableAbilityRank(key, hero.level);
   const desiredRank = currentRank + 1;
   if (desiredRank > availableRank) {
     const requiredLevel = ability.unlockLevels[desiredRank - 1];

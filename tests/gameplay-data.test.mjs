@@ -22,7 +22,7 @@ test('playable HUD uses definition ranks, costs and cooldowns without duplicate 
 
 test('ability controls block locked, resource-starved, dead and inactive heroes', () => {
   const heroId = game.LOCAL_HERO_ENTITY_ID;
-  const locked = game.createPlayableMatch('alden', 1);
+  const locked = game.createPlayableMatch('H001', 1);
   assert.equal(game.useHeroAbility(locked, heroId, 'W', 0), locked);
   const empty = game.createPlayableMatch();
   empty.heroes[heroId].currentResource = 0;
@@ -63,8 +63,8 @@ function makeDuel(level = 1) {
   let state = game.createMatchState('test', 0);
   state = game.addPlayerToMatch(state, { playerId: 'p1', displayName: 'A', team: 'dawn', slotIndex: 1 });
   state = game.addPlayerToMatch(state, { playerId: 'p2', displayName: 'B', team: 'dusk', slotIndex: 1 });
-  state = game.selectHeroForPlayer(state, 'p1', 'alden');
-  state = game.selectHeroForPlayer(state, 'p2', 'alden');
+  state = game.selectHeroForPlayer(state, 'p1', 'H001');
+  state = game.selectHeroForPlayer(state, 'p2', 'H001');
   state = game.assignSelectedHeroToPlayer(state, 'p1', 'h1');
   state = game.assignSelectedHeroToPlayer(state, 'p2', 'h2');
   if (level !== 1) {
@@ -82,14 +82,14 @@ test('match state always exposes 10 fixed 5v5 slots and keeps selection separate
   assert.equal(new Set(state.slots.map(s => s.slotId)).size, 10);
 
   state = game.addPlayerToMatch(state, { playerId: 'p1', displayName: 'Player 1', team: 'dawn', slotIndex: 3 });
-  state = game.selectHeroForPlayer(state, 'p1', 'alden');
-  assert.equal(game.getPlayerSelectedHeroId(state, 'p1'), 'alden');
+  state = game.selectHeroForPlayer(state, 'p1', 'H001');
+  assert.equal(game.getPlayerSelectedHeroId(state, 'p1'), 'H001');
   assert.equal(game.getPlayerOwnedHero(state, 'p1'), null);
 
   state = game.assignSelectedHeroToPlayer(state, 'p1', 'hero:p1');
   const owned = game.getPlayerOwnedHero(state, 'p1');
   assert.equal(owned.heroEntityId, 'hero:p1');
-  assert.equal(owned.definitionId, 'alden');
+  assert.equal(owned.definitionId, 'H001');
   assert.equal(game.getSlotAssignment(state, 'dawn-3').player.playerId, 'p1');
   assert.equal(game.getSlotAssignment(state, 'dawn-3').hero.heroEntityId, 'hero:p1');
   game.validateMatchState(state);

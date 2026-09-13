@@ -140,7 +140,7 @@ try {
       if (!values.every(Number.isFinite)) throw new Error(`Invalid geometry: ${object.name}`);
       if (object.isInstancedMesh && !object.instanceMatrix.array.every(Number.isFinite)) throw new Error('Invalid instances');
     });
-    const selection = scene.getObjectByName('alden').children.find(child => child.geometry?.type === 'RingGeometry');
+    const selection = scene.getObjectByName('H001').children.find(child => child.geometry?.type === 'RingGeometry');
     return { ...counts, meshes, scale: scene.getObjectByName('alden-model').scale.x, selectionScale: selection.geometry.parameters.outerRadius / 0.72 };
   });
   assert.ok(structure.trees > 400, JSON.stringify(structure));
@@ -151,14 +151,14 @@ try {
 
   const destination = await page.evaluate(() => {
     const { THREE, scene, camera, renderer } = window.mapCheck;
-    const hero = scene.getObjectByName('alden');
+    const hero = scene.getObjectByName('H001');
     const target = new THREE.Vector3(hero.position.x + 2, 0, hero.position.z - 1);
     const pixel = target.clone().project(camera);
     return { x: (pixel.x + 1) * renderer.domElement.clientWidth / 2, y: (1 - pixel.y) * renderer.domElement.clientHeight / 2, target: target.toArray() };
   });
   await page.mouse.click(destination.x, destination.y, { button: 'right' });
   await page.waitForFunction(target => {
-    const hero = window.mapCheck.scene.getObjectByName('alden');
+    const hero = window.mapCheck.scene.getObjectByName('H001');
     return Math.hypot(hero.position.x - target[0], hero.position.z - target[2]) < 0.06;
   }, destination.target);
   assert.equal(await page.evaluate(() => window.mapCheck.scene.getObjectByName('alden-model').scale.x), structure.scale);
@@ -289,7 +289,7 @@ try {
     return Math.abs(world.getObjectByName('river-current').material.map.offset.y - previous.flow) > 0.025
       && Math.abs(world.getObjectByName('river-surface').geometry.getAttribute('position').getY(73) - previous.vertexHeight) > 0.0005;
   }, waterChecks);
-  await page.evaluate(center => window.mapCheck.scene.getObjectByName('alden').position.set(center[0], 0.03, center[2]), waterChecks.center);
+  await page.evaluate(center => window.mapCheck.scene.getObjectByName('H001').position.set(center[0], 0.03, center[2]), waterChecks.center);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const ford = await page.evaluate(({ center, tangent }) => {
     const { THREE, renderer, camera } = window.mapCheck;
@@ -302,7 +302,7 @@ try {
   const splashPixels = await page.evaluate(() => {
     const { THREE, renderer, camera, scene } = window.mapCheck;
     const effects = scene.getObjectByName('water-footsteps');
-    const hero = scene.getObjectByName('alden');
+    const hero = scene.getObjectByName('H001');
     const point = new THREE.Vector3(hero.position.x, 0, hero.position.z).project(camera);
     const gl = renderer.getContext();
     const left = Math.round((point.x + 1) * gl.drawingBufferWidth / 2) - 64;
@@ -330,7 +330,7 @@ try {
   assert.ok(splashPixels > 12, `Footstep particles not visible around feet: ${splashPixels}`);
   await page.screenshot({ path: `${output}/river-splashes-desktop.png` });
   await page.waitForFunction(target => {
-    const hero = window.mapCheck.scene.getObjectByName('alden');
+    const hero = window.mapCheck.scene.getObjectByName('H001');
     return Math.hypot(hero.position.x - target[0], hero.position.z - target[2]) < 0.08;
   }, ford.destination);
   await page.waitForFunction(() => window.mapCheck.scene.getObjectByName('water-footsteps').children.every(burst => !burst.visible));
@@ -345,7 +345,7 @@ try {
   await page.waitForFunction(() => window.mapCheck.scene.getObjectByName('water-footsteps').children.filter(burst => burst.visible).length > 1);
   await page.screenshot({ path: `${output}/river-mobile.png` });
   await page.waitForFunction(target => {
-    const hero = window.mapCheck.scene.getObjectByName('alden');
+    const hero = window.mapCheck.scene.getObjectByName('H001');
     return Math.hypot(hero.position.x - target[0], hero.position.z - target[2]) < 0.08;
   }, waterChecks.center);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -357,7 +357,7 @@ try {
     return [['jungle', -27, -4], ['mid-bridge', 0, 0], ...DAWNREACH_LAYOUT.objectivePits.map(pit => [`${pit.kind}-pit`, pit.x, pit.z]), ['red-base', 33.5, -25]];
   });
   for (const [name, x, z] of closeups) {
-    await page.evaluate(([x, z]) => window.mapCheck.scene.getObjectByName('alden').position.set(x, 0.03, z), [x, z]);
+    await page.evaluate(([x, z]) => window.mapCheck.scene.getObjectByName('H001').position.set(x, 0.03, z), [x, z]);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({ path: `${output}/${name}.png` });
   }
@@ -434,7 +434,7 @@ try {
     const { DAWNREACH_LAYOUT } = await import('/src/game/map/mapLayout.ts');
     window.mapInspection.renderer.domElement.remove();
     window.mapInspection.renderer.dispose();
-    window.mapCheck.scene.getObjectByName('alden').position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
+    window.mapCheck.scene.getObjectByName('H001').position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
