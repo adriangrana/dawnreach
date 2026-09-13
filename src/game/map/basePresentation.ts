@@ -62,24 +62,24 @@ function createPresentationMaterials(team: 'blue' | 'red'): BasePresentationMate
       metalness: 0.02,
     }),
     rampStoneA: new THREE.MeshStandardMaterial({
-      color: blue ? 0x8f8a73 : 0x948078,
-      roughness: 0.94,
-      metalness: 0.015,
-    }),
-    rampStoneB: new THREE.MeshStandardMaterial({
-      color: blue ? 0xa39c83 : 0xa58d7f,
-      roughness: 0.92,
-      metalness: 0.018,
-    }),
-    rampStoneC: new THREE.MeshStandardMaterial({
-      color: blue ? 0x74715f : 0x7b6861,
-      roughness: 0.96,
+      color: blue ? 0x706c5b : 0x76645e,
+      roughness: 0.95,
       metalness: 0.012,
     }),
-    rampJoint: new THREE.MeshStandardMaterial({
-      color: blue ? 0x343b3b : 0x443637,
+    rampStoneB: new THREE.MeshStandardMaterial({
+      color: blue ? 0x807a66 : 0x806d65,
+      roughness: 0.94,
+      metalness: 0.014,
+    }),
+    rampStoneC: new THREE.MeshStandardMaterial({
+      color: blue ? 0x5a594c : 0x62524f,
       roughness: 0.97,
-      metalness: 0.025,
+      metalness: 0.01,
+    }),
+    rampJoint: new THREE.MeshStandardMaterial({
+      color: blue ? 0x303535 : 0x3c3031,
+      roughness: 0.98,
+      metalness: 0.02,
     }),
     factionTrim: new THREE.MeshStandardMaterial({
       color: blue ? 0x3f7fac : 0x994d48,
@@ -299,7 +299,7 @@ function createRampSurfaceDetails(angle: number, materials: BasePresentationMate
           angle, outerRadius, innerRadius,
           outerMin, outerMax, outerMin, outerMax, 0.010,
         ),
-        index % 2 === 0 ? materials.stoneLight : materials.rampStoneC,
+        index % 2 === 0 ? materials.rampStoneB : materials.rampStoneC,
         `base-ramp-side-band-${index + 1}`,
       );
     }
@@ -352,7 +352,7 @@ function createRampThreshold(angle: number, materials: BasePresentationMaterials
       -RAMP_HALF_WIDTH + 0.16, RAMP_HALF_WIDTH - 0.16,
       0.016,
     ),
-    materials.stoneLight,
+    materials.rampStoneB,
     'base-ramp-threshold-band',
   );
 
@@ -467,13 +467,13 @@ function createRampRail(
     angle, RAMP_BASE_RADIUS, landingInner, gateLateral, 0.14, 0.22, 0.24, materials.stoneDark,
   ));
   group.add(createRampBeam(
-    angle, slopeOuter, taperRadius, outerLateral, 0.285, 0.32, 0.085, materials.stoneLight,
+    angle, slopeOuter, taperRadius, outerLateral, 0.285, 0.32, 0.085, materials.rampStoneB,
   ));
   group.add(createRampBeam(
-    angle, taperRadius, RAMP_BASE_RADIUS, gateLateral, 0.285, 0.16, 0.085, materials.stoneLight,
+    angle, taperRadius, RAMP_BASE_RADIUS, gateLateral, 0.285, 0.16, 0.085, materials.rampStoneB,
   ));
   group.add(createRampBeam(
-    angle, RAMP_BASE_RADIUS, landingInner, gateLateral, 0.285, 0.16, 0.085, materials.stoneLight,
+    angle, RAMP_BASE_RADIUS, landingInner, gateLateral, 0.285, 0.16, 0.085, materials.rampStoneB,
   ));
   group.add(createRampBeam(
     angle, slopeOuter + 0.12, taperRadius + 0.08, outerLateral, 0.345, 0.15, 0.055, materials.factionTrim,
@@ -502,7 +502,7 @@ function createRampRail(
     foot.receiveShadow = true;
     group.add(foot);
 
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(postTop, postBottom, 0.38, 6), materials.stoneLight);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(postTop, postBottom, 0.38, 6), materials.rampStoneB);
     post.position.copy(basePosition);
     post.position.y += 0.31;
     post.rotation.y = angle;
