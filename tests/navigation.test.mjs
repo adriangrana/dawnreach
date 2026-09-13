@@ -47,6 +47,33 @@ test('A* routes around an obstacle instead of intersecting it', () => {
   }
 });
 
+test('replanning sees an obstacle that appears after the navigation grid was built', () => {
+  let obstacleActive = false;
+  const navigation = createTestWorld({
+    blocked: point => obstacleActive && point.x > 3 && point.x < 5 && point.z > 2 && point.z < 6,
+  });
+  const start = { x: 1.5, z: 4 };
+  const target = { x: 6.5, z: 4 };
+
+  const direct = navigation.findPath(start, target);
+  assert.ok(direct);
+  assert.deepEqual(direct.waypoints, [target]);
+
+  obstacleActive = true;
+  assert.equal(navigation.segmentIsWalkable(start, target), false);
+
+  const rerouted = navigation.findPath(start, target);
+  assert.ok(rerouted);
+  assert.equal(rerouted.partial, false);
+  assert.ok(rerouted.waypoints.length >= 2);
+
+  let previous = start;
+  for (const waypoint of rerouted.waypoints) {
+    assert.equal(navigation.segmentIsWalkable(previous, waypoint), true);
+    previous = waypoint;
+  }
+});
+
 test('unreachable destination returns null when partial routing is disabled', () => {
   const navigation = createTestWorld({ blocked: point => point.x > 3.4 && point.x < 4.6 });
   assert.equal(navigation.findPath({ x: 1.5, z: 4 }, { x: 6.5, z: 4 }), null);
