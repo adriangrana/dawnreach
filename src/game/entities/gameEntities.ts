@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { attachEntityOverhead } from './entityOverheads';
+import { registerFloatingCombatEntity, unregisterFloatingCombatEntity } from './floatingCombatText';
 
 export type TeamId = 'blue' | 'red' | 'neutral';
 export type GameEntityKind = 'hero' | 'creep' | 'tower' | 'building' | 'shop' | 'jungle-creature';
@@ -147,7 +148,10 @@ function defaultVisibilityPolicy(kind: GameEntityKind): EntityVisibilityPolicy {
 
 export function registerGameEntity(root: THREE.Object3D, definition: GameEntityDefinition): GameEntity {
   const existing = root.userData[ENTITY_KEY] as GameEntity | undefined;
-  if (existing) return existing;
+  if (existing) {
+    registerFloatingCombatEntity(existing);
+    return existing;
+  }
 
   const maxHp = Math.max(0, definition.maxHp ?? defaultMaxHp(definition.kind));
   const currentHp = THREE.MathUtils.clamp(definition.currentHp ?? maxHp, 0, maxHp);
@@ -184,6 +188,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   root.userData.maxHp = entity.maxHp;
   root.userData.currentHp = entity.currentHp;
   attachEntityOverhead(entity);
+  registerFloatingCombatEntity(entity);
   return entity;
 }
 
@@ -224,6 +229,7 @@ export class GameEntityRegistry {
 
   registerExisting(entity: GameEntity) {
     this.byRoot.set(entity.root, entity);
+    registerFloatingCombatEntity(entity);
     return entity;
   }
 
@@ -231,6 +237,7 @@ export class GameEntityRegistry {
     const entity = this.byRoot.get(root);
     if (!entity) return false;
     this.byRoot.delete(root);
+    unregisterFloatingCombatEntity(entity);
     delete root.userData[ENTITY_KEY];
     return true;
   }
