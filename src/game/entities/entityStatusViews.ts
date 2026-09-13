@@ -36,7 +36,7 @@ function runtimeStatusView(status: WorldStatusRuntimeSnapshot, atMs: number): En
   const durationLeftMs = status.expiresAtMs == null
     ? null
     : Math.max(0, status.expiresAtMs - atMs);
-  if (status.expiresAtMs != null && durationLeftMs <= 0) return null;
+  if (durationLeftMs != null && durationLeftMs <= 0) return null;
 
   const common = {
     id: status.id,

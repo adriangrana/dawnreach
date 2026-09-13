@@ -266,6 +266,14 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Group)) return;
     const name = object.name.toLowerCase();
+    if (name === 'radiant-drake') {
+      registry.register(object, {
+        id: 'radiant-drake', displayName: 'Radiant Drake', kind: 'jungle-creature', team: 'neutral',
+        selectable: true, targetable: false, grantsVision: false, selectionRadius: 2.8,
+        maxHp: 0, showHealthBar: false, visibilityPolicy: 'vision-only', interaction: 'none',
+      });
+      return;
+    }
     const team = teamFromName(name);
     if (!team) return;
 

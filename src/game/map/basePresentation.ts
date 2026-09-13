@@ -604,6 +604,14 @@ function replaceLegacyThroneCrystal(
   team: 'blue' | 'red',
   materials: BasePresentationMaterials,
 ) {
+  // The authored throne already owns its pedestal and crystal. Adding the legacy
+  // rotating prism here would put two independent crystals in the same socket.
+  const existing = citadel.getObjectByName(`${team}-throne`);
+  if (existing) {
+    existing.userData.collisionRadius = 2.72;
+    existing.userData.structureKind = 'throne';
+    return;
+  }
   for (const child of [...citadel.children]) {
     if (!(child instanceof THREE.Mesh)) continue;
     const childMaterials = Array.isArray(child.material) ? child.material : [child.material];

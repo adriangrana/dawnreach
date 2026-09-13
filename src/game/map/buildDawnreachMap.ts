@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildJungleCamps } from './buildJungleCamps';
+import { buildRadiantDrake } from '../creatures/radiantDrake/buildRadiantDrake';
 import type { DawnreachTextures } from '../shared/textures';
 import { BASE_LAYOUT, CAMP_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, type MapPoint } from './mapLayout';
 import { buildMapVegetation, sampleMapPath, distanceToMapPath, getLaneTowerSites } from './buildMapVegetation';
@@ -583,6 +584,12 @@ function buildObjectivePit(x: number, z: number, kind: 'upper' | 'lower', materi
     group.add(surface);
   }
   group.add(buildObjectiveRuins(kind, materials, entranceAngle));
+  if (kind === 'upper') {
+    const dragon = buildRadiantDrake();
+    dragon.position.y = 0.065;
+    dragon.rotation.y = 0.55;
+    group.add(dragon);
+  }
   for (let index = 0; index < 42; index++) {
     const angle = entranceAngle + OBJECTIVE_LAYOUT.gateHalfAngle + hash01(index, 754) * (Math.PI * 2 - OBJECTIVE_LAYOUT.gateHalfAngle * 2);
     const radius = 5.1 + hash01(index, 753) * 2.0;

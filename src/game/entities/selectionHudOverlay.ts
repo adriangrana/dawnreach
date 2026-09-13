@@ -402,7 +402,7 @@ function abilityIcon(id: string) {
 function abilityEffectsHtml(id: string) {
   const ability = getTowerAbility(id);
   if (!ability) return '';
-  const effects = ability.effects as Record<string, number>;
+  const effects = ability.effects;
   if (id === 'backdoor-protection') {
     return `
       <div class="tower-ability__effects">

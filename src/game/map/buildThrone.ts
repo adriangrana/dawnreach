@@ -150,21 +150,27 @@ export function buildThrone(team: 'blue' | 'red', stoneTexture: THREE.Texture | 
       stud.position.set(offset, 0.76, 2.93);
     }
   }
-  const crystal = add(crystalGeometry(), crystalMaterial, 1.28);
+  const prism = new THREE.Group();
+  prism.name = `${team}-throne-prism`;
+  prism.position.y = 1.28;
+  root.add(prism);
+  const crystal = add(crystalGeometry(), crystalMaterial, 0, prism);
   crystal.name = 'throne-crystal'; crystal.rotation.y = Math.PI / 6;
   // Thin facet ridges catch light without outlining triangulation across the faces.
   for (let ridge = 0; ridge < 6; ridge++) {
     const angle = ridge * Math.PI / 3 + Math.PI / 6;
     const points = [[0, 0.58], [0.45, 0.87], [2.55, 0.69], [3.25, 0.5], [4.3, 0]].map(([y, r]) =>
-      new THREE.Vector3(Math.cos(angle) * (r + 0.006), y + 1.28, Math.sin(angle) * (r + 0.006)));
+      new THREE.Vector3(Math.cos(angle) * (r + 0.006), y, Math.sin(angle) * (r + 0.006)));
     const curve = new THREE.CurvePath<THREE.Vector3>();
     for (let segment = 0; segment < points.length - 1; segment++) {
       curve.add(new THREE.LineCurve3(points[segment], points[segment + 1]));
     }
-    add(new THREE.TubeGeometry(curve, 20, 0.009, 4, false), energy);
+    add(new THREE.TubeGeometry(curve, 20, 0.009, 4, false), energy, 0, prism);
   }
   root.userData.animate = (elapsed: number) => {
     crystalMaterial.emissiveIntensity = 0.46 + Math.sin(elapsed * 1.4) * 0.07;
+    prism.rotation.y = elapsed * (blue ? 0.14 : -0.14);
+    prism.position.y = 1.28 + Math.sin(elapsed * 1.35) * 0.06;
   };
   return root;
 }
