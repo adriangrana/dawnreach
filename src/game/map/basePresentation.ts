@@ -116,7 +116,7 @@ function buildBaseElevation(
   // invisible movement blockers or exposing a large gap in the citadel wall.
   const wallRadius = BASE_LAYOUT.radius - 0.02;
   const rampRailHalfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
-  const gateMargin = 0.06;
+  const gateMargin = 0.10;
   const gateHalfAngle = Math.asin(
     Math.min(0.999, (rampRailHalfWidth + gateMargin) / wallRadius),
   );
@@ -448,37 +448,53 @@ function createRampRail(
 ) {
   const group = new THREE.Group();
   group.name = 'base-ramp-architectural-edge';
-  const lateral = side * (RAMP_HALF_WIDTH + 0.24);
+  const outerLateral = side * (RAMP_HALF_WIDTH + 0.25);
+  const gateLateral = side * (RAMP_HALF_WIDTH + 0.12);
   const slopeOuter = RAMP_OUTER_RADIUS + 0.02;
+  const taperRadius = RAMP_BASE_RADIUS + 1.08;
   const landingInner = RAMP_INNER_RADIUS + 0.12;
 
-  // Layered stone plinth + cap + faction trim. The entire assembly lives outside the
-  // command surface; its inner face only kisses the ramp edge and never narrows the path.
+  // Keep the ceremonial edge broad on the exposed slope, then step it inward before the
+  // gate. This creates a stronger silhouette without colliding visually with the authored
+  // citadel wall, whose current opening intentionally remains tight around the ramp.
   group.add(createRampBeam(
-    angle, slopeOuter, RAMP_BASE_RADIUS, lateral, 0.14, 0.46, 0.24, materials.stoneDark,
+    angle, slopeOuter, taperRadius, outerLateral, 0.14, 0.42, 0.24, materials.stoneDark,
   ));
   group.add(createRampBeam(
-    angle, RAMP_BASE_RADIUS, landingInner, lateral, 0.14, 0.46, 0.24, materials.stoneDark,
+    angle, taperRadius, RAMP_BASE_RADIUS, gateLateral, 0.14, 0.22, 0.24, materials.stoneDark,
   ));
   group.add(createRampBeam(
-    angle, slopeOuter, RAMP_BASE_RADIUS, lateral, 0.285, 0.36, 0.085, materials.stoneLight,
+    angle, RAMP_BASE_RADIUS, landingInner, gateLateral, 0.14, 0.22, 0.24, materials.stoneDark,
   ));
   group.add(createRampBeam(
-    angle, RAMP_BASE_RADIUS, landingInner, lateral, 0.285, 0.36, 0.085, materials.stoneLight,
+    angle, slopeOuter, taperRadius, outerLateral, 0.285, 0.32, 0.085, materials.stoneLight,
   ));
   group.add(createRampBeam(
-    angle, slopeOuter + 0.12, RAMP_BASE_RADIUS - 0.10, lateral, 0.345, 0.17, 0.055, materials.factionTrim,
+    angle, taperRadius, RAMP_BASE_RADIUS, gateLateral, 0.285, 0.16, 0.085, materials.stoneLight,
+  ));
+  group.add(createRampBeam(
+    angle, RAMP_BASE_RADIUS, landingInner, gateLateral, 0.285, 0.16, 0.085, materials.stoneLight,
+  ));
+  group.add(createRampBeam(
+    angle, slopeOuter + 0.12, taperRadius + 0.08, outerLateral, 0.345, 0.15, 0.055, materials.factionTrim,
+  ));
+  group.add(createRampBeam(
+    angle, taperRadius - 0.06, RAMP_BASE_RADIUS - 0.10, gateLateral, 0.345, 0.09, 0.055, materials.factionTrim,
   ));
 
-  const postRadii = [0.12, 0.38, 0.65, 0.9].map(t =>
+  const postRadii = [0.12, 0.42, 0.70].map(t =>
     THREE.MathUtils.lerp(RAMP_OUTER_RADIUS, RAMP_BASE_RADIUS, t));
-  postRadii.push(RAMP_BASE_RADIUS - 0.72);
+  postRadii.push(RAMP_BASE_RADIUS + 0.62, RAMP_BASE_RADIUS - 0.72);
 
   for (const [index, radius] of postRadii.entries()) {
-    const postLateral = side * (RAMP_HALF_WIDTH + (index === postRadii.length - 1 ? 0.31 : 0.33));
+    const nearGate = index >= 3;
+    const postLateral = nearGate ? gateLateral : outerLateral;
     const basePosition = rampPoint(angle, radius, postLateral, 0.11);
+    const footSize = nearGate ? 0.24 : 0.36;
+    const postTop = nearGate ? 0.13 : 0.17;
+    const postBottom = nearGate ? 0.16 : 0.22;
 
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.18, 0.52), materials.stoneDark);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(footSize, 0.18, footSize), materials.stoneDark);
     foot.position.copy(basePosition);
     foot.position.y += 0.09;
     foot.rotation.y = Math.PI / 4 - angle;
@@ -486,7 +502,7 @@ function createRampRail(
     foot.receiveShadow = true;
     group.add(foot);
 
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.38, 6), materials.stoneLight);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(postTop, postBottom, 0.38, 6), materials.stoneLight);
     post.position.copy(basePosition);
     post.position.y += 0.31;
     post.rotation.y = angle;
@@ -494,8 +510,9 @@ function createRampRail(
     post.receiveShadow = true;
     group.add(post);
 
+    const capRadius = nearGate ? 0.145 : 0.205;
     const cap = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.205, 0.205, 0.075, 6),
+      new THREE.CylinderGeometry(capRadius, capRadius, 0.075, 6),
       index === postRadii.length - 1 ? materials.factionGlow : materials.metal,
     );
     cap.position.copy(basePosition);
