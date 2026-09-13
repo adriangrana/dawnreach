@@ -18,7 +18,11 @@ const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * GAME_HERO_SCALE;
 
-export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HTMLDivElement | null) {
+export async function createDawnreachGame(
+  host: HTMLDivElement,
+  minimapHost?: HTMLDivElement | null,
+  minimapHeroMarker?: HTMLImageElement | null,
+) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x17261f);
   scene.fog = new THREE.Fog(0x17261f, 25, 50);
@@ -89,6 +93,7 @@ export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HT
   const pointer = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
+  const minimapHeroPosition = new THREE.Vector3();
 
   let destination: Point3 | null = null;
   let targetYaw = 0;
@@ -190,18 +195,37 @@ export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HT
     camera.updateMatrixWorld();
   };
 
+  const updateMinimapHeroMarker = () => {
+    if (!minimapCamera || !minimapHeroMarker) return;
+
+    minimapHeroPosition
+      .set(hero.root.position.x, 0, hero.root.position.z)
+      .project(minimapCamera);
+
+    const left = (minimapHeroPosition.x * 0.5 + 0.5) * 100;
+    const top = (-minimapHeroPosition.y * 0.5 + 0.5) * 100;
+
+    minimapHeroMarker.style.left = `${left}%`;
+    minimapHeroMarker.style.top = `${top}%`;
+  };
+
   const renderMinimap = () => {
     if (!minimapRenderer || !minimapCamera) return;
 
-    // The gameplay scene uses distance fog, which would fully obscure a top-down camera.
-    // Temporarily disable it only for the minimap pass while rendering the exact same scene.
+    // The minimap is a second live view of the same scene. Alden's 3D model is hidden
+    // only for this render pass because the HUD overlays his dedicated H001I head icon.
     const fog = scene.fog;
+    const heroWasVisible = hero.root.visible;
     scene.fog = null;
+    hero.root.visible = false;
     minimapRenderer.render(scene, minimapCamera);
+    hero.root.visible = heroWasVisible;
     scene.fog = fog;
+    updateMinimapHeroMarker();
   };
 
   updateCamera();
+  updateMinimapHeroMarker();
 
   const animate = () => {
     animationFrame = requestAnimationFrame(animate);
