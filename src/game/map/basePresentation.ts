@@ -58,12 +58,20 @@ function buildBaseElevation(
 
   const rotation = team === 'blue' ? 0 : Math.PI;
   const gateAngles = BASE_LAYOUT.gates.map(angle => angle + rotation);
-  const gateHalfAngle = BASE_LAYOUT.rampWidth / (BASE_LAYOUT.radius * 2) + 0.11;
+
+  // Match the retaining-wall opening to the *visible* ramp width instead of adding a large
+  // arbitrary angular clearance. The rail sits 0.14 units outside the ramp on each side;
+  // keep only a tiny construction margin beyond that so the wall visually meets the ramp.
+  const wallRadius = BASE_LAYOUT.radius - 0.02;
+  const rampRailHalfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
+  const gateMargin = 0.06;
+  const gateHalfAngle = Math.asin(
+    Math.min(0.999, (rampRailHalfWidth + gateMargin) / wallRadius),
+  );
 
   // Build the elevated retaining edge as individual sections and leave genuine openings
   // at every gate. A solid cylinder here intersected the ramps and visually swallowed the
   // hero's lower body while he crossed the base threshold.
-  const wallRadius = BASE_LAYOUT.radius - 0.02;
   const wallThickness = 0.66;
   const wallSegments = 144;
   const segmentAngle = Math.PI * 2 / wallSegments;
