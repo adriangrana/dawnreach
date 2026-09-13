@@ -152,17 +152,23 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     row: clampInt(Math.floor((point.z - bounds.minZ) / cellSize), 0, rows - 1),
   });
 
-  const pointIsWalkable = (point: NavigationPoint) => {
+  const terrainAllowsPoint = (point: NavigationPoint) => {
     if (point.x < bounds.minX || point.x > bounds.maxX || point.z < bounds.minZ || point.z > bounds.maxZ) return false;
-    if (options.terrainWalkable && !options.terrainWalkable(point)) return false;
+    return !options.terrainWalkable || options.terrainWalkable(point);
+  };
+
+  const pointIsWalkable = (point: NavigationPoint) => {
+    if (!terrainAllowsPoint(point)) return false;
     return !options.collisionWorld.isBlocked(point, queryRadius);
   };
 
+  // Cache only immutable terrain eligibility and traversal cost. Collision occupancy is
+  // deliberately queried live so moving blockers can both occupy and later release cells.
   for (let row = 0; row < rows; row++) {
     for (let column = 0; column < columns; column++) {
       const index = indexOf(column, row);
       const point = cellToWorld(column, row);
-      const allowed = pointIsWalkable(point);
+      const allowed = terrainAllowsPoint(point);
       walkable[index] = allowed ? 1 : 0;
       if (!allowed) {
         traversalCosts[index] = Number.POSITIVE_INFINITY;
@@ -173,8 +179,6 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     }
   }
 
-  // The grid is the authored/static baseline. Re-query collisionWorld while searching as well,
-  // so a blocker that appears after startup invalidates cells and forces a fresh route around it.
   const cellIsWalkableNow = (column: number, row: number) => {
     if (!inGrid(column, row)) return false;
     const index = indexOf(column, row);
@@ -400,6 +404,17 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     };
   };
 
+  const getDebugSnapshot = (): NavigationDebugSnapshot => {
+    const currentWalkable = walkable.slice();
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        const index = indexOf(column, row);
+        if (currentWalkable[index] !== 0 && !cellIsWalkableNow(column, row)) currentWalkable[index] = 0;
+      }
+    }
+    return { bounds, cellSize, columns, rows, walkable: currentWalkable };
+  };
+
   return {
     cellSize,
     agentRadius: options.agentRadius,
@@ -408,7 +423,7 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     segmentIsWalkable,
     smoothPath,
     findPath,
-    getDebugSnapshot: () => ({ bounds, cellSize, columns, rows, walkable }),
+    getDebugSnapshot,
   };
 }
 
