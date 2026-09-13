@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { createDawnreachGame } from './game/createDawnreachGame';
 
 const dawnTeam = ['A', 'S', 'K', 'L', 'M'];
@@ -24,7 +24,7 @@ function TeamPortraits({ team, side }: { team: string[]; side: 'dawn' | 'dusk' }
   );
 }
 
-function GameHud() {
+function GameHud({ minimapRef }: { minimapRef: RefObject<HTMLDivElement | null> }) {
   return (
     <div className="game-hud" aria-hidden="true">
       <section className="scoreboard">
@@ -42,13 +42,11 @@ function GameHud() {
 
       <section className="minimap-shell">
         <div className="minimap-field">
-          <span className="minimap-lane minimap-lane--one" />
-          <span className="minimap-lane minimap-lane--two" />
-          <span className="minimap-lane minimap-lane--three" />
-          <i className="minimap-base minimap-base--dawn" />
-          <i className="minimap-base minimap-base--dusk" />
-          <i className="minimap-marker minimap-marker--hero" />
-          <i className="minimap-marker minimap-marker--enemy" />
+          <div
+            ref={minimapRef}
+            className="minimap-live"
+            style={{ position: 'absolute', inset: 0, zIndex: 10, overflow: 'hidden', background: '#07100e' }}
+          />
         </div>
         <div className="minimap-tools">
           <span>+</span>
@@ -113,16 +111,18 @@ function GameHud() {
 }
 
 export default function App() {
-  const hostRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const minimapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const minimapHost = minimapRef.current;
+    if (!host || !minimapHost) return;
 
     let disposed = false;
     let destroy: (() => void) | undefined;
 
-    void createDawnreachGame(host).then((game) => {
+    void createDawnreachGame(host, minimapHost).then((game) => {
       if (disposed) {
         game.destroy();
         return;
@@ -139,7 +139,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <div ref={hostRef} className="game-host" />
-      <GameHud />
+      <GameHud minimapRef={minimapRef} />
     </main>
   );
 }
