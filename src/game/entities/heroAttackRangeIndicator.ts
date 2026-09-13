@@ -55,6 +55,7 @@ function horizontalMesh(
  */
 export function attachHeroAttackRangeIndicator(entity: GameEntity): void {
   if (entity.kind !== 'hero' || entity.attackRange <= 0 || indicators.has(entity)) return;
+  if (typeof window === 'undefined') return;
 
   const palette = paletteFor(entity);
   const root = new THREE.Group();
