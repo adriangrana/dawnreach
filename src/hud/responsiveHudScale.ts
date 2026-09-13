@@ -1,6 +1,6 @@
 const DESKTOP_BREAKPOINT_PX = 1201;
 const COMMAND_DECK_BASE_WIDTH_PX = 721;
-const COMMAND_DECK_VIEWPORT_FRACTION = 0.5;
+const COMMAND_DECK_VIEWPORT_FRACTION = 0.45;
 
 export function mountResponsiveHudScale() {
   const root = document.documentElement;
