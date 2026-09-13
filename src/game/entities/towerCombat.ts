@@ -18,6 +18,7 @@ export const TOWER_COMBAT_TUNING = {
   aggroEventLifetimeMs: 1600,
   heroRespawnBaseSeconds: 6,
   heroRespawnSecondsPerLevel: 2,
+  worldSyncHz: 30,
 } as const;
 
 const RESPAWN_AT_KEY = 'dawnreachRespawnAtSeconds';
@@ -25,13 +26,12 @@ const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
 const RESPAWN_RELEASE_KEY = 'dawnreachRespawnReleaseInstalled';
 const DEATH_COUNT_KEY = 'dawnreachDeaths';
 const DEATH_POSITION_KEY = 'dawnreachDeathPosition';
-const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncElapsed';
+const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncAtSeconds';
+const TRAIL_POINTS = 6;
+const PREWARMED_PROJECTILES_PER_TEAM = 4;
+const PREWARMED_EFFECTS_PER_TEAM = 10;
 
-const towerStates = new WeakMap<THREE.Object3D, TowerCombatState>();
-const towerPosition = new THREE.Vector3();
-const entityPosition = new THREE.Vector3();
-const aimPosition = new THREE.Vector3();
-const projectileDirection = new THREE.Vector3();
+type CombatTeam = 'blue' | 'red';
 
 interface TowerCombatState {
   currentTarget: GameEntity | null;
@@ -44,22 +44,70 @@ interface TowerCombatState {
 }
 
 interface TowerProjectile {
+  team: CombatTeam;
   root: THREE.Group;
   trail: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  target: GameEntity;
-  history: THREE.Vector3[];
+  trailPositions: Float32Array;
+  target: GameEntity | null;
   initialDistance: number;
   travelled: number;
   spin: number;
 }
 
 interface TowerPulseEffect {
+  team: CombatTeam;
   root: THREE.Group;
-  materials: THREE.MeshBasicMaterial[];
+  flash: THREE.Mesh;
+  ringMaterial: THREE.MeshBasicMaterial;
+  flashMaterial: THREE.MeshBasicMaterial;
   age: number;
   duration: number;
   startScale: number;
   endScale: number;
+  ringOpacity: number;
+  flashOpacity: number;
+}
+
+interface ProjectileResources {
+  coreMaterial: THREE.MeshBasicMaterial;
+  haloMaterial: THREE.MeshBasicMaterial;
+  ringMaterial: THREE.MeshBasicMaterial;
+  trailMaterial: THREE.LineBasicMaterial;
+}
+
+const towerStates = new WeakMap<THREE.Object3D, TowerCombatState>();
+const towerPosition = new THREE.Vector3();
+const entityPosition = new THREE.Vector3();
+const aimPosition = new THREE.Vector3();
+const liftedAimPosition = new THREE.Vector3();
+const projectileDirection = new THREE.Vector3();
+const projectileOrigin = new THREE.Vector3();
+const attackSourcePosition = new THREE.Vector3();
+const attackTargetPosition = new THREE.Vector3();
+
+// Geometry is immutable and shared by every tower projectile. This avoids repeated CPU allocation,
+// GPU buffer uploads and shader churn while projectiles are being fired.
+const projectileCoreGeometry = new THREE.OctahedronGeometry(0.14, 0);
+const projectileHaloGeometry = new THREE.IcosahedronGeometry(0.22, 1);
+const projectileRingGeometry = new THREE.TorusGeometry(0.14, 0.018, 6, 20);
+const pulseRingGeometry = new THREE.RingGeometry(0.12, 0.21, 28);
+const pulseFlashGeometry = new THREE.IcosahedronGeometry(0.18, 1);
+
+const projectileResources: Record<CombatTeam, ProjectileResources> = {
+  blue: createProjectileResources('blue'),
+  red: createProjectileResources('red'),
+};
+const projectilePools: Record<CombatTeam, TowerProjectile[]> = { blue: [], red: [] };
+const effectPools: Record<CombatTeam, TowerPulseEffect[]> = { blue: [], red: [] };
+
+// Prewarm object graphs at module initialization rather than during the first tower shot.
+for (const team of ['blue', 'red'] as const) {
+  for (let index = 0; index < PREWARMED_PROJECTILES_PER_TEAM; index++) {
+    projectilePools[team].push(createPooledProjectile(team));
+  }
+  for (let index = 0; index < PREWARMED_EFFECTS_PER_TEAM; index++) {
+    effectPools[team].push(createPooledEffect(team));
+  }
 }
 
 export function calculateHeroRespawnSeconds(level: number): number {
@@ -77,8 +125,8 @@ export function notifyGameEntityAttack(
   target: GameEntity,
   atMs = worldNowMs(),
 ): WorldAttackEvent {
-  const attackerWorld = attacker.root.getWorldPosition(new THREE.Vector3());
-  const targetWorld = target.root.getWorldPosition(new THREE.Vector3());
+  attacker.root.getWorldPosition(attackSourcePosition);
+  target.root.getWorldPosition(attackTargetPosition);
   return publishWorldAttackEvent({
     attackerId: attacker.id,
     targetId: target.id,
@@ -86,8 +134,8 @@ export function notifyGameEntityAttack(
     targetTeam: target.team,
     attackerKind: attacker.kind,
     targetKind: target.kind,
-    attackerPosition: { x: attackerWorld.x, z: attackerWorld.z },
-    targetPosition: { x: targetWorld.x, z: targetWorld.z },
+    attackerPosition: { x: attackSourcePosition.x, z: attackSourcePosition.z },
+    targetPosition: { x: attackTargetPosition.x, z: attackTargetPosition.z },
     atMs,
   });
 }
@@ -106,13 +154,13 @@ export function notifyGameEntityAttackByObject(
 export function updateDefenseTowerCombat(
   tower: THREE.Object3D,
   elapsed: number,
-  authoredTeam: 'blue' | 'red',
+  authoredTeam: CombatTeam,
 ): void {
   const worldRoot = getWorldRoot(tower);
   const registry = worldRoot.userData.entityRegistry as GameEntityRegistry | undefined;
   if (!registry) return;
 
-  synchronizeWorldRuntimeOnce(worldRoot, registry, elapsed);
+  synchronizeWorldRuntime(worldRoot, registry, elapsed);
 
   const towerEntity = getGameEntity(tower);
   if (!towerEntity || towerEntity.kind !== 'tower') return;
@@ -143,7 +191,10 @@ export function updateDefenseTowerCombat(
     state.currentTarget = takePriorityTarget(towerEntity, registry, state)
       ?? findNearestTowerTarget(towerEntity, registry);
     if (state.currentTarget) {
-      state.nextShotAt = Math.max(state.nextShotAt, elapsed + TOWER_COMBAT_TUNING.acquireWindupSeconds);
+      state.nextShotAt = Math.max(
+        state.nextShotAt,
+        elapsed + TOWER_COMBAT_TUNING.acquireWindupSeconds,
+      );
     }
   }
 
@@ -176,12 +227,14 @@ function getWorldRoot(object: THREE.Object3D): THREE.Object3D {
   return current;
 }
 
-function synchronizeWorldRuntimeOnce(
+function synchronizeWorldRuntime(
   worldRoot: THREE.Object3D,
   registry: GameEntityRegistry,
   elapsed: number,
 ): void {
-  if (worldRoot.userData[LAST_WORLD_SYNC_KEY] === elapsed) return;
+  const lastSync = Number(worldRoot.userData[LAST_WORLD_SYNC_KEY] ?? Number.NEGATIVE_INFINITY);
+  const minInterval = 1 / TOWER_COMBAT_TUNING.worldSyncHz;
+  if (elapsed >= lastSync && elapsed - lastSync < minInterval) return;
   worldRoot.userData[LAST_WORLD_SYNC_KEY] = elapsed;
 
   for (const entity of registry.values()) {
@@ -303,7 +356,7 @@ function processAggroEvents(
   tower: GameEntity,
   registry: GameEntityRegistry,
   state: TowerCombatState,
-  team: 'blue' | 'red',
+  team: CombatTeam,
 ): void {
   const events = getWorldAttackEventsAfter(state.lastAggroSequence);
   if (events.length === 0) return;
@@ -365,8 +418,15 @@ function takePriorityTarget(
   while (state.pendingPriorityTargetIds.length > 0) {
     const id = state.pendingPriorityTargetIds.shift()!;
     if (id === excludedId) continue;
-    const entity = registry.values().find(candidate => candidate.id === id);
+    const entity = getEntityById(registry, id);
     if (entity && isValidTowerTarget(tower, entity)) return entity;
+  }
+  return null;
+}
+
+function getEntityById(registry: GameEntityRegistry, id: string): GameEntity | null {
+  for (const entity of registry.values()) {
+    if (entity.id === id) return entity;
   }
   return null;
 }
@@ -379,9 +439,10 @@ function findNearestTowerTarget(
   tower.root.getWorldPosition(towerPosition);
   let nearest: GameEntity | null = null;
   let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+  const rangeSquared = tower.attackRange * tower.attackRange;
 
   for (const candidate of registry.values()) {
-    if (candidate.id === excludedId || !isValidTowerTarget(tower, candidate)) continue;
+    if (candidate.id === excludedId || !isHostileUnitTarget(tower, candidate)) continue;
     candidate.root.getWorldPosition(entityPosition);
     const distanceSquared = planarDistanceSquared(
       towerPosition.x,
@@ -389,19 +450,21 @@ function findNearestTowerTarget(
       entityPosition.x,
       entityPosition.z,
     );
-    if (distanceSquared < nearestDistanceSquared) {
-      nearest = candidate;
-      nearestDistanceSquared = distanceSquared;
-    }
+    if (distanceSquared > rangeSquared || distanceSquared >= nearestDistanceSquared) continue;
+    nearest = candidate;
+    nearestDistanceSquared = distanceSquared;
   }
   return nearest;
 }
 
-function isValidTowerTarget(tower: GameEntity, target: GameEntity): boolean {
+function isHostileUnitTarget(tower: GameEntity, target: GameEntity): boolean {
   if (!target.alive || target.currentHp <= 0 || target.maxHp <= 0) return false;
   if (target.team === tower.team || target.team === 'neutral') return false;
-  if (target.kind === 'tower' || target.kind === 'building' || target.kind === 'shop') return false;
+  return target.kind !== 'tower' && target.kind !== 'building' && target.kind !== 'shop';
+}
 
+function isValidTowerTarget(tower: GameEntity, target: GameEntity): boolean {
+  if (!isHostileUnitTarget(tower, target)) return false;
   tower.root.getWorldPosition(towerPosition);
   target.root.getWorldPosition(entityPosition);
   return planarDistanceSquared(
@@ -412,89 +475,116 @@ function isValidTowerTarget(tower: GameEntity, target: GameEntity): boolean {
   ) <= tower.attackRange * tower.attackRange;
 }
 
+function createProjectileResources(team: CombatTeam): ProjectileResources {
+  const palette = projectilePalette(team);
+  return {
+    // MeshBasicMaterial keeps the projectile luminous without compiling a physically based shader
+    // during combat. The object is tiny on screen, so PBR contributed cost rather than useful detail.
+    coreMaterial: new THREE.MeshBasicMaterial({
+      color: palette.core,
+      toneMapped: false,
+    }),
+    haloMaterial: new THREE.MeshBasicMaterial({
+      color: palette.halo,
+      transparent: true,
+      opacity: 0.24,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+    ringMaterial: new THREE.MeshBasicMaterial({
+      color: palette.trim,
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+    trailMaterial: new THREE.LineBasicMaterial({
+      color: palette.halo,
+      transparent: true,
+      opacity: 0.58,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  };
+}
+
+function createPooledProjectile(team: CombatTeam): TowerProjectile {
+  const resources = projectileResources[team];
+  const root = new THREE.Group();
+  root.name = `${team}-tower-projectile`;
+
+  const core = new THREE.Mesh(projectileCoreGeometry, resources.coreMaterial);
+  core.scale.set(0.82, 0.82, 1.7);
+  root.add(core);
+
+  const halo = new THREE.Mesh(projectileHaloGeometry, resources.haloMaterial);
+  halo.scale.set(0.78, 0.78, 1.42);
+  root.add(halo);
+
+  const ring = new THREE.Mesh(projectileRingGeometry, resources.ringMaterial);
+  ring.position.z = -0.02;
+  root.add(ring);
+
+  const trailPositions = new Float32Array(TRAIL_POINTS * 3);
+  const trailGeometry = new THREE.BufferGeometry();
+  const trailAttribute = new THREE.BufferAttribute(trailPositions, 3);
+  trailAttribute.setUsage(THREE.DynamicDrawUsage);
+  trailGeometry.setAttribute('position', trailAttribute);
+  const trail = new THREE.Line(trailGeometry, resources.trailMaterial);
+  trail.frustumCulled = false;
+
+  return {
+    team,
+    root,
+    trail,
+    trailPositions,
+    target: null,
+    initialDistance: 1,
+    travelled: 0,
+    spin: 0,
+  };
+}
+
+function acquireProjectile(team: CombatTeam): TowerProjectile {
+  return projectilePools[team].pop() ?? createPooledProjectile(team);
+}
+
+function releaseProjectile(projectile: TowerProjectile): void {
+  projectile.root.removeFromParent();
+  projectile.trail.removeFromParent();
+  projectile.target = null;
+  projectile.travelled = 0;
+  projectile.spin = 0;
+  projectilePools[projectile.team].push(projectile);
+}
+
 function launchProjectile(
   worldRoot: THREE.Object3D,
   tower: THREE.Object3D,
-  team: 'blue' | 'red',
+  team: CombatTeam,
   target: GameEntity,
   state: TowerCombatState,
 ): void {
   const source = tower.userData.projectileOrigin as THREE.Object3D | undefined;
-  const origin = (source ?? tower).getWorldPosition(new THREE.Vector3());
-  const targetAim = getEntityAimPosition(target, new THREE.Vector3());
-  const palette = projectilePalette(team);
+  (source ?? tower).getWorldPosition(projectileOrigin);
+  getEntityAimPosition(target, aimPosition);
 
-  const root = new THREE.Group();
-  root.name = `${team}-tower-projectile`;
-  root.position.copy(origin);
+  const projectile = acquireProjectile(team);
+  projectile.target = target;
+  projectile.root.position.copy(projectileOrigin);
+  projectile.root.rotation.set(0, 0, 0);
+  projectile.initialDistance = Math.max(0.25, projectileOrigin.distanceTo(aimPosition));
+  projectile.travelled = 0;
+  projectile.spin = 0;
+  resetTrail(projectile, projectileOrigin);
 
-  const coreMaterial = new THREE.MeshPhysicalMaterial({
-    color: palette.core,
-    emissive: palette.emissive,
-    emissiveIntensity: 1.75,
-    roughness: 0.14,
-    metalness: 0.04,
-    clearcoat: 1,
-    clearcoatRoughness: 0.05,
-    toneMapped: false,
-  });
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), coreMaterial);
-  core.scale.set(0.82, 0.82, 1.7);
-  root.add(core);
-
-  const haloMaterial = new THREE.MeshBasicMaterial({
-    color: palette.halo,
-    transparent: true,
-    opacity: 0.24,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const halo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 1), haloMaterial);
-  halo.scale.set(0.78, 0.78, 1.42);
-  root.add(halo);
-
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color: palette.trim,
-    transparent: true,
-    opacity: 0.72,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.018, 6, 20), ringMaterial);
-  ring.position.z = -0.02;
-  root.add(ring);
-
-  const trailGeometry = new THREE.BufferGeometry();
-  trailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6 * 3), 3));
-  const trailMaterial = new THREE.LineBasicMaterial({
-    color: palette.halo,
-    transparent: true,
-    opacity: 0.58,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const trail = new THREE.Line(trailGeometry, trailMaterial);
-  trail.frustumCulled = false;
-  worldRoot.add(trail);
-  worldRoot.add(root);
-
-  const history = Array.from({ length: 6 }, () => origin.clone());
-  writeTrail(trail, history);
-
-  state.projectiles.push({
-    root,
-    trail,
-    target,
-    history,
-    initialDistance: Math.max(0.25, origin.distanceTo(targetAim)),
-    travelled: 0,
-    spin: 0,
-  });
-
-  state.effects.push(createPulseEffect(worldRoot, origin, team, false));
+  worldRoot.add(projectile.trail);
+  worldRoot.add(projectile.root);
+  state.projectiles.push(projectile);
+  state.effects.push(acquirePulseEffect(worldRoot, projectileOrigin, team, false));
 }
 
 function updateProjectiles(
@@ -503,45 +593,73 @@ function updateProjectiles(
   dt: number,
   elapsed: number,
 ): void {
+  if (dt <= 0) return;
+  const step = TOWER_COMBAT_TUNING.projectileSpeed * dt;
+
   for (let index = state.projectiles.length - 1; index >= 0; index--) {
     const projectile = state.projectiles[index];
-    if (!projectile.target.alive || projectile.target.currentHp <= 0) {
-      disposeProjectile(projectile);
+    const target = projectile.target;
+    if (!target || !target.alive || target.currentHp <= 0) {
+      releaseProjectile(projectile);
       state.projectiles.splice(index, 1);
       continue;
     }
 
-    const targetAim = getEntityAimPosition(projectile.target, aimPosition);
-    const distance = projectile.root.position.distanceTo(targetAim);
-    const step = TOWER_COMBAT_TUNING.projectileSpeed * dt;
+    getEntityAimPosition(target, aimPosition);
+    const distance = projectile.root.position.distanceTo(aimPosition);
 
     if (distance <= Math.max(0.16, step)) {
-      projectile.root.position.copy(targetAim);
-      const impactTeam = projectile.target.team === 'blue' ? 'red' : 'blue';
-      state.effects.push(createPulseEffect(worldRoot, targetAim, impactTeam, true));
-      applyTowerProjectileDamage(projectile.target, elapsed);
-      if (state.currentTarget?.id === projectile.target.id && !projectile.target.alive) {
+      projectile.root.position.copy(aimPosition);
+      const impactTeam: CombatTeam = target.team === 'blue' ? 'red' : 'blue';
+      state.effects.push(acquirePulseEffect(worldRoot, aimPosition, impactTeam, true));
+      applyTowerProjectileDamage(target, elapsed);
+      if (state.currentTarget?.id === target.id && !target.alive) {
         state.currentTarget = null;
       }
-      disposeProjectile(projectile);
+      releaseProjectile(projectile);
       state.projectiles.splice(index, 1);
       continue;
     }
 
     projectile.travelled += step;
     const progress = THREE.MathUtils.clamp(projectile.travelled / projectile.initialDistance, 0, 1);
-    const liftedAim = targetAim.clone();
-    liftedAim.y += Math.sin(progress * Math.PI) * TOWER_COMBAT_TUNING.projectileArcHeight;
-    projectileDirection.copy(liftedAim).sub(projectile.root.position).normalize();
+    liftedAimPosition.copy(aimPosition);
+    liftedAimPosition.y += Math.sin(progress * Math.PI) * TOWER_COMBAT_TUNING.projectileArcHeight;
+    projectileDirection.copy(liftedAimPosition).sub(projectile.root.position).normalize();
     projectile.root.position.addScaledVector(projectileDirection, step);
-    projectile.root.lookAt(liftedAim);
-    projectile.spin += dt * 7.5;
-    projectile.root.rotateZ(projectile.spin * 0.035);
-
-    projectile.history.unshift(projectile.root.position.clone());
-    projectile.history.length = 6;
-    writeTrail(projectile.trail, projectile.history);
+    projectile.root.lookAt(liftedAimPosition);
+    projectile.spin += dt * 2.7;
+    projectile.root.rotateZ(projectile.spin);
+    pushTrailPoint(projectile, projectile.root.position);
   }
+}
+
+function resetTrail(projectile: TowerProjectile, point: THREE.Vector3): void {
+  const positions = projectile.trailPositions;
+  for (let index = 0; index < TRAIL_POINTS; index++) {
+    const offset = index * 3;
+    positions[offset] = point.x;
+    positions[offset + 1] = point.y;
+    positions[offset + 2] = point.z;
+  }
+  (projectile.trail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+}
+
+function pushTrailPoint(projectile: TowerProjectile, point: THREE.Vector3): void {
+  const positions = projectile.trailPositions;
+  for (let index = TRAIL_POINTS - 1; index > 0; index--) {
+    const to = index * 3;
+    const from = (index - 1) * 3;
+    positions[to] = positions[from];
+    positions[to + 1] = positions[from + 1];
+    positions[to + 2] = positions[from + 2];
+  }
+  positions[0] = point.x;
+  positions[1] = point.y;
+  positions[2] = point.z;
+  (projectile.trail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  // No computeBoundingSphere(): the trail explicitly disables frustum culling, so recalculating
+  // bounds every animation frame was pure CPU work and one of the visible hitch sources.
 }
 
 function applyTowerProjectileDamage(target: GameEntity, elapsed: number): void {
@@ -575,6 +693,75 @@ function applyTowerProjectileDamage(target: GameEntity, elapsed: number): void {
   });
 }
 
+function createPooledEffect(team: CombatTeam): TowerPulseEffect {
+  const palette = projectilePalette(team);
+  const root = new THREE.Group();
+
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: palette.trim,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const ring = new THREE.Mesh(pulseRingGeometry, ringMaterial);
+  ring.rotation.x = -Math.PI / 2;
+  root.add(ring);
+
+  const flashMaterial = new THREE.MeshBasicMaterial({
+    color: palette.halo,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const flash = new THREE.Mesh(pulseFlashGeometry, flashMaterial);
+  root.add(flash);
+
+  return {
+    team,
+    root,
+    flash,
+    ringMaterial,
+    flashMaterial,
+    age: 0,
+    duration: 0.2,
+    startScale: 1,
+    endScale: 2,
+    ringOpacity: 0.72,
+    flashOpacity: 0.4,
+  };
+}
+
+function acquirePulseEffect(
+  worldRoot: THREE.Object3D,
+  position: THREE.Vector3,
+  team: TeamId,
+  impact: boolean,
+): TowerPulseEffect {
+  const visualTeam: CombatTeam = team === 'red' ? 'red' : 'blue';
+  const effect = effectPools[visualTeam].pop() ?? createPooledEffect(visualTeam);
+  effect.root.name = impact
+    ? `${visualTeam}-tower-impact`
+    : `${visualTeam}-tower-muzzle-flash`;
+  effect.root.position.copy(position);
+  effect.root.scale.setScalar(impact ? 0.8 : 0.65);
+  effect.flash.scale.setScalar(impact ? 1 : 0.67);
+  effect.age = 0;
+  effect.duration = impact ? 0.30 : 0.18;
+  effect.startScale = impact ? 0.8 : 0.65;
+  effect.endScale = impact ? 2.8 : 2.0;
+  effect.ringOpacity = 0.72;
+  effect.flashOpacity = impact ? 0.52 : 0.38;
+  effect.ringMaterial.opacity = effect.ringOpacity;
+  effect.flashMaterial.opacity = effect.flashOpacity;
+  worldRoot.add(effect.root);
+  return effect;
+}
+
 function updatePulseEffects(state: TowerCombatState, dt: number): void {
   for (let index = state.effects.length - 1; index >= 0; index--) {
     const effect = state.effects[index];
@@ -582,88 +769,19 @@ function updatePulseEffects(state: TowerCombatState, dt: number): void {
     const progress = THREE.MathUtils.clamp(effect.age / effect.duration, 0, 1);
     const scale = THREE.MathUtils.lerp(effect.startScale, effect.endScale, progress);
     effect.root.scale.setScalar(scale);
-    for (const material of effect.materials) material.opacity = (1 - progress) * 0.72;
+    effect.ringMaterial.opacity = (1 - progress) * effect.ringOpacity;
+    effect.flashMaterial.opacity = (1 - progress) * effect.flashOpacity;
     if (progress < 1) continue;
-    disposeObject(effect.root);
+    releasePulseEffect(effect);
     state.effects.splice(index, 1);
   }
 }
 
-function createPulseEffect(
-  worldRoot: THREE.Object3D,
-  position: THREE.Vector3,
-  team: TeamId,
-  impact: boolean,
-): TowerPulseEffect {
-  const visualTeam = team === 'red' ? 'red' : 'blue';
-  const palette = projectilePalette(visualTeam);
-  const root = new THREE.Group();
-  root.name = impact ? `${visualTeam}-tower-impact` : `${visualTeam}-tower-muzzle-flash`;
-  root.position.copy(position);
-
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color: palette.trim,
-    transparent: true,
-    opacity: 0.72,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-  });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.21, 28), ringMaterial);
-  ring.rotation.x = -Math.PI / 2;
-  root.add(ring);
-
-  const flashMaterial = new THREE.MeshBasicMaterial({
-    color: palette.halo,
-    transparent: true,
-    opacity: impact ? 0.52 : 0.38,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const flash = new THREE.Mesh(new THREE.IcosahedronGeometry(impact ? 0.18 : 0.12, 1), flashMaterial);
-  root.add(flash);
-  worldRoot.add(root);
-
-  return {
-    root,
-    materials: [ringMaterial, flashMaterial],
-    age: 0,
-    duration: impact ? 0.30 : 0.18,
-    startScale: impact ? 0.8 : 0.65,
-    endScale: impact ? 2.8 : 2.0,
-  };
-}
-
-function writeTrail(
-  trail: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>,
-  history: readonly THREE.Vector3[],
-): void {
-  const attribute = trail.geometry.getAttribute('position') as THREE.BufferAttribute;
-  for (let index = 0; index < 6; index++) {
-    const point = history[Math.min(index, history.length - 1)] ?? history[0];
-    attribute.setXYZ(index, point.x, point.y, point.z);
-  }
-  attribute.needsUpdate = true;
-  trail.geometry.computeBoundingSphere();
-}
-
-function disposeProjectile(projectile: TowerProjectile): void {
-  disposeObject(projectile.root);
-  projectile.trail.removeFromParent();
-  projectile.trail.geometry.dispose();
-  projectile.trail.material.dispose();
-}
-
-function disposeObject(root: THREE.Object3D): void {
-  root.removeFromParent();
-  root.traverse(object => {
-    if (!(object instanceof THREE.Mesh)) return;
-    object.geometry.dispose();
-    const materials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of materials) material.dispose();
-  });
+function releasePulseEffect(effect: TowerPulseEffect): void {
+  effect.root.removeFromParent();
+  effect.ringMaterial.opacity = 0;
+  effect.flashMaterial.opacity = 0;
+  effectPools[effect.team].push(effect);
 }
 
 function getEntityAimPosition(entity: GameEntity, out: THREE.Vector3): THREE.Vector3 {
@@ -675,10 +793,10 @@ function getEntityAimPosition(entity: GameEntity, out: THREE.Vector3): THREE.Vec
   return out;
 }
 
-function projectilePalette(team: 'blue' | 'red') {
+function projectilePalette(team: CombatTeam) {
   return team === 'blue'
-    ? { core: 0x73def4, emissive: 0x1d93b8, halo: 0xa9f2ff, trim: 0xe0c281 }
-    : { core: 0xf26058, emissive: 0xb62b25, halo: 0xff9a8e, trim: 0xc98359 };
+    ? { core: 0x73def4, halo: 0xa9f2ff, trim: 0xe0c281 }
+    : { core: 0xf26058, halo: 0xff9a8e, trim: 0xc98359 };
 }
 
 function planarDistanceSquared(ax: number, az: number, bx: number, bz: number): number {
