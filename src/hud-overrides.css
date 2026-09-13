@@ -34,13 +34,40 @@
   z-index: 5;
 }
 
+/* Minimap: 25% larger as a complete HUD component. */
+:root {
+  --minimap-size: clamp(228px, 18.125vw, 310px);
+}
+
+.minimap-shell {
+  left: 12.5px;
+  bottom: 12.5px;
+  grid-template-columns: var(--minimap-size) 35px;
+  gap: 6.25px;
+  padding: 8.75px;
+}
+
+.minimap-tools {
+  gap: 6.25px;
+}
+
+.minimap-tools span {
+  width: 33.75px;
+  height: 33.75px;
+  font-size: 16.25px;
+}
+
+.command-deck {
+  left: calc(var(--minimap-size) + 72.5px);
+}
+
 .minimap-hero-icon {
   position: absolute;
   left: 0;
   top: 0;
   z-index: 30;
-  width: clamp(28px, 2.2vw, 36px);
-  height: clamp(28px, 2.2vw, 36px);
+  width: clamp(21px, 1.65vw, 27px);
+  height: clamp(21px, 1.65vw, 27px);
   transform: translate(-50%, -50%);
   object-fit: cover;
   border: 2px solid rgba(132, 213, 255, 0.95);
