@@ -24,6 +24,7 @@ type Point3 = { x: number; z: number };
 type AttackOrder =
   | { kind: 'ground'; point: Point3 }
   | { kind: 'target'; target: THREE.Object3D };
+type CommandMarkerKind = 'move' | 'attack';
 
 const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
@@ -34,10 +35,8 @@ const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
 const ATTACK_RANGE = 1.35;
 const ATTACK_COOLDOWN = 0.72;
+const COMMAND_MARKER_Y = 0.12;
 
-// The Three.js game is created once from App.useEffect(). React Fast Refresh preserves
-// that mounted effect, so editing constants in this module used to leave the old game
-// instance alive. Force a page reload whenever this module changes during development.
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
 }
@@ -126,19 +125,16 @@ export async function createDawnreachGame(
   const heroMoveSpeed = alden ? GAME_MOVE_SPEED : HUMANOID_DEFAULT_MOVE_SPEED;
   const heroAnimationSpeed = alden ? heroMoveSpeed / heroPresentationScale : heroMoveSpeed;
 
-  // Scale the whole gameplay presentation root rather than only `model`. This keeps
-  // every visible Alden child (including attachments) on one authoritative scale.
-  // The root's world position remains the navigation position used by camera/minimap.
   hero.root.scale.setScalar(heroPresentationScale);
   const heroOverlay = addHeroOverlay(hero.root);
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
-  const targetMarker = buildTargetMarker(0x79ff71, 0xc3ffab);
+  const targetMarker = buildTargetMarker('move', 0x79ff71, 0xc3ffab);
   targetMarker.visible = false;
   scene.add(targetMarker);
 
-  const attackMarker = buildTargetMarker(0xff5f58, 0xffc27c);
+  const attackMarker = buildTargetMarker('attack', 0xff5f58, 0xffc27c);
   attackMarker.visible = false;
   scene.add(attackMarker);
 
@@ -205,13 +201,20 @@ export async function createDawnreachGame(
     setCommandCursor(false);
   };
 
+  const showCommandMarker = (marker: THREE.Group, point: Point3) => {
+    marker.position.set(point.x, COMMAND_MARKER_Y, point.z);
+    marker.rotation.set(0, 0, 0);
+    marker.scale.setScalar(0.72);
+    marker.userData.spawnTime = elapsed;
+    marker.visible = true;
+  };
+
   const issueMoveCommand = (point: Point3) => {
     attackOrder = null;
     destination = point;
     disarmAttack();
     attackMarker.visible = false;
-    targetMarker.position.set(point.x, 0.055, point.z);
-    targetMarker.visible = true;
+    showCommandMarker(targetMarker, point);
   };
 
   const issueGroundAttack = (point: Point3) => {
@@ -219,8 +222,7 @@ export async function createDawnreachGame(
     destination = point;
     disarmAttack();
     targetMarker.visible = false;
-    attackMarker.position.set(point.x, 0.058, point.z);
-    attackMarker.visible = true;
+    showCommandMarker(attackMarker, point);
   };
 
   const issueTargetAttack = (target: THREE.Object3D) => {
@@ -229,8 +231,7 @@ export async function createDawnreachGame(
     disarmAttack();
     targetMarker.visible = false;
     target.getWorldPosition(attackTargetPosition);
-    attackMarker.position.set(attackTargetPosition.x, 0.058, attackTargetPosition.z);
-    attackMarker.visible = true;
+    showCommandMarker(attackMarker, { x: attackTargetPosition.x, z: attackTargetPosition.z });
   };
 
   const triggerAttack = () => {
@@ -391,8 +392,6 @@ export async function createDawnreachGame(
   const renderMinimap = () => {
     if (!minimapRenderer || !minimapCamera) return;
 
-    // The minimap is a second live view of the same scene. Alden's 3D model is hidden
-    // only for this render pass because the HUD overlays his dedicated H001I head icon.
     const fog = scene.fog;
     const heroWasVisible = hero.root.visible;
     scene.fog = null;
@@ -418,7 +417,8 @@ export async function createDawnreachGame(
         attackMarker.visible = false;
       } else {
         attackOrder.target.getWorldPosition(attackTargetPosition);
-        attackMarker.position.set(attackTargetPosition.x, 0.058, attackTargetPosition.z);
+        attackMarker.position.x = attackTargetPosition.x;
+        attackMarker.position.z = attackTargetPosition.z;
         const dx = attackTargetPosition.x - hero.root.position.x;
         const dz = attackTargetPosition.z - hero.root.position.z;
         const distance = Math.hypot(dx, dz);
@@ -473,27 +473,35 @@ export async function createDawnreachGame(
     if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
     else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
-    if (alden && swordRestRotation) {
-      if (attackSwing > 0) {
-        attackSwing = Math.min(1, attackSwing + dt * 3.4);
-        const slash = Math.sin(attackSwing * Math.PI);
-        alden.sword.rotation.set(
-          swordRestRotation.x - slash * 0.95,
-          swordRestRotation.y + slash * 0.12,
-          swordRestRotation.z + slash * 0.34,
-        );
-        if (attackSwing >= 1) {
-          attackSwing = 0;
-          alden.sword.rotation.copy(swordRestRotation);
-        }
+    if (alden && swordRestRotation && attackSwing > 0) {
+      attackSwing = Math.min(1, attackSwing + dt * 3.4);
+      const slash = Math.sin(attackSwing * Math.PI);
+      alden.sword.rotation.set(
+        swordRestRotation.x - slash * 0.95,
+        swordRestRotation.y + slash * 0.12,
+        swordRestRotation.z + slash * 0.34,
+      );
+      if (attackSwing >= 1) {
+        attackSwing = 0;
+        alden.sword.rotation.copy(swordRestRotation);
       }
     }
 
     for (const marker of [targetMarker, attackMarker]) {
       if (!marker.visible) continue;
-      const pulse = 1 + Math.sin(elapsed * 8) * 0.12;
-      marker.scale.setScalar(pulse);
-      marker.rotation.z += dt * 0.8;
+      const kind = marker.userData.kind as CommandMarkerKind;
+      const age = Math.max(0, elapsed - Number(marker.userData.spawnTime ?? elapsed));
+      const intro = THREE.MathUtils.smoothstep(age, 0, 0.16);
+      const pulse = 1 + Math.sin(elapsed * (kind === 'attack' ? 8.5 : 6.5)) * 0.045;
+      marker.scale.setScalar((0.72 + intro * 0.28) * pulse);
+      // Rotate around world Y only. Rotating Z tilts this horizontal marker into the terrain.
+      marker.rotation.y += dt * (kind === 'attack' ? 2.1 : 1.25);
+      marker.position.y = COMMAND_MARKER_Y + Math.sin(elapsed * 5 + (kind === 'attack' ? 0.8 : 0)) * 0.006;
+
+      const accentMaterial = marker.userData.accentMaterial as THREE.MeshBasicMaterial | undefined;
+      const glowMaterial = marker.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
+      if (accentMaterial) accentMaterial.opacity = (kind === 'attack' ? 0.92 : 0.86) + Math.sin(elapsed * 7) * 0.07;
+      if (glowMaterial) glowMaterial.opacity = 0.16 + (Math.sin(elapsed * 5) + 1) * 0.055;
     }
 
     updateCamera();
@@ -571,7 +579,6 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
   selection.position.y = 0.025;
   root.add(selection);
 
-  // One camera-facing sprite keeps the icon, bars and level aligned.
   const canvas = document.createElement('canvas');
   canvas.width = 440;
   canvas.height = 88;
@@ -627,11 +634,9 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
       frame.addColorStop(1, '#9caaa7');
       ctx.fillStyle = frame;
       ctx.beginPath();
-      // Extend the frame under the head; the icon is drawn on top of it.
       ctx.moveTo(48, 8);
       ctx.lineTo(436, 8);
       ctx.lineTo(436, 68);
-      // A shallow, symmetric pointer sits directly above the hero's center.
       ctx.lineTo(276, 68);
       ctx.lineTo(canvas.width / 2, 82);
       ctx.lineTo(164, 68);
@@ -657,7 +662,6 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
       texture.needsUpdate = true;
     },
     dispose() {
-      // The scene disposer owns the sprite material and texture.
       if (icon) icon.onload = icon.onerror = null;
       icon = null;
     },
@@ -702,23 +706,86 @@ function buildHeroLabel(ctx: CanvasRenderingContext2D, hp: number, maxHp: number
   }
 }
 
-function buildTargetMarker(color: number, innerColor: number) {
+function buildTargetMarker(kind: CommandMarkerKind, color: number, innerColor: number) {
   const group = new THREE.Group();
+  group.userData.kind = kind;
+  group.userData.spawnTime = 0;
 
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.28, 0.38, 40),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  group.add(ring);
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.2,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const accentMaterial = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const coreMaterial = new THREE.MeshBasicMaterial({
+    color: innerColor,
+    transparent: true,
+    opacity: 0.96,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
 
-  const inner = new THREE.Mesh(
-    new THREE.CircleGeometry(0.07, 24),
-    new THREE.MeshBasicMaterial({ color: innerColor, transparent: true, opacity: 0.82, side: THREE.DoubleSide }),
-  );
-  inner.rotation.x = -Math.PI / 2;
-  inner.position.y = 0.003;
-  group.add(inner);
+  group.userData.glowMaterial = glowMaterial;
+  group.userData.accentMaterial = accentMaterial;
+
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.53, 64), glowMaterial);
+  halo.rotation.x = -Math.PI / 2;
+  halo.renderOrder = 30;
+  group.add(halo);
+
+  for (let segment = 0; segment < 4; segment++) {
+    const start = segment * Math.PI / 2 + 0.14;
+    const arc = new THREE.Mesh(
+      new THREE.RingGeometry(0.34, 0.43, 28, 1, start, Math.PI / 2 - 0.28),
+      accentMaterial,
+    );
+    arc.rotation.x = -Math.PI / 2;
+    arc.position.y = 0.004;
+    arc.renderOrder = 31;
+    group.add(arc);
+  }
+
+  const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.215, 40), coreMaterial);
+  innerRing.rotation.x = -Math.PI / 2;
+  innerRing.position.y = 0.007;
+  innerRing.renderOrder = 32;
+  group.add(innerRing);
+
+  const coreGeometry = new THREE.CircleGeometry(kind === 'attack' ? 0.09 : 0.072, 4);
+  coreGeometry.rotateZ(Math.PI / 4);
+  const core = new THREE.Mesh(coreGeometry, coreMaterial);
+  core.rotation.x = -Math.PI / 2;
+  core.position.y = 0.01;
+  core.renderOrder = 33;
+  group.add(core);
+
+  if (kind === 'attack') {
+    for (let spokeIndex = 0; spokeIndex < 4; spokeIndex++) {
+      const spokeGeometry = new THREE.PlaneGeometry(0.035, 0.13);
+      spokeGeometry.rotateZ(spokeIndex * Math.PI / 2);
+      const spoke = new THREE.Mesh(spokeGeometry, coreMaterial);
+      spoke.rotation.x = -Math.PI / 2;
+      const angle = spokeIndex * Math.PI / 2;
+      spoke.position.set(Math.sin(angle) * 0.27, 0.009, Math.cos(angle) * 0.27);
+      spoke.renderOrder = 33;
+      group.add(spoke);
+    }
+  }
+
   return group;
 }
 
