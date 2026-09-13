@@ -173,6 +173,14 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     }
   }
 
+  // The grid is the authored/static baseline. Re-query collisionWorld while searching as well,
+  // so a blocker that appears after startup invalidates cells and forces a fresh route around it.
+  const cellIsWalkableNow = (column: number, row: number) => {
+    if (!inGrid(column, row)) return false;
+    const index = indexOf(column, row);
+    return walkable[index] !== 0 && pointIsWalkable(cellToWorld(column, row));
+  };
+
   const nearestWalkableCell = (
     point: NavigationPoint,
     maxRadius: number,
@@ -187,9 +195,7 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       for (let columnOffset = -radiusInCells; columnOffset <= radiusInCells; columnOffset++) {
         const column = origin.column + columnOffset;
         const row = origin.row + rowOffset;
-        if (!inGrid(column, row)) continue;
-        const index = indexOf(column, row);
-        if (walkable[index] === 0) continue;
+        if (!cellIsWalkableNow(column, row)) continue;
         const candidate = cellToWorld(column, row);
         const dx = candidate.x - point.x;
         const dz = candidate.z - point.z;
@@ -218,9 +224,8 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
 
       const cell = worldToCell(point);
       if (cell.column !== previousCell.column && cell.row !== previousCell.row) {
-        const horizontal = indexOf(cell.column, previousCell.row);
-        const vertical = indexOf(previousCell.column, cell.row);
-        if (walkable[horizontal] === 0 || walkable[vertical] === 0) return false;
+        if (!cellIsWalkableNow(cell.column, previousCell.row)
+          || !cellIsWalkableNow(previousCell.column, cell.row)) return false;
       }
       previousCell = cell;
     }
@@ -308,14 +313,13 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       for (const neighbor of NEIGHBORS) {
         const column = currentColumn + neighbor.dc;
         const row = currentRow + neighbor.dr;
-        if (!inGrid(column, row)) continue;
+        if (!cellIsWalkableNow(column, row)) continue;
         const neighborIndex = indexOf(column, row);
-        if (walkable[neighborIndex] === 0 || closedGeneration[neighborIndex] === generation) continue;
+        if (closedGeneration[neighborIndex] === generation) continue;
 
         if (neighbor.dc !== 0 && neighbor.dr !== 0) {
-          const sideA = indexOf(currentColumn + neighbor.dc, currentRow);
-          const sideB = indexOf(currentColumn, currentRow + neighbor.dr);
-          if (walkable[sideA] === 0 || walkable[sideB] === 0) continue;
+          if (!cellIsWalkableNow(currentColumn + neighbor.dc, currentRow)
+            || !cellIsWalkableNow(currentColumn, currentRow + neighbor.dr)) continue;
         }
 
         const stepCost = neighbor.cost * cellSize
