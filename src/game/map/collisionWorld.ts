@@ -26,7 +26,7 @@ type SegmentCollider = {
   bx: number;
   bz: number;
   radius: number;
-  kind: 'wall' | 'elevation';
+  kind: 'wall' | 'elevation' | 'barrier';
 };
 
 export type CollisionWorld = {
@@ -72,6 +72,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   addRetainingWallColliders(segments, counts);
   addBaseWallColliders(segments, counts);
   addObjectiveWallColliders(segments, counts);
+  collectPresentationBarrierColliders(battlefield, segments);
 
   const isBlocked = (point: CollisionPoint, radius: number) => {
     if (point.x - radius < MAP_BOUNDS.minX || point.x + radius > MAP_BOUNDS.maxX
@@ -465,6 +466,56 @@ function collectStructureColliders(
       kind: 'structure',
     });
     counts.structures++;
+  });
+}
+
+function collectPresentationBarrierColliders(
+  battlefield: THREE.Object3D,
+  colliders: SegmentCollider[],
+) {
+  const start = new THREE.Vector3();
+  const end = new THREE.Vector3();
+
+  const addBoxAxisBarrier = (mesh: THREE.Mesh<THREE.BoxGeometry>, radius: number) => {
+    const { width } = mesh.geometry.parameters;
+    start.set(-width / 2, 0, 0).applyMatrix4(mesh.matrixWorld);
+    end.set(width / 2, 0, 0).applyMatrix4(mesh.matrixWorld);
+    if (Math.hypot(end.x - start.x, end.z - start.z) <= 0.08) return;
+    colliders.push({
+      ax: start.x,
+      az: start.z,
+      bx: end.x,
+      bz: end.z,
+      radius,
+      kind: 'barrier',
+    });
+  };
+
+  battlefield.traverse((object) => {
+    if (!(object instanceof THREE.Group)) return;
+
+    if (object.name === 'river-bridge-rails') {
+      for (const child of object.children) {
+        if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.BoxGeometry)) continue;
+        const { width, height, depth } = child.geometry.parameters;
+        // One capsule per stone parapet is enough: the coping, posts and metal rails sit on
+        // the same line, so duplicating colliders for every decorative part would over-push.
+        if (width < 7 || height < 0.18 || height > 0.28) continue;
+        addBoxAxisBarrier(child, Math.max(0.14, depth * 0.5));
+      }
+      return;
+    }
+
+    if (object.name !== 'base-ramp-architectural-edge') return;
+    for (const child of object.children) {
+      if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.BoxGeometry)) continue;
+      const { width, height, depth } = child.geometry.parameters;
+      // The first masonry beam on each ramp-edge module is the physical barrier. It is
+      // authored in three tapered pieces so the collider follows the rail through the gate.
+      // Post feet are only 0.18 high and upper trims are thinner, so they are excluded here.
+      if (width < 0.55 || height < 0.2) continue;
+      addBoxAxisBarrier(child, Math.max(0.10, depth * 0.5));
+    }
   });
 }
 
