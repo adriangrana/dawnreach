@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "defaultTower": {
+    "level": 3,
+    "maxHp": 1800,
+    "attack": {
+      "damage": 165,
+      "intervalSeconds": 1.0,
+      "acquireWindupSeconds": 0.18,
+      "range": 8.5,
+      "projectileSpeed": 13.5,
+      "projectileArcHeight": 0.72
+    },
+    "vision": {
+      "radius": 15.0,
+      "height": 4.5
+    },
+    "auraRadius": 8.5,
+    "abilities": [
+      {
+        "id": "backdoor-protection",
+        "name": "Protección de retaguardia",
+        "englishName": "Backdoor Protection",
+        "type": "passive",
+        "level": 1,
+        "description": "Las estructuras aliadas dentro del radio de la torre reciben menos daño y regeneran vida rápidamente mientras no haya creeps enemigos cerca de la torre.",
+        "eligibleKinds": ["tower", "building"],
+        "effects": {
+          "damageReductionPercent": 50,
+          "healthRegenPerSecond": 24,
+          "disabledByEnemyCreepRadius": 8.5
+        }
+      },
+      {
+        "id": "reinforced",
+        "name": "Reforzado",
+        "englishName": "Reinforced",
+        "type": "passive",
+        "level": 2,
+        "description": "Las unidades y estructuras aliadas reforzadas infligen daño adicional a otros objetivos reforzados y reciben menos daño de ataques.",
+        "eligibleKinds": ["hero", "creep", "tower", "building", "shop"],
+        "effects": {
+          "bonusDamageVsReinforcedPercent": 150,
+          "heroAttackDamageReductionPercent": 50,
+          "nonHeroAttackDamageReductionPercent": 30
+        }
+      }
+    ]
+  }
+}
