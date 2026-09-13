@@ -11,14 +11,15 @@ export {
 
 /**
  * Alden's basic attack is authored as a four-phase left-handed diagonal cut:
- * anticipation 0-35%, impact 35-45%, follow-through 45-65%, recovery 65-100%.
+ * anticipation 0-35%, impact 35-45% (contact at ~40%), follow-through 45-65%,
+ * recovery 65-100%.
  *
  * createDawnreachGame already drives the local sword pivot while an attack is active.
  * We use that movement as the attack trigger and layer the full-body motion on the
  * dedicated left-wrist pivot, so combat code does not need to know anything about
  * the animation rig.
  */
-const BASIC_ATTACK_BODY_DURATION = 0.54;
+const BASIC_ATTACK_BODY_DURATION = 1 / 3.4;
 const ATTACK_SIGNAL_THRESHOLD = THREE.MathUtils.degToRad(1.5);
 
 type AttackPose = Readonly<{
@@ -95,7 +96,7 @@ const ANTICIPATION: AttackPose = {
   rightHipPitch: -7,
 };
 
-// 45% — explosive release. The elbow deliberately stops short of full extension
+// ~40% — actual contact. The elbow deliberately stops short of full extension
 // (about 168 degrees) and the wrist snaps forward to provide the sword's whip.
 const IMPACT: AttackPose = {
   pelvisYaw: 25,
@@ -150,12 +151,12 @@ export function animateAlden(
 
   // The low-level combat loop moves rig.sword during a basic attack. Read that local
   // deviation before animateHumanoid runs, then fire one full-body animation on the
-  // rising edge. This keeps attack timing/damage ownership in gameplay and pose
-  // ownership here in the animation layer.
+  // rising edge. Start one frame into the clip because the sword movement we observe
+  // was authored by the previous render frame.
   const swordDriven = state.restSwordQuaternion.angleTo(rig.sword.quaternion) > ATTACK_SIGNAL_THRESHOLD;
   if (swordDriven && !state.swordDrivenLastFrame && !state.active) {
     state.active = true;
-    state.elapsed = 0;
+    state.elapsed = dt;
   }
   state.swordDrivenLastFrame = swordDriven;
 
@@ -274,13 +275,19 @@ function sampleAttackPose(progress: number): AttackPose {
     const t = easeInQuad(p / 0.35);
     return lerpPose(NEUTRAL, ANTICIPATION, t);
   }
-  if (p <= 0.45) {
-    const t = (p - 0.35) / 0.10;
+  if (p <= 0.40) {
+    // Explosive release: deliberately linear so the weapon does not feel floaty.
+    const t = (p - 0.35) / 0.05;
     return lerpPose(ANTICIPATION, IMPACT, t);
+  }
+  if (p <= 0.45) {
+    // Finish the contact window while immediately beginning to absorb the strike.
+    const t = (p - 0.40) / 0.05;
+    return lerpPose(IMPACT, FOLLOW_THROUGH, t * 0.22);
   }
   if (p <= 0.65) {
     const t = THREE.MathUtils.smoothstep(p, 0.45, 0.65);
-    return lerpPose(IMPACT, FOLLOW_THROUGH, t);
+    return lerpPose(IMPACT, FOLLOW_THROUGH, 0.22 + t * 0.78);
   }
 
   const t = easeOutCubic((p - 0.65) / 0.35);
