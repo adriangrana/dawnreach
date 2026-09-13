@@ -3,6 +3,7 @@ import {
   createEmptyAbilityRanks,
   createEmptyInventory,
   type AbilityKey,
+  type HeroDefinition,
   type HeroId,
   type InventoryItem,
 } from '../heroes/types';
@@ -19,6 +20,7 @@ import type {
 
 const TEAMS: readonly TeamId[] = ['dawn', 'dusk'];
 const SLOT_INDEXES: readonly TeamSlotIndex[] = [1, 2, 3, 4, 5];
+const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
 export function createMatchSlots(): MatchSlotState[] {
   return TEAMS.flatMap(team => SLOT_INDEXES.map(index => ({
@@ -148,6 +150,8 @@ export function setHeroLevel(state: MatchState, heroEntityId: string, level: num
     throw new RangeError(`Hero level must be an integer from 1 to ${definition.maxLevel}.`);
   }
 
+  assertAbilityAllocationFitsLevel(hero, definition, level);
+
   const before = hero.definitionId === 'alden' ? getAldenStatsAtLevel(hero.level) : definition.baseStats;
   const after = hero.definitionId === 'alden' ? getAldenStatsAtLevel(level) : definition.baseStats;
   const hpRatio = before.maxHp > 0 ? hero.currentHp / before.maxHp : 1;
@@ -159,19 +163,34 @@ export function setHeroLevel(state: MatchState, heroEntityId: string, level: num
   return next;
 }
 
+export function getSpentHeroAbilityPoints(state: MatchState, heroEntityId: string): number {
+  return getSpentAbilityPoints(getRequiredHero(state, heroEntityId));
+}
+
+export function getUnspentHeroAbilityPoints(state: MatchState, heroEntityId: string): number {
+  const hero = getRequiredHero(state, heroEntityId);
+  return Math.max(0, hero.level - getSpentAbilityPoints(hero));
+}
+
 export function upgradeHeroAbility(state: MatchState, heroEntityId: string, key: AbilityKey): MatchState {
   const next = cloneState(state);
   const hero = getRequiredHero(next, heroEntityId);
   const definition = getHeroDefinition(hero.definitionId);
+  const ability = definition.abilities[key];
   const currentRank = hero.abilityRanks[key];
-  if (currentRank >= 4) throw new Error(`${key} is already rank 4.`);
+  const maxRank = ability.unlockLevels.length;
+  if (currentRank >= maxRank) throw new Error(`${key} is already rank ${maxRank}.`);
 
-  let availableRank = definition.abilities[key].unlockLevels.filter(level => level <= hero.level).length;
+  let availableRank = ability.unlockLevels.filter(level => level <= hero.level).length;
   if (hero.definitionId === 'alden') availableRank = getAldenAvailableAbilityRank(key, hero.level);
   const desiredRank = currentRank + 1;
   if (desiredRank > availableRank) {
-    const requiredLevel = definition.abilities[key].unlockLevels[desiredRank - 1];
+    const requiredLevel = ability.unlockLevels[desiredRank - 1];
     throw new Error(`${key} rank ${desiredRank} requires hero level ${requiredLevel}.`);
+  }
+
+  if (getSpentAbilityPoints(hero) >= hero.level) {
+    throw new Error(`${hero.heroEntityId} has no unspent ability points at hero level ${hero.level}.`);
   }
 
   hero.abilityRanks[key] = desiredRank;
@@ -234,6 +253,14 @@ export function validateMatchState(state: MatchState): void {
       if (slot.heroEntityId !== hero.heroEntityId) throw new Error(`Hero ${hero.heroEntityId} is not linked back from slot ${slot.slotId}.`);
     }
   }
+
+  for (const hero of Object.values(state.heroes)) {
+    const definition = getHeroDefinition(hero.definitionId);
+    if (hero.level < 1 || hero.level > definition.maxLevel) {
+      throw new Error(`Hero ${hero.heroEntityId} has invalid level ${hero.level}.`);
+    }
+    assertAbilityAllocationFitsLevel(hero, definition, hero.level);
+  }
 }
 
 export function getRequiredPlayer(state: MatchState, playerId: string): MatchPlayerState {
@@ -252,6 +279,37 @@ function getRequiredSlot(state: MatchState, slotId: MatchSlotId): MatchSlotState
   const slot = state.slots.find(candidate => candidate.slotId === slotId);
   if (!slot) throw new Error(`Unknown match slot ${slotId}.`);
   return slot;
+}
+
+function getSpentAbilityPoints(hero: MatchHeroState): number {
+  return ABILITY_KEYS.reduce((total, key) => total + hero.abilityRanks[key], 0);
+}
+
+function assertAbilityAllocationFitsLevel(
+  hero: MatchHeroState,
+  definition: HeroDefinition,
+  heroLevel: number,
+): void {
+  const spentPoints = getSpentAbilityPoints(hero);
+  if (spentPoints > heroLevel) {
+    throw new RangeError(
+      `Hero ${hero.heroEntityId} has spent ${spentPoints} ability points but level ${heroLevel} only grants ${heroLevel}.`,
+    );
+  }
+
+  for (const key of ABILITY_KEYS) {
+    const rank = hero.abilityRanks[key];
+    const unlockLevels = definition.abilities[key].unlockLevels;
+    if (!Number.isInteger(rank) || rank < 0 || rank > unlockLevels.length) {
+      throw new RangeError(`${key} rank ${rank} is invalid for ${definition.displayName}.`);
+    }
+    if (rank > 0) {
+      const requiredLevel = unlockLevels[rank - 1];
+      if (requiredLevel === undefined || heroLevel < requiredLevel) {
+        throw new RangeError(`${key} rank ${rank} requires hero level ${requiredLevel}.`);
+      }
+    }
+  }
 }
 
 function cloneState(state: MatchState): MatchState {

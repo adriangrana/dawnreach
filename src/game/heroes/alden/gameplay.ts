@@ -7,6 +7,12 @@ import type {
 
 export const ALDEN_ID = 'alden' as const;
 
+export const ALDEN_SKILL_SYSTEM = {
+  abilityPointsPerHeroLevel: 1,
+  basicAbilityRankHeroLevels: [1, 3, 5, 7] as const,
+  ultimateRankHeroLevels: [6, 12, 18] as const,
+} as const;
+
 export interface AldenInnateDefinition {
   name: string;
   maxStacks: number;
@@ -96,7 +102,7 @@ export interface AldenGameplayDefinition extends HeroDefinition {
     qwCooldownReductionPerBasicAttackSeconds: number;
     cooldownReductionInternalCooldownSeconds: number;
     bossThreatMultiplier: number;
-    ranks: readonly [AldenRRank, AldenRRank, AldenRRank, AldenRRank];
+    ranks: readonly [AldenRRank, AldenRRank, AldenRRank];
   };
 }
 
@@ -104,18 +110,18 @@ const qAbility: HeroAbilityDefinition = {
   key: 'Q',
   name: 'Avance de la Corona',
   type: 'active',
-  lore: 'Alden avanza tras su escudo con la determinación de una guardia real rompiendo una línea enemiga. Al llegar a su presa, abre la defensa con un corte diagonal de su espada.',
+  lore: 'Alden irrumpe con la determinación de una guardia real rompiendo una línea enemiga y remata el avance con un corte diagonal de su espada.',
   technicalDescription: 'Avanza hasta 300 unidades y termina con un corte frontal de 110° y 285 de alcance. Inflige daño físico, ralentiza y aplica 1 Cadencia Real al primer héroe, élite o jefe alcanzado.',
-  unlockLevels: [1, 8, 15, 22],
+  unlockLevels: ALDEN_SKILL_SYSTEM.basicAbilityRankHeroLevels,
 };
 
 const wAbility: HeroAbilityDefinition = {
   key: 'W',
   name: 'Guardia de la Puerta Inquebrantable',
   type: 'active',
-  lore: 'Alden adopta la postura de los guardianes que defendían las puertas de Valebrant: escudo alto, pie firme y espada preparada detrás de la línea de acero.',
-  technicalDescription: 'Mantiene guardia frontal durante 1.25 s. Reduce daño directo físico o mágico recibido desde 140° frontales, pierde 25% de movimiento y puede preparar Represalia al bloquear suficiente daño o recibir control duro frontal.',
-  unlockLevels: [3, 10, 17, 24],
+  lore: 'Alden adopta la postura de los guardianes de Valebrant: pie firme, espada en guardia y toda su técnica concentrada en desviar el impacto antes de devolverlo.',
+  technicalDescription: 'Mantiene guardia frontal con la espada durante 1.25 s. Reduce daño directo físico o mágico recibido desde 140° frontales, pierde 25% de movimiento y puede preparar Represalia al bloquear suficiente daño o recibir control duro frontal.',
+  unlockLevels: ALDEN_SKILL_SYSTEM.basicAbilityRankHeroLevels,
 };
 
 const eAbility: HeroAbilityDefinition = {
@@ -124,7 +130,7 @@ const eAbility: HeroAbilityDefinition = {
   type: 'active_with_passive',
   lore: 'Cada golpe de Alden mide la guardia rival y prepara el siguiente. Cuando encuentra la apertura, completa la secuencia con un corte circular capaz de quebrar una formación.',
   technicalDescription: 'Los básicos consecutivos contra un mismo objetivo acumulan hasta 3 Cadencias durante 4 s y aumentan la velocidad de ataque contra ese objetivo. La activa consume las Cadencias de los objetivos en 325 unidades para infligir daño adicional y curar a Alden.',
-  unlockLevels: [5, 12, 19, 26],
+  unlockLevels: ALDEN_SKILL_SYSTEM.basicAbilityRankHeroLevels,
 };
 
 const rAbility: HeroAbilityDefinition = {
@@ -133,20 +139,20 @@ const rAbility: HeroAbilityDefinition = {
   type: 'ultimate',
   lore: 'Alden pronuncia el antiguo decreto de la corona y convierte el campo cercano en su tribunal: quien amenace a los suyos deberá enfrentarlo primero a él.',
   technicalDescription: 'Tras 0.55 s golpea un radio de 475, inflige daño físico, provoca a héroes y aplica Cadencia Real. Activa Majestad de Hierro durante 6 s, reduciendo daño recibido y aumentando tenacidad. Los básicos contra objetivos juzgados reducen Q y W.',
-  unlockLevels: [6, 18, 30, 42],
+  unlockLevels: ALDEN_SKILL_SYSTEM.ultimateRankHeroLevels,
 };
 
 export const ALDEN: AldenGameplayDefinition = {
   id: ALDEN_ID,
   displayName: 'Alden',
-  version: '1.0.0',
-  maxLevel: 50,
+  version: '1.1.0',
+  maxLevel: 30,
   className: 'Caballero',
   primaryRole: 'Tanque-Bruiser',
   secondaryRoles: ['Frontline', 'Iniciador', 'Daño sostenido'],
   difficulty: 'Medium',
-  weaponConfiguration: 'Espada larga a una mano y escudo pesado',
-  weaponDesignReason: 'La espada conserva amenaza sostenida mientras el escudo convierte orientación, timing y lectura del rival en supervivencia activa.',
+  weaponConfiguration: 'Espada larga de caballero, sin escudo',
+  weaponDesignReason: 'Alden concentra toda su identidad de combate en una sola espada: inicia con ella, mantiene presión sostenida y convierte una guardia técnica de hoja en su principal herramienta defensiva.',
   lore: 'Alden fue el último caballero en abandonar las puertas de Valebrant cuando el reino cayó. Desde entonces lleva su espada no como símbolo de nobleza, sino como juramento: mientras él permanezca en pie, ningún enemigo cruzará la línea que protege.',
   resource: {
     type: 'mana',
@@ -253,14 +259,13 @@ export const ALDEN: AldenGameplayDefinition = {
     bossThreatMultiplier: 5,
     ranks: [
       { baseDamage: 130, manaCost: 100, cooldownSeconds: 90, pvpTauntDurationSeconds: 1, eliteTauntDurationSeconds: 1.5, damageReductionPercent: 15, tenacityPercent: 20 },
-      { baseDamage: 190, manaCost: 115, cooldownSeconds: 80, pvpTauntDurationSeconds: 1.2, eliteTauntDurationSeconds: 1.7, damageReductionPercent: 18, tenacityPercent: 25 },
-      { baseDamage: 250, manaCost: 130, cooldownSeconds: 70, pvpTauntDurationSeconds: 1.4, eliteTauntDurationSeconds: 1.9, damageReductionPercent: 21, tenacityPercent: 30 },
+      { baseDamage: 220, manaCost: 125, cooldownSeconds: 75, pvpTauntDurationSeconds: 1.3, eliteTauntDurationSeconds: 1.8, damageReductionPercent: 20, tenacityPercent: 28 },
       { baseDamage: 310, manaCost: 145, cooldownSeconds: 60, pvpTauntDurationSeconds: 1.6, eliteTauntDurationSeconds: 2.1, damageReductionPercent: 24, tenacityPercent: 35 },
     ],
   },
 };
 
-export const ALDEN_ABILITY_UNLOCK_LEVELS: Record<AbilityKey, readonly [number, number, number, number]> = {
+export const ALDEN_ABILITY_UNLOCK_LEVELS: Record<AbilityKey, readonly number[]> = {
   Q: ALDEN.abilities.Q.unlockLevels,
   W: ALDEN.abilities.W.unlockLevels,
   E: ALDEN.abilities.E.unlockLevels,

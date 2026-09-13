@@ -19,6 +19,13 @@ const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68 ;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
 
+// The Three.js game is created once from App.useEffect(). React Fast Refresh preserves
+// that mounted effect, so editing constants in this module used to leave the old game
+// instance alive. Force a page reload whenever this module changes during development.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => window.location.reload());
+}
+
 export async function createDawnreachGame(
   host: HTMLDivElement,
   minimapHost?: HTMLDivElement | null,
@@ -86,9 +93,13 @@ export async function createDawnreachGame(
   const hero = alden ?? buildHumanoidBody();
   const heroPresentationScale = alden ? GAME_HERO_SCALE : 1;
   const heroMoveSpeed = alden ? GAME_MOVE_SPEED : HUMANOID_DEFAULT_MOVE_SPEED;
+  const heroAnimationSpeed = alden ? heroMoveSpeed / heroPresentationScale : heroMoveSpeed;
 
-  hero.model.scale.setScalar(heroPresentationScale);
-  addHeroOverlay(hero.root, alden ? 'Alden' : 'Humanoide', heroPresentationScale);
+  // Scale the whole gameplay presentation root rather than only `model`. This keeps
+  // every visible Alden child (including attachments) on one authoritative scale.
+  // The root's world position remains the navigation position used by camera/minimap.
+  hero.root.scale.setScalar(heroPresentationScale);
+  addHeroOverlay(hero.root, alden ? 'Alden' : 'Humanoide');
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
@@ -273,8 +284,8 @@ export async function createDawnreachGame(
     currentYaw += yawDelta * Math.min(1, dt * 11);
     hero.model.rotation.y = currentYaw;
 
-    if (alden) animateAlden(alden, elapsed, moving, dt, heroMoveSpeed);
-    else animateHumanoid(hero, elapsed, moving, dt, heroMoveSpeed);
+    if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
+    else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
     if (targetMarker.visible) {
       const pulse = 1 + Math.sin(elapsed * 8) * 0.12;

@@ -1,3 +1,5 @@
+export const MAX_HERO_LEVEL = 30 as const;
+
 export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 export type DamageType = 'physical' | 'magic' | 'true';
 export type HeroResourceType = 'mana' | 'rage' | 'energy';
@@ -24,20 +26,24 @@ export type StatProgression =
   | { kind: 'linear'; perLevel: number }
   | { kind: 'percentOfBase'; percentPerLevel: number };
 
+export type AbilityUnlockLevels =
+  | readonly [number, number, number]
+  | readonly [number, number, number, number];
+
 export interface HeroAbilityDefinition {
   key: AbilityKey;
   name: string;
   type: 'active' | 'passive' | 'active_with_passive' | 'ultimate';
   lore: string;
   technicalDescription: string;
-  unlockLevels: readonly [number, number, number, number];
+  unlockLevels: AbilityUnlockLevels;
 }
 
 export interface HeroDefinition {
   id: HeroId;
   displayName: string;
   version: string;
-  maxLevel: number;
+  maxLevel: typeof MAX_HERO_LEVEL;
   className: string;
   primaryRole: string;
   secondaryRoles: readonly string[];
