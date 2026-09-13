@@ -19,6 +19,7 @@ export const VISION_RANGES = {
 } as const;
 
 export const ATTACK_RANGES = {
+  hero: 1.35,
   tower: TOWER_GAMEPLAY.attack.range,
 } as const;
 
@@ -93,7 +94,11 @@ function defaultVisionRadius(kind: GameEntityKind) {
 }
 
 function defaultAttackRange(kind: GameEntityKind) {
-  return kind === 'tower' ? ATTACK_RANGES.tower : 0;
+  switch (kind) {
+    case 'hero': return ATTACK_RANGES.hero;
+    case 'tower': return ATTACK_RANGES.tower;
+    default: return 0;
+  }
 }
 
 function defaultMaxHp(kind: GameEntityKind) {
