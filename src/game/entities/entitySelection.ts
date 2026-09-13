@@ -50,7 +50,7 @@ type SelectionVisual = Readonly<{
   outerRotor: THREE.Group;
   innerRotor: THREE.Group;
   glowMaterial: THREE.MeshBasicMaterial;
-  pulseMaterials: readonly THREE.MeshBasicMaterial[];
+  glowBaseOpacity: number;
   style: SelectionStyle;
 }>;
 
@@ -106,7 +106,7 @@ const STYLE_BY_KIND: Record<GameEntityKind, SelectionStyle> = {
     pulseSpeed: 2,
     pulseAmount: 0.008,
     glowOpacity: 0.11,
-    mainOpacity: 0.9,
+    mainOpacity: 0.90,
     accentOpacity: 0.58,
   },
   tower: {
@@ -256,7 +256,6 @@ function addHorizontalRing(
   mesh.position.y = y;
   mesh.renderOrder = renderOrder;
   parent.add(mesh);
-  return mesh;
 }
 
 function buildSelectionVisual(entity: GameEntity): SelectionVisual {
@@ -270,7 +269,6 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
   const mainMaterial = markerMaterial(palette.primary, style.mainOpacity);
   const brightMaterial = markerMaterial(palette.bright, style.accentOpacity);
   const segmentMaterial = markerMaterial(palette.primary, Math.min(1, style.accentOpacity + 0.08));
-  const pulseMaterials = [glowMaterial, mainMaterial, brightMaterial, segmentMaterial] as const;
 
   addHorizontalRing(root, style.glowInner, style.glowOuter, glowMaterial, 78, 0.000);
   addHorizontalRing(root, style.shadowInner, style.shadowOuter, shadowMaterial, 79, 0.003);
@@ -313,13 +311,12 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
   }
   root.add(innerRotor);
 
-  // Buildings and towers get restrained corner pips. They make large structures feel
-  // deliberately framed without turning the marker into a thick arcade-style circle.
+  // Large/interactable structures receive restrained pips so their footprint feels framed,
+  // but the marker stays thin enough to preserve ground readability.
   if (entity.kind === 'tower' || entity.kind === 'building' || entity.kind === 'shop') {
     const pipCount = entity.kind === 'shop' ? 6 : 4;
     const pipRadius = style.tickRadius - 0.02;
     const pipMaterial = markerMaterial(palette.bright, 0.68);
-    pulseMaterials.push?.(pipMaterial);
     for (let index = 0; index < pipCount; index++) {
       const angle = index * Math.PI * 2 / pipCount + Math.PI / 4;
       const pip = new THREE.Mesh(new THREE.PlaneGeometry(0.055, 0.055), pipMaterial);
@@ -330,7 +327,14 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
     }
   }
 
-  return { root, outerRotor, innerRotor, glowMaterial, pulseMaterials, style };
+  return {
+    root,
+    outerRotor,
+    innerRotor,
+    glowMaterial,
+    glowBaseOpacity: style.glowOpacity,
+    style,
+  };
 }
 
 function disposeSelectionVisual(visual: SelectionVisual | null) {
@@ -441,12 +445,7 @@ export function createEntitySelectionController(
     marker.scale.setScalar(scale);
     visual.outerRotor.rotation.y = now * visual.style.rotationSpeed;
     visual.innerRotor.rotation.y = now * visual.style.counterRotationSpeed;
-    visual.glowMaterial.opacity = visual.style.glowOpacity * (0.91 + (pulse + 1) * 0.08) * intro;
-
-    for (const material of visual.pulseMaterials) {
-      if (material === visual.glowMaterial) continue;
-      material.opacity = Math.min(1, material.opacity * 0.96 + intro * 0.04);
-    }
+    visual.glowMaterial.opacity = visual.glowBaseOpacity * (0.92 + (pulse + 1) * 0.08) * intro;
   };
 
   return {
