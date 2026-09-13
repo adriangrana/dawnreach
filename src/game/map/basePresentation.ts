@@ -704,12 +704,14 @@ function replaceLegacyThroneCrystal(
   floatingPrism.position.y = prismBaseY;
   throne.add(floatingPrism);
 
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.02, 4.45, 6, 1, false), crystal);
+  // Give the rotating outer prism a slightly broader footprint so the luminous inner
+  // core stays visually contained at every rotation angle instead of peeking past a facet.
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.14, 4.45, 6, 1, false), crystal);
   spire.rotation.y = Math.PI / 6;
   spire.castShadow = true;
   floatingPrism.add(spire);
 
-  const glowSpire = new THREE.Mesh(new THREE.ConeGeometry(0.54, 3.7, 6, 1, false), innerGlow);
+  const glowSpire = new THREE.Mesh(new THREE.ConeGeometry(0.50, 3.7, 6, 1, false), innerGlow);
   glowSpire.position.y = -0.08;
   glowSpire.rotation.y = Math.PI / 6;
   floatingPrism.add(glowSpire);
