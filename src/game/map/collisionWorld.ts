@@ -40,6 +40,7 @@ const WALL_RADIUS = 0.48;
 // Retaining-wall masonry is 0.84 units wide at its foundation/coping, so its
 // collision half-width should match the visible 0.42-unit footprint.
 const ELEVATION_RADIUS = 0.42;
+const THRONE_PLATFORM_RADIUS = 3.5;
 const MAX_SUBSTEP = 0.18;
 const SOLVER_PASSES = 8;
 const ROCK_FOOTPRINT_SCALE = 0.82;
@@ -446,10 +447,16 @@ function collectStructureColliders(
     const authoredRadius = Number(object.userData.collisionRadius ?? 0);
     if (authoredRadius > 0) {
       object.getWorldPosition(center);
+      // The visible throne is wider than the replacement crystal group: the legacy
+      // ceremonial platform under it reaches radius 3.5. Collision must cover that full
+      // footprint so heroes cannot walk through the outer rings of the structure.
+      const radius = object.userData.structureKind === 'throne'
+        ? Math.max(authoredRadius, THRONE_PLATFORM_RADIUS)
+        : authoredRadius;
       colliders.push({
         x: center.x,
         z: center.z,
-        radius: authoredRadius,
+        radius,
         kind: 'structure',
       });
       counts.structures++;
