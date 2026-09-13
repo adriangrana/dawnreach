@@ -54,9 +54,11 @@
 }
 
 /* Desktop viewport layout --------------------------------------------------
-   Keep the primary HUD anchored to the physical viewport edges instead of
-   floating over the playfield. The minimap occupies 15% of the playable
-   width and the command deck (portrait / abilities / inventory) 50%.
+   Primary HUD pieces are anchored to the physical viewport edges. The minimap
+   occupies 15% of the playable width. The command deck keeps its authored
+   721x152 proportions and is uniformly scaled until its rendered width is 50vw,
+   so portrait, abilities, inventory, bars, borders and typography all grow
+   together instead of stretching horizontally.
 */
 @media (min-width: 1201px) {
   .minimap-shell {
@@ -86,10 +88,13 @@
     left: 50%;
     right: auto;
     bottom: 0;
-    width: 50vw;
-    max-width: none;
-    margin: 0;
-    transform: translateX(-50%);
+    width: 721px;
+    max-width: 721px;
+    height: 152px;
+    min-height: 0;
+    margin: 0 0 0 -360.5px;
+    transform: scale(var(--command-deck-scale, 1));
+    transform-origin: 50% 100%;
   }
 }
 
