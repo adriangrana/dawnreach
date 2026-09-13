@@ -1,8 +1,29 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { createDawnreachGame } from './game/createDawnreachGame';
+import './hud-overrides.css';
 
-const dawnTeam = ['A', 'S', 'K', 'L', 'M'];
-const duskTeam = ['V', 'N', 'D', 'T', 'R'];
+const ALDEN_PORTRAIT_SRC = '/src/game/heroes/alden/images/H001.png';
+const ALDEN_MINIMAP_SRC = '/src/game/heroes/alden/images/H001I.png';
+
+type TeamHero = {
+  initial: string;
+  portrait?: string;
+};
+
+const dawnTeam: TeamHero[] = [
+  { initial: 'A', portrait: ALDEN_PORTRAIT_SRC },
+  { initial: 'S' },
+  { initial: 'K' },
+  { initial: 'L' },
+  { initial: 'M' },
+];
+const duskTeam: TeamHero[] = [
+  { initial: 'V' },
+  { initial: 'N' },
+  { initial: 'D' },
+  { initial: 'T' },
+  { initial: 'R' },
+];
 const abilities = [
   { key: 'Q', glyph: '✦', cooldown: '' },
   { key: 'W', glyph: '◈', cooldown: '9' },
@@ -11,12 +32,27 @@ const abilities = [
 ];
 const inventory = ['⚔', '◆', '◇', '✧', '●', ''];
 
-function TeamPortraits({ team, side }: { team: string[]; side: 'dawn' | 'dusk' }) {
+function hideMissingImage(event: React.SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.style.display = 'none';
+}
+
+function TeamPortraits({ team, side }: { team: TeamHero[]; side: 'dawn' | 'dusk' }) {
   return (
     <div className={`team-portraits team-portraits--${side}`}>
       {team.map((hero, index) => (
         <div className="top-hero-slot" key={`${side}-${index}`}>
-          <div className="top-hero-face">{hero}</div>
+          <div className="top-hero-face">
+            <span>{hero.initial}</span>
+            {hero.portrait && (
+              <img
+                className="top-hero-image"
+                src={hero.portrait}
+                alt=""
+                draggable={false}
+                onError={hideMissingImage}
+              />
+            )}
+          </div>
           <span className="top-hero-level">{index === 0 && side === 'dawn' ? 11 : 10}</span>
         </div>
       ))}
@@ -24,7 +60,13 @@ function TeamPortraits({ team, side }: { team: string[]; side: 'dawn' | 'dusk' }
   );
 }
 
-function GameHud({ minimapRef }: { minimapRef: RefObject<HTMLDivElement | null> }) {
+function GameHud({
+  minimapRef,
+  minimapHeroRef,
+}: {
+  minimapRef: RefObject<HTMLDivElement | null>;
+  minimapHeroRef: RefObject<HTMLImageElement | null>;
+}) {
   return (
     <div className="game-hud" aria-hidden="true">
       <section className="scoreboard">
@@ -47,6 +89,14 @@ function GameHud({ minimapRef }: { minimapRef: RefObject<HTMLDivElement | null> 
             className="minimap-live"
             style={{ position: 'absolute', inset: 0, zIndex: 10, overflow: 'hidden', background: '#07100e' }}
           />
+          <img
+            ref={minimapHeroRef}
+            className="minimap-hero-icon"
+            src={ALDEN_MINIMAP_SRC}
+            alt=""
+            draggable={false}
+            onError={hideMissingImage}
+          />
         </div>
         <div className="minimap-tools">
           <span>+</span>
@@ -59,6 +109,13 @@ function GameHud({ minimapRef }: { minimapRef: RefObject<HTMLDivElement | null> 
         <div className="hero-panel">
           <div className="hero-portrait">
             <span className="hero-portrait__crest">A</span>
+            <img
+              className="hero-portrait__image"
+              src={ALDEN_PORTRAIT_SRC}
+              alt=""
+              draggable={false}
+              onError={hideMissingImage}
+            />
             <span className="hero-level">11</span>
           </div>
           <div className="hero-identity">
@@ -113,16 +170,18 @@ function GameHud({ minimapRef }: { minimapRef: RefObject<HTMLDivElement | null> 
 export default function App() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const minimapHeroRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     const minimapHost = minimapRef.current;
+    const minimapHeroMarker = minimapHeroRef.current;
     if (!host || !minimapHost) return;
 
     let disposed = false;
     let destroy: (() => void) | undefined;
 
-    void createDawnreachGame(host, minimapHost).then((game) => {
+    void createDawnreachGame(host, minimapHost, minimapHeroMarker).then((game) => {
       if (disposed) {
         game.destroy();
         return;
@@ -139,7 +198,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <div ref={hostRef} className="game-host" />
-      <GameHud minimapRef={minimapRef} />
+      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} />
     </main>
   );
 }
