@@ -1,3 +1,5 @@
+export const MAX_HERO_LEVEL = 30 as const;
+
 export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 export type DamageType = 'physical' | 'magic' | 'true';
 export type HeroResourceType = 'mana' | 'rage' | 'energy';
@@ -41,7 +43,7 @@ export interface HeroDefinition {
   id: HeroId;
   displayName: string;
   version: string;
-  maxLevel: number;
+  maxLevel: typeof MAX_HERO_LEVEL;
   className: string;
   primaryRole: string;
   secondaryRoles: readonly string[];
