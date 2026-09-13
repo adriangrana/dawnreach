@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { DAWNREACH_LAYOUT } from '../map/mapLayout';
 import { getGameEntity, type GameEntity, type GameEntityRegistry, type TeamId } from './gameEntities';
+import { calculateTowerAuraAdjustedDamage, updateTowerGameplayAuras } from './towerAuras';
 import {
   emitWorldCombatEvent,
   getWorldAttackEventsAfter,
@@ -11,11 +13,11 @@ import {
 } from './worldCombatBridge';
 
 export const TOWER_COMBAT_TUNING = {
-  attackIntervalSeconds: 1.0,
-  acquireWindupSeconds: 0.18,
-  damage: 165,
-  projectileSpeed: 13.5,
-  projectileArcHeight: 0.72,
+  attackIntervalSeconds: TOWER_GAMEPLAY.attack.intervalSeconds,
+  acquireWindupSeconds: TOWER_GAMEPLAY.attack.acquireWindupSeconds,
+  damage: TOWER_GAMEPLAY.attack.damage,
+  projectileSpeed: TOWER_GAMEPLAY.attack.projectileSpeed,
+  projectileArcHeight: TOWER_GAMEPLAY.attack.projectileArcHeight,
   aggroEventLifetimeMs: 1600,
   heroRespawnBaseSeconds: 6,
   heroRespawnSecondsPerLevel: 2,
@@ -49,6 +51,7 @@ interface TowerProjectile {
   root: THREE.Group;
   trail: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   trailPositions: Float32Array;
+  source: GameEntity | null;
   target: GameEntity | null;
   initialDistance: number;
   travelled: number;
@@ -86,8 +89,6 @@ const projectileOrigin = new THREE.Vector3();
 const attackSourcePosition = new THREE.Vector3();
 const attackTargetPosition = new THREE.Vector3();
 
-// Geometry is immutable and shared by every tower projectile. This avoids repeated CPU allocation,
-// GPU buffer uploads and shader churn while projectiles are being fired.
 const projectileCoreGeometry = new THREE.OctahedronGeometry(0.14, 0);
 const projectileHaloGeometry = new THREE.IcosahedronGeometry(0.22, 1);
 const projectileRingGeometry = new THREE.TorusGeometry(0.14, 0.018, 6, 20);
@@ -101,7 +102,6 @@ const projectileResources: Record<CombatTeam, ProjectileResources> = {
 const projectilePools: Record<CombatTeam, TowerProjectile[]> = { blue: [], red: [] };
 const effectPools: Record<CombatTeam, TowerPulseEffect[]> = { blue: [], red: [] };
 
-// Prewarm object graphs at module initialization rather than during the first tower shot.
 for (const team of ['blue', 'red'] as const) {
   for (let index = 0; index < PREWARMED_PROJECTILES_PER_TEAM; index++) {
     projectilePools[team].push(createPooledProjectile(team));
@@ -117,10 +117,6 @@ export function calculateHeroRespawnSeconds(level: number): number {
     + safeLevel * TOWER_COMBAT_TUNING.heroRespawnSecondsPerLevel;
 }
 
-/**
- * Unit combat should call this whenever an entity commits an attack. Tower aggro consumes
- * these world-space events without coupling the tower AI to a specific hero implementation.
- */
 export function notifyGameEntityAttack(
   attacker: GameEntity,
   target: GameEntity,
@@ -162,6 +158,7 @@ export function updateDefenseTowerCombat(
   if (!registry) return;
 
   synchronizeWorldRuntime(worldRoot, registry, elapsed);
+  updateTowerGameplayAuras(worldRoot, registry, elapsed);
   updateHeroDeathPresentationOnce(worldRoot, registry, elapsed);
 
   const towerEntity = getGameEntity(tower);
@@ -321,8 +318,6 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
     setHeroStatusOverlayVisible(entity, true);
     setHeroCorpsePose(entity, false);
 
-    // Publish the alive snapshot before notifying React. This prevents the next tower sync
-    // from consuming the stale dead snapshot and briefly hiding/re-killing the just-respawned hero.
     publishWorldEntityRuntime(entity.id, {
       level: entity.level,
       maxHp: entity.maxHp,
@@ -382,9 +377,6 @@ function setHeroStatusOverlayVisible(entity: GameEntity, visible: boolean): void
 function setHeroCorpsePose(entity: GameEntity, dead: boolean): void {
   const model = getHeroModel(entity);
   if (!model) return;
-
-  // The procedural humanoid animator owns model Y/Z but not X rotation. Using X here keeps
-  // the corpse pose stable without fighting the regular gait animation every frame.
   model.rotation.x = dead ? -Math.PI * 0.48 : 0;
 }
 
@@ -536,8 +528,6 @@ function isValidTowerTarget(tower: GameEntity, target: GameEntity): boolean {
 function createProjectileResources(team: CombatTeam): ProjectileResources {
   const palette = projectilePalette(team);
   return {
-    // MeshBasicMaterial keeps the projectile luminous without compiling a physically based shader
-    // during combat. The object is tiny on screen, so PBR contributed cost rather than useful detail.
     coreMaterial: new THREE.MeshBasicMaterial({
       color: palette.core,
       toneMapped: false,
@@ -599,6 +589,7 @@ function createPooledProjectile(team: CombatTeam): TowerProjectile {
     root,
     trail,
     trailPositions,
+    source: null,
     target: null,
     initialDistance: 1,
     travelled: 0,
@@ -613,6 +604,7 @@ function acquireProjectile(team: CombatTeam): TowerProjectile {
 function releaseProjectile(projectile: TowerProjectile): void {
   projectile.root.removeFromParent();
   projectile.trail.removeFromParent();
+  projectile.source = null;
   projectile.target = null;
   projectile.travelled = 0;
   projectile.spin = 0;
@@ -631,6 +623,7 @@ function launchProjectile(
   getEntityAimPosition(target, aimPosition);
 
   const projectile = acquireProjectile(team);
+  projectile.source = getGameEntity(tower);
   projectile.target = target;
   projectile.root.position.copy(projectileOrigin);
   projectile.root.rotation.set(0, 0, 0);
@@ -670,7 +663,7 @@ function updateProjectiles(
       projectile.root.position.copy(aimPosition);
       const impactTeam: CombatTeam = target.team === 'blue' ? 'red' : 'blue';
       state.effects.push(acquirePulseEffect(worldRoot, aimPosition, impactTeam, true));
-      applyTowerProjectileDamage(target, elapsed);
+      applyTowerProjectileDamage(projectile.source, target, elapsed);
       if (state.currentTarget?.id === target.id && !target.alive) {
         state.currentTarget = null;
       }
@@ -716,14 +709,13 @@ function pushTrailPoint(projectile: TowerProjectile, point: THREE.Vector3): void
   positions[1] = point.y;
   positions[2] = point.z;
   (projectile.trail.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-  // No computeBoundingSphere(): the trail explicitly disables frustum culling, so recalculating
-  // bounds every animation frame was pure CPU work and one of the visible hitch sources.
 }
 
-function applyTowerProjectileDamage(target: GameEntity, elapsed: number): void {
+function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntity, elapsed: number): void {
   if (!target.alive || target.currentHp <= 0) return;
 
-  target.currentHp = Math.max(0, target.currentHp - TOWER_COMBAT_TUNING.damage);
+  const damage = calculateTowerAuraAdjustedDamage(source, target, TOWER_COMBAT_TUNING.damage);
+  target.currentHp = Math.max(0, target.currentHp - damage);
   target.root.userData.currentHp = target.currentHp;
 
   if (target.currentHp > 0) {
