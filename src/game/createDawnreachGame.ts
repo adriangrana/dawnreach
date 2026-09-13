@@ -60,6 +60,7 @@ const BLOCKED_ROUTE_REPATH_COOLDOWN = 0.12;
 const TARGET_REPATH_DISTANCE = 0.75;
 const TARGET_REPATH_COOLDOWN = 0.35;
 const VISION_UPDATE_INTERVAL = 0.1;
+const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
 
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
@@ -250,6 +251,7 @@ export async function createDawnreachGame(
   let lastMinimapRender = -Infinity;
   let lastVisionUpdate = -Infinity;
   let cameraFocus: Point3 | null = null;
+  let movementWasLocked = false;
   const cameraAnchor = hero.root.position.clone();
 
   const heroPoint = (): Point3 => ({ x: hero.root.position.x, z: hero.root.position.z });
@@ -266,6 +268,57 @@ export async function createDawnreachGame(
   const clearMovementRoute = () => {
     clearCurrentPath();
     routeRequest = null;
+  };
+
+  const resetHeroLocomotionPose = () => {
+    hero.gait.phase = 0;
+    hero.gait.weight = 0;
+    hero.leftLeg.rotation.x = 0;
+    hero.rightLeg.rotation.x = 0;
+    hero.leftShin.rotation.x = 0;
+    hero.rightShin.rotation.x = 0;
+    hero.leftFoot.rotation.x = 0;
+    hero.rightFoot.rotation.x = 0;
+    hero.leftArm.rotation.x = 0;
+    hero.rightArm.rotation.x = 0;
+    hero.leftForearm.rotation.x = -0.35;
+    hero.rightForearm.rotation.x = -0.35;
+    hero.leftForearm.rotation.z = 0;
+    hero.rightForearm.rotation.z = 0;
+    hero.pelvis.rotation.y = 0;
+    hero.pelvis.rotation.z = 0;
+    hero.pelvis.position.x = 0;
+    hero.torso.rotation.y = 0;
+    hero.torso.rotation.z = 0;
+    hero.torso.position.x = 0;
+    hero.torso.position.y = hero.torsoRestY;
+    hero.head.quaternion.identity();
+    hero.model.position.y = 0;
+    hero.model.rotation.z = 0;
+    if (alden) {
+      alden.capeMotion = 0;
+      alden.cape.rotation.x = 0.025;
+      alden.cape.rotation.z = 0;
+    }
+  };
+
+  const isHeroMovementLocked = () => {
+    const overlay = getHeroState?.() ?? null;
+    const entity = getGameEntity(hero.root);
+    return (overlay?.hero.currentHp ?? 1) <= 0
+      || entity?.alive === false
+      || hero.root.userData[RESPAWN_HOLD_KEY] === true;
+  };
+
+  const clearHeroOrdersForLock = () => {
+    clearMovementRoute();
+    attackOrder = null;
+    lastAttackPathTarget = null;
+    attackSwing = 0;
+    targetMarker.visible = false;
+    attackMarker.visible = false;
+    disarmAttack();
+    if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
   };
 
   const applyNavigationPath = (path: NavigationPath, requested: Point3) => {
@@ -395,6 +448,10 @@ export async function createDawnreachGame(
 
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0 && event.button !== 2) return;
+    if (isHeroMovementLocked()) {
+      event.preventDefault();
+      return;
+    }
     setPointerFromEvent(event, renderer.domElement);
     raycaster.setFromCamera(pointer, camera);
 
@@ -421,6 +478,7 @@ export async function createDawnreachGame(
     if (!minimapHost || !minimapCamera || (event.button !== 0 && event.button !== 2)) return;
     event.preventDefault();
     event.stopPropagation();
+    if (isHeroMovementLocked()) return;
     setPointerFromEvent(event, minimapHost);
     raycaster.setFromCamera(pointer, minimapCamera);
 
@@ -451,6 +509,7 @@ export async function createDawnreachGame(
     if (target?.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
     if (event.code === 'KeyA') {
+      if (isHeroMovementLocked()) return;
       event.preventDefault();
       attackArmed = true;
       setCommandCursor(true);
@@ -593,7 +652,14 @@ export async function createDawnreachGame(
     }
     selection.update();
 
-    if (attackOrder?.kind === 'target') {
+    const movementLocked = isHeroMovementLocked();
+    if (movementLocked) {
+      if (!movementWasLocked) clearHeroOrdersForLock();
+      resetHeroLocomotionPose();
+    }
+    movementWasLocked = movementLocked;
+
+    if (!movementLocked && attackOrder?.kind === 'target') {
       if (!attackOrder.target.parent) {
         attackOrder = null;
         clearMovementRoute();
@@ -629,7 +695,7 @@ export async function createDawnreachGame(
     // Movement orders are persistent intents. A valid full route is left alone, but its
     // next segment is revalidated frequently. Partial/missing routes are retried from the
     // hero's new position until the original requested destination becomes reachable.
-    if (routeRequest && attackOrder?.kind !== 'target') {
+    if (!movementLocked && routeRequest && attackOrder?.kind !== 'target') {
       const nextWaypoint = destination && currentWaypointIndex < currentPath.length
         ? currentPath[currentWaypointIndex]
         : null;
@@ -653,7 +719,7 @@ export async function createDawnreachGame(
     let moving = false;
     let reachedDestination = false;
 
-    if (destination && currentPath.length > 0) {
+    if (!movementLocked && destination && currentPath.length > 0) {
       while (currentWaypointIndex < currentPath.length) {
         const waypoint = currentPath[currentWaypointIndex];
         if (Math.hypot(waypoint.x - hero.root.position.x, waypoint.z - hero.root.position.z) > WAYPOINT_REACHED_DISTANCE) break;
@@ -719,33 +785,35 @@ export async function createDawnreachGame(
       }
     }
 
-    if (reachedDestination && attackOrder?.kind === 'ground') {
+    if (!movementLocked && reachedDestination && attackOrder?.kind === 'ground') {
       triggerAttack();
       attackOrder = null;
       attackMarker.visible = false;
     }
 
-    const yawDelta = Math.atan2(
-      Math.sin(targetYaw - currentYaw),
-      Math.cos(targetYaw - currentYaw),
-    );
-    currentYaw += yawDelta * Math.min(1, dt * 11);
-    hero.model.rotation.y = currentYaw;
-
-    if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
-    else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
-
-    if (alden && swordRestRotation && attackSwing > 0) {
-      attackSwing = Math.min(1, attackSwing + dt * 3.4);
-      const slash = Math.sin(attackSwing * Math.PI);
-      alden.sword.rotation.set(
-        swordRestRotation.x - slash * 0.95,
-        swordRestRotation.y + slash * 0.12,
-        swordRestRotation.z + slash * 0.34,
+    if (!movementLocked) {
+      const yawDelta = Math.atan2(
+        Math.sin(targetYaw - currentYaw),
+        Math.cos(targetYaw - currentYaw),
       );
-      if (attackSwing >= 1) {
-        attackSwing = 0;
-        alden.sword.rotation.copy(swordRestRotation);
+      currentYaw += yawDelta * Math.min(1, dt * 11);
+      hero.model.rotation.y = currentYaw;
+
+      if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
+      else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
+
+      if (alden && swordRestRotation && attackSwing > 0) {
+        attackSwing = Math.min(1, attackSwing + dt * 3.4);
+        const slash = Math.sin(attackSwing * Math.PI);
+        alden.sword.rotation.set(
+          swordRestRotation.x - slash * 0.95,
+          swordRestRotation.y + slash * 0.12,
+          swordRestRotation.z + slash * 0.34,
+        );
+        if (attackSwing >= 1) {
+          attackSwing = 0;
+          alden.sword.rotation.copy(swordRestRotation);
+        }
       }
     }
 
