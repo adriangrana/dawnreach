@@ -129,12 +129,19 @@ function spawnFloatingLabel(
   };
 
   sprite.scale.set(baseWidth * 0.72, baseHeight * 0.72, 1);
-  sprite.onBeforeRender = () => updateFloatingLabel(label);
+  sprite.onBeforeRender = (_renderer, _scene, camera) => updateFloatingLabel(label, camera);
   worldRoot.add(sprite);
 }
 
-function updateFloatingLabel(label: FloatingLabel): void {
+function updateFloatingLabel(label: FloatingLabel, camera: THREE.Camera): void {
   if (label.finished) return;
+
+  // The top-down minimap uses a Z-up orientation. Combat text belongs only to the
+  // playable camera, otherwise large numbers would flash over the minimap as well.
+  if (Math.abs(camera.up.y) < 0.5) {
+    label.material.opacity = 0;
+    return;
+  }
 
   const progress = THREE.MathUtils.clamp((performance.now() - label.startMs) / label.durationMs, 0, 1);
   if (progress >= 1) {
