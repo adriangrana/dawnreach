@@ -17,8 +17,9 @@ export function connectLocalLaneProgression(
   registry: GameEntityRegistry,
   localHero: GameEntity,
 ) {
-  return subscribeWorldCombatEvents((event) => {
-    if (event.reason !== 'death') return;
+  const resolvedDeaths = new Set<string>();
+  const unsubscribe = subscribeWorldCombatEvents((event) => {
+    if (event.reason !== 'death' || resolvedDeaths.has(event.entityId)) return;
 
     const creep = registry.values().find(entity => entity.id === event.entityId);
     if (!creep || creep.kind !== 'creep') return;
@@ -26,6 +27,7 @@ export function connectLocalLaneProgression(
     const authoredType = creep.root.userData.laneCreepType;
     if (typeof authoredType !== 'string' || !CREEP_TYPES.has(authoredType as WorldCreepType)) return;
     const creepType = authoredType as WorldCreepType;
+    resolvedDeaths.add(creep.id);
 
     creep.root.getWorldPosition(creepPosition);
     const attack = getMostRecentAttackOnTarget(creep.id, event.atMs, 3_000);
@@ -70,4 +72,9 @@ export function connectLocalLaneProgression(
       reason: 'creep-death',
     });
   });
+
+  return () => {
+    resolvedDeaths.clear();
+    unsubscribe();
+  };
 }
