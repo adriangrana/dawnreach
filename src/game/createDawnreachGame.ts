@@ -9,6 +9,16 @@ import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
 import { polishRiverBridges } from './map/polishRiverBridges';
 import { createWaterEffects } from './map/waterEffects';
 import { createProceduralTextures } from './shared/textures';
+import type { HeroStats, MatchHeroState } from './match';
+
+type HeroOverlayState = {
+  hero: MatchHeroState;
+  stats: Pick<HeroStats, 'maxHp' | 'maxResource'>;
+};
+
+const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.png', {
+  eager: true, query: '?url', import: 'default',
+});
 
 type Point3 = { x: number; z: number };
 type AttackOrder =
@@ -36,6 +46,7 @@ export async function createDawnreachGame(
   host: HTMLDivElement,
   minimapHost?: HTMLDivElement | null,
   minimapHeroMarker?: HTMLImageElement | null,
+  getHeroState?: () => HeroOverlayState | null,
 ) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x758994);
@@ -119,7 +130,7 @@ export async function createDawnreachGame(
   // every visible Alden child (including attachments) on one authoritative scale.
   // The root's world position remains the navigation position used by camera/minimap.
   hero.root.scale.setScalar(heroPresentationScale);
-  addHeroOverlay(hero.root, alden ? 'Alden' : 'Humanoide');
+  const heroOverlay = addHeroOverlay(hero.root);
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
@@ -490,6 +501,7 @@ export async function createDawnreachGame(
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
     waterEffects.update(elapsed, [hero.root]);
+    heroOverlay.update(getHeroState?.() ?? null);
     renderer.render(scene, camera);
     if (elapsed - lastMinimapRender >= 0.16) {
       renderMinimap();
@@ -510,6 +522,7 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('contextmenu', onContextMenu);
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
+      heroOverlay.dispose();
       disposeScene(scene);
       renderer.dispose();
       minimapRenderer?.dispose();
@@ -544,7 +557,7 @@ function addLighting(scene: THREE.Scene) {
   return sun;
 }
 
-function addHeroOverlay(root: THREE.Group, name: string, scale = 1) {
+function addHeroOverlay(root: THREE.Group, scale = 1) {
   const selection = new THREE.Mesh(
     new THREE.RingGeometry(0.62 * scale, 0.72 * scale, 64),
     new THREE.MeshBasicMaterial({
@@ -558,100 +571,135 @@ function addHeroOverlay(root: THREE.Group, name: string, scale = 1) {
   selection.position.y = 0.025;
   root.add(selection);
 
-  const levelLabel = buildLevelLabel(1, scale);
-  levelLabel.position.set(0, 4.57 * scale, 0);
-  root.add(levelLabel);
-
-
-  const hpBar = buildHeroLabel(name, scale);
-  hpBar.position.set(0, 4.57 * scale, 0);
-  root.add(hpBar);
-
-  const manaBar = buildManaLabel(scale);
-  manaBar.position.set(0, 4 * scale, 0);
-  root.add(manaBar);
-}
-function buildLevelLabel(level: number, scale = 1) {
+  // One camera-facing sprite keeps the icon, bars and level aligned.
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 440;
+  canvas.height = 88;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#0d1519';
-  ctx.fillRect(42, 56, 40, 40);
-  ctx.strokeStyle = '#70818c';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(42, 56, 40, 40);
-  ctx.font = 'bold 24px Arial';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(level.toString(), 62, 84);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  const material = new THREE.SpriteMaterial({
+    map: texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+  });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3 * scale, 0.82 * scale, 1);
+  sprite.name = 'hero-status-overlay';
+  sprite.scale.set(4.8 * scale, 4.8 * canvas.height / canvas.width * scale, 1);
+  sprite.position.set(0, 5.75 * scale, 0);
   sprite.renderOrder = 10;
-  return sprite;
+  sprite.visible = false;
+  root.add(sprite);
+
+  let icon: HTMLImageElement | null = null;
+  let iconPath: string | undefined;
+  let lastValues: (string | number)[] = [];
+  let dirty = true;
+
+  return {
+    update(state: HeroOverlayState | null) {
+      sprite.visible = state !== null;
+      if (!state) return;
+      const { hero, stats } = state;
+      const nextIconPath = heroIcons[`./heroes/${hero.heroName?.toLowerCase()}/images/${hero.definitionId}I.png`];
+      if (nextIconPath !== iconPath) {
+        if (icon) icon.onload = icon.onerror = null;
+        iconPath = nextIconPath;
+        icon = null;
+        dirty = true;
+        if (iconPath) {
+          icon = new Image();
+          icon.onload = icon.onerror = () => { dirty = true; };
+          icon.src = iconPath;
+        }
+      }
+      const values = [hero.heroName, hero.definitionId, hero.level,
+        hero.currentHp, stats.maxHp, hero.currentResource, stats.maxResource];
+      if (!dirty && values.every((value, index) => value === lastValues[index])) return;
+      lastValues = values;
+      dirty = false;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const frame = ctx.createLinearGradient(0, 8, 0, 72);
+      frame.addColorStop(0, '#fafafa');
+      frame.addColorStop(1, '#9caaa7');
+      ctx.fillStyle = frame;
+      ctx.beginPath();
+      // Extend the frame under the head; the icon is drawn on top of it.
+      ctx.moveTo(48, 8);
+      ctx.lineTo(436, 8);
+      ctx.lineTo(436, 68);
+      // A shallow, symmetric pointer sits directly above the hero's center.
+      ctx.lineTo(276, 68);
+      ctx.lineTo(canvas.width / 2, 82);
+      ctx.lineTo(164, 68);
+      ctx.lineTo(48, 68);
+      ctx.closePath();
+      ctx.fill();
+
+      buildHeroLabel(ctx, hero.currentHp, stats.maxHp);
+      buildManaLabel(ctx, hero.currentResource, stats.maxResource);
+      buildLevelLabel(ctx, hero.level);
+      if (icon?.complete && icon.naturalWidth > 0) {
+        const size = Math.min(80 / icon.naturalWidth, 80 / icon.naturalHeight);
+        const width = icon.naturalWidth * size;
+        const height = icon.naturalHeight * size;
+        ctx.drawImage(icon, (80 - width) / 2, (80 - height) / 2, width, height);
+      } else {
+        ctx.font = 'bold 38px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(hero.heroName?.charAt(0) ?? '?', 38, 40);
+      }
+      texture.needsUpdate = true;
+    },
+    dispose() {
+      // The scene disposer owns the sprite material and texture.
+      if (icon) icon.onload = icon.onerror = null;
+      icon = null;
+    },
+  };
 }
-function buildManaLabel(scale = 1) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(8,15,13,0.96)';
-  ctx.fillRect(90, 57, 332, 38);
-  ctx.fillStyle = '#4a90e2';
-  ctx.fillRect(98, 65, 316, 22);
-  ctx.strokeStyle = '#0a0f0d';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(90, 57, 332, 38);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3 * scale, 0.82 * scale, 1);
-  sprite.renderOrder = 10;
-  return sprite;
-}
-function buildHeroLabel(name: string, scale = 1) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = 'bold 50px Arial';
+function buildLevelLabel(ctx: CanvasRenderingContext2D, level: number) {
+  ctx.font = 'bold 38px Arial';
   ctx.textAlign = 'center';
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = 'rgba(10,14,12,0.9)';
-  ctx.strokeText(name, 256, 39);
-  ctx.fillStyle = '#f5f1e7';
-  ctx.fillText(name, 256, 39);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#080b09';
+  ctx.fillText(String(level), 406, 40, 50);
+}
 
-  ctx.fillStyle = 'rgba(8,15,13,0.96)';
-  ctx.fillRect(90, 57, 332, 38);
-  ctx.fillStyle = '#49ce61';
-  ctx.fillRect(98, 65, 316, 22);
-  ctx.strokeStyle = '#0a0f0d';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(90, 57, 332, 38);
+function resourceFraction(current: number, maximum: number) {
+  if (!Number.isFinite(current) || !Number.isFinite(maximum) || maximum <= 0) return 0;
+  return THREE.MathUtils.clamp(current / maximum, 0, 1);
+}
 
+function buildManaLabel(ctx: CanvasRenderingContext2D, mana: number, maxMana: number) {
+  ctx.fillStyle = '#050805';
+  ctx.fillRect(78, 46, 302, 18);
+  ctx.fillStyle = '#14213a';
+  ctx.fillRect(82, 49, 294, 11);
+  ctx.fillStyle = '#367eff';
+  ctx.fillRect(82, 49, 294 * resourceFraction(mana, maxMana), 11);
+}
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3 * scale, 0.82 * scale, 1);
-  sprite.renderOrder = 10;
-  return sprite;
+function buildHeroLabel(ctx: CanvasRenderingContext2D, hp: number, maxHp: number) {
+  ctx.fillStyle = '#050805';
+  ctx.fillRect(78, 12, 302, 37);
+  ctx.fillStyle = '#1c2916';
+  ctx.fillRect(82, 16, 294, 29);
+  const health = ctx.createLinearGradient(0, 16, 0, 45);
+  health.addColorStop(0, '#83e844');
+  health.addColorStop(1, '#46c526');
+  ctx.fillStyle = health;
+  ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
+  ctx.fillStyle = 'rgba(5, 30, 4, 0.4)';
+  for (let segment = 1; segment < 3; segment++) {
+    ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
+  }
 }
 
 function buildTargetMarker(color: number, innerColor: number) {
