@@ -46,8 +46,8 @@ const layout = {
     [[29, 6], [21, 4], [17, -2], [15, -11]],
     [[12, -24], [9, -17], [7, -10], [3, -5]],
   ] satisfies MapPoint[][],
-  // Keep neutral camps on dry jungle ground and off the river corridor.
-  camps: [[-30, -8], [-24, -15], [-15, 22], [-4, 13], [30, 8], [24, 15], [15, -22], [4, -13]] satisfies MapPoint[],
+  // Neutral camps live in grassy jungle clearings, away from river water and visible travel routes.
+  camps: [[-30, -8], [-8, -19], [-15, 22], [-4, 13], [30, 8], [8, 19], [15, -22], [4, -13]] satisfies MapPoint[],
   retainingWalls: [
     [[-34, 5], [-33, -2], [-30, -10]],
     [[-23, -18], [-19, -15], [-18, -10]],
