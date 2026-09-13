@@ -1,0 +1,263 @@
+import { getHeroDefinition, hasHeroDefinition } from '../heroes/catalog';
+import {
+  createEmptyAbilityRanks,
+  createEmptyInventory,
+  type AbilityKey,
+  type HeroId,
+  type InventoryItem,
+} from '../heroes/types';
+import { getAldenAvailableAbilityRank, getAldenStatsAtLevel } from '../heroes/alden/gameplay';
+import type {
+  MatchHeroState,
+  MatchPlayerState,
+  MatchSlotId,
+  MatchSlotState,
+  MatchState,
+  TeamId,
+  TeamSlotIndex,
+} from './types';
+
+const TEAMS: readonly TeamId[] = ['dawn', 'dusk'];
+const SLOT_INDEXES: readonly TeamSlotIndex[] = [1, 2, 3, 4, 5];
+
+export function createMatchSlots(): MatchSlotState[] {
+  return TEAMS.flatMap(team => SLOT_INDEXES.map(index => ({
+    slotId: `${team}-${index}` as MatchSlotId,
+    team,
+    index,
+    playerId: null,
+    heroEntityId: null,
+  })));
+}
+
+export function createMatchState(matchId: string, createdAtMs = Date.now()): MatchState {
+  if (!matchId.trim()) throw new Error('matchId is required.');
+  return {
+    matchId,
+    phase: 'lobby',
+    createdAtMs,
+    slots: createMatchSlots(),
+    players: {},
+    heroes: {},
+  };
+}
+
+export function setMatchPhase(state: MatchState, phase: MatchState['phase']): MatchState {
+  const next = cloneState(state);
+  next.phase = phase;
+  return next;
+}
+
+export function addPlayerToMatch(
+  state: MatchState,
+  input: {
+    playerId: string;
+    displayName: string;
+    team: TeamId;
+    slotIndex: TeamSlotIndex;
+  },
+): MatchState {
+  if (!input.playerId.trim()) throw new Error('playerId is required.');
+  if (state.players[input.playerId]) throw new Error(`Player ${input.playerId} is already in the match.`);
+
+  const slotId = `${input.team}-${input.slotIndex}` as MatchSlotId;
+  const slot = state.slots.find(candidate => candidate.slotId === slotId);
+  if (!slot) throw new Error(`Unknown match slot ${slotId}.`);
+  if (slot.playerId) throw new Error(`Match slot ${slotId} is already occupied.`);
+
+  const next = cloneState(state);
+  const nextSlot = getRequiredSlot(next, slotId);
+  const player: MatchPlayerState = {
+    playerId: input.playerId,
+    displayName: input.displayName,
+    team: input.team,
+    slotId,
+    connected: true,
+    selectedHeroId: null,
+    ownedHeroEntityId: null,
+  };
+  next.players[player.playerId] = player;
+  nextSlot.playerId = player.playerId;
+  return next;
+}
+
+export function setPlayerConnection(state: MatchState, playerId: string, connected: boolean): MatchState {
+  const next = cloneState(state);
+  const player = getRequiredPlayer(next, playerId);
+  player.connected = connected;
+  return next;
+}
+
+export function selectHeroForPlayer(state: MatchState, playerId: string, heroId: HeroId): MatchState {
+  if (!hasHeroDefinition(heroId)) throw new Error(`Cannot select unknown hero ${heroId}.`);
+  const next = cloneState(state);
+  getRequiredPlayer(next, playerId).selectedHeroId = heroId;
+  return next;
+}
+
+export function assignSelectedHeroToPlayer(
+  state: MatchState,
+  playerId: string,
+  heroEntityId = `${playerId}:hero`,
+): MatchState {
+  if (state.heroes[heroEntityId]) throw new Error(`Hero entity ${heroEntityId} already exists.`);
+  const sourcePlayer = getRequiredPlayer(state, playerId);
+  if (!sourcePlayer.selectedHeroId) throw new Error(`Player ${playerId} has not selected a hero.`);
+  if (sourcePlayer.ownedHeroEntityId) throw new Error(`Player ${playerId} already owns hero ${sourcePlayer.ownedHeroEntityId}.`);
+
+  const definition = getHeroDefinition(sourcePlayer.selectedHeroId);
+  const stats = sourcePlayer.selectedHeroId === 'alden'
+    ? getAldenStatsAtLevel(1)
+    : definition.baseStats;
+
+  const hero: MatchHeroState = {
+    heroEntityId,
+    definitionId: definition.id,
+    ownerPlayerId: playerId,
+    team: sourcePlayer.team,
+    slotId: sourcePlayer.slotId,
+    level: 1,
+    experience: 0,
+    currentHp: stats.maxHp,
+    currentResource: stats.maxResource,
+    abilityRanks: createEmptyAbilityRanks(),
+    inventory: createEmptyInventory(),
+    cooldownReadyAtMs: { Q: 0, W: 0, E: 0, R: 0 },
+    runtime: {
+      statuses: {},
+      counters: {},
+      timestamps: {},
+      targetCounters: {},
+    },
+  };
+
+  const next = cloneState(state);
+  const player = getRequiredPlayer(next, playerId);
+  const slot = getRequiredSlot(next, player.slotId);
+  player.ownedHeroEntityId = heroEntityId;
+  slot.heroEntityId = heroEntityId;
+  next.heroes[heroEntityId] = hero;
+  return next;
+}
+
+export function setHeroLevel(state: MatchState, heroEntityId: string, level: number): MatchState {
+  const next = cloneState(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const definition = getHeroDefinition(hero.definitionId);
+  if (!Number.isInteger(level) || level < 1 || level > definition.maxLevel) {
+    throw new RangeError(`Hero level must be an integer from 1 to ${definition.maxLevel}.`);
+  }
+
+  const before = hero.definitionId === 'alden' ? getAldenStatsAtLevel(hero.level) : definition.baseStats;
+  const after = hero.definitionId === 'alden' ? getAldenStatsAtLevel(level) : definition.baseStats;
+  const hpRatio = before.maxHp > 0 ? hero.currentHp / before.maxHp : 1;
+  const resourceRatio = before.maxResource > 0 ? hero.currentResource / before.maxResource : 1;
+
+  hero.level = level;
+  hero.currentHp = clamp(after.maxHp * hpRatio, 0, after.maxHp);
+  hero.currentResource = clamp(after.maxResource * resourceRatio, 0, after.maxResource);
+  return next;
+}
+
+export function upgradeHeroAbility(state: MatchState, heroEntityId: string, key: AbilityKey): MatchState {
+  const next = cloneState(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const definition = getHeroDefinition(hero.definitionId);
+  const currentRank = hero.abilityRanks[key];
+  if (currentRank >= 4) throw new Error(`${key} is already rank 4.`);
+
+  let availableRank = definition.abilities[key].unlockLevels.filter(level => level <= hero.level).length;
+  if (hero.definitionId === 'alden') availableRank = getAldenAvailableAbilityRank(key, hero.level);
+  const desiredRank = currentRank + 1;
+  if (desiredRank > availableRank) {
+    const requiredLevel = definition.abilities[key].unlockLevels[desiredRank - 1];
+    throw new Error(`${key} rank ${desiredRank} requires hero level ${requiredLevel}.`);
+  }
+
+  hero.abilityRanks[key] = desiredRank;
+  return next;
+}
+
+export function equipInventoryItem(
+  state: MatchState,
+  heroEntityId: string,
+  inventorySlot: 0 | 1 | 2 | 3 | 4 | 5,
+  item: InventoryItem | null,
+): MatchState {
+  const next = cloneState(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const slot = hero.inventory.find(candidate => candidate.slot === inventorySlot);
+  if (!slot) throw new Error(`Inventory slot ${inventorySlot} does not exist.`);
+  slot.item = item ? structuredClone(item) : null;
+  return next;
+}
+
+export function getPlayerSelectedHeroId(state: MatchState, playerId: string): HeroId | null {
+  return getRequiredPlayer(state, playerId).selectedHeroId;
+}
+
+export function getPlayerOwnedHero(state: MatchState, playerId: string): MatchHeroState | null {
+  const player = getRequiredPlayer(state, playerId);
+  if (!player.ownedHeroEntityId) return null;
+  return getRequiredHero(state, player.ownedHeroEntityId);
+}
+
+export function getSlotAssignment(state: MatchState, slotId: MatchSlotId): {
+  slot: MatchSlotState;
+  player: MatchPlayerState | null;
+  hero: MatchHeroState | null;
+} {
+  const slot = getRequiredSlot(state, slotId);
+  return {
+    slot,
+    player: slot.playerId ? getRequiredPlayer(state, slot.playerId) : null,
+    hero: slot.heroEntityId ? getRequiredHero(state, slot.heroEntityId) : null,
+  };
+}
+
+export function validateMatchState(state: MatchState): void {
+  if (state.slots.length !== 10) throw new Error(`A match must contain exactly 10 slots, received ${state.slots.length}.`);
+  for (const team of TEAMS) {
+    const teamSlots = state.slots.filter(slot => slot.team === team);
+    if (teamSlots.length !== 5) throw new Error(`Team ${team} must contain exactly 5 slots.`);
+  }
+
+  const slotIds = new Set(state.slots.map(slot => slot.slotId));
+  if (slotIds.size !== 10) throw new Error('Match slot ids must be unique.');
+
+  for (const player of Object.values(state.players)) {
+    const slot = getRequiredSlot(state, player.slotId);
+    if (slot.playerId !== player.playerId) throw new Error(`Player ${player.playerId} is not linked back from slot ${player.slotId}.`);
+    if (player.ownedHeroEntityId) {
+      const hero = getRequiredHero(state, player.ownedHeroEntityId);
+      if (hero.ownerPlayerId !== player.playerId) throw new Error(`Hero ${hero.heroEntityId} ownership is inconsistent.`);
+      if (slot.heroEntityId !== hero.heroEntityId) throw new Error(`Hero ${hero.heroEntityId} is not linked back from slot ${slot.slotId}.`);
+    }
+  }
+}
+
+export function getRequiredPlayer(state: MatchState, playerId: string): MatchPlayerState {
+  const player = state.players[playerId];
+  if (!player) throw new Error(`Unknown player ${playerId}.`);
+  return player;
+}
+
+export function getRequiredHero(state: MatchState, heroEntityId: string): MatchHeroState {
+  const hero = state.heroes[heroEntityId];
+  if (!hero) throw new Error(`Unknown hero entity ${heroEntityId}.`);
+  return hero;
+}
+
+function getRequiredSlot(state: MatchState, slotId: MatchSlotId): MatchSlotState {
+  const slot = state.slots.find(candidate => candidate.slotId === slotId);
+  if (!slot) throw new Error(`Unknown match slot ${slotId}.`);
+  return slot;
+}
+
+function cloneState(state: MatchState): MatchState {
+  return structuredClone(state);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
