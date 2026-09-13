@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CollisionWorld } from '../map/collisionWorld';
 import { distanceToMapPath, sampleMapPath } from '../map/buildMapVegetation';
-import { DAWNREACH_LAYOUT, MAP_BOUNDS } from '../map/mapLayout';
+import { DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT } from '../map/mapLayout';
 import {
   createNavigationWorld,
   type NavigationPath,
@@ -14,6 +14,9 @@ const NAVIGATION_CLEARANCE = 0.07;
 const RIVER_WATER_HALF_WIDTH = 3.38;
 const BRIDGE_APPROACH_EXTENSION = 1.85;
 const BRIDGE_REGION_PADDING = 0.08;
+const OBJECTIVE_INTERIOR_RADIUS = OBJECTIVE_LAYOUT.poolRadius + 0.48;
+const OBJECTIVE_GATE_CORRIDOR_RADIUS = OBJECTIVE_LAYOUT.wallRadius + RIVER_WATER_HALF_WIDTH + 0.9;
+const OBJECTIVE_GATE_NAV_HALF_ANGLE = OBJECTIVE_LAYOUT.gateHalfAngle * 0.62;
 
 export const NAVIGATION_DEBUG = false;
 
@@ -21,6 +24,12 @@ type BridgeRegion = Readonly<{
   inverseWorld: THREE.Matrix4;
   halfLength: number;
   halfWidth: number;
+}>;
+
+type ObjectivePitRegion = Readonly<{
+  x: number;
+  z: number;
+  entranceAngle: number;
 }>;
 
 export function createDawnreachNavigationWorld(
@@ -31,6 +40,7 @@ export function createDawnreachNavigationWorld(
   battlefield.updateMatrixWorld(true);
   const river = sampleMapPath(DAWNREACH_LAYOUT.river);
   const bridges = collectBridgeRegions(battlefield);
+  const objectivePits = collectObjectivePitRegions(river);
 
   return createNavigationWorld({
     bounds: MAP_BOUNDS,
@@ -40,6 +50,9 @@ export function createDawnreachNavigationWorld(
     clearance: NAVIGATION_CLEARANCE,
     nearestSearchRadius: 5.5,
     terrainWalkable(point) {
+      // Objective pools are intentionally shallow, playable water. Their wall colliders still
+      // enforce the circular ruins and leave only the authored gate as a legal entrance.
+      if (objectivePits.some(region => objectivePitContains(region, point))) return true;
       if (distanceToMapPath(point.x, point.z, river) > RIVER_WATER_HALF_WIDTH) return true;
       return bridges.some(region => bridgeContains(region, point));
     },
@@ -65,6 +78,37 @@ function collectBridgeRegions(battlefield: THREE.Object3D) {
     });
   });
   return regions;
+}
+
+function collectObjectivePitRegions(river: readonly THREE.Vector3[]) {
+  return DAWNREACH_LAYOUT.objectivePits.map((pit): ObjectivePitRegion => {
+    let nearest = river[0];
+    for (const point of river) {
+      if (Math.hypot(point.x - pit.x, point.z - pit.z) < Math.hypot(nearest.x - pit.x, nearest.z - pit.z)) {
+        nearest = point;
+      }
+    }
+    return {
+      x: pit.x,
+      z: pit.z,
+      entranceAngle: Math.atan2(nearest.z - pit.z, nearest.x - pit.x),
+    };
+  });
+}
+
+function objectivePitContains(region: ObjectivePitRegion, point: NavigationPoint) {
+  const dx = point.x - region.x;
+  const dz = point.z - region.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance <= OBJECTIVE_INTERIOR_RADIUS) return true;
+  if (distance > OBJECTIVE_GATE_CORRIDOR_RADIUS) return false;
+
+  const angle = Math.atan2(dz, dx);
+  return angularDistance(angle, region.entranceAngle) <= OBJECTIVE_GATE_NAV_HALF_ANGLE;
+}
+
+function angularDistance(a: number, b: number) {
+  return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
 
 const bridgeProbe = new THREE.Vector3();
