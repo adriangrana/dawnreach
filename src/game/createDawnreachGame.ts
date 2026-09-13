@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from './characters/animateHumanoid';
 import { buildHumanoidBody } from './characters/buildHumanoidBody';
+import { createEntitySelectionController } from './entities/entitySelection';
+import { GameEntityRegistry, getGameEntity, registerAuthoredMapEntities, VISION_RANGES } from './entities/gameEntities';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
@@ -19,6 +21,7 @@ import {
 import type { NavigationPath } from './navigation/navigationWorld';
 import { createProceduralTextures } from './shared/textures';
 import type { HeroStats, MatchHeroState } from './match';
+import { createVisionSystem } from './vision/visionSystem';
 
 type HeroOverlayState = {
   hero: MatchHeroState;
@@ -56,6 +59,7 @@ const PARTIAL_ROUTE_REPATH_INTERVAL = 0.24;
 const BLOCKED_ROUTE_REPATH_COOLDOWN = 0.12;
 const TARGET_REPATH_DISTANCE = 0.75;
 const TARGET_REPATH_COOLDOWN = 0.35;
+const VISION_UPDATE_INTERVAL = 0.1;
 
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
@@ -166,6 +170,26 @@ export async function createDawnreachGame(
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, HERO_GROUND_OFFSET, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
+  const entityRegistry = new GameEntityRegistry();
+  registerAuthoredMapEntities(entityRegistry, battlefield);
+  entityRegistry.register(hero.root, {
+    id: 'blue-hero-alden',
+    displayName: alden ? 'Alden' : 'Humanoid Preview',
+    kind: 'hero',
+    team: 'blue',
+    selectable: true,
+    targetable: true,
+    grantsVision: true,
+    visionRadius: VISION_RANGES.hero,
+    visionHeight: 1.8,
+    visibilityPolicy: 'vision-only',
+    interaction: 'unit',
+    selectionRadius: 0.78,
+  });
+  const vision = createVisionSystem(entityRegistry, 'blue');
+  scene.userData.entityRegistry = entityRegistry;
+  scene.userData.visionSystem = vision;
+
   const targetMarker = buildTargetMarker('move', 0x79ff71, 0xc3ffab);
   targetMarker.visible = false;
   scene.add(targetMarker);
@@ -175,6 +199,12 @@ export async function createDawnreachGame(
   scene.add(attackMarker);
 
   const raycaster = new THREE.Raycaster();
+  const selection = createEntitySelectionController(
+    scene,
+    entityRegistry,
+    entity => entity.team === 'blue' || entity.revealed,
+  );
+  vision.updateEntityVisibility();
   const surfaceRay = new THREE.Raycaster();
   surfaceRay.ray.direction.set(0, -1, 0);
   const pointer = new THREE.Vector2();
@@ -216,6 +246,7 @@ export async function createDawnreachGame(
   let elapsed = 0;
   let animationFrame = 0;
   let lastMinimapRender = -Infinity;
+  let lastVisionUpdate = -Infinity;
   let cameraFocus: Point3 | null = null;
   const cameraAnchor = hero.root.position.clone();
 
@@ -287,7 +318,10 @@ export async function createDawnreachGame(
     const hits = raycaster.intersectObjects(attackables, true);
     for (const hit of hits) {
       const attackable = findAttackableAncestor(hit.object);
-      if (attackable) return attackable;
+      if (!attackable) continue;
+      const entity = getGameEntity(attackable);
+      if (entity && !vision.isEntityVisible(entity)) continue;
+      return attackable;
     }
     return null;
   };
@@ -368,7 +402,10 @@ export async function createDawnreachGame(
       return;
     }
 
-    if (!attackArmed) return;
+    if (!attackArmed) {
+      selection.pick(raycaster);
+      return;
+    }
     const target = pickAttackable();
     if (target) {
       issueTargetAttack(target);
@@ -547,6 +584,12 @@ export async function createDawnreachGame(
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
     attackCooldown = Math.max(0, attackCooldown - dt);
+
+    if (elapsed - lastVisionUpdate >= VISION_UPDATE_INTERVAL) {
+      vision.updateEntityVisibility();
+      lastVisionUpdate = elapsed;
+    }
+    selection.update();
 
     if (attackOrder?.kind === 'target') {
       if (!attackOrder.target.parent) {
@@ -748,6 +791,7 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('contextmenu', onContextMenu);
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
+      selection.dispose();
       heroOverlay.dispose();
       disposeScene(scene);
       renderer.dispose();
