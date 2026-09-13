@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { GameEntity, GameEntityKind } from './gameEntities';
+import type { GameEntity, GameEntityKind, TeamId } from './gameEntities';
 
 const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
   eager: true,
@@ -33,6 +33,17 @@ function resourceFraction(current: number, maximum: number) {
   return THREE.MathUtils.clamp(current / maximum, 0, 1);
 }
 
+function healthPalette(team: TeamId) {
+  switch (team) {
+    case 'blue':
+      return { top: '#8aeb4b', bottom: '#43bb29', dark: '#1c2916' };
+    case 'red':
+      return { top: '#ff6559', bottom: '#c52f2a', dark: '#30110f' };
+    case 'neutral':
+      return { top: '#efcf57', bottom: '#c5922e', dark: '#30270f' };
+  }
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -51,17 +62,27 @@ function roundRect(
   ctx.closePath();
 }
 
-function drawHeroHealth(ctx: CanvasRenderingContext2D, hp: number, maxHp: number) {
+function drawHeroHealth(
+  ctx: CanvasRenderingContext2D,
+  hp: number,
+  maxHp: number,
+  team: TeamId,
+) {
+  const palette = healthPalette(team);
   ctx.fillStyle = '#050805';
   ctx.fillRect(78, 12, 302, 37);
-  ctx.fillStyle = '#1c2916';
+  ctx.fillStyle = palette.dark;
   ctx.fillRect(82, 16, 294, 29);
   const health = ctx.createLinearGradient(0, 16, 0, 45);
-  health.addColorStop(0, '#83e844');
-  health.addColorStop(1, '#46c526');
+  health.addColorStop(0, palette.top);
+  health.addColorStop(1, palette.bottom);
   ctx.fillStyle = health;
   ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
-  ctx.fillStyle = 'rgba(5, 30, 4, 0.4)';
+  ctx.fillStyle = team === 'red'
+    ? 'rgba(45, 4, 4, 0.42)'
+    : team === 'neutral'
+      ? 'rgba(45, 32, 4, 0.42)'
+      : 'rgba(5, 30, 4, 0.4)';
   for (let segment = 1; segment < 3; segment++) {
     ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
   }
@@ -110,7 +131,7 @@ function drawHeroFrame(
   ctx.closePath();
   ctx.fill();
 
-  drawHeroHealth(ctx, entity.currentHp, entity.maxHp);
+  drawHeroHealth(ctx, entity.currentHp, entity.maxHp, entity.team);
   drawHeroResource(ctx, entity.currentResource, entity.maxResource);
   drawHeroLevel(ctx, entity.level);
 
@@ -135,6 +156,7 @@ function drawHealthOnlyFrame(
 ) {
   const fraction = resourceFraction(entity.currentHp, entity.maxHp);
   const segments = healthSegments(entity.kind);
+  const palette = healthPalette(entity.team);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const frame = ctx.createLinearGradient(0, 4, 0, 44);
@@ -148,38 +170,34 @@ function drawHealthOnlyFrame(
   roundRect(ctx, 7, 9, 306, 30, 4);
   ctx.fill();
 
-  ctx.fillStyle = '#101710';
+  ctx.fillStyle = palette.dark;
   roundRect(ctx, 11, 13, 298, 22, 2);
   ctx.fill();
 
   const fillWidth = 294 * fraction;
   if (fillWidth > 0) {
     const health = ctx.createLinearGradient(0, 14, 0, 34);
-    if (fraction > 0.5) {
-      health.addColorStop(0, '#90eb52');
-      health.addColorStop(1, '#43b92d');
-    } else if (fraction > 0.25) {
-      health.addColorStop(0, '#f0cf55');
-      health.addColorStop(1, '#c59128');
-    } else {
-      health.addColorStop(0, '#f26759');
-      health.addColorStop(1, '#b72f28');
-    }
+    health.addColorStop(0, palette.top);
+    health.addColorStop(1, palette.bottom);
     ctx.fillStyle = health;
     ctx.fillRect(13, 15, fillWidth, 18);
   }
 
-  ctx.fillStyle = 'rgba(4, 12, 5, 0.38)';
+  ctx.fillStyle = entity.team === 'red'
+    ? 'rgba(56, 5, 5, 0.42)'
+    : entity.team === 'neutral'
+      ? 'rgba(52, 39, 6, 0.42)'
+      : 'rgba(4, 12, 5, 0.38)';
   for (let segment = 1; segment < segments; segment++) {
     const x = 13 + 294 * segment / segments;
     ctx.fillRect(x, 15, 1.25, 18);
   }
 
   ctx.fillStyle = entity.team === 'blue'
-    ? 'rgba(74, 194, 255, 0.9)'
+    ? 'rgba(75, 211, 73, 0.95)'
     : entity.team === 'red'
-      ? 'rgba(255, 96, 82, 0.9)'
-      : 'rgba(233, 195, 89, 0.9)';
+      ? 'rgba(255, 91, 78, 0.95)'
+      : 'rgba(233, 195, 89, 0.95)';
   ctx.fillRect(15, 11, 290, 2);
 }
 
@@ -193,6 +211,7 @@ function entitySignature(entity: GameEntity) {
       entity.maxHp,
       entity.currentResource,
       entity.maxResource,
+      entity.team,
     ].join('|');
   }
   return `${entity.currentHp}|${entity.maxHp}|${entity.team}`;
@@ -210,6 +229,12 @@ function heroIconPath(entity: GameEntity) {
  */
 export function attachEntityOverhead(entity: GameEntity) {
   if (!entity.showHealthBar || entity.maxHp <= 0) return;
+
+  // The old base-presentation layer can still author a legacy throne shell with the same
+  // semantic name as the current throne. It is visual compatibility geometry, not a second
+  // gameplay entity, so it must never receive a second HP bar.
+  if (entity.root.userData.structureKind === 'throne') return;
+
   if (entity.kind === 'hero' && entity.root.getObjectByName('hero-status-overlay')) return;
 
   const overheadName = `${entity.id}-overhead`;
