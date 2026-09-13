@@ -1,10 +1,15 @@
 import * as THREE from 'three';
-import { subscribeWorldCombatEvents, type WorldCombatEvent } from './worldCombatBridge';
+import {
+  subscribeWorldCombatEvents,
+  subscribeWorldHeroProgressionEvents,
+  type WorldCombatEvent,
+  type WorldHeroProgressionEvent,
+} from './worldCombatBridge';
 import type { GameEntity } from './gameEntities';
 
 type FloatingCombatEntity = GameEntity;
 
-type CombatTextKind = 'outgoing' | 'incoming';
+type CombatTextKind = 'outgoing' | 'incoming' | 'gold';
 
 type FloatingLabel = {
   sprite: THREE.Sprite;
@@ -22,18 +27,32 @@ type FloatingLabel = {
   finished: boolean;
 };
 
+type TargetingCollider = {
+  mesh: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
+  geometry: THREE.CylinderGeometry;
+  material: THREE.MeshBasicMaterial;
+};
+
 const entitiesById = new Map<string, FloatingCombatEntity>();
 const lastHpById = new Map<string, number>();
+const targetingColliders = new Map<string, TargetingCollider>();
 const TMP_WORLD = new THREE.Vector3();
 const CANVAS_WIDTH = 512;
 const CANVAS_HEIGHT = 160;
 const LOCAL_HERO_ID = 'blue-hero-alden';
+const ATTACK_TARGET_HALO_DURATION_MS = 1_500;
 let fallbackLocalHeroId: string | null = null;
 let serial = 0;
+let attackMarkerAnimationFrame = 0;
+let attackCommandMarker: THREE.Group | null = null;
+let attackMarkerVisibleSinceMs: number | null = null;
+let attackMarkerSpawnToken: number | null = null;
 
 export function registerFloatingCombatEntity(entity: FloatingCombatEntity): void {
   entitiesById.set(entity.id, entity);
   lastHpById.set(entity.id, entity.currentHp);
+  ensureCreepTargetingCollider(entity);
+  ensureAttackTargetHaloMonitor();
   if (entity.id === LOCAL_HERO_ID) fallbackLocalHeroId = entity.id;
   else if (!fallbackLocalHeroId && entity.kind === 'hero' && entity.team === 'blue') fallbackLocalHeroId = entity.id;
 }
@@ -43,6 +62,50 @@ export function unregisterFloatingCombatEntity(entity: FloatingCombatEntity): vo
     entitiesById.delete(entity.id);
     lastHpById.delete(entity.id);
   }
+  removeCreepTargetingCollider(entity.id);
+
+  if (entitiesById.size === 0 && attackMarkerAnimationFrame !== 0) {
+    cancelAnimationFrame(attackMarkerAnimationFrame);
+    attackMarkerAnimationFrame = 0;
+    attackCommandMarker = null;
+    attackMarkerVisibleSinceMs = null;
+    attackMarkerSpawnToken = null;
+  }
+}
+
+function ensureCreepTargetingCollider(entity: FloatingCombatEntity): void {
+  if (entity.kind !== 'creep' || targetingColliders.has(entity.id)) return;
+
+  // A slightly wider invisible cylinder makes small lane creeps much easier to acquire
+  // with the attack cursor without changing their physical collision or visual size.
+  const radius = Math.max(0.78, entity.selectionRadius * 1.45);
+  const height = entity.definitionId?.includes('siege') ? 1.95 : 1.72;
+  const geometry = new THREE.CylinderGeometry(radius, radius, height, 18, 1, false);
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  material.colorWrite = false;
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'creep-targeting-collider';
+  mesh.position.y = height * 0.5;
+  mesh.frustumCulled = false;
+  mesh.userData.targetingCollider = true;
+  entity.root.add(mesh);
+  targetingColliders.set(entity.id, { mesh, geometry, material });
+}
+
+function removeCreepTargetingCollider(entityId: string): void {
+  const collider = targetingColliders.get(entityId);
+  if (!collider) return;
+  targetingColliders.delete(entityId);
+  collider.mesh.removeFromParent();
+  collider.geometry.dispose();
+  collider.material.dispose();
 }
 
 function currentLocalHeroId(): string | null {
@@ -80,6 +143,13 @@ function handleCombatEvent(event: WorldCombatEvent): void {
   spawnFloatingLabel(target, amount, incoming ? 'incoming' : 'outgoing', event.reason === 'death');
 }
 
+function handleHeroProgressionEvent(event: WorldHeroProgressionEvent): void {
+  if (event.goldDelta <= 0) return;
+  const hero = entitiesById.get(event.heroEntityId);
+  if (!hero) return;
+  spawnFloatingLabel(hero, event.goldDelta, 'gold', false);
+}
+
 function spawnFloatingLabel(
   target: FloatingCombatEntity,
   amount: number,
@@ -110,18 +180,18 @@ function spawnFloatingLabel(
 
   const lane = serial++ % 5;
   const centeredLane = lane - 2;
-  const baseHeight = lethal ? 1.10 : 0.92;
+  const baseHeight = kind === 'gold' ? 0.80 : lethal ? 1.10 : 0.92;
   const baseWidth = baseHeight * aspect;
   const label: FloatingLabel = {
     sprite,
     material,
     texture,
     startMs: performance.now(),
-    durationMs: lethal ? 1120 : kind === 'incoming' ? 1040 : 960,
+    durationMs: kind === 'gold' ? 1_180 : lethal ? 1_120 : kind === 'incoming' ? 1_040 : 960,
     origin,
     driftX: centeredLane * 0.075,
     driftZ: ((serial % 3) - 1) * 0.035,
-    rise: lethal ? 1.55 : 1.32,
+    rise: kind === 'gold' ? 1.45 : lethal ? 1.55 : 1.32,
     baseWidth,
     baseHeight,
     lethal,
@@ -184,8 +254,8 @@ function createDamageTexture(amount: number, kind: CombatTextKind, lethal: boole
   if (!context) throw new Error('Canvas 2D context unavailable for floating combat text');
 
   const value = Math.max(1, Math.round(amount));
-  const label = kind === 'incoming' ? `−${value}` : `${value}`;
-  const fontSize = lethal ? 92 : kind === 'incoming' ? 82 : 78;
+  const label = kind === 'incoming' ? `−${value}` : kind === 'gold' ? `+${value}` : `${value}`;
+  const fontSize = kind === 'gold' ? 76 : lethal ? 92 : kind === 'incoming' ? 82 : 78;
   const font = `900 ${fontSize}px "Trebuchet MS", "Segoe UI", sans-serif`;
 
   context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -203,6 +273,11 @@ function createDamageTexture(amount: number, kind: CombatTextKind, lethal: boole
     gradient.addColorStop(0.38, '#ffaaa1');
     gradient.addColorStop(1, '#ff625b');
     context.shadowColor = 'rgba(224, 44, 37, 0.62)';
+  } else if (kind === 'gold') {
+    gradient.addColorStop(0, '#fff9c9');
+    gradient.addColorStop(0.38, '#ffe177');
+    gradient.addColorStop(1, '#d89d27');
+    context.shadowColor = 'rgba(229, 168, 44, 0.68)';
   } else {
     gradient.addColorStop(0, '#fffbea');
     gradient.addColorStop(0.44, '#f3df9d');
@@ -210,9 +285,13 @@ function createDamageTexture(amount: number, kind: CombatTextKind, lethal: boole
     context.shadowColor = 'rgba(225, 170, 67, 0.52)';
   }
 
-  context.shadowBlur = lethal ? 25 : 18;
+  context.shadowBlur = lethal ? 25 : kind === 'gold' ? 22 : 18;
   context.shadowOffsetY = 2;
-  context.strokeStyle = kind === 'incoming' ? 'rgba(49, 8, 8, 0.96)' : 'rgba(31, 23, 8, 0.96)';
+  context.strokeStyle = kind === 'incoming'
+    ? 'rgba(49, 8, 8, 0.96)'
+    : kind === 'gold'
+      ? 'rgba(58, 38, 4, 0.97)'
+      : 'rgba(31, 23, 8, 0.96)';
   context.lineWidth = lethal ? 13 : 11;
   context.strokeText(label, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 3);
 
@@ -221,7 +300,11 @@ function createDamageTexture(amount: number, kind: CombatTextKind, lethal: boole
 
   context.shadowBlur = 0;
   context.shadowOffsetY = 0;
-  context.strokeStyle = kind === 'incoming' ? 'rgba(255, 235, 231, 0.34)' : 'rgba(255, 250, 219, 0.38)';
+  context.strokeStyle = kind === 'incoming'
+    ? 'rgba(255, 235, 231, 0.34)'
+    : kind === 'gold'
+      ? 'rgba(255, 249, 193, 0.56)'
+      : 'rgba(255, 250, 219, 0.38)';
   context.lineWidth = 1.5;
   context.strokeText(label, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 1.5);
 
@@ -270,6 +353,52 @@ function labelLift(entity: FloatingCombatEntity): number {
   }
 }
 
+function ensureAttackTargetHaloMonitor(): void {
+  if (attackMarkerAnimationFrame !== 0) return;
+
+  const tick = () => {
+    attackMarkerAnimationFrame = requestAnimationFrame(tick);
+    const localHeroId = currentLocalHeroId();
+    const localHero = localHeroId ? entitiesById.get(localHeroId) : undefined;
+    if (!localHero) return;
+
+    const worldRoot = findWorldRoot(localHero.root);
+    if (!worldRoot) return;
+
+    if (!attackCommandMarker || !attackCommandMarker.parent) {
+      attackCommandMarker = null;
+      worldRoot.traverse((object) => {
+        if (attackCommandMarker || !(object instanceof THREE.Group)) return;
+        if (object.userData.kind === 'attack') attackCommandMarker = object;
+      });
+    }
+
+    const marker = attackCommandMarker;
+    if (!marker) return;
+    if (!marker.visible) {
+      attackMarkerVisibleSinceMs = null;
+      attackMarkerSpawnToken = null;
+      return;
+    }
+
+    const nowMs = performance.now();
+    const spawnToken = Number(marker.userData.spawnTime ?? 0);
+    if (attackMarkerVisibleSinceMs === null || attackMarkerSpawnToken !== spawnToken) {
+      attackMarkerVisibleSinceMs = nowMs;
+      attackMarkerSpawnToken = spawnToken;
+      return;
+    }
+
+    if (nowMs - attackMarkerVisibleSinceMs >= ATTACK_TARGET_HALO_DURATION_MS) {
+      marker.visible = false;
+      attackMarkerVisibleSinceMs = null;
+      attackMarkerSpawnToken = null;
+    }
+  };
+
+  attackMarkerAnimationFrame = requestAnimationFrame(tick);
+}
+
 function findWorldRoot(object: THREE.Object3D): THREE.Object3D | null {
   let current: THREE.Object3D | null = object;
   while (current?.parent) current = current.parent;
@@ -277,3 +406,4 @@ function findWorldRoot(object: THREE.Object3D): THREE.Object3D | null {
 }
 
 subscribeWorldCombatEvents(handleCombatEvent);
+subscribeWorldHeroProgressionEvents(handleHeroProgressionEvent);
