@@ -84,6 +84,11 @@
    inventory, bars, borders and typography all grow together.
 */
 @media (min-width: 1201px) {
+  .scoreboard {
+    transform: translateX(-50%) scale(1.7);
+    transform-origin: 50% 0;
+  }
+
   .minimap-shell {
     left: 0;
     bottom: 0;
