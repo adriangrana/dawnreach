@@ -2,6 +2,7 @@ import type { GameEntity, GameEntityKind, TeamId } from './gameEntities';
 
 const STYLE_ID = 'dawnreach-selection-hud-style';
 const OVERLAY_CLASS = 'selected-entity-hud-overlay';
+let activeBridgeCount = 0;
 
 function kindLabel(kind: GameEntityKind) {
   switch (kind) {
@@ -342,11 +343,17 @@ export type SelectionHudBridge = Readonly<{
 }>;
 
 export function createSelectionHudBridge(localHero: GameEntity | null): SelectionHudBridge {
+  activeBridgeCount += 1;
   let selected: GameEntity | null = null;
   let lastSignature = '';
   let overlay = ensureOverlay();
+  let disposed = false;
 
   const render = (force = false) => {
+    if (overlay && !overlay.isConnected) {
+      overlay = null;
+      lastSignature = '';
+    }
     overlay ??= ensureOverlay();
     if (!overlay) return;
     const signature = entitySignature(selected);
@@ -384,9 +391,12 @@ export function createSelectionHudBridge(localHero: GameEntity | null): Selectio
     },
     isLocalHeroSelected: () => selected !== null && selected === localHero && localHero.alive,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       window.removeEventListener('pointerdown', onPointerDownCapture, true);
       window.removeEventListener('keydown', onKeyDownCapture, true);
-      overlay?.remove();
+      activeBridgeCount = Math.max(0, activeBridgeCount - 1);
+      if (activeBridgeCount === 0) overlay?.remove();
       overlay = null;
     },
   };
