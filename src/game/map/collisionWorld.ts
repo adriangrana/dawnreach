@@ -438,6 +438,20 @@ function collectStructureColliders(
   const size = new THREE.Vector3();
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Group)) return;
+
+    const authoredRadius = Number(object.userData.collisionRadius ?? 0);
+    if (authoredRadius > 0) {
+      object.getWorldPosition(center);
+      colliders.push({
+        x: center.x,
+        z: center.z,
+        radius: authoredRadius,
+        kind: 'structure',
+      });
+      counts.structures++;
+      return;
+    }
+
     const name = object.name.toLowerCase();
     if (!(name.endsWith('-tower') || name.endsWith('-defense-tower'))) return;
     const box = new THREE.Box3().setFromObject(object);
