@@ -24,6 +24,7 @@ const FOG_RENDER_ORDER = 20;
 const FOG_VISIBILITY_RAYS = 64;
 const FOG_SOURCE_REBUILD_DISTANCE = 0.16;
 const FOG_SOURCE_REBUILD_HEIGHT = 0.12;
+const FOG_OCCLUDER_REVEAL_MARGIN = 0.10;
 const VISION_EPSILON = 0.06;
 const TREE_VISION_RADIUS = 0.34;
 const WALL_RADIUS = 0.48;
@@ -38,6 +39,7 @@ type CircleOccluder = {
   radius: number;
   minY: number;
   maxY: number;
+  fogProjectionPadding?: number;
 };
 
 type EllipseOccluder = {
@@ -50,6 +52,7 @@ type EllipseOccluder = {
   sin: number;
   minY: number;
   maxY: number;
+  fogProjectionPadding?: number;
 };
 
 type SegmentOccluder = {
@@ -61,6 +64,7 @@ type SegmentOccluder = {
   radius: number;
   minY: number;
   maxY: number;
+  fogProjectionPadding?: number;
 };
 
 type VisionOccluder = CircleOccluder | EllipseOccluder | SegmentOccluder;
@@ -125,6 +129,28 @@ function rayCircleEntry(
   return distance >= 0 && distance <= maxDistance ? distance : Infinity;
 }
 
+function rayCircleExit(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  cx: number,
+  cz: number,
+  radius: number,
+) {
+  const mx = ox - cx;
+  const mz = oz - cz;
+  const b = mx * dx + mz * dz;
+  const c = mx * mx + mz * mz - radius * radius;
+  const discriminant = b * b - c;
+  if (discriminant < 0) return Infinity;
+  const near = -b - Math.sqrt(discriminant);
+  const far = -b + Math.sqrt(discriminant);
+  if (far < 0 || near > maxDistance) return Infinity;
+  return Math.min(maxDistance, far);
+}
+
 function rayEllipseEntry(
   ox: number,
   oz: number,
@@ -151,6 +177,35 @@ function rayEllipseEntry(
   if (a <= 1e-9 || discriminant < 0) return Infinity;
   const distance = (-b - Math.sqrt(discriminant)) / (2 * a);
   return distance >= 0 && distance <= maxDistance ? distance : Infinity;
+}
+
+function rayEllipseExit(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  ellipse: EllipseOccluder,
+) {
+  const worldX = ox - ellipse.x;
+  const worldZ = oz - ellipse.z;
+  const localX = ellipse.cos * worldX - ellipse.sin * worldZ;
+  const localZ = ellipse.sin * worldX + ellipse.cos * worldZ;
+  const localDx = ellipse.cos * dx - ellipse.sin * dz;
+  const localDz = ellipse.sin * dx + ellipse.cos * dz;
+  const nx = localX / ellipse.radiusX;
+  const nz = localZ / ellipse.radiusZ;
+  const ndx = localDx / ellipse.radiusX;
+  const ndz = localDz / ellipse.radiusZ;
+  const a = ndx * ndx + ndz * ndz;
+  const b = 2 * (nx * ndx + nz * ndz);
+  const c = nx * nx + nz * nz - 1;
+  const discriminant = b * b - 4 * a * c;
+  if (a <= 1e-9 || discriminant < 0) return Infinity;
+  const near = (-b - Math.sqrt(discriminant)) / (2 * a);
+  const far = (-b + Math.sqrt(discriminant)) / (2 * a);
+  if (far < 0 || near > maxDistance) return Infinity;
+  return Math.min(maxDistance, far);
 }
 
 function raySlabEntry(position: number, direction: number, minimum: number, maximum: number) {
@@ -207,6 +262,58 @@ function rayCapsuleEntry(
   return best;
 }
 
+function rayCapsuleExit(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  segment: SegmentOccluder,
+) {
+  const sx = segment.bx - segment.ax;
+  const sz = segment.bz - segment.az;
+  const length = Math.hypot(sx, sz);
+  if (length <= 1e-6) {
+    return rayCircleExit(ox, oz, dx, dz, maxDistance, segment.ax, segment.az, segment.radius);
+  }
+
+  const ux = sx / length;
+  const uz = sz / length;
+  const nx = -uz;
+  const nz = ux;
+  const px = ox - segment.ax;
+  const pz = oz - segment.az;
+  const localX = px * ux + pz * uz;
+  const localZ = px * nx + pz * nz;
+  const localDx = dx * ux + dz * uz;
+  const localDz = dx * nx + dz * nz;
+
+  let farthest = -Infinity;
+  const xSlab = raySlabEntry(localX, localDx, 0, length);
+  const zSlab = raySlabEntry(localZ, localDz, -segment.radius, segment.radius);
+  if (xSlab && zSlab) {
+    const near = Math.max(xSlab.near, zSlab.near, 0);
+    const far = Math.min(xSlab.far, zSlab.far, maxDistance);
+    if (near <= far) farthest = Math.max(farthest, far);
+  }
+
+  const startEntry = rayCircleEntry(ox, oz, dx, dz, maxDistance, segment.ax, segment.az, segment.radius);
+  if (Number.isFinite(startEntry)) {
+    farthest = Math.max(
+      farthest,
+      rayCircleExit(ox, oz, dx, dz, maxDistance, segment.ax, segment.az, segment.radius),
+    );
+  }
+  const endEntry = rayCircleEntry(ox, oz, dx, dz, maxDistance, segment.bx, segment.bz, segment.radius);
+  if (Number.isFinite(endEntry)) {
+    farthest = Math.max(
+      farthest,
+      rayCircleExit(ox, oz, dx, dz, maxDistance, segment.bx, segment.bz, segment.radius),
+    );
+  }
+  return farthest >= 0 ? farthest : Infinity;
+}
+
 function rayOccluderEntry(
   occluder: VisionOccluder,
   source: WorldPoint3,
@@ -223,6 +330,22 @@ function rayOccluderEntry(
     return rayEllipseEntry(source.x, source.z, dx, dz, maxDistance, occluder);
   }
   return rayCapsuleEntry(source.x, source.z, dx, dz, maxDistance, occluder);
+}
+
+function rayOccluderExit(
+  occluder: VisionOccluder,
+  source: WorldPoint3,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+) {
+  if (occluder.kind === 'circle') {
+    return rayCircleExit(source.x, source.z, dx, dz, maxDistance, occluder.x, occluder.z, occluder.radius);
+  }
+  if (occluder.kind === 'ellipse') {
+    return rayEllipseExit(source.x, source.z, dx, dz, maxDistance, occluder);
+  }
+  return rayCapsuleExit(source.x, source.z, dx, dz, maxDistance, occluder);
 }
 
 function distancePointToSegment(
@@ -268,6 +391,7 @@ function collectVisionOccluders(scene: THREE.Scene) {
           radius: TREE_VISION_RADIUS * Math.max(Math.abs(scale.x), Math.abs(scale.z)),
           minY: position.y,
           maxY: position.y + 4.7 * Math.abs(scale.y),
+          fogProjectionPadding: 0.34,
         });
       }
       return;
@@ -295,6 +419,7 @@ function collectVisionOccluders(scene: THREE.Scene) {
         sin: Math.sin(worldEuler.y),
         minY: bounds.min.y,
         maxY: bounds.max.y,
+        fogProjectionPadding: THREE.MathUtils.clamp((bounds.max.y - bounds.min.y) * 0.16, 0.12, 0.65),
       });
       return;
     }
@@ -316,6 +441,11 @@ function collectVisionOccluders(scene: THREE.Scene) {
         : THREE.MathUtils.clamp(Math.min(localSize.x, localSize.z) * 0.34, 0.65, 1.45),
       minY: bounds.min.y,
       maxY: bounds.max.y,
+      // The fog plane is intentionally depth-independent so it can tint unexplored
+      // structures. A tall visible structure therefore needs a little screen-space
+      // clearance behind its footprint, otherwise fog on the ground behind it projects
+      // over the face that is actually visible to the source.
+      fogProjectionPadding: THREE.MathUtils.clamp(localSize.y * 0.34, 0.55, 2.35),
     });
   });
 
@@ -352,6 +482,7 @@ function addRetainingWallOccluders(occluders: VisionOccluder[]) {
         occluders.push({
           kind: 'segment', ax: x1, az: z1, bx: x2, bz: z2,
           radius: ELEVATION_RADIUS, minY: -0.5, maxY: 2.8,
+          fogProjectionPadding: 0.16,
         });
       }
     }
@@ -381,6 +512,7 @@ function addBaseWallOccluders(occluders: VisionOccluder[]) {
         radius: WALL_RADIUS,
         minY: -0.5,
         maxY: BASE_LAYOUT.elevation + 1.55,
+        fogProjectionPadding: 0.20,
       });
     }
   }
@@ -408,6 +540,7 @@ function addObjectiveWallOccluders(occluders: VisionOccluder[]) {
         radius: WALL_RADIUS,
         minY: -0.5,
         maxY: 4.2,
+        fogProjectionPadding: 0.20,
       });
     }
   }
@@ -430,12 +563,26 @@ function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
   const traceDistance = (source: WorldPoint3, angle: number, maxDistance: number) => {
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
-    let nearest = maxDistance;
+    let nearestEntry = maxDistance;
+    let nearestOccluder: VisionOccluder | null = null;
     for (const occluder of occluders) {
-      const distance = rayOccluderEntry(occluder, source, dx, dz, nearest);
-      if (distance < nearest) nearest = distance;
+      const entry = rayOccluderEntry(occluder, source, dx, dz, nearestEntry);
+      if (entry < nearestEntry) {
+        nearestEntry = entry;
+        nearestOccluder = occluder;
+      }
     }
-    return nearest;
+    if (!nearestOccluder) return maxDistance;
+
+    // Gameplay LOS blocks at the front face, but the fog mask must clear the blocker
+    // itself and begin immediately behind it. Otherwise the depth-independent fog plane
+    // projects across the visible face of towers/rocks/trees from the isometric camera.
+    const exit = rayOccluderExit(nearestOccluder, source, dx, dz, maxDistance);
+    if (!Number.isFinite(exit)) return nearestEntry;
+    return Math.min(
+      maxDistance,
+      exit + (nearestOccluder.fogProjectionPadding ?? 0) + FOG_OCCLUDER_REVEAL_MARGIN,
+    );
   };
 
   const lineOfSight: VisionLineOfSight = (source, target) => {
