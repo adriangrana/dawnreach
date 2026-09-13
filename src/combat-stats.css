@@ -1,7 +1,7 @@
 .combat-stats-overlay {
   position: fixed;
-  top: 20px;
-  left: 18px;
+  top: 0;
+  left: 0;
   z-index: 120;
   min-width: 158px;
   padding: 7px 14px 8px 13px;
@@ -53,10 +53,50 @@
   white-space: nowrap;
 }
 
+/* Desktop viewport layout --------------------------------------------------
+   Keep the primary HUD anchored to the physical viewport edges instead of
+   floating over the playfield. The minimap occupies 15% of the playable
+   width and the command deck (portrait / abilities / inventory) 50%.
+*/
+@media (min-width: 1201px) {
+  .minimap-shell {
+    left: 0;
+    bottom: 0;
+    width: 15vw;
+    grid-template-columns: minmax(0, 1fr) 25px;
+    margin: 0;
+  }
+
+  .minimap-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .minimap-shell::before {
+    top: 0;
+    left: 0;
+  }
+
+  .minimap-shell::after {
+    right: 0;
+    bottom: 0;
+  }
+
+  .command-deck {
+    left: 50%;
+    right: auto;
+    bottom: 0;
+    width: 50vw;
+    max-width: none;
+    margin: 0;
+    transform: translateX(-50%);
+  }
+}
+
 @media (max-width: 900px), (max-height: 650px) {
   .combat-stats-overlay {
-    top: 14px;
-    left: 12px;
+    top: 0;
+    left: 0;
     min-width: 136px;
     padding: 6px 11px 7px 10px;
   }
