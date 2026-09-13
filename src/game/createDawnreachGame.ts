@@ -28,7 +28,7 @@ type HeroOverlayState = {
   stats: Pick<HeroStats, 'maxHp' | 'maxResource'>;
 };
 
-const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.png', {
+const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.webp', {
   eager: true, query: '?url', import: 'default',
 });
 
@@ -969,7 +969,7 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
       sprite.visible = state !== null && state.hero.currentHp > 0;
       if (!state) return;
       const { hero, stats } = state;
-      const nextIconPath = heroIcons[`./heroes/${hero.heroName?.toLowerCase()}/images/${hero.definitionId}I.png`];
+      const nextIconPath = heroIcons[`./heroes/${hero.heroName?.toLowerCase()}/images/${hero.definitionId}I.webp`];
       if (nextIconPath !== iconPath) {
         if (icon) icon.onload = icon.onerror = null;
         iconPath = nextIconPath;

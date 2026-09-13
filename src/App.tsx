@@ -13,11 +13,11 @@ import {
   recoverHeroResource, useHeroAbility, type AbilityKey, type MatchState,
 } from './game/match';
 
-const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.png', import.meta.url).href;
-const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import.meta.url).href;
+const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', import.meta.url).href;
+const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.webp', import.meta.url).href;
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
-const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].png', {
+const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].webp', {
   eager: true, query: '?url', import: 'default',
 });
 
@@ -331,7 +331,7 @@ function GameHud({
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
                 blockedReason={heroDead ? 'No disponible mientras estás muerto' : control.blockedReason} art={abilityArt[key]}
-                image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
+                image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.webp`]}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}

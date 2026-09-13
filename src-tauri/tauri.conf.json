@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Dawnreach — POC 0.1",
+        "title": "Dawnreach — 0.1",
         "width": 1280,
         "height": 720,
         "minWidth": 960,

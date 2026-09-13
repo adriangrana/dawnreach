@@ -27,10 +27,10 @@ try {
     for (const key of ['Q', 'W', 'E', 'R']) {
       const slot = page.locator(`[data-ability="${key}"]`);
       const image = slot.locator('.ability-image');
-      if (aldenImages.includes(`H001${key}.png`)) {
+      if (aldenImages.includes(`H001${key}.webp`)) {
         assert.equal(await image.count(), 1, `${key}: missing hero ability image`);
         const source = await image.getAttribute('src');
-        assert.match(source, new RegExp(`/H001${key}(?:-[^/]+)?\\.png$`), `${key}: wrong ability image`);
+        assert.match(source, new RegExp(`/H001${key}(?:-[^/]+)?\\.webp$`), `${key}: wrong ability image`);
         assert.ok(await image.isVisible(), `${key}: image is hidden`);
       } else {
         assert.equal(await image.count(), 0, `${key}: missing file must not produce a broken image`);
