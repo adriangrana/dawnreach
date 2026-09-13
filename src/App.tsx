@@ -4,13 +4,20 @@ import { createDawnreachGame } from './game/createDawnreachGame';
 import {
   publishWorldEntityRuntime,
   subscribeWorldCombatEvents,
+  subscribeWorldHeroProgressionEvents,
   type WorldCombatEvent,
+  type WorldHeroProgressionEvent,
 } from './game/entities/worldCombatBridge';
 import AbilityButton from './hud/AbilityButton';
+import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
-  ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID, calculateAldenInnate, calculateHeroStats,
-  createPlayableMatch, getAbilityControl, getHeroDefinition, getRequiredHero,
-  recoverHeroResource, useHeroAbility, type AbilityKey, type MatchState,
+  ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID,
+  advanceHeroPassiveGold, applyHeroProgressionReward,
+  calculateAldenInnate, calculateHeroStats,
+  createPlayableMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
+  getRequiredHero, getUnspentHeroAbilityPoints,
+  recoverHeroResource, upgradeHeroAbility, useHeroAbility,
+  type AbilityKey, type MatchState,
 } from './game/match';
 
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', import.meta.url).href;
@@ -48,7 +55,6 @@ const duskTeam: TeamHero[] = [
 ];
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
 const heroImageCodes: Record<string, string> = { H001: 'H001' };
-const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
 
 type HudRuntime = {
   match: MatchState;
@@ -60,14 +66,43 @@ type HudRuntime = {
 type HudAction =
   | { type: 'tick'; nowMs: number }
   | { type: 'cast'; key: AbilityKey; nowMs: number }
-  | { type: 'world-hero-sync'; event: WorldCombatEvent };
+  | { type: 'upgrade'; key: AbilityKey; nowMs: number }
+  | { type: 'world-hero-sync'; event: WorldCombatEvent }
+  | { type: 'world-progression'; event: WorldHeroProgressionEvent };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
-  const actionNowMs = action.type === 'world-hero-sync' ? action.event.atMs : action.nowMs;
+  const actionNowMs = action.type === 'world-hero-sync' || action.type === 'world-progression'
+    ? action.event.atMs
+    : action.nowMs;
   const nowMs = Math.max(runtime.nowMs, actionNowMs);
-  const match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, nowMs - runtime.nowMs, nowMs);
+  const elapsedMs = Math.max(0, nowMs - runtime.nowMs);
+  let match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, elapsedMs, nowMs);
+  match = advanceHeroPassiveGold(match, LOCAL_HERO_ENTITY_ID, elapsedMs);
 
   if (action.type === 'tick') return { ...runtime, match, nowMs };
+
+  if (action.type === 'world-progression') {
+    const before = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
+    const nextMatch = applyHeroProgressionReward(match, LOCAL_HERO_ENTITY_ID, {
+      experience: action.event.experienceDelta,
+      gold: action.event.goldDelta,
+      lastHits: action.event.lastHitsDelta,
+      denies: action.event.deniesDelta,
+    });
+    const after = getRequiredHero(nextMatch, LOCAL_HERO_ENTITY_ID);
+    const messages: string[] = [];
+    if (action.event.lastHitsDelta > 0) messages.push(`LH +${action.event.lastHitsDelta}`);
+    if (action.event.deniesDelta > 0) messages.push(`DN +${action.event.deniesDelta}`);
+    if (action.event.goldDelta > 0) messages.push(`+${action.event.goldDelta} oro`);
+    if (action.event.experienceDelta > 0) messages.push(`+${action.event.experienceDelta} XP`);
+    if (after.level > before.level) messages.push(`Nivel ${after.level}`);
+    return {
+      ...runtime,
+      match: nextMatch,
+      nowMs,
+      feedback: messages.join(' · '),
+    };
+  }
 
   if (action.type === 'world-hero-sync') {
     const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
@@ -102,6 +137,33 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
       feedback,
       respawnReadyAtMs,
       respawnDurationMs,
+    };
+  }
+
+  if (action.type === 'upgrade') {
+    const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
+    const ability = getHeroDefinition(hero.definitionId).abilities[action.key];
+    const currentRank = hero.abilityRanks[action.key];
+    const requiredLevel = ability.unlockLevels[currentRank];
+    const points = getUnspentHeroAbilityPoints(match, hero.heroEntityId);
+    if (points <= 0) {
+      return { ...runtime, match, nowMs, feedback: 'No tienes puntos de habilidad disponibles.' };
+    }
+    if (requiredLevel === undefined || hero.level < requiredLevel) {
+      return {
+        ...runtime,
+        match,
+        nowMs,
+        feedback: `${ability.name}: requiere nivel ${requiredLevel ?? hero.level}.`,
+      };
+    }
+    const nextMatch = upgradeHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key);
+    const nextRank = getRequiredHero(nextMatch, LOCAL_HERO_ENTITY_ID).abilityRanks[action.key];
+    return {
+      ...runtime,
+      match: nextMatch,
+      nowMs,
+      feedback: `${ability.name} sube a rango ${nextRank}.`,
     };
   }
 
@@ -164,7 +226,7 @@ function RespawnCooldownOverlay({ presentation, compact = false }: { presentatio
 function TeamPortraits({
   team,
   side,
-  heroLevel = 11,
+  heroLevel = 1,
   localRespawn,
 }: {
   team: TeamHero[];
@@ -195,7 +257,7 @@ function TeamPortraits({
               {respawn && <RespawnCooldownOverlay presentation={respawn} compact />}
             </div>
             <span className="top-hero-level" style={respawn ? { zIndex: 5 } : undefined}>
-              {localHero ? heroLevel : 10}
+              {localHero ? heroLevel : 1}
             </span>
           </div>
         );
@@ -219,6 +281,8 @@ function GameHud({
   const definition = getHeroDefinition(hero.definitionId);
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
   const innate = hero.definitionId === ALDEN.id ? calculateAldenInnate(runtime.match, hero.heroEntityId) : null;
+  const experience = getHeroExperienceProgress(runtime.match, hero.heroEntityId);
+  const unspentAbilityPoints = getUnspentHeroAbilityPoints(runtime.match, hero.heroEntityId);
   const heroDead = hero.currentHp <= 0;
   const respawnRemainingMs = runtime.respawnReadyAtMs === null
     ? 0
@@ -228,6 +292,10 @@ function GameHud({
     remainingMs: respawnRemainingMs,
     totalMs: Math.max(1, runtime.respawnDurationMs || respawnRemainingMs),
   };
+
+  useEffect(() => {
+    setCombatHudStats({ lastHits: hero.lastHits, denies: hero.denies });
+  }, [hero.lastHits, hero.denies]);
 
   useEffect(() => {
     const timer = window.setInterval(() => dispatch({ type: 'tick', nowMs: performance.now() }), 100);
@@ -300,7 +368,15 @@ function GameHud({
               style={heroDead ? { filter: 'grayscale(0.9) brightness(0.42)' } : undefined}
             />
             <RespawnCooldownOverlay presentation={respawnPresentation} />
-            <span className="hero-level">{hero.level}</span>
+            <span
+              className="hero-level-ring"
+              title={experience.maxLevel ? 'Nivel máximo' : `${Math.floor(experience.current)} / ${experience.required} XP`}
+              style={{
+                background: `conic-gradient(#67d4ff ${experience.fraction * 360}deg, #263238 0deg)`,
+              }}
+            >
+              <span>{hero.level}</span>
+            </span>
           </div>
           <div className="hero-identity">
             <strong>{definition.displayName}</strong>
@@ -320,19 +396,25 @@ function GameHud({
         </div>
 
         <div className="combat-panel">
-          <div className="ability-row">
+          <div className="ability-row" data-unspent-points={unspentAbilityPoints}>
             {ABILITY_KEYS.map(key => {
               const control = getAbilityControl(runtime.match, hero.heroEntityId, key, runtime.nowMs);
               const ability = control.ability;
+              const nextLevel = ability.unlockLevels[control.rank];
+              const canUpgrade = unspentAbilityPoints > 0
+                && nextLevel !== undefined
+                && hero.level >= nextLevel;
               return <AbilityButton
                 key={key} hotkey={key} name={ability.name} kind={ability.type}
                 description={ability.technicalDescription} lore={ability.lore}
-                rank={control.rank} maxRank={ability.unlockLevels.length} nextLevel={ability.unlockLevels[control.rank]}
+                rank={control.rank} maxRank={ability.unlockLevels.length} nextLevel={nextLevel}
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
                 blockedReason={heroDead ? 'No disponible mientras estás muerto' : control.blockedReason} art={abilityArt[key]}
                 image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.webp`]}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
+                canUpgrade={canUpgrade}
+                onUpgrade={() => dispatch({ type: 'upgrade', key, nowMs: performance.now() })}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}
           </div>
@@ -350,16 +432,20 @@ function GameHud({
 
         <div className="inventory-panel">
           <div className="inventory-grid">
-            {inventory.map((item, index) => (
-              <div className={`inventory-slot inventory-slot--${item}`} key={item}>
-                <HudArt name={item} />
+            {hero.inventory.map((slot, index) => (
+              <div
+                className={`inventory-slot ${slot.item ? 'inventory-slot--filled' : 'inventory-slot--empty'}`}
+                key={slot.slot}
+                title={slot.item?.displayName ?? 'Vacío'}
+              >
+                {slot.item && <strong className="inventory-item-label">{slot.item.displayName.charAt(0)}</strong>}
                 <span className="item-key">{index + 1}</span>
               </div>
             ))}
           </div>
           <div className="gold-row">
             <Coins />
-            <strong>1240</strong>
+            <strong>{hero.gold}</strong>
           </div>
         </div>
         <div className="deck-crest"><Swords /></div>
@@ -376,7 +462,7 @@ export default function App() {
   const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
     const nowMs = performance.now();
     return {
-      match: createPlayableMatch('H001', 11, nowMs),
+      match: createPlayableMatch('H001', 1, nowMs),
       nowMs,
       feedback: '',
       respawnReadyAtMs: null,
@@ -416,6 +502,11 @@ export default function App() {
   useEffect(() => subscribeWorldCombatEvents((event) => {
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
     dispatch({ type: 'world-hero-sync', event });
+  }), []);
+
+  useEffect(() => subscribeWorldHeroProgressionEvents((event) => {
+    if (event.heroEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
+    dispatch({ type: 'world-progression', event });
   }), []);
 
   useEffect(() => {
