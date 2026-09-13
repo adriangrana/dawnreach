@@ -1,4 +1,5 @@
 import { ALDEN, type AldenGameplayDefinition } from '../heroes/alden/gameplay';
+import { getHeroDefinition } from '../heroes/catalog';
 import type { AbilityKey, DamageType } from '../heroes/types';
 import { getRequiredHero } from './matchState';
 import { calculateCombatStats, calculateHeroStats, getActiveStatus } from './stats';
@@ -207,6 +208,9 @@ export function calculateAldenInnate(
 
 export function performAbilityAction(state: MatchState, input: AbilityActionInput): ActionResolution {
   const actor = getRequiredHero(state, input.actorHeroEntityId);
+  if (getHeroDefinition(actor.definitionId).abilities[input.key].type === 'passive') {
+    throw new Error(`${input.key} is passive and cannot be cast.`);
+  }
   if (actor.definitionId !== ALDEN.id) throw new Error(`No combat resolver is registered for ${actor.definitionId}.`);
   const rank = actor.abilityRanks[input.key];
   if (rank < 1 || rank > 4) throw new Error(`${input.key} has not been learned by ${actor.heroEntityId}.`);

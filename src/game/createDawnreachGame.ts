@@ -4,8 +4,9 @@ import { buildHumanoidBody } from './characters/buildHumanoidBody';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
-import { buildDawnreachMap } from './map/buildDawnreachMap';
+import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
+import { createWaterEffects } from './map/waterEffects';
 import { createProceduralTextures } from './shared/textures';
 
 type Point3 = { x: number; z: number };
@@ -15,8 +16,8 @@ const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(10.5, 14, 12.5);
 const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
-const GAME_HERO_SCALE = 0.68;
-const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * GAME_HERO_SCALE;
+const GAME_HERO_SCALE = 0.68 ;
+const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
 
 export async function createDawnreachGame(
   host: HTMLDivElement,
@@ -24,8 +25,8 @@ export async function createDawnreachGame(
   minimapHeroMarker?: HTMLImageElement | null,
 ) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x17261f);
-  scene.fog = new THREE.Fog(0x17261f, 25, 50);
+  scene.background = new THREE.Color(0x758994);
+  scene.fog = new THREE.Fog(0x758994, 42, 100);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -68,11 +69,17 @@ export async function createDawnreachGame(
     minimapCamera.updateMatrixWorld();
   }
 
-  addLighting(scene);
+  const sunlight = addLighting(scene);
 
   const textures = createProceduralTextures();
   const battlefield = buildDawnreachMap(textures);
   scene.add(battlefield);
+  const waterSurfaces: THREE.Mesh<THREE.BufferGeometry>[] = [];
+  battlefield.traverse(object => {
+    if (object instanceof THREE.Mesh && object.userData.waterSurface) waterSurfaces.push(object);
+  });
+  const waterEffects = createWaterEffects(battlefield);
+  scene.add(waterEffects.group);
 
   const previewHumanoid = new URLSearchParams(window.location.search).get('rig') === 'humanoid';
   const alden = previewHumanoid ? null : buildAlden(createAldenMaterials());
@@ -100,6 +107,7 @@ export async function createDawnreachGame(
   let currentYaw = 0;
   let elapsed = 0;
   let animationFrame = 0;
+  let lastMinimapRender = -Infinity;
 
   const onContextMenu = (event: MouseEvent) => event.preventDefault();
 
@@ -186,6 +194,9 @@ export async function createDawnreachGame(
 
   const updateCamera = () => {
     const target = hero.root.position;
+    sunlight.position.set(target.x - 16, 32, target.z + 14);
+    sunlight.target.position.set(target.x, 0, target.z);
+    sunlight.target.updateMatrixWorld(true);
     camera.position.set(
       target.x + CAMERA_OFFSET.x,
       CAMERA_OFFSET.y,
@@ -272,8 +283,17 @@ export async function createDawnreachGame(
     }
 
     updateCamera();
+    textures.water.offset.set(Math.sin(elapsed * 0.12) * 0.025, -elapsed * 0.055);
+    textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
+    for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
+    waterEffects.update(elapsed, [hero.root]);
     renderer.render(scene, camera);
-    renderMinimap();
+    if (elapsed - lastMinimapRender >= 0.16) {
+      renderMinimap();
+      lastMinimapRender = elapsed;
+    } else {
+      updateMinimapHeroMarker();
+    }
   };
 
   animate();
@@ -296,25 +316,26 @@ export async function createDawnreachGame(
 }
 
 function addLighting(scene: THREE.Scene) {
-  scene.add(new THREE.HemisphereLight(0xbfd8ff, 0x31402b, 1.45));
+  scene.add(new THREE.HemisphereLight(0xc7deed, 0x384632, 1.05));
 
-  const sun = new THREE.DirectionalLight(0xfff0cc, 3.6);
+  const sun = new THREE.DirectionalLight(0xffeed2, 3.0);
   sun.position.set(-8, 22, 10);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.00012;
   sun.shadow.normalBias = 0.025;
-  sun.shadow.camera.left = -20;
-  sun.shadow.camera.right = 20;
-  sun.shadow.camera.top = 20;
-  sun.shadow.camera.bottom = -20;
+  sun.shadow.camera.left = -24;
+  sun.shadow.camera.right = 24;
+  sun.shadow.camera.top = 24;
+  sun.shadow.camera.bottom = -24;
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 60;
-  scene.add(sun);
+  sun.shadow.camera.far = 90;
+  scene.add(sun, sun.target);
 
   const fill = new THREE.DirectionalLight(0x6f91ff, 0.72);
   fill.position.set(12, 7, -10);
   scene.add(fill);
+  return sun;
 }
 
 function addHeroOverlay(root: THREE.Group, name: string, scale = 1) {
@@ -401,19 +422,24 @@ function buildTargetMarker() {
 function disposeScene(scene: THREE.Scene) {
   const disposedTextures = new Set<THREE.Texture>();
   const disposedMaterials = new Set<THREE.Material>();
+  const disposedGeometries = new Set<THREE.BufferGeometry>();
 
   scene.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh || obj instanceof THREE.Sprite)) return;
-    if (obj instanceof THREE.Mesh) obj.geometry.dispose();
+    if (obj instanceof THREE.Mesh && !disposedGeometries.has(obj.geometry)) {
+      disposedGeometries.add(obj.geometry);
+      obj.geometry.dispose();
+    }
 
     const material = obj.material;
     const disposeMaterial = (mat: THREE.Material) => {
       if (disposedMaterials.has(mat)) return;
       disposedMaterials.add(mat);
-      const withMap = mat as THREE.Material & { map?: THREE.Texture | null };
-      if (withMap.map && !disposedTextures.has(withMap.map)) {
-        disposedTextures.add(withMap.map);
-        withMap.map.dispose();
+      for (const value of Object.values(mat)) {
+        if (value instanceof THREE.Texture && !disposedTextures.has(value)) {
+          disposedTextures.add(value);
+          value.dispose();
+        }
       }
       mat.dispose();
     };

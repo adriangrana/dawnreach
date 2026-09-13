@@ -5,6 +5,60 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const game = require('../node_modules/.cache/alden-test/match/index.js');
 
+test('playable HUD uses definition ranks, costs and cooldowns without duplicate casts', () => {
+  const state = game.createPlayableMatch();
+  const heroId = game.LOCAL_HERO_ENTITY_ID;
+  assert.deepEqual(state.heroes[heroId].abilityRanks, { Q: 2, W: 2, E: 1, R: 1 });
+  for (const key of game.ABILITY_KEYS) {
+    const control = game.getAbilityControl(state, heroId, key, 1000);
+    assert.equal(control.canUse, true);
+    const next = game.useHeroAbility(state, heroId, key, 1000);
+    assert.equal(next.heroes[heroId].currentResource, state.heroes[heroId].currentResource - control.preview.resourceCost);
+    assert.equal(next.heroes[heroId].cooldownReadyAtMs[key], 1000 + control.preview.cooldownSeconds * 1000);
+    assert.equal(game.useHeroAbility(next, heroId, key, 1001), next);
+    assert.equal(game.getAbilityControl(next, heroId, key, next.heroes[heroId].cooldownReadyAtMs[key]).canUse, true);
+  }
+});
+
+test('ability controls block locked, resource-starved, dead and inactive heroes', () => {
+  const heroId = game.LOCAL_HERO_ENTITY_ID;
+  const locked = game.createPlayableMatch('alden', 1);
+  assert.equal(game.useHeroAbility(locked, heroId, 'W', 0), locked);
+  const empty = game.createPlayableMatch();
+  empty.heroes[heroId].currentResource = 0;
+  assert.equal(game.useHeroAbility(empty, heroId, 'Q', 0), empty);
+  const dead = game.createPlayableMatch();
+  dead.heroes[heroId].currentHp = 0;
+  assert.equal(game.useHeroAbility(dead, heroId, 'Q', 0), dead);
+  const paused = game.setMatchPhase(game.createPlayableMatch(), 'finished');
+  assert.equal(game.useHeroAbility(paused, heroId, 'Q', 0), paused);
+});
+
+test('resource recovery follows gameplay stats and never exceeds capacity', () => {
+  const heroId = game.LOCAL_HERO_ENTITY_ID;
+  const state = game.useHeroAbility(game.createPlayableMatch(), heroId, 'Q', 0);
+  const stats = game.calculateHeroStats(state, heroId);
+  const recovered = game.recoverHeroResource(state, heroId, 1000, 1000);
+  assert.equal(recovered.heroes[heroId].currentResource, state.heroes[heroId].currentResource + stats.resourceRegenPerSecond);
+  assert.equal(game.recoverHeroResource(state, heroId, 1_000_000, 1_000_000).heroes[heroId].currentResource, stats.maxResource);
+  assert.equal(game.recoverHeroResource(state, heroId, -1000, 0), state);
+});
+
+test('pure passives cannot cast but active-with-passive abilities can', () => {
+  const heroId = game.LOCAL_HERO_ENTITY_ID;
+  const state = game.createPlayableMatch();
+  assert.equal(game.getAbilityControl(state, heroId, 'E', 0).canUse, true);
+  const originalType = game.ALDEN.abilities.E.type;
+  try {
+    game.ALDEN.abilities.E.type = 'passive';
+    assert.equal(game.getAbilityControl(state, heroId, 'E', 0).passive, true);
+    assert.equal(game.useHeroAbility(state, heroId, 'E', 0), state);
+    assert.throws(() => game.performAbilityAction(state, { actorHeroEntityId: heroId, key: 'E', nowMs: 0 }), /passive/);
+  } finally {
+    game.ALDEN.abilities.E.type = originalType;
+  }
+});
+
 function makeDuel(level = 1) {
   let state = game.createMatchState('test', 0);
   state = game.addPlayerToMatch(state, { playerId: 'p1', displayName: 'A', team: 'dawn', slotIndex: 1 });

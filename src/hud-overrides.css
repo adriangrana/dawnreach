@@ -170,11 +170,11 @@
   left: calc(var(--minimap-size) + 74px);
   right: 20px;
   bottom: 12px;
-  max-width: 970px;
+  max-width: 721px;
   min-height: 0;
   height: 152px;
   display: grid;
-  grid-template-columns: 236px minmax(248px, 1fr) 182px;
+  grid-template-columns: 210px minmax(0, 1fr) 182px;
   padding: 5px 8px;
   border: 3px solid var(--hud-edge);
   border-top-color: #a39875;
@@ -253,7 +253,26 @@
 .hero-attributes b:nth-child(3) svg { color: #9eae92; }
 .hero-sigil { position: absolute; bottom: 0; right: 0; width: 28px; height: 28px; border: 1px solid #7b6b43; opacity: .8; }
 .combat-panel { gap: 9px; padding-inline: 16px; }
-.ability-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; align-items: center; }
+.ability-row { display: flex; justify-content: center; gap: 6px; align-items: flex-start; }
+.ability-control { position: relative; flex: 0 1 64px; width: 100%; max-width: 64px; min-width: 0; justify-self: center; pointer-events: auto; }
+.ability-control button { padding: 0; cursor: pointer; color: inherit; font: inherit; }
+.ability-control button[aria-disabled="true"] { cursor: not-allowed; }
+.ability-control button:focus-visible, .ability-control--passive:focus-visible { outline: 2px solid #efe0ac; outline-offset: 3px; }
+.ability-control button:not([aria-disabled="true"]):hover { border-color: #f7df9a; filter: brightness(1.12); }
+.ability-control button:not([aria-disabled="true"]):active { filter: brightness(1.3); }
+.ability-rank { height: 10px; display: flex; align-items: center; justify-content: space-between; gap: 3px; margin-top: 3px; }
+.ability-rank-pips { display: flex; gap: 2px; min-width: 0; flex: 1; }
+.ability-rank-pips span { height: 3px; flex: 1; background: #1d272b; border: 1px solid #66654e; }
+.ability-rank-pips .is-learned { background: #d8bd72; border-color: #e1d097; }
+.ability-rank b { font-size: 8px; font-weight: 400; line-height: 10px; color: #ddd1ad; }
+.ability-passive-mark, .ability-mixed-mark { position: absolute; z-index: 3; right: 2px; top: 2px; width: 14px; height: 11px; padding: 1px; color: #e3d5b3; background: #101b1ee6; }
+.ability-mixed-mark { color: #add5cf; }
+.ability-control--passive .ability-slot { border-style: double; border-color: #a3ada2; cursor: default; }
+.ability-control--passive .ability-image, .ability-control--passive .hud-art { filter: grayscale(.8) sepia(.25) brightness(.85); }
+.ability-control .is-locked .ability-image, .ability-control .is-locked .hud-art { filter: grayscale(1) brightness(.4); }
+.hero-sigil .ability-control { max-width: none; }
+.hero-sigil .ability-slot { aspect-ratio: 1; }
+.hero-sigil .ability-passive-mark { width: 11px; height: 8px; top: 0; right: 0; }
 .ability-slot, .ability-slot:nth-child(n) {
   height: auto;
   width: 100%;
@@ -308,14 +327,43 @@
 .deck-crest { position: absolute; left: calc(50% - 12px); top: -12px; display: grid; place-items: center; width: 23px; height: 23px; transform: rotate(45deg); border: 1px solid #b09b63; background: linear-gradient(135deg, #42483c, #131b1e); box-shadow: 0 0 0 2px #11191c; }
 .deck-crest svg { transform: rotate(-45deg); width: 14px; height: 14px; stroke: #e2ca92; stroke-width: 1.2; }
 
+.hud-feedback { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ability-tooltip {
+  position: fixed;
+  z-index: 100;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  border: 1px solid #a18f60;
+  background: linear-gradient(135deg, #29302d, #10181bdd 45%), #0b1216;
+  box-shadow: 0 0 0 2px #0b1012, inset 0 0 0 3px #69614430, 0 10px 30px #0009;
+  color: #d6ddd7;
+  font: 12px/1.55 "Trebuchet MS", sans-serif;
+  letter-spacing: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.ability-tooltip header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #b4bdad; font-size: 10px; }
+.ability-tooltip kbd { border: 1px solid #84734d; padding: 0 5px; color: #e5d39f; font: inherit; }
+.ability-tooltip-title { display: block; margin-top: 5px; color: #f0ddab; font: 700 17px/1.4 "Palatino Linotype", Georgia, serif; overflow-wrap: anywhere; }
+.ability-tooltip-rank { color: #b7a778; font-size: 11px; }
+.ability-tooltip dl { display: flex; gap: 24px; padding: 8px 0; border-block: 1px solid #8d805139; margin: 10px 0; }
+.ability-tooltip dl div { display: flex; gap: 8px; }
+.ability-tooltip dt { color: #9abac6; }
+.ability-tooltip dd { margin: 0; color: #ede5cf; }
+.ability-tooltip p { margin: 9px 0; }
+.ability-tooltip .ability-tooltip-lore { color: #a5b0a6; font-style: italic; font-size: 11px; }
+.ability-tooltip footer { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-top: 8px; margin-top: 10px; border-top: 1px solid #8d805139; color: #d4c191; font-size: 11px; }
+
 @media (max-width: 1200px) {
   :root { --minimap-size: 164px; }
-  .command-deck { left: 244px; right: 12px; height: 143px; grid-template-columns: 196px minmax(218px, 1fr) 154px; padding-inline: 6px; }
+  .command-deck { left: 244px; right: 12px; max-width: 634px; height: 143px; grid-template-columns: 196px minmax(0, 1fr) 154px; padding-inline: 6px; }
   .hero-panel { grid-template-columns: 80px minmax(0, 1fr); gap: 10px; padding-right: 8px; }
   .hero-portrait { width: 80px; height: 111px; }
   .hero-identity strong { font-size: 18px; }
   .hero-sigil { display: none; }
   .combat-panel { padding-inline: 12px; }
+  .ability-control { max-width: 55px; }
   .ability-row { gap: 7px; }
   .inventory-panel { padding-left: 9px; }
 }
@@ -325,7 +373,7 @@
   .minimap-shell { left: 8px; bottom: 8px; grid-template-columns: var(--minimap-size) 20px; padding: 5px; gap: 4px; }
   .minimap-tools span { width: 20px; height: 22px; }
   .minimap-ornament { right: 5px; }
-  .command-deck { left: 182px; right: 8px; bottom: 8px; height: 126px; grid-template-columns: 152px minmax(192px, 1fr) 126px; padding: 4px; }
+  .command-deck { left: 182px; right: 8px; bottom: 8px; max-width: 531px; height: 126px; grid-template-columns: 152px minmax(0, 1fr) 126px; padding: 4px; }
   .hero-panel { grid-template-columns: 65px minmax(0, 1fr); padding: 6px 7px 6px 2px; gap: 8px; }
   .hero-portrait { width: 65px; height: 94px; margin-top: -3px; }
   .hero-level { width: 24px; height: 24px; right: -6px; bottom: -6px; font-size: 11px; }
@@ -335,6 +383,7 @@
   .hero-attributes b { font-size: 10px; gap: 4px; }
   .hero-attributes svg { width: 11px; height: 11px; }
   .combat-panel { padding: 6px 10px; gap: 7px; }
+  .ability-control { max-width: 50px; }
   .ability-row { gap: 6px; }
   .ability-cooldown { font-size: 21px; }
   .resource { height: 13px; }
@@ -359,13 +408,14 @@
   .match-clock b { font-size: 10px; }
   .minimap-shell { bottom: 204px; }
   .minimap-hero-icon { width: 20px; height: 20px; }
-  .command-deck { left: 8px; right: 8px; height: 178px; grid-template-columns: 86px minmax(0, 1fr); grid-template-rows: 112px 48px; padding: 6px; }
+  .command-deck { left: 8px; right: 8px; max-width: 346px; height: 178px; grid-template-columns: 86px minmax(0, 1fr); grid-template-rows: 112px 48px; padding: 6px; }
   .hero-panel { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 5px; padding: 0 8px 0 0; }
   .hero-portrait { width: 64px; height: 80px; margin-top: -3px; flex-shrink: 0; }
   .hero-identity { text-align: center; width: 100%; }
   .hero-identity strong { font-size: 14px; }
   .hero-identity > span, .hero-attributes { display: none; }
   .combat-panel { grid-column: 2; grid-row: 1; border-right: 0; padding: 0 2px 5px 10px; gap: 9px; }
+  .ability-control { max-width: 52px; }
   .ability-slot, .ability-slot:nth-child(n) { max-width: 64px; }
   .ability-row { gap: 7px; }
   .inventory-panel { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 9px; border-top: 1px solid #5f5c4080; padding: 7px 1px 0; }
@@ -378,7 +428,7 @@
 }
 
 @media (max-width: 380px) {
-  .command-deck { grid-template-columns: 73px minmax(0, 1fr); }
+  .command-deck { max-width: 323px; grid-template-columns: 73px minmax(0, 1fr); }
   .combat-panel { padding-left: 7px; }
   .ability-row { gap: 5px; }
   .ability-cooldown { font-size: 18px; }

@@ -1,6 +1,12 @@
-import { useEffect, useRef, type RefObject, type SyntheticEvent } from 'react';
+import { useEffect, useReducer, useRef, type RefObject, type SyntheticEvent } from 'react';
 import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
 import { createDawnreachGame } from './game/createDawnreachGame';
+import AbilityButton from './hud/AbilityButton';
+import {
+  ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID, calculateAldenInnate, calculateHeroStats,
+  createPlayableMatch, getAbilityControl, getHeroDefinition, getRequiredHero,
+  recoverHeroResource, useHeroAbility, type AbilityKey, type MatchState,
+} from './game/match';
 
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.png', import.meta.url).href;
 const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import.meta.url).href;
@@ -30,16 +36,24 @@ const duskTeam: TeamHero[] = [
   { initial: 'T' },
   { initial: 'R' },
 ];
-const abilities = [
-  { key: 'Q', art: 'blade', cooldown: '' },
-  { key: 'W', art: 'aegis', cooldown: '9' },
-  { key: 'E', art: 'banner', cooldown: '14' },
-  { key: 'R', art: 'sun', cooldown: '' },
-].map(ability => ({
-  ...ability,
-  image: heroAbilityImages[`./game/heroes/alden/images/H001${ability.key}.png`],
-}));
+const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
+const heroImageCodes: Record<string, string> = { alden: 'H001' };
 const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
+
+type HudRuntime = { match: MatchState; nowMs: number; feedback: string };
+type HudAction = { type: 'tick'; nowMs: number } | { type: 'cast'; key: AbilityKey; nowMs: number };
+
+function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
+  const nowMs = Math.max(runtime.nowMs, action.nowMs);
+  const match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, nowMs - runtime.nowMs, nowMs);
+  if (action.type === 'tick') return { ...runtime, match, nowMs };
+  const control = getAbilityControl(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
+  return {
+    match: useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs),
+    nowMs,
+    feedback: `${control.ability.name}: ${control.blockedReason ?? 'activada'}`,
+  };
+}
 
 function HudArt({ name }: { name: string }) {
   return <svg className="hud-art" viewBox="0 0 100 100" aria-hidden="true"><use href={`${HUD_ART_SRC}#${name}`} /></svg>;
@@ -49,7 +63,7 @@ function hideMissingImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none';
 }
 
-function TeamPortraits({ team, side }: { team: TeamHero[]; side: 'dawn' | 'dusk' }) {
+function TeamPortraits({ team, side, heroLevel = 11 }: { team: TeamHero[]; side: 'dawn' | 'dusk'; heroLevel?: number }) {
   return (
     <div className={`team-portraits team-portraits--${side}`}>
       {team.map((hero, index) => (
@@ -67,7 +81,7 @@ function TeamPortraits({ team, side }: { team: TeamHero[]; side: 'dawn' | 'dusk'
               />
             )}
           </div>
-          <span className="top-hero-level">{index === 0 && side === 'dawn' ? 11 : 10}</span>
+          <span className="top-hero-level">{index === 0 && side === 'dawn' ? heroLevel : 10}</span>
         </div>
       ))}
     </div>
@@ -81,10 +95,37 @@ function GameHud({
   minimapRef: RefObject<HTMLDivElement | null>;
   minimapHeroRef: RefObject<HTMLImageElement | null>;
 }) {
+  const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
+    const nowMs = performance.now();
+    return { match: createPlayableMatch('alden', 11, nowMs), nowMs, feedback: '' };
+  });
+  const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
+  const definition = getHeroDefinition(hero.definitionId);
+  const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
+  const innate = hero.definitionId === ALDEN.id ? calculateAldenInnate(runtime.match, hero.heroEntityId) : null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => dispatch({ type: 'tick', nowMs: performance.now() }), 100);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.isComposing || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+      const key = event.key.toUpperCase() as AbilityKey;
+      if (!ABILITY_KEYS.includes(key)) return;
+      event.preventDefault();
+      dispatch({ type: 'cast', key, nowMs: performance.now() });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   return (
-    <div className="game-hud" aria-hidden="true">
+    <div className="game-hud">
       <section className="scoreboard">
-        <TeamPortraits team={dawnTeam} side="dawn" />
+        <TeamPortraits team={dawnTeam} side="dawn" heroLevel={hero.level} />
         <div className="match-score">
           <strong className="score score--dawn">0</strong>
           <div className="match-clock">
@@ -131,42 +172,50 @@ function GameHud({
               draggable={false}
               onError={hideMissingImage}
             />
-            <span className="hero-level">11</span>
+            <span className="hero-level">{hero.level}</span>
           </div>
           <div className="hero-identity">
-            <strong>Alden</strong>
-            <span>Vanguard</span>
+            <strong>{definition.displayName}</strong>
+            <span>{definition.className}</span>
             <div className="hero-attributes">
-              <b><Sword />62</b>
-              <b><Sparkles />38</b>
-              <b><Shield />51</b>
+              <b><Sword />{Math.round(stats.attackDamage)}</b>
+              <b><Sparkles />{Math.round(stats.magicResistance)}</b>
+              <b><Shield />{Math.round(stats.physicalArmor)}</b>
             </div>
-            <div className="hero-sigil"><HudArt name="sun" /></div>
+            {innate && <div className="hero-sigil">
+              <AbilityButton
+                name={ALDEN.innate.name} kind="passive" art="sun" blockedReason="Pasiva innata"
+                description={`Al recibir impactos frontales acumula hasta ${innate.requiredStacks} cargas. Potencia el siguiente ataque con ${Math.round(innate.bonusDamage)} de dano adicional y hasta ${Math.round(innate.healing)} de curacion. Intervalo entre cargas: ${innate.stackInternalCooldownSeconds} s. Bloqueo tras activarse: ${innate.procLockoutSeconds} s.`}
+              ><HudArt name="sun" /></AbilityButton>
+            </div>}
           </div>
         </div>
 
         <div className="combat-panel">
           <div className="ability-row">
-            {abilities.map((ability) => (
-              <div className={`ability-slot ability-slot--${ability.art}${ability.cooldown ? ' is-cooling' : ''}`} key={ability.key} data-ability={ability.key}>
-                {ability.image ? (
-                  <img className="ability-image" src={ability.image} alt="" draggable={false} />
-                ) : (
-                  <HudArt name={ability.art} />
-                )}
-                {ability.cooldown && <b className="ability-cooldown">{ability.cooldown}</b>}
-                <i>{ability.key}</i>
-              </div>
-            ))}
+            {ABILITY_KEYS.map(key => {
+              const control = getAbilityControl(runtime.match, hero.heroEntityId, key, runtime.nowMs);
+              const ability = control.ability;
+              return <AbilityButton
+                key={key} hotkey={key} name={ability.name} kind={ability.type}
+                description={ability.technicalDescription} lore={ability.lore}
+                rank={control.rank} maxRank={ability.unlockLevels.length} nextLevel={ability.unlockLevels[control.rank]}
+                remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
+                resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
+                blockedReason={control.blockedReason} art={abilityArt[key]}
+                image={heroAbilityImages[`./game/heroes/${hero.definitionId}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
+                onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
+              ><HudArt name={abilityArt[key]} /></AbilityButton>;
+            })}
           </div>
           <div className="resource-bars">
             <div className="resource resource--health">
-              <span style={{ width: `${1628 / 1780 * 100}%` }} />
-              <b>1628 / 1780</b>
+              <span style={{ width: `${hero.currentHp / stats.maxHp * 100}%` }} />
+              <b>{Math.floor(hero.currentHp)} / {Math.round(stats.maxHp)}</b>
             </div>
-            <div className="resource resource--mana">
-              <span style={{ width: `${612 / 780 * 100}%` }} />
-              <b>612 / 780</b>
+            <div className="resource resource--mana" data-current={hero.currentResource} data-max={stats.maxResource}>
+              <span style={{ width: `${hero.currentResource / stats.maxResource * 100}%` }} />
+              <b>{Math.floor(hero.currentResource)} / {Math.round(stats.maxResource)}</b>
             </div>
           </div>
         </div>
@@ -187,6 +236,7 @@ function GameHud({
         </div>
         <div className="deck-crest"><Swords /></div>
       </section>
+      <div className="hud-feedback" role="status" aria-live="polite">{runtime.feedback}</div>
     </div>
   );
 }

@@ -13,6 +13,17 @@ const { createHumanoidRig } = require('../node_modules/.cache/alden-test/charact
 const { buildHumanoidBody } = require('../node_modules/.cache/alden-test/characters/buildHumanoidBody.js');
 const { animateHumanoid } = require('../node_modules/.cache/alden-test/characters/animateHumanoid.js');
 
+test('Alden animation preserves the presentation scale while walking and resting', () => {
+  for (const scale of [0.34, 0.493, 0.986, 1.4]) {
+    const rig = makeRig();
+    rig.model.scale.setScalar(scale);
+    for (let frame = 0; frame < 180; frame++) {
+      animateAlden(rig, frame / 60, frame < 120, 1 / 60, 3.4);
+      assert.deepEqual(rig.model.scale.toArray(), [scale, scale, scale]);
+    }
+  }
+});
+
 test('bare humanoid rigs have usable contacts and no required equipment', () => {
   for (const bodyScale of [0, -1, NaN, Infinity]) assert.throws(() => createHumanoidRig({ bodyScale }), RangeError);
   for (const armRestAngle of [-1, NaN, Infinity, Math.PI]) assert.throws(() => createHumanoidRig({ armRestAngle }), RangeError);

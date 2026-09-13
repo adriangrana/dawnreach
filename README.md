@@ -383,7 +383,11 @@ Importar la misma instancia de Three.js que usa Vite, como hace el test. En insp
 
 El layout esta en [src/App.tsx](src/App.tsx). [src/main.tsx](src/main.tsx) carga primero los estilos base y despues [src/hud-overrides.css](src/hud-overrides.css); conservar ese orden para que los ajustes del HUD no queden sobrescritos. Las habilidades usan imagenes de la carpeta del heroe con la convencion `<codigo><tecla>.png`: Alden usa `H001Q.png`, `H001W.png`, `H001E.png` y `H001R.png` dentro de su carpeta `images`. Vite las descubre con `import.meta.glob` y las incluye en produccion; si falta un archivo se mantiene el icono provisional de [src/assets/hud-art.svg](src/assets/hud-art.svg), que tambien contiene el arte de objetos. Para otro heroe, ajustar carpeta y codigo en el mapeo del HUD. Los iconos de atributos y herramientas usan Lucide. Los retratos de Alden se resuelven con `new URL(..., import.meta.url)` para incluirlos tambien en produccion.
 
-El HUD conserva valores de muestra: marcador, atributos, cooldowns e inventario no estan conectados todavia al estado de combate. Las herramientas del minimapa siguen siendo decorativas. El contenido del minimapa y su marcador de heroe siguen usando el renderer existente; el rediseño no modifica mapa, camara ni animacion.
+Las habilidades, atributos, salud y mana del HUD usan una partida local creada por [src/game/match/abilityControls.ts](src/game/match/abilityControls.ts). Se conserva el nivel 11 del prototipo y se aprenden los rangos disponibles segun el `gameplay.ts` del heroe: para Alden son Q2, W2, E1 y R1. Los clics y teclas Q/W/E/R llaman al mismo resolver de gameplay, consumen recursos e inician cooldowns por rango. La regeneracion de mana usa las estadisticas del heroe. Se ignoran teclas repetidas, modificadores y escritura en campos editables.
+
+[src/hud/AbilityButton.tsx](src/hud/AbilityButton.tsx) muestra rangos, progreso de recarga y tooltips con tipo, descripcion, lore, coste y siguiente nivel de mejora. Las pasivas puras estan deshabilitadas y tienen tratamiento visual propio; `active_with_passive` conserva su parte activa. La pasiva innata de Alden tiene su propio sello no utilizable. Los tooltips admiten hover, foco y Escape, y se ajustan al viewport.
+
+Los lanzamientos todavia no reciben objetivos de la escena 3D: esto conecta controles, costes y estados de gameplay, no animaciones de habilidades, seleccion de objetivos ni impactos visuales. Solo Alden tiene actualmente un resolver registrado; otro heroe necesita su definicion en el catalogo y su resolver/preview. El marcador, inventario ilustrado y oro siguen siendo de muestra. Las herramientas del minimapa siguen siendo decorativas. Mapa, camara y animacion no cambian por esta conexion del HUD.
 
 Con Edge, Playwright y el servidor local disponibles:
 
@@ -391,7 +395,7 @@ Con Edge, Playwright y el servidor local disponibles:
 node tests/verify-hud.mjs
 ```
 
-[tests/verify-hud.mjs](tests/verify-hud.mjs) comprueba siete viewports (1440x900, 1176x768, 1024x768, 800x600, 390x844, 320x640 y 844x390), limites de paneles/textos, ausencia de solapamientos, carga de retratos/simbolos, pixeles de canvas e iconos y movimiento por clic derecho. Acepta `ALDEN_URL` igual que el test de Alden. Guarda capturas en `node_modules/.cache/hud-visual/`. Es una prueba del layout, no sustituye la bateria de animacion o gameplay.
+[tests/verify-hud.mjs](tests/verify-hud.mjs) comprueba siete viewports (1440x900, 1176x768, 1024x768, 800x600, 390x844, 320x640 y 844x390), limites de paneles/textos, ausencia de solapamientos, carga de retratos/simbolos, pixeles de canvas e iconos y movimiento por clic derecho. Tambien comprueba clic/teclas, rangos, consumo de mana, expiracion de cooldown, bloqueo de pasivas y tooltips. El panel se limita a 721 px en escritorio y las habilidades permanecen agrupadas, sin espacios expansivos. Acepta `ALDEN_URL` igual que el test de Alden y guarda capturas en `node_modules/.cache/hud-visual/`. No sustituye la bateria de animacion o gameplay.
 
 ## 8. Pendientes y diagnostico
 
