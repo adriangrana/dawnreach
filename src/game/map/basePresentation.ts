@@ -182,7 +182,8 @@ function createRampRail(angle: number, side: number, material: THREE.Material) {
   );
   rail.rotation.order = 'YXZ';
   rail.rotation.y = -angle;
-  rail.rotation.z = side > 0 ? slope : -slope;
+  // Both rails follow the same ramp plane. Side only offsets them laterally.
+  rail.rotation.z = -slope;
   rail.castShadow = true;
   rail.receiveShadow = true;
   return rail;
