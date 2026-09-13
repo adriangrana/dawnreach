@@ -3,6 +3,7 @@ export * from './matchState';
 export * from './stats';
 export * from './combat';
 export * from './abilityControls';
+export * from './progression';
 export * from '../heroes/types';
 export * from '../heroes/catalog';
 export * from '../heroes/alden/gameplay';
