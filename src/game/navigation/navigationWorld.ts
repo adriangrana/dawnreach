@@ -410,7 +410,28 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       }
     }
 
-    if (!allowPartial || bestIndex === startIndex || startHeuristic - bestHeuristic < PARTIAL_PROGRESS_EPSILON) return null;
+    if (!allowPartial) return null;
+
+    // If the node budget was reached, continue toward the best OPEN frontier instead of
+    // the closed node with the smallest raw distance to the goal. The latter creates local
+    // minima around U-shaped rocks/forests: the hero walks up to the obstacle and repeatedly
+    // replans to the same dead end because a valid detour must first move farther from the
+    // destination. The heap frontier preserves A*'s g+h search direction and can therefore
+    // carry a bounded search around that detour over several partial replans.
+    if (expandedNodes >= maxExpandedNodes && heap.size > 0) {
+      while (heap.size > 0) {
+        const frontier = heap.pop();
+        if (!frontier) break;
+        if (closedGeneration[frontier.index] === generation || seenGeneration[frontier.index] !== generation) continue;
+        if (frontier.index === startIndex) continue;
+        const frontierPath = reconstruct(startIndex, frontier.index);
+        if (frontierPath.length > 1) return { indices: frontierPath, partial: true };
+      }
+    }
+
+    // Exhausting the OPEN set means the target is genuinely disconnected for this search.
+    // In that case the old closest-to-goal fallback is still useful as a best-effort result.
+    if (bestIndex === startIndex || startHeuristic - bestHeuristic < PARTIAL_PROGRESS_EPSILON) return null;
     return { indices: reconstruct(startIndex, bestIndex), partial: true };
   };
 
