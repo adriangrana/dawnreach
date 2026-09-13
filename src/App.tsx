@@ -10,12 +10,13 @@ import {
 
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.png', import.meta.url).href;
 const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import.meta.url).href;
+const ALDEN_ABILITY_IMAGES: Record<AbilityKey, string> = {
+  Q: new URL('./game/heroes/alden/images/H001Q.png', import.meta.url).href,
+  W: new URL('./game/heroes/alden/images/H001W.png', import.meta.url).href,
+  E: new URL('./game/heroes/alden/images/H001E.png', import.meta.url).href,
+  R: new URL('./game/heroes/alden/images/H001R.png', import.meta.url).href,
+};
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
-const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].png', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-});
 
 type TeamHero = {
   initial: string;
@@ -37,7 +38,6 @@ const duskTeam: TeamHero[] = [
   { initial: 'R' },
 ];
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
-const heroImageCodes: Record<string, string> = { alden: 'H001' };
 const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
 
 type HudRuntime = { match: MatchState; nowMs: number; feedback: string };
@@ -203,7 +203,7 @@ function GameHud({
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
                 blockedReason={control.blockedReason} art={abilityArt[key]}
-                image={heroAbilityImages[`./game/heroes/${hero.definitionId}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
+                image={hero.definitionId === ALDEN.id ? ALDEN_ABILITY_IMAGES[key] : undefined}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}
