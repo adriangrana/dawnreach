@@ -287,20 +287,38 @@ function replaceLegacyThroneCrystal(
   baseGem.castShadow = true;
   throne.add(baseGem);
 
+  // Keep the main prism physically separated from the socket so it reads as a suspended
+  // power crystal. The animation is absolute-time based, so main-view and minimap renders
+  // cannot make it spin faster by invoking the render hook more than once per frame.
+  const floatingPrism = new THREE.Group();
+  floatingPrism.name = `${team}-throne-prism`;
+  const prismBaseY = 5.05;
+  const prismFloatAmplitude = 0.18;
+  const prismFloatSpeed = 1.35;
+  const prismRotationSpeed = blue ? 0.52 : -0.52;
+  const prismPhase = blue ? 0 : Math.PI * 0.4;
+  floatingPrism.position.y = prismBaseY;
+  throne.add(floatingPrism);
+
   const spire = new THREE.Mesh(new THREE.ConeGeometry(1.02, 4.45, 6, 1, false), crystal);
-  spire.position.y = 3.5;
   spire.rotation.y = Math.PI / 6;
   spire.castShadow = true;
-  throne.add(spire);
+  floatingPrism.add(spire);
 
   const glowSpire = new THREE.Mesh(new THREE.ConeGeometry(0.54, 3.7, 6, 1, false), innerGlow);
-  glowSpire.position.y = 3.38;
+  glowSpire.position.y = -0.08;
   glowSpire.rotation.y = Math.PI / 6;
-  throne.add(glowSpire);
+  floatingPrism.add(glowSpire);
 
   const light = new THREE.PointLight(blue ? 0x49c8ff : 0xff5148, 16, 9, 2);
-  light.position.y = 3.5;
-  throne.add(light);
+  light.position.y = 0.12;
+  floatingPrism.add(light);
+
+  spire.onBeforeRender = () => {
+    const time = performance.now() * 0.001;
+    floatingPrism.position.y = prismBaseY + Math.sin(time * prismFloatSpeed + prismPhase) * prismFloatAmplitude;
+    floatingPrism.rotation.y = time * prismRotationSpeed;
+  };
 
   citadel.add(throne);
 }
