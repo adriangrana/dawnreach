@@ -41,29 +41,55 @@ test('match state always exposes 10 fixed 5v5 slots and keeps selection separate
   game.validateMatchState(state);
 });
 
-test('Alden level growth reproduces the level 1 and level 50 design values', () => {
+test('Alden level growth stops at the game cap of level 30', () => {
   const l1 = game.getAldenStatsAtLevel(1);
-  const l50 = game.getAldenStatsAtLevel(50);
+  const l30 = game.getAldenStatsAtLevel(30);
   assert.equal(l1.maxHp, 760);
   assert.equal(l1.attackDamage, 66);
-  assert.equal(l50.maxHp, 5905);
-  assert.ok(Math.abs(l50.attackDamage - 232.6) < 1e-9);
-  assert.ok(Math.abs(l50.attackSpeed - 1.10808) < 1e-9);
-  assert.ok(Math.abs(l50.magicResistance - 84.35) < 1e-9);
+  assert.equal(l30.maxHp, 3805);
+  assert.equal(l30.maxResource, 735);
+  assert.ok(Math.abs(l30.attackDamage - 164.6) < 1e-9);
+  assert.ok(Math.abs(l30.attackSpeed - 0.94968) < 1e-9);
+  assert.ok(Math.abs(l30.magicResistance - 61.35) < 1e-9);
+  assert.throws(() => game.getAldenStatsAtLevel(31), /1 to 30/);
 });
 
-test('skill ranks are gated by their alternating character levels', () => {
+test('skill ranks use Dota-style points, 1/3/5/7 basic gates and 6/12/18 ultimate gates', () => {
   let state = makeDuel();
+  assert.equal(game.getUnspentHeroAbilityPoints(state, 'h1'), 1);
+
   state = game.upgradeHeroAbility(state, 'h1', 'Q');
   assert.equal(state.heroes.h1.abilityRanks.Q, 1);
-  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'Q'), /level 8/);
-  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'W'), /level 3/);
+  assert.equal(game.getUnspentHeroAbilityPoints(state, 'h1'), 0);
+  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'Q'), /level 3/);
+  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'W'), /no unspent ability points/);
 
-  state = game.setHeroLevel(state, 'h1', 6);
+  state = game.setHeroLevel(state, 'h1', 2);
   state = game.upgradeHeroAbility(state, 'h1', 'W');
+  assert.deepEqual(state.heroes.h1.abilityRanks, { Q: 1, W: 1, E: 0, R: 0 });
+  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'Q'), /level 3/);
+
+  state = game.setHeroLevel(state, 'h1', 3);
+  state = game.upgradeHeroAbility(state, 'h1', 'Q');
+  assert.equal(state.heroes.h1.abilityRanks.Q, 2);
+
+  state = game.setHeroLevel(state, 'h1', 7);
   state = game.upgradeHeroAbility(state, 'h1', 'E');
+  state = game.upgradeHeroAbility(state, 'h1', 'Q');
   state = game.upgradeHeroAbility(state, 'h1', 'R');
-  assert.deepEqual(state.heroes.h1.abilityRanks, { Q: 1, W: 1, E: 1, R: 1 });
+  state = game.upgradeHeroAbility(state, 'h1', 'Q');
+  assert.deepEqual(state.heroes.h1.abilityRanks, { Q: 4, W: 1, E: 1, R: 1 });
+  assert.equal(game.getSpentHeroAbilityPoints(state, 'h1'), 7);
+  assert.equal(game.getUnspentHeroAbilityPoints(state, 'h1'), 0);
+  assert.throws(() => game.upgradeHeroAbility(state, 'h1', 'W'), /no unspent ability points/);
+
+  let ultimate = makeDuel(18);
+  ultimate = game.upgradeHeroAbility(ultimate, 'h1', 'R');
+  ultimate = game.upgradeHeroAbility(ultimate, 'h1', 'R');
+  ultimate = game.upgradeHeroAbility(ultimate, 'h1', 'R');
+  assert.equal(ultimate.heroes.h1.abilityRanks.R, 3);
+  assert.throws(() => game.upgradeHeroAbility(ultimate, 'h1', 'R'), /already rank 3/);
+  assert.equal(game.calculateAldenAbilityAtRank(ultimate, 'h1', 'R', 3).cooldownSeconds, 60);
 });
 
 test('inventory modifiers feed total stats and ability scaling', () => {
