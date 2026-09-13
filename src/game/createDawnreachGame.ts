@@ -42,7 +42,7 @@ const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(0, 34, 16.3);
 const CAMERA_PAN_SPEED = 8.5;
-const MINIMAP_PADDING = 1.06;
+const MINIMAP_PADDING = 1.0;
 const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
@@ -97,6 +97,7 @@ export async function createDawnreachGame(
   const minimapCamera = minimapRenderer
     ? new THREE.OrthographicCamera(-48, 48, 48, -48, 0.1, 180)
     : null;
+  const minimapBackground = new THREE.Color(0x07100e);
 
   if (minimapRenderer && minimapCamera && minimapHost) {
     minimapRenderer.setPixelRatio(1);
@@ -118,6 +119,21 @@ export async function createDawnreachGame(
   }
 
   if (minimapHeroMarker) minimapHeroMarker.style.pointerEvents = 'none';
+
+  const minimapViewportSvg = minimapHost
+    ? document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    : null;
+  const minimapViewportPolygon = minimapViewportSvg
+    ? document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+    : null;
+  if (minimapHost && minimapViewportSvg && minimapViewportPolygon) {
+    minimapViewportSvg.classList.add('minimap-camera-viewport');
+    minimapViewportSvg.setAttribute('viewBox', '0 0 100 100');
+    minimapViewportSvg.setAttribute('preserveAspectRatio', 'none');
+    minimapViewportSvg.setAttribute('aria-hidden', 'true');
+    minimapViewportSvg.appendChild(minimapViewportPolygon);
+    minimapHost.appendChild(minimapViewportSvg);
+  }
 
   const sunlight = addLighting(scene);
 
@@ -215,6 +231,16 @@ export async function createDawnreachGame(
   const hitPoint = new THREE.Vector3();
   const minimapHeroPosition = new THREE.Vector3();
   const attackTargetPosition = new THREE.Vector3();
+  const minimapViewportRaycaster = new THREE.Raycaster();
+  const minimapViewportPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const minimapViewportHit = new THREE.Vector3();
+  const minimapViewportProjected = new THREE.Vector3();
+  const minimapViewportCorners = [
+    new THREE.Vector2(-1, 1),
+    new THREE.Vector2(1, 1),
+    new THREE.Vector2(1, -1),
+    new THREE.Vector2(-1, -1),
+  ] as const;
   const swordRestRotation = alden ? alden.sword.rotation.clone() : null;
 
   const sampleSurfaceHeight = (x: number, z: number, fallback = 0) => {
@@ -626,6 +652,33 @@ export async function createDawnreachGame(
     camera.updateMatrixWorld();
   };
 
+  const updateMinimapCameraViewport = () => {
+    if (!minimapCamera || !minimapViewportPolygon) return;
+
+    // Intersect the four orthographic screen-corner rays with the horizontal plane
+    // passing through the current camera focus. Projecting those world points into the
+    // top-down minimap produces the exact visible footprint, including the isometric
+    // camera pitch, instead of a misleading axis-aligned rectangle.
+    minimapViewportPlane.constant = -cameraAnchor.y;
+    const points: string[] = [];
+    for (const corner of minimapViewportCorners) {
+      minimapViewportRaycaster.setFromCamera(corner, camera);
+      const intersection = minimapViewportRaycaster.ray.intersectPlane(minimapViewportPlane, minimapViewportHit);
+      if (!intersection) {
+        minimapViewportPolygon.setAttribute('points', '');
+        return;
+      }
+
+      minimapViewportProjected
+        .set(intersection.x, 0, intersection.z)
+        .project(minimapCamera);
+      const x = (minimapViewportProjected.x * 0.5 + 0.5) * 100;
+      const y = (-minimapViewportProjected.y * 0.5 + 0.5) * 100;
+      points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+    }
+    minimapViewportPolygon.setAttribute('points', points.join(' '));
+  };
+
   const updateMinimapHeroMarker = () => {
     if (!minimapCamera || !minimapHeroMarker) return;
 
@@ -644,16 +697,20 @@ export async function createDawnreachGame(
     if (!minimapRenderer || !minimapCamera) return;
 
     const fog = scene.fog;
+    const background = scene.background;
     const heroWasVisible = hero.root.visible;
     scene.fog = null;
+    scene.background = minimapBackground;
     hero.root.visible = false;
     minimapRenderer.render(scene, minimapCamera);
     hero.root.visible = heroWasVisible;
+    scene.background = background;
     scene.fog = fog;
     updateMinimapHeroMarker();
   };
 
   updateCamera();
+  updateMinimapCameraViewport();
   updateMinimapHeroMarker();
 
   const animate = () => {
@@ -862,6 +919,7 @@ export async function createDawnreachGame(
     }
 
     updateCamera(dt);
+    updateMinimapCameraViewport();
     textures.water.offset.set(Math.sin(elapsed * 0.12) * 0.025, -elapsed * 0.055);
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
@@ -896,6 +954,9 @@ export async function createDawnreachGame(
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
       if (minimapRenderer && minimapHost && minimapRenderer.domElement.parentElement === minimapHost) {
         minimapHost.removeChild(minimapRenderer.domElement);
+      }
+      if (minimapViewportSvg && minimapHost && minimapViewportSvg.parentElement === minimapHost) {
+        minimapHost.removeChild(minimapViewportSvg);
       }
     },
   };
