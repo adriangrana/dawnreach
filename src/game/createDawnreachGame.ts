@@ -102,6 +102,13 @@ export async function createDawnreachGame(
   const battlefield = buildDawnreachMap(textures);
   polishRiverBridges(battlefield);
   scene.add(battlefield);
+  const commandSurfaces: THREE.Mesh[] = [];
+  battlefield.traverse(object => {
+    if (object instanceof THREE.Mesh && object.userData.commandSurface) commandSurfaces.push(object);
+  });
+  battlefield.updateMatrixWorld(true);
+  const animateCamps = battlefield.getObjectByName('jungle-camps')?.userData.animate as
+    ((elapsed: number) => void) | undefined;
   const collisionWorld = createMapCollisionWorld(battlefield);
   battlefield.userData.collisionCounts = collisionWorld.counts;
 
@@ -143,6 +150,8 @@ export async function createDawnreachGame(
   scene.add(attackMarker);
 
   const raycaster = new THREE.Raycaster();
+  const surfaceRay = new THREE.Raycaster();
+  surfaceRay.ray.direction.set(0, -1, 0);
   const pointer = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
@@ -191,6 +200,8 @@ export async function createDawnreachGame(
   };
 
   const pickGround = () => {
+    const surface = raycaster.intersectObjects(commandSurfaces, false)[0];
+    if (surface) return clampMapPoint(surface.point);
     if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return null;
     return clampMapPoint(hitPoint);
   };
@@ -206,7 +217,10 @@ export async function createDawnreachGame(
   };
 
   const showCommandMarker = (marker: THREE.Group, point: Point3) => {
-    marker.position.set(point.x, COMMAND_MARKER_Y, point.z);
+    surfaceRay.ray.origin.set(point.x, 20, point.z);
+    const surface = surfaceRay.intersectObjects(commandSurfaces, false)[0];
+    marker.userData.surfaceHeight = surface?.point.y ?? 0;
+    marker.position.set(point.x, marker.userData.surfaceHeight + COMMAND_MARKER_Y, point.z);
     marker.rotation.set(0, 0, 0);
     marker.scale.setScalar(0.72);
     marker.userData.spawnTime = elapsed;
@@ -421,8 +435,12 @@ export async function createDawnreachGame(
         attackMarker.visible = false;
       } else {
         attackOrder.target.getWorldPosition(attackTargetPosition);
-        attackMarker.position.x = attackTargetPosition.x;
-        attackMarker.position.z = attackTargetPosition.z;
+        if (attackMarker.position.x !== attackTargetPosition.x || attackMarker.position.z !== attackTargetPosition.z) {
+          attackMarker.position.x = attackTargetPosition.x;
+          attackMarker.position.z = attackTargetPosition.z;
+          surfaceRay.ray.origin.set(attackTargetPosition.x, 20, attackTargetPosition.z);
+          attackMarker.userData.surfaceHeight = surfaceRay.intersectObjects(commandSurfaces, false)[0]?.point.y ?? 0;
+        }
         const dx = attackTargetPosition.x - hero.root.position.x;
         const dz = attackTargetPosition.z - hero.root.position.z;
         const distance = Math.hypot(dx, dz);
@@ -515,10 +533,11 @@ export async function createDawnreachGame(
       const kind = marker.userData.kind as CommandMarkerKind;
       const age = Math.max(0, elapsed - Number(marker.userData.spawnTime ?? elapsed));
       const intro = THREE.MathUtils.smoothstep(age, 0, 0.16);
-      const pulse = 1 + Math.sin(elapsed * (kind === 'attack' ? 8.5 : 6.5)) * 0.045;
+      const pulse = 1 + Math.sin(age * (kind === 'attack' ? 4.5 : 3.5)) * 0.035;
       marker.scale.setScalar((0.72 + intro * 0.28) * pulse);
-      marker.rotation.y += dt * (kind === 'attack' ? 2.1 : 1.25);
-      marker.position.y = COMMAND_MARKER_Y + Math.sin(elapsed * 5 + (kind === 'attack' ? 0.8 : 0)) * 0.006;
+      marker.rotation.y = age * (kind === 'attack' ? 1.05 : 0.65);
+      marker.position.y = Number(marker.userData.surfaceHeight ?? 0) + COMMAND_MARKER_Y
+        + Math.sin(age * 5 + (kind === 'attack' ? 0.8 : 0)) * 0.006;
 
       const accentMaterial = marker.userData.accentMaterial as THREE.MeshBasicMaterial | undefined;
       const glowMaterial = marker.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
@@ -531,6 +550,7 @@ export async function createDawnreachGame(
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
     waterEffects.update(elapsed, [hero.root]);
+    animateCamps?.(elapsed);
     heroOverlay.update(getHeroState?.() ?? null);
     renderer.render(scene, camera);
     if (elapsed - lastMinimapRender >= 0.16) {
@@ -817,8 +837,8 @@ function disposeScene(scene: THREE.Scene) {
   const disposedGeometries = new Set<THREE.BufferGeometry>();
 
   scene.traverse((obj) => {
-    if (!(obj instanceof THREE.Mesh || obj instanceof THREE.Sprite)) return;
-    if (obj instanceof THREE.Mesh && !disposedGeometries.has(obj.geometry)) {
+    if (!(obj instanceof THREE.Mesh || obj instanceof THREE.Sprite || obj instanceof THREE.Points)) return;
+    if ((obj instanceof THREE.Mesh || obj instanceof THREE.Points) && !disposedGeometries.has(obj.geometry)) {
       disposedGeometries.add(obj.geometry);
       obj.geometry.dispose();
     }

@@ -261,6 +261,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
 
 function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
   if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return false;
+  if (object.userData.collisionRock === true) return true;
   if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return false;
 
   const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
@@ -282,6 +283,7 @@ function openCampEntrances(battlefield: THREE.Object3D) {
   });
 
   for (const camp of camps) {
+    if (camp.userData.authoredEntrance) continue;
     camp.getWorldPosition(campCenter);
 
     let nearestX = campCenter.x;

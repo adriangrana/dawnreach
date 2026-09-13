@@ -2,6 +2,8 @@ export type MapPoint = readonly [x: number, z: number];
 
 export const OBJECTIVE_LAYOUT = { poolRadius: 5.8, wallRadius: 6.25, clearance: 7.9, gateHalfAngle: 1.08 } as const;
 
+export const CAMP_LAYOUT = { radius: 3.3, clearingRadius: 4.4, entranceHalfAngle: 0.65 } as const;
+
 export const BASE_LAYOUT = {
   radius: 19.6,
   elevation: 3.2,
@@ -47,7 +49,7 @@ const layout = {
     [[12, -24], [9, -17], [7, -10], [3, -5]],
   ] satisfies MapPoint[][],
   // Neutral camps live in grassy jungle clearings, away from river water and visible travel routes.
-  camps: [[-30, -8], [-8, -19], [-15, 22], [-4, 13], [30, 8], [8, 19], [15, -22], [4, -13]] satisfies MapPoint[],
+  camps: [[-33.6, -10], [-8, -19], [-15, 28], [-4, 13], [33.6, 10], [8, 19], [15, -28], [4, -13]] satisfies MapPoint[],
   retainingWalls: [
     [[-34, 5], [-33, -2], [-30, -10]],
     [[-23, -18], [-19, -15], [-18, -10]],

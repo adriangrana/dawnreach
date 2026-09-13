@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { DawnreachTextures } from '../shared/textures';
-import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, type MapPoint } from './mapLayout';
+import { BASE_LAYOUT, CAMP_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, type MapPoint } from './mapLayout';
 
 export function sampleMapPath(points: readonly MapPoint[]) {
   return new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'catmullrom', 0.35).getPoints(160);
@@ -50,6 +50,11 @@ export function buildMapVegetation(textures: DawnreachTextures) {
   group.name = 'map-vegetation';
   const lanes = Object.values(DAWNREACH_LAYOUT.lanes).map(sampleMapPath);
   const paths = DAWNREACH_LAYOUT.junglePaths.map(sampleMapPath);
+  const trailPoints = paths.flat();
+  const campApproaches = DAWNREACH_LAYOUT.camps.map(([x, z]) => {
+    const end = trailPoints.reduce((a, b) => Math.hypot(a.x - x, a.z - z) < Math.hypot(b.x - x, b.z - z) ? a : b);
+    return { x, z, dx: end.x - x, dz: end.z - z };
+  });
   const river = sampleMapPath(DAWNREACH_LAYOUT.river);
   const walls = DAWNREACH_LAYOUT.retainingWalls.map(sampleMapPath);
   const bases = [DAWNREACH_LAYOUT.blueBase, DAWNREACH_LAYOUT.redBase];
@@ -71,10 +76,15 @@ export function buildMapVegetation(textures: DawnreachTextures) {
   const object = new THREE.Object3D();
 
   const clearance = (x: number, z: number) => {
+    for (const approach of campApproaches) {
+      const lengthSquared = approach.dx ** 2 + approach.dz ** 2;
+      const t = THREE.MathUtils.clamp(((x - approach.x) * approach.dx + (z - approach.z) * approach.dz) / Math.max(lengthSquared, 0.001), 0, 1);
+      if (Math.hypot(x - approach.x - t * approach.dx, z - approach.z - t * approach.dz) < 1.5) return -1;
+    }
     if (towers.some(tower => Math.hypot(x - tower.x, z - tower.z) < 2)) return -1;
     if (bases.some(base => Math.hypot(x - base.x, z - base.z) < BASE_LAYOUT.radius + 1.5)) return -1;
     if (DAWNREACH_LAYOUT.objectivePits.some(pit => Math.hypot(x - pit.x, z - pit.z) < OBJECTIVE_LAYOUT.clearance)) return -1;
-    if (DAWNREACH_LAYOUT.camps.some(([campX, campZ]) => Math.hypot(x - campX, z - campZ) < 2.4)) return -1;
+    if (DAWNREACH_LAYOUT.camps.some(([campX, campZ]) => Math.hypot(x - campX, z - campZ) < CAMP_LAYOUT.clearingRadius)) return -1;
     return Math.min(
       ...lanes.map(path => distanceToMapPath(x, z, path) - 2.65),
       ...paths.map(path => distanceToMapPath(x, z, path) - 1.05),

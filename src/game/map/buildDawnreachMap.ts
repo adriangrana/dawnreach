@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { buildJungleCamps } from './buildJungleCamps';
 import type { DawnreachTextures } from '../shared/textures';
-import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, type MapPoint } from './mapLayout';
+import { BASE_LAYOUT, CAMP_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, type MapPoint } from './mapLayout';
 import { buildMapVegetation, sampleMapPath, distanceToMapPath, getLaneTowerSites } from './buildMapVegetation';
 import { buildCitadel, buildDefenseTower, buildMasonryWalls, buildObjectiveRuins } from './buildMapArchitecture';
 
@@ -22,6 +23,7 @@ export function buildDawnreachMap(textures: DawnreachTextures) {
   world.add(ground);
 
   ground.name = 'terrain';
+  ground.userData.commandSurface = true;
   materials.ground.vertexColors = true;
   buildRiver(world, materials);
 
@@ -42,6 +44,7 @@ export function buildDawnreachMap(textures: DawnreachTextures) {
   for (const path of DAWNREACH_LAYOUT.junglePaths) {
     const trail = new THREE.Mesh(createRibbonGeometry(path, 1.85, 0.015, 3), materials.dirt);
     trail.name = 'jungle-trail';
+    trail.userData.commandSurface = true;
     trail.receiveShadow = true;
     world.add(trail);
   }
@@ -55,6 +58,7 @@ export function buildDawnreachMap(textures: DawnreachTextures) {
   addMapEdgeCliffs(world, materials);
   addFortifications(world, materials);
   addJungleLandmarks(world, materials);
+  world.add(buildJungleCamps(textures));
   for (const site of getLaneTowerSites()) {
     const tower = buildDefenseTower(site.team, materials);
     tower.position.set(site.x, 0, site.z);
@@ -163,6 +167,7 @@ function buildRiver(world: THREE.Group, materials: MapMaterials) {
     materials.riverBank,
   );
   bank.name = 'river-bank';
+  bank.userData.commandSurface = true;
   bank.receiveShadow = true;
   world.add(bank);
 
@@ -171,6 +176,7 @@ function buildRiver(world: THREE.Group, materials: MapMaterials) {
     materials.riverBed,
   );
   shallow.name = 'river-bed';
+  shallow.userData.commandSurface = true;
   shallow.receiveShadow = true;
   world.add(shallow);
 
@@ -179,6 +185,7 @@ function buildRiver(world: THREE.Group, materials: MapMaterials) {
     materials.water,
   );
   water.name = 'river-surface';
+  water.userData.commandSurface = true;
   water.userData.waterSurface = true;
   water.renderOrder = 2;
   water.receiveShadow = true;
@@ -237,6 +244,7 @@ function buildLane(world: THREE.Group, points: readonly MapPoint[], materials: M
   world.add(transition);
 
   const lane = new THREE.Mesh(createRibbonGeometry(points, 4.08, 0.016, 4), materials.lane);
+  lane.userData.commandSurface = true;
   lane.renderOrder = 1;
   lane.receiveShadow = true;
   world.add(lane);
@@ -552,11 +560,13 @@ function buildObjectivePit(x: number, z: number, kind: 'upper' | 'lower', materi
   group.userData.poolRadius = OBJECTIVE_LAYOUT.poolRadius;
   const bed = new THREE.Mesh(createObjectiveFloor(OBJECTIVE_LAYOUT.wallRadius + 0.95, 0.014), materials.riverBed);
   bed.name = 'objective-bed';
+  bed.userData.commandSurface = true;
   bed.receiveShadow = true;
   group.add(bed);
   const poolGeometry = createObjectiveFloor(OBJECTIVE_LAYOUT.poolRadius, 0.048);
   const pool = new THREE.Mesh(poolGeometry, materials.water);
   pool.name = 'objective-water';
+  pool.userData.commandSurface = true;
   pool.userData.waterSurface = true;
   pool.renderOrder = 2;
   pool.receiveShadow = true;
@@ -647,6 +657,7 @@ function addRiverCrossings(world: THREE.Group, materials: MapMaterials) {
     bridge.rotation.y = -Math.atan2(tangent.z, tangent.x);
 
     const deck = new THREE.Mesh(new THREE.BoxGeometry(10.2, 0.12, 4.1), materials.stoneWarm);
+    deck.userData.commandSurface = true;
     deck.position.y = 0.01;
     deck.castShadow = true;
     deck.receiveShadow = true;
@@ -860,39 +871,13 @@ function addJungleLandmarks(world: THREE.Group, materials: MapMaterials) {
         || distanceToMapPath(rockX, rockZ, river) < 4.4
         || lanes.some(lane => distanceToMapPath(rockX, rockZ, lane) < 3.5)
         || trails.some(trail => distanceToMapPath(rockX, rockZ, trail) < 2)
-        || DAWNREACH_LAYOUT.camps.some(([campX, campZ]) => Math.hypot(rockX - campX, rockZ - campZ) < 2.8)) continue;
+        || DAWNREACH_LAYOUT.camps.some(([campX, campZ]) => Math.hypot(rockX - campX, rockZ - campZ) < CAMP_LAYOUT.clearingRadius + 0.5)) continue;
       const rock = buildRock(materials, 1600 + cluster * 11 + index, 1);
       rock.position.set(rockX, 0.7, rockZ);
       rock.scale.set(0.7 + hash01(cluster, index) * 0.5, 1.25 + hash01(index, cluster, 9) * 1.1, 0.85);
       world.add(rock);
     }
   }
-  DAWNREACH_LAYOUT.camps.forEach(([x, z], index) => {
-    const camp = new THREE.Group();
-    camp.name = `jungle-camp-${index}`;
-    camp.position.set(x, 0, z);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(2.15, 40), materials.dirt);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0.023;
-    floor.receiveShadow = true;
-    camp.add(floor);
-    const glow = new THREE.MeshStandardMaterial({ color: index % 2 ? 0xd28c50 : 0x59b9c9,
-      emissive: index % 2 ? 0x764522 : 0x247a9a, emissiveIntensity: 0.6, roughness: 0.4 });
-    for (let pebble = 0; pebble < 8; pebble++) {
-      const angle = pebble * Math.PI * 2 / 8;
-      const rock = buildRock(materials, index * 19 + pebble, 0.45);
-      rock.position.set(Math.cos(angle) * 1.8, 0.22, Math.sin(angle) * 1.8);
-      rock.scale.y = 0.7;
-      camp.add(rock);
-    }
-    for (let shardIndex = 0; shardIndex < 3; shardIndex++) {
-      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.27, 0), glow);
-      crystal.position.set((shardIndex - 1) * 0.37, 0.48, Math.sin(shardIndex * 2) * 0.3);
-      crystal.scale.set(0.7, 1.7 + shardIndex * 0.2, 0.7);
-      camp.add(crystal);
-    }
-    world.add(camp);
-  });
 }
 
 function hash01(...values: number[]) {

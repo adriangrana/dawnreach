@@ -58,6 +58,7 @@ export function polishRiverBridges(root: THREE.Object3D) {
         deck.material,
       );
       approach.name = `${object.name}-approach-${direction < 0 ? 'west' : 'east'}`;
+      approach.userData.commandSurface = true;
       object.add(approach);
     }
   });
