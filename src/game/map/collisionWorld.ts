@@ -44,8 +44,14 @@ const ROCK_FOOTPRINT_SCALE = 0.82;
 const ROCK_MIN_RADIUS = 0.18;
 const LANE_ROCK_CLEARANCE = 2.35;
 const TRAIL_ROCK_CLEARANCE = 1.25;
+const CAMP_ENTRANCE_ROCKS = 2;
 
 export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
+  battlefield.updateMatrixWorld(true);
+
+  // Camp rings are landmarks, not cages. Remove the two stones closest to the nearest
+  // jungle route so every neutral camp has a clear, readable entrance.
+  openCampEntrances(battlefield);
   battlefield.updateMatrixWorld(true);
 
   // Gameplay routes are authored as guaranteed walkable space. Decorative camp and
@@ -263,6 +269,52 @@ function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
   const materials = Array.isArray(object.material) ? object.material : [object.material];
   return materials.some(material =>
     material instanceof THREE.MeshStandardMaterial && material.map !== null);
+}
+
+function openCampEntrances(battlefield: THREE.Object3D) {
+  const trails = DAWNREACH_LAYOUT.junglePaths.map(sampleMapPath);
+  const camps: THREE.Group[] = [];
+  const campCenter = new THREE.Vector3();
+  const rockCenter = new THREE.Vector3();
+
+  battlefield.traverse((object) => {
+    if (object instanceof THREE.Group && object.name.startsWith('jungle-camp-')) camps.push(object);
+  });
+
+  for (const camp of camps) {
+    camp.getWorldPosition(campCenter);
+
+    let nearestX = campCenter.x;
+    let nearestZ = campCenter.z;
+    let nearestDistanceSq = Infinity;
+    for (const trail of trails) {
+      for (const point of trail) {
+        const dx = point.x - campCenter.x;
+        const dz = point.z - campCenter.z;
+        const distanceSq = dx * dx + dz * dz;
+        if (distanceSq >= nearestDistanceSq) continue;
+        nearestDistanceSq = distanceSq;
+        nearestX = point.x;
+        nearestZ = point.z;
+      }
+    }
+
+    const entranceAngle = Math.atan2(nearestZ - campCenter.z, nearestX - campCenter.x);
+    const ringRocks = camp.children
+      .filter(isStoneRock)
+      .map((rock) => {
+        rock.getWorldPosition(rockCenter);
+        const angle = Math.atan2(rockCenter.z - campCenter.z, rockCenter.x - campCenter.x);
+        return { rock, distance: angularDistance(angle, entranceAngle) };
+      })
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, CAMP_ENTRANCE_ROCKS);
+
+    for (const { rock } of ringRocks) {
+      rock.removeFromParent();
+      rock.geometry.dispose();
+    }
+  }
 }
 
 function pruneRouteBlockingRocks(battlefield: THREE.Object3D) {
