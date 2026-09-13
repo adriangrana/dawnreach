@@ -198,8 +198,10 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
     const team = teamFromName(name);
     if (!team) return;
 
-    // The ceremonial core is a first-class selectable objective. Register it separately
-    // from the surrounding citadel so ray hits on the throne resolve to the throne itself.
+    // The ceremonial core is a first-class selectable objective. Its visible legacy
+    // platform reaches 3.5 world units from the centre. Building selection graphics put
+    // their main line at roughly 82% of selectionRadius, so 4.25 makes that line hug the
+    // platform edge while the segmented accents remain cleanly outside the structure.
     if (name === `${team}-throne`) {
       registry.register(object, {
         id: `${team}-throne`,
@@ -212,7 +214,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         visionRadius: VISION_RANGES.building,
         visionHeight: 5.2,
         attackRange: 0,
-        selectionRadius: 2.95,
+        selectionRadius: 4.25,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'attackable-structure',
       });
