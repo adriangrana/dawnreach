@@ -21,6 +21,7 @@ export type NavigationPath = Readonly<{
 export type FindPathOptions = Readonly<{
   allowPartial?: boolean;
   nearestSearchRadius?: number;
+  maxExpandedNodes?: number;
 }>;
 
 export type NavigationWorldOptions = Readonly<{
@@ -60,7 +61,12 @@ const SQRT_TWO = Math.SQRT2;
 const DEFAULT_CELL_SIZE = 0.65;
 const DEFAULT_CLEARANCE = 0.07;
 const DEFAULT_NEAREST_SEARCH_RADIUS = 5;
-const SEGMENT_SAMPLE_RATIO = 0.32;
+const DEFAULT_MAX_EXPANDED_NODES = 2200;
+const HEURISTIC_WEIGHT = 1.08;
+const SEGMENT_SAMPLE_RATIO = 0.44;
+const DIRECT_PATH_CHECK_LIMIT = 14;
+const FULL_SMOOTH_NODE_LIMIT = 56;
+const SMOOTH_WINDOW_NODES = 18;
 const PARTIAL_PROGRESS_EPSILON = 0.35;
 
 const NEIGHBORS = [
@@ -130,14 +136,21 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
   const columns = Math.max(1, Math.ceil((bounds.maxX - bounds.minX) / cellSize));
   const rows = Math.max(1, Math.ceil((bounds.maxZ - bounds.minZ) / cellSize));
   const nodeCount = columns * rows;
-  const walkable = new Uint8Array(nodeCount);
+
+  // Static terrain/cost data is cached once. Collision occupancy stays dynamic, but each
+  // A* request evaluates any grid cell at most once instead of repeatedly walking every
+  // collider from each neighboring node.
+  const terrainMask = new Uint8Array(nodeCount);
   const traversalCosts = new Float32Array(nodeCount);
   const parents = new Int32Array(nodeCount);
   const gScores = new Float64Array(nodeCount);
   const seenGeneration = new Uint32Array(nodeCount);
   const closedGeneration = new Uint32Array(nodeCount);
+  const occupancyGeneration = new Uint32Array(nodeCount);
+  const occupancyState = new Uint8Array(nodeCount); // 1 = free, 2 = blocked
   const heap = new BinaryMinHeap();
   let generation = 0;
+  let occupancyToken = 0;
 
   const indexOf = (column: number, row: number) => row * columns + column;
   const inGrid = (column: number, row: number) => column >= 0 && row >= 0 && column < columns && row < rows;
@@ -162,14 +175,12 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     return !options.collisionWorld.isBlocked(point, queryRadius);
   };
 
-  // Cache only immutable terrain eligibility and traversal cost. Collision occupancy is
-  // deliberately queried live so moving blockers can both occupy and later release cells.
   for (let row = 0; row < rows; row++) {
     for (let column = 0; column < columns; column++) {
       const index = indexOf(column, row);
       const point = cellToWorld(column, row);
       const allowed = terrainAllowsPoint(point);
-      walkable[index] = allowed ? 1 : 0;
+      terrainMask[index] = allowed ? 1 : 0;
       if (!allowed) {
         traversalCosts[index] = Number.POSITIVE_INFINITY;
         continue;
@@ -179,16 +190,62 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     }
   }
 
-  const cellIsWalkableNow = (column: number, row: number) => {
+  const nextOccupancyToken = () => {
+    occupancyToken++;
+    if (occupancyToken === 0xffffffff) {
+      occupancyToken = 1;
+      occupancyGeneration.fill(0);
+    }
+    return occupancyToken;
+  };
+
+  const cellIsWalkableNow = (column: number, row: number, token?: number) => {
     if (!inGrid(column, row)) return false;
     const index = indexOf(column, row);
-    return walkable[index] !== 0 && pointIsWalkable(cellToWorld(column, row));
+    if (terrainMask[index] === 0) return false;
+
+    if (token !== undefined && occupancyGeneration[index] === token) {
+      return occupancyState[index] === 1;
+    }
+
+    const free = !options.collisionWorld.isBlocked(cellToWorld(column, row), queryRadius);
+    if (token !== undefined) {
+      occupancyGeneration[index] = token;
+      occupancyState[index] = free ? 1 : 2;
+    }
+    return free;
+  };
+
+  const segmentIsWalkable = (from: NavigationPoint, to: NavigationPoint) => {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const distance = Math.hypot(dx, dz);
+    const sampleStep = Math.max(0.12, cellSize * SEGMENT_SAMPLE_RATIO);
+    const samples = Math.max(1, Math.ceil(distance / sampleStep));
+    let previousCell = worldToCell(from);
+
+    for (let step = 0; step <= samples; step++) {
+      const t = step / samples;
+      const point = { x: from.x + dx * t, z: from.z + dz * t };
+      if (!pointIsWalkable(point)) return false;
+
+      const cell = worldToCell(point);
+      if (cell.column !== previousCell.column && cell.row !== previousCell.row) {
+        // Exact point checks above protect against dynamic blockers. These side-cell checks
+        // preserve the no-corner-cutting rule without forcing A* to revisit those cells.
+        if (!cellIsWalkableNow(cell.column, previousCell.row)
+          || !cellIsWalkableNow(previousCell.column, cell.row)) return false;
+      }
+      previousCell = cell;
+    }
+    return true;
   };
 
   const nearestWalkableCell = (
     point: NavigationPoint,
     maxRadius: number,
     requireSegmentToPoint: boolean,
+    token: number,
   ): GridCell | null => {
     const origin = worldToCell(point);
     const radiusInCells = Math.max(1, Math.ceil(maxRadius / cellSize));
@@ -199,7 +256,7 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       for (let columnOffset = -radiusInCells; columnOffset <= radiusInCells; columnOffset++) {
         const column = origin.column + columnOffset;
         const row = origin.row + rowOffset;
-        if (!cellIsWalkableNow(column, row)) continue;
+        if (!cellIsWalkableNow(column, row, token)) continue;
         const candidate = cellToWorld(column, row);
         const dx = candidate.x - point.x;
         const dz = candidate.z - point.z;
@@ -213,33 +270,11 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     return best;
   };
 
-  const segmentIsWalkable = (from: NavigationPoint, to: NavigationPoint) => {
-    const dx = to.x - from.x;
-    const dz = to.z - from.z;
-    const distance = Math.hypot(dx, dz);
-    const sampleStep = Math.max(0.08, cellSize * SEGMENT_SAMPLE_RATIO);
-    const samples = Math.max(1, Math.ceil(distance / sampleStep));
-    let previousCell = worldToCell(from);
-
-    for (let step = 0; step <= samples; step++) {
-      const t = step / samples;
-      const point = { x: from.x + dx * t, z: from.z + dz * t };
-      if (!pointIsWalkable(point)) return false;
-
-      const cell = worldToCell(point);
-      if (cell.column !== previousCell.column && cell.row !== previousCell.row) {
-        if (!cellIsWalkableNow(cell.column, previousCell.row)
-          || !cellIsWalkableNow(previousCell.column, cell.row)) return false;
-      }
-      previousCell = cell;
-    }
-    return true;
-  };
-
   const findNearestWalkable = (point: NavigationPoint, maxRadius = nearestSearchRadius): NavigationPoint | null => {
     const clamped = clampPoint(point, bounds);
     if (pointIsWalkable(clamped)) return clamped;
-    const cell = nearestWalkableCell(clamped, Math.max(cellSize, maxRadius), false);
+    const token = nextOccupancyToken();
+    const cell = nearestWalkableCell(clamped, Math.max(cellSize, maxRadius), false, token);
     return cell ? cellToWorld(cell.column, cell.row) : null;
   };
 
@@ -248,11 +283,37 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     const result: NavigationPoint[] = [copyPoint(points[0])];
     let anchor = 0;
     while (anchor < points.length - 1) {
-      let next = points.length - 1;
-      while (next > anchor + 1 && !segmentIsWalkable(points[anchor], points[next])) next--;
+      let next = Math.min(points.length - 1, anchor + SMOOTH_WINDOW_NODES);
+      while (next > anchor + 1 && !segmentIsWalkable(points[anchor], points[next])) {
+        // Back off quickly rather than scanning every possible long candidate.
+        next = Math.max(anchor + 1, anchor + Math.floor((next - anchor) / 2));
+      }
       result.push(copyPoint(points[next]));
       anchor = next;
     }
+    return result;
+  };
+
+  const compressByDirection = (points: readonly NavigationPoint[]) => {
+    if (points.length <= 2) return points.map(copyPoint);
+    const result: NavigationPoint[] = [copyPoint(points[0])];
+    let previousDirectionX = 0;
+    let previousDirectionZ = 0;
+
+    for (let index = 1; index < points.length; index++) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const directionX = Math.sign(Math.round((current.x - previous.x) / cellSize));
+      const directionZ = Math.sign(Math.round((current.z - previous.z) / cellSize));
+      if (index > 1 && (directionX !== previousDirectionX || directionZ !== previousDirectionZ)) {
+        result.push(copyPoint(previous));
+      }
+      previousDirectionX = directionX;
+      previousDirectionZ = directionZ;
+    }
+
+    const last = points[points.length - 1];
+    if (distanceSquared(result[result.length - 1], last) > 1e-8) result.push(copyPoint(last));
     return result;
   };
 
@@ -277,7 +338,13 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     return indices;
   };
 
-  const runAStar = (start: GridCell, goal: GridCell, allowPartial: boolean) => {
+  const runAStar = (
+    start: GridCell,
+    goal: GridCell,
+    allowPartial: boolean,
+    token: number,
+    maxExpandedNodes: number,
+  ) => {
     generation++;
     if (generation === 0xffffffff) {
       generation = 1;
@@ -291,18 +358,20 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
     seenGeneration[startIndex] = generation;
     gScores[startIndex] = 0;
     parents[startIndex] = startIndex;
-    heap.push({ index: startIndex, score: heuristic(start, goal) });
+    heap.push({ index: startIndex, score: heuristic(start, goal) * HEURISTIC_WEIGHT });
 
     let bestIndex = startIndex;
     let bestHeuristic = heuristic(start, goal);
     const startHeuristic = bestHeuristic;
+    let expandedNodes = 0;
 
-    while (heap.size > 0) {
+    while (heap.size > 0 && expandedNodes < maxExpandedNodes) {
       const entry = heap.pop();
       if (!entry) break;
       const currentIndex = entry.index;
       if (closedGeneration[currentIndex] === generation) continue;
       closedGeneration[currentIndex] = generation;
+      expandedNodes++;
       if (currentIndex === goalIndex) return { indices: reconstruct(startIndex, goalIndex), partial: false };
 
       const currentRow = Math.floor(currentIndex / columns);
@@ -317,13 +386,13 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       for (const neighbor of NEIGHBORS) {
         const column = currentColumn + neighbor.dc;
         const row = currentRow + neighbor.dr;
-        if (!cellIsWalkableNow(column, row)) continue;
+        if (!cellIsWalkableNow(column, row, token)) continue;
         const neighborIndex = indexOf(column, row);
         if (closedGeneration[neighborIndex] === generation) continue;
 
         if (neighbor.dc !== 0 && neighbor.dr !== 0) {
-          if (!cellIsWalkableNow(currentColumn + neighbor.dc, currentRow)
-            || !cellIsWalkableNow(currentColumn, currentRow + neighbor.dr)) continue;
+          if (!cellIsWalkableNow(currentColumn + neighbor.dc, currentRow, token)
+            || !cellIsWalkableNow(currentColumn, currentRow + neighbor.dr, token)) continue;
         }
 
         const stepCost = neighbor.cost * cellSize
@@ -336,7 +405,7 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
         parents[neighborIndex] = currentIndex;
         heap.push({
           index: neighborIndex,
-          score: tentative + heuristic({ column, row }, goal),
+          score: tentative + heuristic({ column, row }, goal) * HEURISTIC_WEIGHT,
         });
       }
     }
@@ -352,10 +421,17 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
   ): NavigationPath | null => {
     const requestedTarget = clampPoint(target, bounds);
     const searchRadius = Math.max(cellSize, findOptions.nearestSearchRadius ?? nearestSearchRadius);
-    const resolvedTarget = findNearestWalkable(requestedTarget, searchRadius);
-    if (!resolvedTarget) return null;
+    const token = nextOccupancyToken();
 
-    if (segmentIsWalkable(start, resolvedTarget)) {
+    let resolvedTarget = requestedTarget;
+    if (!pointIsWalkable(resolvedTarget)) {
+      const nearest = nearestWalkableCell(resolvedTarget, searchRadius, false, token);
+      if (!nearest) return null;
+      resolvedTarget = cellToWorld(nearest.column, nearest.row);
+    }
+
+    const directDistance = Math.hypot(resolvedTarget.x - start.x, resolvedTarget.z - start.z);
+    if (directDistance <= DIRECT_PATH_CHECK_LIMIT && segmentIsWalkable(start, resolvedTarget)) {
       return {
         requestedTarget: copyPoint(requestedTarget),
         resolvedTarget: copyPoint(resolvedTarget),
@@ -364,16 +440,24 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       };
     }
 
-    const startCell = nearestWalkableCell(start, Math.max(cellSize * 2.5, 1.5), false);
+    const startCell = nearestWalkableCell(start, Math.max(cellSize * 2.5, 1.5), false, token);
     if (!startCell) return null;
     const targetCell = nearestWalkableCell(
       resolvedTarget,
       Math.max(cellSize * 2.5, 1.5),
-      pointIsWalkable(resolvedTarget),
+      false,
+      token,
     );
     if (!targetCell) return null;
 
-    const search = runAStar(startCell, targetCell, findOptions.allowPartial ?? false);
+    const maxExpandedNodes = Math.max(64, Math.floor(findOptions.maxExpandedNodes ?? DEFAULT_MAX_EXPANDED_NODES));
+    const search = runAStar(
+      startCell,
+      targetCell,
+      findOptions.allowPartial ?? false,
+      token,
+      maxExpandedNodes,
+    );
     if (!search || search.indices.length === 0) return null;
 
     const raw: NavigationPoint[] = [copyPoint(start)];
@@ -392,8 +476,10 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
       raw.push(copyPoint(resolvedTarget));
     }
 
-    const smoothed = smoothPath(raw);
-    const waypoints = smoothed.slice(1);
+    // Long routes avoid expensive all-pairs line-of-sight smoothing. A* already yields
+    // legal adjacent cells, so direction compression keeps the path natural at O(n).
+    const reduced = raw.length <= FULL_SMOOTH_NODE_LIMIT ? smoothPath(raw) : compressByDirection(raw);
+    const waypoints = reduced.slice(1);
     if (waypoints.length === 0 && distanceSquared(start, finalTarget) > 1e-5) waypoints.push(copyPoint(finalTarget));
 
     return {
@@ -405,14 +491,15 @@ export function createNavigationWorld(options: NavigationWorldOptions): Navigati
   };
 
   const getDebugSnapshot = (): NavigationDebugSnapshot => {
-    const currentWalkable = walkable.slice();
+    const snapshot = terrainMask.slice();
+    const token = nextOccupancyToken();
     for (let row = 0; row < rows; row++) {
       for (let column = 0; column < columns; column++) {
         const index = indexOf(column, row);
-        if (currentWalkable[index] !== 0 && !cellIsWalkableNow(column, row)) currentWalkable[index] = 0;
+        if (snapshot[index] !== 0 && !cellIsWalkableNow(column, row, token)) snapshot[index] = 0;
       }
     }
-    return { bounds, cellSize, columns, rows, walkable: currentWalkable };
+    return { bounds, cellSize, columns, rows, walkable: snapshot };
   };
 
   return {
