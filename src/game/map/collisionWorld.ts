@@ -32,8 +32,17 @@ const ELEVATION_RADIUS = 0.62;
 const MAX_SUBSTEP = 0.18;
 const SOLVER_PASSES = 8;
 const ROCK_COLLISION_SCALE = 0.92;
+const LANE_ROCK_CLEARANCE = 2.35;
+const TRAIL_ROCK_CLEARANCE = 1.25;
 
 export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
+  battlefield.updateMatrixWorld(true);
+
+  // Gameplay routes are authored as guaranteed walkable space. Decorative camp and
+  // jungle rocks are generated independently, so occasionally one can overlap a lane
+  // or jungle trail. Remove only those stone meshes whose visible footprint intrudes
+  // into a route before building colliders, keeping the visual map and navigation in sync.
+  pruneRouteBlockingRocks(battlefield);
   battlefield.updateMatrixWorld(true);
 
   const circles: CircleCollider[] = [];
@@ -192,6 +201,51 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   };
 }
 
+function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
+  if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return false;
+  if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return false;
+
+  const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
+  if (authoredRadius < 0.34) return false;
+
+  const materials = Array.isArray(object.material) ? object.material : [object.material];
+  return materials.some(material =>
+    material instanceof THREE.MeshStandardMaterial && material.map !== null);
+}
+
+function pruneRouteBlockingRocks(battlefield: THREE.Object3D) {
+  const lanes = Object.values(DAWNREACH_LAYOUT.lanes).map(sampleMapPath);
+  const trails = DAWNREACH_LAYOUT.junglePaths.map(sampleMapPath);
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  const toRemove: THREE.Mesh[] = [];
+
+  battlefield.traverse((object) => {
+    if (!isStoneRock(object)) return;
+
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
+    box.getSize(size);
+    if (size.y < 0.28 || Math.max(size.x, size.z) < 0.42) return;
+    box.getCenter(center);
+
+    // Use the visible horizontal footprint, not only the rock center. This creates
+    // an actual clear corridor instead of allowing a large boulder to overhang it.
+    const footprintRadius = Math.max(size.x, size.z) * 0.5;
+    const overlapsLane = lanes.some(path =>
+      distanceToMapPath(center.x, center.z, path) < LANE_ROCK_CLEARANCE + footprintRadius);
+    const overlapsTrail = trails.some(path =>
+      distanceToMapPath(center.x, center.z, path) < TRAIL_ROCK_CLEARANCE + footprintRadius);
+
+    if (overlapsLane || overlapsTrail) toRemove.push(object);
+  });
+
+  for (const rock of toRemove) {
+    rock.removeFromParent();
+    rock.geometry.dispose();
+  }
+}
+
 function collectTreeColliders(
   battlefield: THREE.Object3D,
   colliders: CircleCollider[],
@@ -229,19 +283,7 @@ function collectRockColliders(
   const size = new THREE.Vector3();
 
   battlefield.traverse((object) => {
-    if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return;
-    if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return;
-
-    const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
-    if (authoredRadius < 0.34) return;
-
-    // buildRock() uses the map's textured stone materials while tree crowns and shrubs
-    // use untextured foliage materials. This is substantially more reliable than the old
-    // sibling-count heuristic, which accidentally discarded every rock in large clusters.
-    const materials = Array.isArray(object.material) ? object.material : [object.material];
-    const isStoneRock = materials.some(material =>
-      material instanceof THREE.MeshStandardMaterial && material.map !== null);
-    if (!isStoneRock) return;
+    if (!isStoneRock(object)) return;
 
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) return;
