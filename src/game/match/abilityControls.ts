@@ -106,7 +106,15 @@ export function recoverHeroResource(state: MatchState, heroEntityId: string, ela
     const hero = getRequiredHero(state, heroEntityId);
     if (hero.currentHp <= 0 || state.phase !== 'in_progress' || elapsedMs <= 0) return state;
     const stats = calculateHeroStats(state, heroEntityId, { nowMs });
-    const currentResource = Math.min(stats.maxResource, hero.currentResource + stats.resourceRegenPerSecond * elapsedMs / 1000);
-    if (currentResource === hero.currentResource) return state;
-    return { ...state, heroes: { ...state.heroes, [heroEntityId]: { ...hero, currentResource } } };
+    const elapsedSeconds = elapsedMs / 1000;
+    const currentHp = Math.min(stats.maxHp, hero.currentHp + stats.hpRegenPerSecond * elapsedSeconds);
+    const currentResource = Math.min(stats.maxResource, hero.currentResource + stats.resourceRegenPerSecond * elapsedSeconds);
+    if (currentHp === hero.currentHp && currentResource === hero.currentResource) return state;
+    return {
+        ...state,
+        heroes: {
+            ...state.heroes,
+            [heroEntityId]: { ...hero, currentHp, currentResource },
+        },
+    };
 }
