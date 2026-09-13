@@ -14,6 +14,12 @@ export const VISION_RANGES = {
   jungleCreature: 0,
 } as const;
 
+// Gameplay-facing combat ranges belong to entity data so presentation systems such as
+// selection/range previews never need to invent a second, potentially divergent value.
+export const ATTACK_RANGES = {
+  tower: 8.5,
+} as const;
+
 export type GameEntityDefinition = Readonly<{
   id?: string;
   displayName: string;
@@ -24,6 +30,7 @@ export type GameEntityDefinition = Readonly<{
   grantsVision?: boolean;
   visionRadius?: number;
   visionHeight?: number;
+  attackRange?: number;
   visibilityPolicy?: EntityVisibilityPolicy;
   interaction?: EntityInteraction;
   selectionRadius?: number;
@@ -41,6 +48,7 @@ export type GameEntity = {
   grantsVision: boolean;
   visionRadius: number;
   visionHeight: number;
+  attackRange: number;
   visibilityPolicy: EntityVisibilityPolicy;
   interaction: EntityInteraction;
   selectionRadius: number;
@@ -59,6 +67,10 @@ function defaultVisionRadius(kind: GameEntityKind) {
     case 'shop': return VISION_RANGES.shop;
     case 'jungle-creature': return VISION_RANGES.jungleCreature;
   }
+}
+
+function defaultAttackRange(kind: GameEntityKind) {
+  return kind === 'tower' ? ATTACK_RANGES.tower : 0;
 }
 
 function defaultSelectionRadius(kind: GameEntityKind) {
@@ -113,6 +125,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
     grantsVision: definition.grantsVision ?? definition.team !== 'neutral',
     visionRadius: Math.max(0, definition.visionRadius ?? defaultVisionRadius(definition.kind)),
     visionHeight: Math.max(0, definition.visionHeight ?? 1.5),
+    attackRange: Math.max(0, definition.attackRange ?? defaultAttackRange(definition.kind)),
     visibilityPolicy: definition.visibilityPolicy ?? defaultVisibilityPolicy(definition.kind),
     interaction: definition.interaction ?? defaultInteraction(definition.kind),
     selectionRadius: Math.max(0.2, definition.selectionRadius ?? defaultSelectionRadius(definition.kind)),
@@ -123,6 +136,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   root.userData[ENTITY_KEY] = entity;
   root.userData.selectable = entity.selectable;
   root.userData.visionRadius = entity.visionRadius;
+  root.userData.attackRange = entity.attackRange;
   return entity;
 }
 
@@ -184,6 +198,27 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
     const team = teamFromName(name);
     if (!team) return;
 
+    // The ceremonial core is a first-class selectable objective. Register it separately
+    // from the surrounding citadel so ray hits on the throne resolve to the throne itself.
+    if (name === `${team}-throne`) {
+      registry.register(object, {
+        id: `${team}-throne`,
+        displayName: `${team === 'blue' ? 'Blue' : 'Red'} Throne`,
+        kind: 'building',
+        team,
+        selectable: true,
+        targetable: team === 'red',
+        grantsVision: true,
+        visionRadius: VISION_RANGES.building,
+        visionHeight: 5.2,
+        attackRange: 0,
+        selectionRadius: 2.95,
+        visibilityPolicy: 'structure-in-fog',
+        interaction: 'attackable-structure',
+      });
+      return;
+    }
+
     if (name.endsWith('-tower') || name === `${team}-defense-tower`) {
       registry.register(object, {
         displayName: titleCaseName(name),
@@ -194,13 +229,14 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         grantsVision: true,
         visionRadius: VISION_RANGES.tower,
         visionHeight: 4.5,
+        attackRange: ATTACK_RANGES.tower,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'attackable-structure',
       });
       return;
     }
 
-    if (name === `${team}-base` || name.endsWith('-throne')) {
+    if (name === `${team}-base`) {
       registry.register(object, {
         displayName: titleCaseName(name),
         kind: 'building',
@@ -210,6 +246,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         grantsVision: true,
         visionRadius: VISION_RANGES.building,
         visionHeight: 5,
+        attackRange: 0,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'structure',
       });
