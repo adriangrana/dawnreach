@@ -58,7 +58,11 @@ export interface MatchHeroState {
   team: TeamId;
   slotId: MatchSlotId;
   level: number;
+  /** Experience accumulated toward the next hero level. */
   experience: number;
+  gold: number;
+  lastHits: number;
+  denies: number;
   currentHp: number;
   currentResource: number;
   abilityRanks: AbilityRanks;
