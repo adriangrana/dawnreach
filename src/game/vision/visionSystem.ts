@@ -24,7 +24,7 @@ const FOG_RENDER_ORDER = 20;
 const FOG_VISIBILITY_RAYS = 64;
 const FOG_SOURCE_REBUILD_DISTANCE = 0.16;
 const FOG_SOURCE_REBUILD_HEIGHT = 0.12;
-const FOG_OCCLUDER_REVEAL_MARGIN = 0.10;
+const FOG_OCCLUDER_REVEAL_MARGIN = 0.025;
 const VISION_EPSILON = 0.06;
 const TREE_VISION_RADIUS = 0.34;
 const WALL_RADIUS = 0.48;
@@ -391,7 +391,7 @@ function collectVisionOccluders(scene: THREE.Scene) {
           radius: TREE_VISION_RADIUS * Math.max(Math.abs(scale.x), Math.abs(scale.z)),
           minY: position.y,
           maxY: position.y + 4.7 * Math.abs(scale.y),
-          fogProjectionPadding: 0.34,
+          fogProjectionPadding: 0.04,
         });
       }
       return;
@@ -419,7 +419,7 @@ function collectVisionOccluders(scene: THREE.Scene) {
         sin: Math.sin(worldEuler.y),
         minY: bounds.min.y,
         maxY: bounds.max.y,
-        fogProjectionPadding: THREE.MathUtils.clamp((bounds.max.y - bounds.min.y) * 0.16, 0.12, 0.65),
+        fogProjectionPadding: 0.06,
       });
       return;
     }
@@ -432,20 +432,19 @@ function collectVisionOccluders(scene: THREE.Scene) {
     if (bounds.isEmpty()) return;
     bounds.getCenter(worldCenter);
     bounds.getSize(localSize);
+    const visualRadius = authoredRadius > 0
+      ? authoredRadius
+      : THREE.MathUtils.clamp(Math.min(localSize.x, localSize.z) * 0.34, 0.65, 1.45);
     occluders.push({
       kind: 'circle',
       x: worldCenter.x,
       z: worldCenter.z,
-      radius: authoredRadius > 0
-        ? authoredRadius
-        : THREE.MathUtils.clamp(Math.min(localSize.x, localSize.z) * 0.34, 0.65, 1.45),
+      radius: visualRadius,
       minY: bounds.min.y,
       maxY: bounds.max.y,
-      // The fog plane is intentionally depth-independent so it can tint unexplored
-      // structures. A tall visible structure therefore needs a little screen-space
-      // clearance behind its footprint, otherwise fog on the ground behind it projects
-      // over the face that is actually visible to the source.
-      fogProjectionPadding: THREE.MathUtils.clamp(localSize.y * 0.34, 0.55, 2.35),
+      // Keep the fog almost flush with the rear footprint. This margin only prevents
+      // the depth-independent fog plane from tinting the source-facing surface.
+      fogProjectionPadding: THREE.MathUtils.clamp(visualRadius * 0.08, 0.06, 0.12),
     });
   });
 
@@ -482,7 +481,7 @@ function addRetainingWallOccluders(occluders: VisionOccluder[]) {
         occluders.push({
           kind: 'segment', ax: x1, az: z1, bx: x2, bz: z2,
           radius: ELEVATION_RADIUS, minY: -0.5, maxY: 2.8,
-          fogProjectionPadding: 0.16,
+          fogProjectionPadding: 0.05,
         });
       }
     }
@@ -512,7 +511,7 @@ function addBaseWallOccluders(occluders: VisionOccluder[]) {
         radius: WALL_RADIUS,
         minY: -0.5,
         maxY: BASE_LAYOUT.elevation + 1.55,
-        fogProjectionPadding: 0.20,
+        fogProjectionPadding: 0.06,
       });
     }
   }
@@ -540,7 +539,7 @@ function addObjectiveWallOccluders(occluders: VisionOccluder[]) {
         radius: WALL_RADIUS,
         minY: -0.5,
         maxY: 4.2,
-        fogProjectionPadding: 0.20,
+        fogProjectionPadding: 0.06,
       });
     }
   }
@@ -574,9 +573,8 @@ function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
     }
     if (!nearestOccluder) return maxDistance;
 
-    // Gameplay LOS blocks at the front face, but the fog mask must clear the blocker
-    // itself and begin immediately behind it. Otherwise the depth-independent fog plane
-    // projects across the visible face of towers/rocks/trees from the isometric camera.
+    // Gameplay LOS still stops at the source-facing surface. The fog mask alone is
+    // allowed to clear the blocker footprint so the blocker itself remains readable.
     const exit = rayOccluderExit(nearestOccluder, source, dx, dz, maxDistance);
     if (!Number.isFinite(exit)) return nearestEntry;
     return Math.min(
