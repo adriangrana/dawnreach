@@ -9,6 +9,13 @@ import {
 } from '../entities/worldCombatBridge';
 import { createMapCollisionWorld, type CollisionWorld } from '../map/collisionWorld';
 import { DAWNREACH_LAYOUT, type MapPoint } from '../map/mapLayout';
+import {
+  animateLaneCreepVisual,
+  buildLaneCreepVisual,
+  createLaneCreepVisualResources,
+  triggerLaneCreepAttack,
+  type LaneCreepVisual,
+} from './laneCreepVisuals';
 
 export type LaneName = 'top' | 'mid' | 'bot';
 export type LaneCreepType = 'melee' | 'ranged' | 'flagbearer' | 'siege';
@@ -33,7 +40,7 @@ type AttackActivity = Readonly<{
 
 type LaneCreepRuntime = {
   entity: GameEntity;
-  model: THREE.Group;
+  visual: LaneCreepVisual;
   type: LaneCreepType;
   lane: LaneName;
   team: CombatTeam;
@@ -49,7 +56,6 @@ type LaneCreepRuntime = {
   returnNodeIndex: number;
   reachedEndAt: number | null;
   spawnedAt: number;
-  phase: number;
   seed: number;
   spatialX: number;
   spatialZ: number;
@@ -58,7 +64,6 @@ type LaneCreepRuntime = {
 };
 
 type LaneTeamBucket = Record<CombatTeam, Set<LaneCreepRuntime>>;
-type VisualResources = ReturnType<typeof createVisualResources>;
 
 const GAME_UNIT_TO_WORLD = 0.01;
 const WORLD_UNITS = (gameUnits: number) => gameUnits * GAME_UNIT_TO_WORLD;
@@ -178,7 +183,7 @@ class LaneCreepManager {
   private readonly creepById = new Map<string, LaneCreepRuntime>();
   private readonly attackActivity = new Map<string, AttackActivity>();
   private readonly commandSurfaces: THREE.Mesh[] = [];
-  private readonly resources: VisualResources = createVisualResources();
+  private readonly visualResources = createLaneCreepVisualResources();
   private readonly collisionWorld: CollisionWorld;
   private readonly spatialCells = new Map<number, Set<LaneCreepRuntime>>();
   private readonly heightCache = new Map<number, number>();
@@ -211,10 +216,9 @@ class LaneCreepManager {
       if (object instanceof THREE.Mesh && object.userData.commandSurface) this.commandSurfaces.push(object);
     });
 
-    // The gameplay bootstrap already builds the hero collision world before the first hero
-    // registration. createMapCollisionWorld also opens camp entrances, so mark those groups
-    // as already authored before constructing the creep-side static solver to keep that step
-    // idempotent instead of removing another pair of rocks from every camp.
+    // The hero bootstrap already created collision data and opened the authored camp
+    // entrances. Mark those entrances before creating the creep-side static solver so
+    // this second collision world stays idempotent and never removes extra scenery.
     battlefield.traverse((object) => {
       if (object instanceof THREE.Group && object.name.startsWith('jungle-camp-')) {
         object.userData.authoredEntrance = true;
@@ -316,7 +320,9 @@ class LaneCreepManager {
     const rawSpawnZ = start[1] + sideZ * lateralSlot - dirZ * trailingOffset;
     const spawn = this.findFreeSpawnPoint(rawSpawnX, rawSpawnZ, dirX, dirZ, stats.collisionRadius);
 
-    const { root, model } = buildCreepVisual(this.resources, team, type);
+    const seed = this.serial;
+    const visual = buildLaneCreepVisual(this.visualResources, team, type, seed);
+    const { root } = visual;
     root.name = `${team}-${lane}-${type}-wave-${waveIndex}-${this.serial}`;
     const initialSurface = this.surfaceHeightAt(spawn.x, spawn.z) + 0.03;
     root.position.set(spawn.x, initialSurface, spawn.z);
@@ -355,7 +361,7 @@ class LaneCreepManager {
     const spatial = spatialCoords(root.position.x, root.position.z);
     const runtime: LaneCreepRuntime = {
       entity,
-      model,
+      visual,
       type,
       lane,
       team,
@@ -371,7 +377,6 @@ class LaneCreepManager {
       returnNodeIndex: 0,
       reachedEndAt: null,
       spawnedAt: now,
-      phase: (this.serial % 17) / 17 * Math.PI * 2,
       seed: this.serial,
       spatialX: spatial.x,
       spatialZ: spatial.z,
@@ -464,7 +469,7 @@ class LaneCreepManager {
     if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) this.clearTarget(creep);
 
     if (creep.state === 'RETURNING') {
-      const moving = this.updateReturning(creep, dt, now);
+      const moving = this.updateReturning(creep, dt);
       this.updateSurfaceHeight(creep, dt, moving);
       this.animateCreep(creep, now, moving);
       return true;
@@ -633,6 +638,7 @@ class LaneCreepManager {
   private attackTarget(creep: LaneCreepRuntime, target: GameEntity, now: number) {
     if (!this.isTargetValid(creep, target)) return;
     creep.nextAttackAt = now + creep.stats.attackInterval;
+    triggerLaneCreepAttack(creep.visual, now);
 
     const attackerPosition = this.getEntityPosition(creep.entity, TEMP_A);
     const targetPosition = this.getEntityPosition(target, TEMP_B);
@@ -666,7 +672,6 @@ class LaneCreepManager {
       atMs: eventNow,
     });
 
-    creep.model.scale.set(1.06, 0.95, 1.06);
     if (!target.alive) this.clearTarget(creep);
   }
 
@@ -710,7 +715,7 @@ class LaneCreepManager {
     this.writeState(creep);
   }
 
-  private updateReturning(creep: LaneCreepRuntime, dt: number, _now: number) {
+  private updateReturning(creep: LaneCreepRuntime, dt: number) {
     const node = creep.route[creep.returnNodeIndex] ?? creep.route[0];
     const dx = node[0] - creep.entity.root.position.x;
     const dz = node[1] - creep.entity.root.position.z;
@@ -903,11 +908,7 @@ class LaneCreepManager {
   }
 
   private animateCreep(creep: LaneCreepRuntime, now: number, moving: boolean) {
-    const desired = moving ? 1 + Math.sin(now * 9 + creep.phase) * 0.025 : 1;
-    creep.model.position.y = moving ? Math.abs(Math.sin(now * 7 + creep.phase)) * 0.028 : 0;
-    creep.model.scale.x += (desired - creep.model.scale.x) * 0.16;
-    creep.model.scale.y += (1 - creep.model.scale.y) * 0.16;
-    creep.model.scale.z += (desired - creep.model.scale.z) * 0.16;
+    animateLaneCreepVisual(creep.visual, now, moving);
   }
 
   private clearTarget(creep: LaneCreepRuntime) {
@@ -1013,7 +1014,7 @@ class LaneCreepManager {
     this.disposed = true;
     cancelAnimationFrame(this.animationFrame);
     for (let index = this.creeps.length - 1; index >= 0; index--) this.cleanupCreep(index);
-    this.resources.dispose();
+    this.visualResources.dispose();
     this.heightCache.clear();
     this.spatialCells.clear();
     managerByScene.delete(this.scene);
@@ -1107,121 +1108,4 @@ function disposeEntityOverhead(root: THREE.Object3D) {
     material.map?.dispose();
     material.dispose();
   });
-}
-
-function createVisualResources() {
-  const geometries = {
-    body: new THREE.CapsuleGeometry(0.28, 0.46, 3, 7),
-    head: new THREE.SphereGeometry(0.22, 9, 6),
-    shoulder: new THREE.BoxGeometry(0.58, 0.13, 0.22),
-    blade: new THREE.BoxGeometry(0.07, 0.06, 0.68),
-    staff: new THREE.CylinderGeometry(0.035, 0.035, 0.92, 6),
-    flag: new THREE.PlaneGeometry(0.58, 0.38),
-    focus: new THREE.SphereGeometry(0.09, 7, 5),
-    wheel: new THREE.CylinderGeometry(0.22, 0.22, 0.09, 8),
-    siegeBody: new THREE.BoxGeometry(0.72, 0.34, 0.92),
-    siegeArm: new THREE.BoxGeometry(0.11, 0.11, 0.95),
-    siegeCrest: new THREE.BoxGeometry(0.36, 0.2, 0.08),
-  };
-
-  const blue = new THREE.MeshStandardMaterial({ color: 0x356fd6, roughness: 0.55, metalness: 0.24 });
-  const red = new THREE.MeshStandardMaterial({ color: 0xb84b46, roughness: 0.55, metalness: 0.24 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb9c4ca, roughness: 0.42, metalness: 0.62 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x22272d, roughness: 0.7, metalness: 0.14 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x69503a, roughness: 0.84, metalness: 0.02 });
-  const blueFlag = new THREE.MeshStandardMaterial({ color: 0x4f8cff, side: THREE.DoubleSide, roughness: 0.72 });
-  const redFlag = new THREE.MeshStandardMaterial({ color: 0xe0645c, side: THREE.DoubleSide, roughness: 0.72 });
-  const materials = { blue, red, steel, dark, wood, blueFlag, redFlag };
-
-  return {
-    geometries,
-    materials,
-    dispose() {
-      Object.values(geometries).forEach(geometry => geometry.dispose());
-      Object.values(materials).forEach(material => material.dispose());
-    },
-  };
-}
-
-function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: LaneCreepType) {
-  const root = new THREE.Group();
-  const model = new THREE.Group();
-  model.name = 'lane-creep-model';
-  root.add(model);
-
-  const teamMaterial = team === 'blue' ? resources.materials.blue : resources.materials.red;
-
-  if (type === 'siege') {
-    const chassis = new THREE.Mesh(resources.geometries.siegeBody, resources.materials.wood);
-    chassis.position.y = 0.42;
-    model.add(chassis);
-
-    const leftWheel = new THREE.Mesh(resources.geometries.wheel, resources.materials.dark);
-    leftWheel.rotation.z = Math.PI / 2;
-    leftWheel.position.set(-0.39, 0.26, 0);
-    model.add(leftWheel);
-
-    const rightWheel = new THREE.Mesh(resources.geometries.wheel, resources.materials.dark);
-    rightWheel.rotation.z = Math.PI / 2;
-    rightWheel.position.set(0.39, 0.26, 0);
-    model.add(rightWheel);
-
-    const arm = new THREE.Mesh(resources.geometries.siegeArm, resources.materials.steel);
-    arm.position.set(0, 0.74, -0.18);
-    arm.rotation.x = -0.38;
-    model.add(arm);
-
-    const crest = new THREE.Mesh(resources.geometries.siegeCrest, teamMaterial);
-    crest.position.set(0, 0.67, 0.49);
-    model.add(crest);
-    model.scale.setScalar(0.92);
-    return { root, model };
-  }
-
-  const body = new THREE.Mesh(resources.geometries.body, teamMaterial);
-  body.position.y = 0.64;
-  model.add(body);
-
-  const head = new THREE.Mesh(resources.geometries.head, resources.materials.steel);
-  head.position.y = 1.23;
-  model.add(head);
-
-  const shoulder = new THREE.Mesh(resources.geometries.shoulder, resources.materials.steel);
-  shoulder.position.y = 0.95;
-  model.add(shoulder);
-
-  if (type === 'melee' || type === 'flagbearer') {
-    const blade = new THREE.Mesh(resources.geometries.blade, resources.materials.steel);
-    blade.position.set(0.38, 0.72, 0.04);
-    blade.rotation.x = Math.PI / 2.7;
-    blade.rotation.z = -0.16;
-    model.add(blade);
-  }
-
-  if (type === 'ranged') {
-    const staff = new THREE.Mesh(resources.geometries.staff, resources.materials.wood);
-    staff.position.set(0.34, 0.73, 0.02);
-    staff.rotation.z = -0.2;
-    model.add(staff);
-    const focus = new THREE.Mesh(resources.geometries.focus, teamMaterial);
-    focus.position.set(0.34, 1.2, 0.02);
-    model.add(focus);
-  }
-
-  if (type === 'flagbearer') {
-    const pole = new THREE.Mesh(resources.geometries.staff, resources.materials.wood);
-    pole.scale.y = 1.75;
-    pole.position.set(-0.34, 1.05, 0.02);
-    model.add(pole);
-    const flag = new THREE.Mesh(
-      resources.geometries.flag,
-      team === 'blue' ? resources.materials.blueFlag : resources.materials.redFlag,
-    );
-    flag.position.set(-0.05, 1.62, 0.02);
-    flag.rotation.y = Math.PI / 2;
-    model.add(flag);
-  }
-
-  model.scale.setScalar(0.82);
-  return { root, model };
 }
