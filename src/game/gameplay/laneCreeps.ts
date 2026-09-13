@@ -5,6 +5,7 @@ import {
   getWorldAttackEventsAfter,
   publishWorldAttackEvent,
   publishWorldEntityRuntime,
+  removeWorldEntityRuntime,
 } from '../entities/worldCombatBridge';
 import { DAWNREACH_LAYOUT, type MapPoint } from '../map/mapLayout';
 
@@ -37,6 +38,7 @@ type LaneCreepRuntime = {
   routeIndex: number;
   state: LaneCreepState;
   target: GameEntity | null;
+  targetAcquiredAt: number;
   stats: CreepStats;
   nextAttackAt: number;
   nextScanAt: number;
@@ -184,9 +186,7 @@ class LaneCreepManager {
 
     for (let index = this.creeps.length - 1; index >= 0; index--) {
       const creep = this.creeps[index];
-      if (!this.updateCreep(creep, elapsed, dt)) {
-        this.cleanupCreep(index);
-      }
+      if (!this.updateCreep(creep, elapsed, dt)) this.cleanupCreep(index);
     }
 
     this.animationFrame = requestAnimationFrame(this.frame);
@@ -285,6 +285,7 @@ class LaneCreepManager {
       routeIndex: 1,
       state: 'ATTACK_MOVE',
       target: null,
+      targetAcquiredAt: 0,
       stats,
       nextAttackAt: 0,
       nextScanAt: 0,
@@ -301,7 +302,9 @@ class LaneCreepManager {
 
     for (const event of events) {
       this.lastAttackSequence = Math.max(this.lastAttackSequence, event.sequence);
-      const eventSeconds = event.atMs / 1000;
+      // World combat events use absolute performance.now() milliseconds. Convert them
+      // into the manager's match-relative clock before applying activity/grace windows.
+      const eventSeconds = Math.max(0, (event.atMs - this.startedAtMs) / 1000);
       this.attackActivity.set(event.attackerId, {
         targetId: event.targetId,
         atSeconds: eventSeconds,
@@ -320,6 +323,7 @@ class LaneCreepManager {
         if (!this.isVisibleToCreep(creep, attacker)) continue;
 
         creep.target = attacker;
+        creep.targetAcquiredAt = nowSeconds;
         creep.state = 'AGGRO';
         creep.aggroLockUntil = nowSeconds + LANE_CREEP_TUNING.aggroLockSeconds;
         creep.nextScanAt = creep.aggroLockUntil;
@@ -341,6 +345,7 @@ class LaneCreepManager {
 
     if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) {
       creep.target = null;
+      creep.targetAcquiredAt = 0;
       creep.state = 'ATTACK_MOVE';
       creep.nextScanAt = 0;
       this.writeState(creep);
@@ -354,6 +359,7 @@ class LaneCreepManager {
 
     if (creep.target && !this.isTargetValid(creep, creep.target)) {
       creep.target = null;
+      creep.targetAcquiredAt = 0;
       creep.state = 'ATTACK_MOVE';
       creep.nextScanAt = 0;
       this.writeState(creep);
@@ -372,8 +378,10 @@ class LaneCreepManager {
       }
 
       if (laneDistance > LANE_CREEP_TUNING.laneReturnThreshold) {
-        const lastAttackAt = this.attackActivity.get(creep.target.id)?.atSeconds ?? Number.NEGATIVE_INFINITY;
-        if (now - lastAttackAt > LANE_CREEP_TUNING.outOfLaneAttackGraceSeconds) {
+        const lastAttackAt = this.attackActivity.get(creep.target.id)?.atSeconds
+          ?? creep.targetAcquiredAt;
+        const graceAnchor = Math.max(creep.targetAcquiredAt, lastAttackAt);
+        if (now - graceAnchor > LANE_CREEP_TUNING.outOfLaneAttackGraceSeconds) {
           this.beginReturning(creep);
           this.animateCreep(creep, now, false);
           return true;
@@ -383,8 +391,11 @@ class LaneCreepManager {
 
     if (creep.state !== 'AGGRO' && now >= creep.nextScanAt) {
       creep.nextScanAt = now + LANE_CREEP_TUNING.scanIntervalSeconds;
+      const previousTarget = creep.target;
       const target = this.choosePriorityTarget(creep, now);
       creep.target = target;
+      if (target && target !== previousTarget) creep.targetAcquiredAt = now;
+      if (!target) creep.targetAcquiredAt = 0;
       creep.state = target ? 'COMBAT' : 'ATTACK_MOVE';
       this.writeState(creep);
     }
@@ -531,6 +542,7 @@ class LaneCreepManager {
 
     if (!target.alive) {
       creep.target = null;
+      creep.targetAcquiredAt = 0;
       creep.state = 'ATTACK_MOVE';
       creep.nextScanAt = 0;
       this.writeState(creep);
@@ -564,6 +576,7 @@ class LaneCreepManager {
 
   private beginReturning(creep: LaneCreepRuntime) {
     creep.target = null;
+    creep.targetAcquiredAt = 0;
     creep.state = 'RETURNING';
     creep.aggroLockUntil = 0;
     creep.returnNodeIndex = nearestNodeIndex(
@@ -656,6 +669,7 @@ class LaneCreepManager {
   private cleanupCreep(index: number) {
     const creep = this.creeps[index];
     this.registry.unregister(creep.entity.root);
+    removeWorldEntityRuntime(creep.entity.id);
     this.scene.remove(creep.entity.root);
     this.attackActivity.delete(creep.entity.id);
     this.creeps.splice(index, 1);
@@ -738,9 +752,11 @@ function createVisualResources() {
     blade: new THREE.BoxGeometry(0.07, 0.06, 0.68),
     staff: new THREE.CylinderGeometry(0.035, 0.035, 0.92, 8),
     flag: new THREE.PlaneGeometry(0.58, 0.38),
+    focus: new THREE.SphereGeometry(0.09, 10, 8),
     wheel: new THREE.CylinderGeometry(0.22, 0.22, 0.09, 12),
     siegeBody: new THREE.BoxGeometry(0.72, 0.34, 0.92),
     siegeArm: new THREE.BoxGeometry(0.11, 0.11, 0.95),
+    siegeCrest: new THREE.BoxGeometry(0.36, 0.2, 0.08),
   };
 
   const blue = new THREE.MeshStandardMaterial({ color: 0x356fd6, roughness: 0.5, metalness: 0.28 });
@@ -800,7 +816,7 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     staff.rotation.z = -0.2;
     staff.castShadow = true;
     model.add(staff);
-    const focus = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), teamMaterial);
+    const focus = new THREE.Mesh(resources.geometries.focus, teamMaterial);
     focus.position.set(0.34, 1.2, 0.02);
     model.add(focus);
   }
@@ -845,7 +861,7 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     arm.castShadow = true;
     model.add(arm);
 
-    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.2, 0.08), teamMaterial);
+    const crest = new THREE.Mesh(resources.geometries.siegeCrest, teamMaterial);
     crest.position.set(0, 0.67, 0.49);
     model.add(crest);
   }
