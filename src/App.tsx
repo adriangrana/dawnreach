@@ -18,14 +18,18 @@ const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].png', {
-  eager: true,
-  query: '?url',
-  import: 'default',
+  eager: true, query: '?url', import: 'default',
 });
 
 type TeamHero = {
   initial: string;
   portrait?: string;
+};
+
+type RespawnPresentation = {
+  dead: boolean;
+  remainingMs: number;
+  totalMs: number;
 };
 
 const dawnTeam: TeamHero[] = [
@@ -46,7 +50,13 @@ const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'ban
 const heroImageCodes: Record<string, string> = { H001: 'H001' };
 const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
 
-type HudRuntime = { match: MatchState; nowMs: number; feedback: string };
+type HudRuntime = {
+  match: MatchState;
+  nowMs: number;
+  feedback: string;
+  respawnReadyAtMs: number | null;
+  respawnDurationMs: number;
+};
 type HudAction =
   | { type: 'tick'; nowMs: number }
   | { type: 'cast'; key: AbilityKey; nowMs: number }
@@ -67,23 +77,37 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
       ? hero.currentResource
       : Math.max(0, Math.min(stats.maxResource, action.event.currentResource));
     const nextHero = { ...hero, currentHp, currentResource };
+    const respawnDurationMs = action.event.reason === 'death'
+      ? Math.max(0, (action.event.respawnSeconds ?? 0) * 1000)
+      : action.event.reason === 'respawn'
+        ? 0
+        : runtime.respawnDurationMs;
+    const respawnReadyAtMs = action.event.reason === 'death'
+      ? action.event.atMs + respawnDurationMs
+      : action.event.reason === 'respawn'
+        ? null
+        : runtime.respawnReadyAtMs;
     const feedback = action.event.reason === 'death'
       ? `${hero.heroName} ha caído. Reaparición en ${Math.ceil(action.event.respawnSeconds ?? 0)} s.`
       : action.event.reason === 'respawn'
         ? `${hero.heroName} ha reaparecido en la base.`
         : runtime.feedback;
     return {
+      ...runtime,
       match: {
         ...match,
         heroes: { ...match.heroes, [LOCAL_HERO_ENTITY_ID]: nextHero },
       },
       nowMs,
       feedback,
+      respawnReadyAtMs,
+      respawnDurationMs,
     };
   }
 
   const control = getAbilityControl(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
   return {
+    ...runtime,
     match: useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs),
     nowMs,
     feedback: `${control.ability.name}: ${control.blockedReason ?? 'activada'}`,
@@ -98,27 +122,75 @@ function hideMissingImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none';
 }
 
-function TeamPortraits({ team, side, heroLevel = 11 }: { team: TeamHero[]; side: 'dawn' | 'dusk'; heroLevel?: number }) {
+function RespawnCooldownOverlay({ presentation, compact = false }: { presentation: RespawnPresentation; compact?: boolean }) {
+  if (!presentation.dead) return null;
+  const safeTotal = Math.max(1, presentation.totalMs);
+  const fraction = Math.min(1, Math.max(0, presentation.remainingMs / safeTotal));
+  const seconds = Math.max(0, Math.ceil(presentation.remainingMs / 1000));
+  return (
+    <span
+      aria-label={`Reaparición en ${seconds} segundos`}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: compact ? 3 : 4,
+        display: 'grid',
+        placeItems: 'center',
+        pointerEvents: 'none',
+        background: `conic-gradient(from 0deg, rgba(3, 8, 11, 0.94) ${fraction * 360}deg, rgba(7, 16, 24, 0.38) 0deg)`,
+        boxShadow: 'inset 0 0 22px rgba(0, 0, 0, 0.82)',
+        color: '#f4ead0',
+        fontFamily: 'Trebuchet MS, Segoe UI, sans-serif',
+        fontSize: compact ? 12 : 27,
+        fontWeight: 800,
+        lineHeight: 1,
+        textShadow: '0 2px 4px #000, 0 0 9px rgba(191, 220, 235, 0.28)',
+      }}
+    >
+      {seconds}
+    </span>
+  );
+}
+
+function TeamPortraits({
+  team,
+  side,
+  heroLevel = 11,
+  localRespawn,
+}: {
+  team: TeamHero[];
+  side: 'dawn' | 'dusk';
+  heroLevel?: number;
+  localRespawn?: RespawnPresentation;
+}) {
   return (
     <div className={`team-portraits team-portraits--${side}`}>
-      {team.map((hero, index) => (
-        <div className="top-hero-slot" key={`${side}-${index}`}>
-          <div className="top-hero-face">
-            <Shield className="top-hero-silhouette" />
-            <span>{hero.initial}</span>
-            {hero.portrait && (
-              <img
-                className="top-hero-image"
-                src={hero.portrait}
-                alt=""
-                draggable={false}
-                onError={hideMissingImage}
-              />
-            )}
+      {team.map((hero, index) => {
+        const localHero = index === 0 && side === 'dawn';
+        const respawn = localHero && localRespawn?.dead ? localRespawn : undefined;
+        return (
+          <div className="top-hero-slot" key={`${side}-${index}`}>
+            <div className="top-hero-face">
+              <Shield className="top-hero-silhouette" />
+              <span>{hero.initial}</span>
+              {hero.portrait && (
+                <img
+                  className="top-hero-image"
+                  src={hero.portrait}
+                  alt=""
+                  draggable={false}
+                  onError={hideMissingImage}
+                  style={respawn ? { filter: 'grayscale(0.9) brightness(0.42)' } : undefined}
+                />
+              )}
+              {respawn && <RespawnCooldownOverlay presentation={respawn} compact />}
+            </div>
+            <span className="top-hero-level" style={respawn ? { zIndex: 5 } : undefined}>
+              {localHero ? heroLevel : 10}
+            </span>
           </div>
-          <span className="top-hero-level">{index === 0 && side === 'dawn' ? heroLevel : 10}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -138,6 +210,15 @@ function GameHud({
   const definition = getHeroDefinition(hero.definitionId);
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
   const innate = hero.definitionId === ALDEN.id ? calculateAldenInnate(runtime.match, hero.heroEntityId) : null;
+  const heroDead = hero.currentHp <= 0;
+  const respawnRemainingMs = runtime.respawnReadyAtMs === null
+    ? 0
+    : Math.max(0, runtime.respawnReadyAtMs - runtime.nowMs);
+  const respawnPresentation: RespawnPresentation = {
+    dead: heroDead,
+    remainingMs: respawnRemainingMs,
+    totalMs: Math.max(1, runtime.respawnDurationMs || respawnRemainingMs),
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => dispatch({ type: 'tick', nowMs: performance.now() }), 100);
@@ -160,7 +241,7 @@ function GameHud({
   return (
     <div className="game-hud">
       <section className="scoreboard">
-        <TeamPortraits team={dawnTeam} side="dawn" heroLevel={hero.level} />
+        <TeamPortraits team={dawnTeam} side="dawn" heroLevel={hero.level} localRespawn={respawnPresentation} />
         <div className="match-score">
           <strong className="score score--dawn">0</strong>
           <div className="match-clock">
@@ -186,6 +267,7 @@ function GameHud({
             alt=""
             draggable={false}
             onError={hideMissingImage}
+            style={{ opacity: heroDead ? 0 : 1 }}
           />
         </div>
         <div className="minimap-tools">
@@ -206,7 +288,9 @@ function GameHud({
               alt=""
               draggable={false}
               onError={hideMissingImage}
+              style={heroDead ? { filter: 'grayscale(0.9) brightness(0.42)' } : undefined}
             />
+            <RespawnCooldownOverlay presentation={respawnPresentation} />
             <span className="hero-level">{hero.level}</span>
           </div>
           <div className="hero-identity">
@@ -282,13 +366,20 @@ export default function App() {
   const minimapHeroRef = useRef<HTMLImageElement | null>(null);
   const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
     const nowMs = performance.now();
-    return { match: createPlayableMatch('H001', 11, nowMs), nowMs, feedback: '' };
+    return {
+      match: createPlayableMatch('H001', 11, nowMs),
+      nowMs,
+      feedback: '',
+      respawnReadyAtMs: null,
+      respawnDurationMs: 0,
+    };
   });
   const getOverlayState = () => ({
     hero: getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID),
     stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
   });
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
+  const localHeroDead = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID).currentHp <= 0;
 
   useEffect(() => {
     const overlay = getOverlayState();
@@ -307,6 +398,38 @@ export default function App() {
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
     dispatch({ type: 'world-hero-sync', event });
   }), []);
+
+  useEffect(() => {
+    if (!localHeroDead) return;
+
+    const belongsToGameSurface = (target: EventTarget | null) => (
+      target instanceof Element && Boolean(target.closest('.game-canvas, .minimap-live'))
+    );
+    const blockDeadMove = (event: PointerEvent) => {
+      if (event.button !== 2 || !belongsToGameSurface(event.target)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const blockDeadContextMenu = (event: MouseEvent) => {
+      if (!belongsToGameSurface(event.target)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const blockDeadAttackCommand = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyA') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    window.addEventListener('pointerdown', blockDeadMove, true);
+    window.addEventListener('contextmenu', blockDeadContextMenu, true);
+    window.addEventListener('keydown', blockDeadAttackCommand, true);
+    return () => {
+      window.removeEventListener('pointerdown', blockDeadMove, true);
+      window.removeEventListener('contextmenu', blockDeadContextMenu, true);
+      window.removeEventListener('keydown', blockDeadAttackCommand, true);
+    };
+  }, [localHeroDead]);
 
   useEffect(() => {
     const host = hostRef.current;
