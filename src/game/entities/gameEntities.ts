@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { attachEntityOverhead } from './entityOverheads';
 
 export type TeamId = 'blue' | 'red' | 'neutral';
@@ -9,23 +10,19 @@ export type EntityVisibilityPolicy = 'always' | 'vision-only' | 'structure-in-fo
 export const VISION_RANGES = {
   hero: 12.5,
   creep: 8,
-  tower: 15,
+  tower: TOWER_GAMEPLAY.vision.radius,
   building: 11,
   shop: 9,
   jungleCreature: 0,
 } as const;
 
-// Gameplay-facing combat ranges belong to entity data so presentation systems such as
-// selection/range previews never need to invent a second, potentially divergent value.
 export const ATTACK_RANGES = {
-  tower: 8.5,
+  tower: TOWER_GAMEPLAY.attack.range,
 } as const;
 
-// Initial health values live with entity metadata so overhead UI, combat and targeting
-// all read the same authoritative state. These are tuning values, not presentation constants.
 export const ENTITY_MAX_HP = {
   creep: 550,
-  tower: 1800,
+  tower: TOWER_GAMEPLAY.maxHp,
   throne: 5000,
   jungleCreature: 900,
 } as const;
@@ -247,10 +244,6 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
     const team = teamFromName(name);
     if (!team) return;
 
-    // The ceremonial core is a first-class selectable objective. Its visible legacy
-    // platform reaches 3.5 world units from the centre. Building selection graphics put
-    // their main line at roughly 82% of selectionRadius, so 4.25 makes that line hug the
-    // platform edge while the segmented accents remain cleanly outside the structure.
     if (name === `${team}-throne`) {
       registry.register(object, {
         id: `${team}-throne`,
@@ -281,11 +274,13 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         selectable: true,
         targetable: team === 'red',
         grantsVision: true,
-        visionRadius: VISION_RANGES.tower,
-        visionHeight: 4.5,
-        attackRange: ATTACK_RANGES.tower,
-        maxHp: ENTITY_MAX_HP.tower,
-        currentHp: ENTITY_MAX_HP.tower,
+        visionRadius: TOWER_GAMEPLAY.vision.radius,
+        visionHeight: TOWER_GAMEPLAY.vision.height,
+        attackRange: TOWER_GAMEPLAY.attack.range,
+        maxHp: TOWER_GAMEPLAY.maxHp,
+        currentHp: TOWER_GAMEPLAY.maxHp,
+        level: TOWER_GAMEPLAY.level,
+        definitionId: 'defense-tower',
         showHealthBar: true,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'attackable-structure',
