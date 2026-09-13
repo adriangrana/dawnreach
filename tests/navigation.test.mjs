@@ -72,6 +72,11 @@ test('replanning sees an obstacle that appears after the navigation grid was bui
     assert.equal(navigation.segmentIsWalkable(previous, waypoint), true);
     previous = waypoint;
   }
+
+  obstacleActive = false;
+  const directAgain = navigation.findPath(start, target);
+  assert.ok(directAgain);
+  assert.deepEqual(directAgain.waypoints, [target]);
 });
 
 test('unreachable destination returns null when partial routing is disabled', () => {
