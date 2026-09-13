@@ -9,8 +9,16 @@ export {
   HUMANOID_GAIT_RATE as ALDEN_GAIT_RATE,
 } from '../../characters/animateHumanoid.js';
 
+// The gameplay shell currently presents Alden at 0.68. The battlefield scale needs
+// him at half of that visual size, while keeping the same world traversal speed.
+// Doubling the gait speed preserves approximately the same foot-to-ground cadence
+// after halving the visible model scale.
+const ALDEN_BATTLEFIELD_SCALE = 0.34;
+const ALDEN_GAIT_SCALE_COMPENSATION = 2;
+
 export function animateAlden(rig: AldenRig, elapsed: number, moving: boolean, delta = 1 / 60, speed = HUMANOID_DEFAULT_MOVE_SPEED) {
-  animateHumanoid(rig, elapsed, moving, delta, speed);
+  rig.model.scale.setScalar(ALDEN_BATTLEFIELD_SCALE);
+  animateHumanoid(rig, elapsed, moving, delta, speed * ALDEN_GAIT_SCALE_COMPENSATION);
   const dt = Math.max(0, Math.min(delta, 0.1));
   const target = moving ? 1 : 0;
   const weight = THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
