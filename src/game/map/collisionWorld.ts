@@ -29,8 +29,9 @@ export type CollisionWorld = {
 const TREE_RADIUS = 0.31;
 const WALL_RADIUS = 0.48;
 const ELEVATION_RADIUS = 0.62;
-const MAX_SUBSTEP = 0.22;
-const SOLVER_PASSES = 4;
+const MAX_SUBSTEP = 0.18;
+const SOLVER_PASSES = 8;
+const ROCK_COLLISION_SCALE = 0.92;
 
 export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
   battlefield.updateMatrixWorld(true);
@@ -45,6 +46,21 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   addRetainingWallColliders(segments, counts);
   addBaseWallColliders(segments, counts);
   addObjectiveWallColliders(segments, counts);
+
+  const isBlocked = (point: CollisionPoint, radius: number) => {
+    if (point.x - radius < MAP_BOUNDS.minX || point.x + radius > MAP_BOUNDS.maxX
+      || point.z - radius < MAP_BOUNDS.minZ || point.z + radius > MAP_BOUNDS.maxZ) return true;
+
+    for (const circle of circles) {
+      const required = radius + circle.radius;
+      if ((point.x - circle.x) ** 2 + (point.z - circle.z) ** 2 < required ** 2) return true;
+    }
+
+    for (const segment of segments) {
+      if (distanceToSegment(point.x, point.z, segment) < radius + segment.radius) return true;
+    }
+    return false;
+  };
 
   const resolvePoint = (point: CollisionPoint, previous: CollisionPoint, radius: number) => {
     const resolved = {
@@ -77,7 +93,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
           distance = 0;
         }
 
-        const push = required - distance + 0.002;
+        const push = required - distance + 0.003;
         resolved.x += nx * push;
         resolved.z += nz * push;
         changed = true;
@@ -116,7 +132,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
           distance = 0;
         }
 
-        const push = required - distance + 0.002;
+        const push = required - distance + 0.003;
         resolved.x += nx * push;
         resolved.z += nz * push;
         changed = true;
@@ -130,21 +146,6 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
     return resolved;
   };
 
-  const isBlocked = (point: CollisionPoint, radius: number) => {
-    if (point.x - radius < MAP_BOUNDS.minX || point.x + radius > MAP_BOUNDS.maxX
-      || point.z - radius < MAP_BOUNDS.minZ || point.z + radius > MAP_BOUNDS.maxZ) return true;
-
-    for (const circle of circles) {
-      const required = radius + circle.radius;
-      if ((point.x - circle.x) ** 2 + (point.z - circle.z) ** 2 < required ** 2) return true;
-    }
-
-    for (const segment of segments) {
-      if (distanceToSegment(point.x, point.z, segment) < radius + segment.radius) return true;
-    }
-    return false;
-  };
-
   return {
     counts,
     isBlocked,
@@ -152,16 +153,39 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
       const dx = to.x - from.x;
       const dz = to.z - from.z;
       const distance = Math.hypot(dx, dz);
-      if (distance <= 1e-8) return resolvePoint(to, from, radius);
+
+      let current = resolvePoint(from, from, radius);
+      if (distance <= 1e-8) return current;
 
       const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
       const stepX = dx / steps;
       const stepZ = dz / steps;
-      let current = { x: from.x, z: from.z };
 
       for (let step = 0; step < steps; step++) {
         const candidate = { x: current.x + stepX, z: current.z + stepZ };
-        current = resolvePoint(candidate, current, radius);
+        const resolved = resolvePoint(candidate, current, radius);
+        if (!isBlocked(resolved, radius)) {
+          current = resolved;
+          continue;
+        }
+
+        // Dense rock/tree clusters can leave the iterative solver wedged between two
+        // overlapping colliders. In that case, try axis-separated sliding and only
+        // accept positions that are guaranteed collision-free.
+        const slideX = resolvePoint({ x: current.x + stepX, z: current.z }, current, radius);
+        const slideZ = resolvePoint({ x: current.x, z: current.z + stepZ }, current, radius);
+        const xFree = !isBlocked(slideX, radius);
+        const zFree = !isBlocked(slideZ, radius);
+
+        if (xFree && zFree) {
+          const xProgress = (slideX.x - current.x) ** 2 + (slideX.z - current.z) ** 2;
+          const zProgress = (slideZ.x - current.x) ** 2 + (slideZ.z - current.z) ** 2;
+          current = xProgress >= zProgress ? slideX : slideZ;
+        } else if (xFree) {
+          current = slideX;
+        } else if (zFree) {
+          current = slideZ;
+        }
       }
       return current;
     },
@@ -202,33 +226,37 @@ function collectRockColliders(
   counts: { rocks: number },
 ) {
   const center = new THREE.Vector3();
-  const scale = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const position = new THREE.Vector3();
+  const size = new THREE.Vector3();
 
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return;
     if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return;
 
-    // Shrubs are built from clusters of several dodecahedrons. They are visual dressing,
-    // not hard collision. Standalone dodecahedrons with enough mass are authored rocks.
-    const dodecahedronSiblings = object.parent?.children.filter(child =>
-      child instanceof THREE.Mesh && child.geometry instanceof THREE.DodecahedronGeometry).length ?? 0;
-    if (dodecahedronSiblings >= 3) return;
-
     const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
     if (authoredRadius < 0.34) return;
 
-    object.matrixWorld.decompose(position, quaternion, scale);
+    // buildRock() uses the map's textured stone materials while tree crowns and shrubs
+    // use untextured foliage materials. This is substantially more reliable than the old
+    // sibling-count heuristic, which accidentally discarded every rock in large clusters.
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const isStoneRock = materials.some(material =>
+      material instanceof THREE.MeshStandardMaterial && material.map !== null);
+    if (!isStoneRock) return;
+
     const box = new THREE.Box3().setFromObject(object);
-    const size = box.getSize(new THREE.Vector3());
+    if (box.isEmpty()) return;
+    box.getSize(size);
     if (size.y < 0.28 || Math.max(size.x, size.z) < 0.42) return;
     box.getCenter(center);
 
+    // Use the horizontal AABB half-diagonal instead of the old min-axis estimate.
+    // It encloses irregular, rotated and non-uniformly scaled rocks closely enough that
+    // Alden cannot visually enter the stone before the collision response begins.
+    const horizontalHalfDiagonal = Math.hypot(size.x, size.z) * 0.5;
     colliders.push({
       x: center.x,
       z: center.z,
-      radius: Math.max(0.24, Math.min(size.x, size.z) * 0.42),
+      radius: Math.max(0.28, horizontalHalfDiagonal * ROCK_COLLISION_SCALE),
       kind: 'rock',
     });
     counts.rocks++;
