@@ -8,8 +8,8 @@ import {
   type NavigationWorld,
 } from './navigationWorld';
 
-const NAVIGATION_CELL_SIZE = 0.7;
-const NAVIGATION_CLEARANCE = 0.07;
+const NAVIGATION_CELL_SIZE = 0.5;
+const NAVIGATION_CLEARANCE = 0.04;
 
 export const NAVIGATION_DEBUG = false;
 
