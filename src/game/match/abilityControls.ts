@@ -3,7 +3,7 @@ import type { AbilityKey } from '../heroes/types';
 import { calculateAldenAbilityAtRank, performAbilityAction } from './combat';
 import {
     addPlayerToMatch, assignSelectedHeroToPlayer, createMatchState, getRequiredHero,
-    selectHeroForPlayer, setHeroLevel, setMatchPhase, upgradeHeroAbility,
+    selectHeroForPlayer, setHeroLevel, setMatchPhase,
 } from './matchState';
 import type { MatchState } from './types';
 import { calculateHeroStats } from './stats';
@@ -13,7 +13,7 @@ export const LOCAL_HERO_ENTITY_ID = 'local-player:hero';
 
 export function createPlayableMatch(
     heroId = 'H001',
-    level = 11,
+    level = 1,
     nowMs = 0,
 ): MatchState {
     let state = createMatchState('local-match', nowMs);
@@ -32,46 +32,9 @@ export function createPlayableMatch(
         LOCAL_HERO_ENTITY_ID,
     );
 
-    state = setHeroLevel(state, LOCAL_HERO_ENTITY_ID, level);
-
-    const definition = getHeroDefinition(heroId);
-
-    let pointsRemaining = level;
-
-    // Prioridad para el héroe de prueba:
-    // ultimate primero cuando esté disponible,
-    // después Q, W y E.
-    const priority: AbilityKey[] = ['R', 'Q', 'W', 'E'];
-
-    while (pointsRemaining > 0) {
-        let upgraded = false;
-
-        for (const key of priority) {
-            const currentRank =
-                state.heroes[LOCAL_HERO_ENTITY_ID].abilityRanks[key];
-
-            const unlockLevels = definition.abilities[key].unlockLevels;
-
-            if (currentRank >= unlockLevels.length) continue;
-
-            const requiredLevel = unlockLevels[currentRank];
-
-            if (requiredLevel > level) continue;
-
-            state = upgradeHeroAbility(
-                state,
-                LOCAL_HERO_ENTITY_ID,
-                key,
-            );
-
-            pointsRemaining--;
-            upgraded = true;
-
-            if (pointsRemaining === 0) break;
-        }
-
-        if (!upgraded) break;
-    }
+    // Ability ranks intentionally remain at zero. Hero levels grant unspent points;
+    // the player decides which eligible ability receives each point.
+    if (level !== 1) state = setHeroLevel(state, LOCAL_HERO_ENTITY_ID, level);
 
     return setMatchPhase(state, 'in_progress');
 }
@@ -86,8 +49,9 @@ export function getAbilityControl(state: MatchState, heroEntityId: string, key: 
         ? calculateAldenAbilityAtRank(state, heroEntityId, key, Math.max(1, rank) as 1 | 2 | 3 | 4)
         : null;
     const remainingMs = Math.max(0, hero.cooldownReadyAtMs[key] - nowMs);
+    const firstUnlockLevel = ability.unlockLevels[0];
     const blockedReason = passive ? 'Pasiva'
-        : rank === 0 ? `Se desbloquea en nivel ${ability.unlockLevels[0]}`
+        : rank === 0 ? (hero.level >= firstUnlockLevel ? 'Sin aprender' : `Se desbloquea en nivel ${firstUnlockLevel}`)
             : hero.currentHp <= 0 ? 'Heroe derrotado'
                 : state.phase !== 'in_progress' ? 'Partida inactiva'
                     : !preview ? 'Habilidad no disponible'
