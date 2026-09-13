@@ -23,8 +23,8 @@
         "englishName": "Backdoor Protection",
         "type": "passive",
         "level": 1,
-        "description": "Las estructuras aliadas dentro del radio de la torre reciben menos daño y regeneran vida rápidamente mientras no haya creeps enemigos cerca de la torre.",
-        "eligibleKinds": ["tower", "building"],
+        "description": "Los aliados dentro del radio de la torre reciben menos daño y regeneran vida rápidamente mientras no haya creeps enemigos cerca de la torre.",
+        "eligibleKinds": ["hero", "creep", "tower", "building", "shop"],
         "effects": {
           "damageReductionPercent": 50,
           "healthRegenPerSecond": 24,
