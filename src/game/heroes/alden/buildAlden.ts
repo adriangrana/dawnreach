@@ -1,463 +1,307 @@
 import * as THREE from 'three';
-import type { AldenMaterials, AldenRig } from './types';
+import { applyPaintedFinish } from './materials.js';
+import {
+  breastclothSurface, createCapeSurface, createBootGeometry, createBreastplateGeometry,
+  createCapeGeometry, createEmblemGeometry, createGreaveGeometry, createLoftGeometry,
+  createPauldronGeometry, createPlateGeometry, createProjectedShapeGeometry, createSurfaceGeometry, createSurfaceRibbon,
+  createSwordGeometry, createPauldronSurface, mantleSections,
+} from './geometry.js';
+import type { Surface } from './geometry.js';
+import { createHumanoidRig, type HumanoidRig } from '../../characters/humanoidRig.js';
 
-export function buildAlden(materials: AldenMaterials): AldenRig {
-  const root = new THREE.Group();
-  const model = new THREE.Group();
-  root.add(model);
+export type AldenMaterials = Record<
+  'steel' | 'steelDark' | 'gold' | 'blue' | 'blueDark' | 'leather' | 'chain' | 'visor',
+  THREE.MeshStandardMaterial
+>;
 
-  const selection = new THREE.Mesh(
-    new THREE.RingGeometry(0.62, 0.72, 64),
-    new THREE.MeshBasicMaterial({
-      color: 0x63f0c2,
-      transparent: true,
-      opacity: 0.95,
-      side: THREE.DoubleSide,
-    }),
-  );
-  selection.rotation.x = -Math.PI / 2;
-  selection.position.y = 0.025;
-  root.add(selection);
+export type AldenRig = HumanoidRig & {
+  cape: THREE.Group;
+  capeMotion: number;
+  capePanels: Array<{ geometry: THREE.BufferGeometry; rest: Float32Array }>;
+  sword: THREE.Group;
+};
 
-  const label = buildHeroLabel();
-  label.position.set(0, 3.22, 0);
-  root.add(label);
+function mesh(parent: THREE.Object3D, name: string, geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0) {
+  const part = new THREE.Mesh(geometry, material);
+  part.name = name;
+  part.position.set(x, y, z);
+  part.castShadow = true;
+  part.receiveShadow = true;
+  parent.add(part);
+  return part;
+}
 
-  const leftLeg = buildLeg(materials, -0.20);
-  const rightLeg = buildLeg(materials, 0.20);
-  model.add(leftLeg, rightLeg);
+function group(parent: THREE.Object3D, name: string, x = 0, y = 0, z = 0) {
+  const pivot = new THREE.Group();
+  pivot.name = name;
+  pivot.position.set(x, y, z);
+  parent.add(pivot);
+  return pivot;
+}
 
-  const hips = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.31, 0.37, 0.34, 14),
-    materials.chain,
-  );
-  hips.position.y = 1.08;
-  model.add(hips);
+function piping(parent: THREE.Object3D, name: string, points: THREE.Vector3[], material: THREE.Material, radius = 0.012) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  return mesh(parent, name, new THREE.TubeGeometry(curve, Math.max(8, points.length * 3), radius, 4, false), material);
+}
 
-  const torso = new THREE.Group();
-  torso.position.y = 1.69;
-  model.add(torso);
+function ribbon(parent: THREE.Object3D, name: string, surface: Surface, start: [number, number], end: [number, number], width: number, offset: number, material: THREE.Material) {
+  return mesh(parent, name, createSurfaceRibbon(surface, new THREE.Vector2(...start), new THREE.Vector2(...end), width, offset), material);
+}
 
-  const breastplateProfile = [
-    new THREE.Vector2(0.20, -0.49),
-    new THREE.Vector2(0.28, -0.34),
-    new THREE.Vector2(0.35, -0.10),
-    new THREE.Vector2(0.43, 0.17),
-    new THREE.Vector2(0.40, 0.40),
-  ];
-  const chest = new THREE.Mesh(
-    new THREE.LatheGeometry(breastplateProfile, 24),
-    materials.steelDark,
-  );
-  chest.scale.z = 0.66;
-  chest.castShadow = true;
-  torso.add(chest);
+export function buildAlden(materials: AldenMaterials, options: { armRestAngle?: number; shoulderNeckBlend?: number; capeNeckBlend?: number } = {}): AldenRig {
+  const shoulderNeckBlend = options.shoulderNeckBlend ?? 1;
+  const rig = createHumanoidRig({ ...options, name: 'alden' });
+  const { model, pelvis, torso, head } = rig;
+  buildLeg(rig.leftLeg, rig.leftShin, rig.leftFoot, materials);
+  buildLeg(rig.rightLeg, rig.rightShin, rig.rightFoot, materials);
 
-  const tabardShape = new THREE.Shape();
-  tabardShape.moveTo(-0.27, 0.31);
-  tabardShape.quadraticCurveTo(-0.28, 0.10, -0.20, -0.43);
-  tabardShape.lineTo(0.20, -0.43);
-  tabardShape.quadraticCurveTo(0.28, 0.10, 0.27, 0.31);
-  tabardShape.closePath();
+  mesh(pelvis, 'mail-skirt', createLoftGeometry([
+    { y: 0.96, width: 0.36, front: 0.22, back: 0.20 },
+    { y: 1.16, width: 0.34, front: 0.23, back: 0.22 },
+    { y: 1.40, width: 0.28, front: 0.19, back: 0.18 },
+  ]), materials.chain, 0, -1.18);
 
-  const tabard = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(tabardShape, {
-      depth: 0.03,
-      bevelEnabled: true,
-      bevelSize: 0.012,
-      bevelThickness: 0.01,
-      bevelSegments: 2,
-    }),
-    materials.blue,
-  );
-  tabard.position.set(0, -0.01, 0.305);
-  tabard.castShadow = true;
-  torso.add(tabard);
+  mesh(torso, 'breastplate', createBreastplateGeometry(), materials.steel);
+  mesh(torso, 'breastcloth', createSurfaceGeometry(breastclothSurface, 12, 12, true), materials.blue);
+  for (const side of [-1, 1]) {
+    ribbon(torso, 'tabard-gold-selvedge', breastclothSurface, [side * 0.94, 0], [side * 0.94, 1], 0.12, 0.008, materials.gold);
+  }
+  ribbon(torso, 'tabard-neckline', breastclothSurface, [-1, 0.015], [1, 0.015], 0.025, 0.009, materials.gold);
+  mesh(torso, 'chest-star', createEmblemGeometry(breastclothSurface, 0.64, 0.22, 0.54, 0.018), materials.gold);
 
-  const leftTrim = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, 0.71, 0.035),
-    materials.gold,
-  );
-  leftTrim.position.set(-0.225, -0.04, 0.34);
-  leftTrim.rotation.z = -0.07;
-
-  const rightTrim = leftTrim.clone();
-  rightTrim.position.x = 0.225;
-  rightTrim.rotation.z = 0.07;
-  torso.add(leftTrim, rightTrim);
-
-  const emblemShape = new THREE.Shape();
-  emblemShape.moveTo(0, 0.17);
-  emblemShape.lineTo(0.055, 0.055);
-  emblemShape.lineTo(0.022, 0.01);
-  emblemShape.lineTo(0, -0.17);
-  emblemShape.lineTo(-0.022, 0.01);
-  emblemShape.lineTo(-0.055, 0.055);
-  emblemShape.closePath();
-
-  const chestEmblem = new THREE.Mesh(
-    new THREE.ShapeGeometry(emblemShape),
-    materials.gold,
-  );
-  chestEmblem.position.set(0, 0.02, 0.35);
-  torso.add(chestEmblem);
-
-  const collar = new THREE.Mesh(
-    new THREE.TorusGeometry(0.28, 0.03, 8, 28, Math.PI),
-    materials.gold,
-  );
-  collar.rotation.set(Math.PI / 2, 0, Math.PI);
-  collar.position.set(0, 0.34, 0.10);
-  collar.scale.z = 0.68;
-  torso.add(collar);
-
-  const waistBelt = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.34, 0.34, 0.13, 20),
-    materials.leather,
-  );
-  waistBelt.scale.z = 0.68;
-  waistBelt.position.y = -0.47;
-  torso.add(waistBelt);
-
-  const buckle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.12, 0.05, 20),
-    materials.gold,
-  );
+  for (const [index, height] of [-0.36, -0.45].entries()) {
+    mesh(torso, 'articulated-fauld', createLoftGeometry([
+      { y: height - 0.07, width: 0.32 + index * 0.02, front: 0.235, back: 0.21 },
+      { y: height + 0.035, width: 0.295 + index * 0.02, front: 0.223, back: 0.20 },
+    ]), materials.steelDark);
+  }
+  mesh(torso, 'waist-belt', createLoftGeometry([
+    { y: -0.52, width: 0.33, front: 0.262, back: 0.224 },
+    { y: -0.40, width: 0.32, front: 0.258, back: 0.22 },
+  ]), materials.leather);
+  const buckle = mesh(torso, 'belt-buckle', new THREE.CylinderGeometry(0.108, 0.108, 0.043, 12), materials.gold, 0, -0.46, 0.282);
   buckle.rotation.x = Math.PI / 2;
-  buckle.position.set(0, -0.47, 0.27);
-  torso.add(buckle);
-
-  addShoulder(torso, materials, -0.47);
-  addShoulder(torso, materials, 0.47);
-
-  const leftArm = buildArm(materials, -0.49, false);
-  const rightArm = buildArm(materials, 0.49, true);
-  torso.add(leftArm, rightArm);
-
-  const cape = buildCape(materials);
-  torso.add(cape);
-
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.17, 0.18, 12),
-    materials.chain,
-  );
-  neck.position.y = 0.56;
-  torso.add(neck);
-
-  const head = buildHelmet(materials);
-  head.position.y = 0.92;
-  torso.add(head);
-
-  const sword = buildSword(materials);
-  sword.position.set(0.03, -1.00, 0.01);
-  sword.rotation.set(0.04, 0.10, -0.58);
-  rightArm.add(sword);
-
-  model.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.castShadow = true;
-      obj.receiveShadow = true;
-    }
-  });
-
-  return { root, model, leftLeg, rightLeg, leftArm, rightArm, cape, sword };
-}
-
-function buildLeg(materials: AldenMaterials, x: number) {
-  const pivot = new THREE.Group();
-  pivot.position.set(x, 1.05, 0);
-
-  const thigh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.13, 0.155, 0.56, 12),
-    materials.chain,
-  );
-  thigh.position.y = -0.27;
-  pivot.add(thigh);
-
-  const knee = new THREE.Mesh(
-    new THREE.SphereGeometry(0.16, 14, 10),
-    materials.steel,
-  );
-  knee.scale.set(1.0, 0.82, 1.08);
-  knee.position.y = -0.57;
-  pivot.add(knee);
-
-  const shin = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.16, 0.56, 12),
-    materials.steel,
-  );
-  shin.position.y = -0.86;
-  pivot.add(shin);
-
-  const goldBand = new THREE.Mesh(
-    new THREE.TorusGeometry(0.145, 0.022, 8, 18),
-    materials.gold,
-  );
-  goldBand.rotation.x = Math.PI / 2;
-  goldBand.position.y = -0.69;
-  pivot.add(goldBand);
-
-  const boot = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.20, 0.44),
-    materials.leather,
-  );
-  boot.position.set(0, -1.16, 0.11);
-  boot.geometry.translate(0, 0, 0.06);
-  pivot.add(boot);
-
-  const toe = new THREE.Mesh(
-    new THREE.SphereGeometry(0.12, 14, 10),
-    materials.leather,
-  );
-  toe.scale.set(1.1, 0.72, 1.55);
-  toe.position.set(0, -1.15, 0.26);
-  pivot.add(toe);
-
-  return pivot;
-}
-
-function buildArm(materials: AldenMaterials, x: number, swordArm: boolean) {
-  const pivot = new THREE.Group();
-  pivot.position.set(x, 0.28, 0);
-
-  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.145, 0.51, 12), materials.chain);
-  upper.position.y = -0.25;
-  pivot.add(upper);
-
-  const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 8), materials.steel);
-  elbow.position.y = -0.52;
-  pivot.add(elbow);
-
-  const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.14, 0.47, 12), materials.steel);
-  forearm.position.y = -0.75;
-  pivot.add(forearm);
-
-  const glove = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), materials.leather);
-  glove.scale.set(0.92, 0.9, 1.08);
-  glove.position.y = -1.02;
-  pivot.add(glove);
-
-  pivot.rotation.z = x < 0 ? 0.08 : -0.08;
-  if (swordArm) pivot.rotation.x = -0.08;
-  return pivot;
-}
-
-function addShoulder(torso: THREE.Group, materials: AldenMaterials, x: number) {
-  const pauldron = new THREE.Mesh(
-    new THREE.SphereGeometry(0.24, 18, 12),
-    materials.steel,
-  );
-  pauldron.scale.set(1.24, 0.58, 0.96);
-  pauldron.position.set(x, 0.25, 0.0);
-  torso.add(pauldron);
-
-  const trim = new THREE.Mesh(
-    new THREE.TorusGeometry(0.185, 0.028, 8, 20, Math.PI),
-    materials.gold,
-  );
-  trim.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-  trim.position.set(x, 0.26, 0.015);
-  torso.add(trim);
-}
-
-function buildHelmet(materials: AldenMaterials) {
-  const group = new THREE.Group();
-
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), materials.steel);
-  helmet.scale.set(0.92, 1.12, 0.93);
-  group.add(helmet);
-
-  const facePlateShape = new THREE.Shape();
-  facePlateShape.moveTo(-0.23, 0.15);
-  facePlateShape.lineTo(0.23, 0.15);
-  facePlateShape.lineTo(0.20, -0.15);
-  facePlateShape.lineTo(0, -0.24);
-  facePlateShape.lineTo(-0.20, -0.15);
-  facePlateShape.closePath();
-  const facePlate = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(facePlateShape, { depth: 0.065, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.01, bevelSegments: 2 }),
-    materials.steel,
-  );
-  facePlate.position.set(0, -0.04, 0.285);
-  group.add(facePlate);
-
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.045, 0.025), materials.visor);
-  visor.position.set(0, 0.02, 0.36);
-  group.add(visor);
-
-  const visorVertical = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.026), materials.visor);
-  visorVertical.position.set(0, -0.09, 0.362);
-  group.add(visorVertical);
-
-  const crest = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.58, 4), materials.gold);
-  crest.position.y = 0.48;
-  crest.scale.z = 0.55;
-  group.add(crest);
-
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.055, 0.06), materials.gold);
-  brow.position.set(0, 0.11, 0.34);
-  group.add(brow);
-  return group;
-}
-
-function buildCape(materials: AldenMaterials) {
-  const group = new THREE.Group();
-  group.position.set(0, 0.18, -0.31);
-  group.rotation.x = 0.10;
-
-  const width = 1.34;
-  const height = 1.92;
-  const geometry = new THREE.PlaneGeometry(width, height, 12, 14);
-  const pos = geometry.attributes.position as THREE.BufferAttribute;
-
-  for (let i = 0; i < pos.count; i += 1) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const t = (y + height / 2) / height;
-    const n = x / (width / 2);
-    const widthFactor = 0.74 + (1 - t) * 0.38;
-    const shapedX = x * widthFactor;
-    const topPinch = t * 0.12;
-    const sideCurve = Math.pow(Math.abs(n), 1.7) * (1 - t) * 0.15;
-    const bottomDip = (1 - t) * 0.08;
-    const hemWave = Math.cos(n * Math.PI * 2.4) * (1 - t) * 0.03;
-    const shapedY = y + sideCurve - bottomDip + hemWave + topPinch;
-    const drape = -(1 - t) * 0.24 - Math.abs(n) * 0.05;
-    const fold = Math.sin(n * Math.PI * 3.0) * 0.04 * (1 - t * 0.25);
-    pos.setXYZ(i, shapedX, shapedY, drape + fold);
+  const inset = mesh(torso, 'buckle-inset', new THREE.TorusGeometry(0.078, 0.008, 4, 16), materials.steelDark, 0, -0.46, 0.309);
+  inset.scale.y = 1.05;
+  for (const side of [-1, 1]) {
+    const tailSurface: Surface = (across, down) => new THREE.Vector3(
+      side * (0.145 + down * 0.025) + across * (0.125 + down * 0.025),
+      -0.53 - down * 0.54 + Math.abs(across) * down * 0.07,
+      0.265 + 0.06 * down + Math.cos(across * Math.PI) * 0.015,
+    );
+    mesh(torso, 'split-tabard', createSurfaceGeometry(tailSurface, 8, 8, true), materials.blue);
+    ribbon(torso, 'tabard-tail-trim', tailSurface, [side * 0.92, 0], [side * 0.92, 0.98], 0.14, 0.006, materials.gold);
+    ribbon(torso, 'tabard-tail-hem', tailSurface, [-1, 0.97], [1, 0.97], 0.065, 0.006, materials.gold);
+    const tasset = mesh(torso, 'hip-tasset', createPlateGeometry([
+      [-0.10, 0], [0.11, 0.015], [0.155, -0.33], [-0.08, -0.30],
+    ]), materials.steel, side * 0.32, -0.55, 0.095);
+    tasset.rotation.y = side * 0.62;
+    tasset.rotation.z = side * 0.16;
   }
 
-  geometry.computeVertexNormals();
+  mesh(torso, 'gorget', createLoftGeometry([
+    { y: 0.34, width: 0.28, front: 0.20, back: 0.21 },
+    { y: 0.46, width: 0.205, front: 0.16, back: 0.16 },
+    { y: 0.56, width: 0.16, front: 0.14, back: 0.14 },
+  ]), materials.steelDark);
+  mesh(torso, 'folded-blue-mantle', createLoftGeometry(mantleSections), materials.blueDark);
+  piping(torso, 'mantle-fold', [new THREE.Vector3(-0.30, 0.40, 0.15), new THREE.Vector3(0, 0.335, 0.235), new THREE.Vector3(0.29, 0.43, 0.15)], materials.blue, 0.028);
+  const clasp = mesh(torso, 'cape-clasp', new THREE.CylinderGeometry(0.087, 0.087, 0.035, 12), materials.gold, -0.30, 0.37, 0.19);
+  clasp.rotation.x = Math.PI / 2;
+  mesh(torso, 'clasp-ring', new THREE.TorusGeometry(0.064, 0.009, 4, 12), materials.gold, -0.30, 0.37, 0.218);
 
-  const capeMat = new THREE.MeshStandardMaterial({
-    map: materials.blue.map,
-    color: 0xffffff,
-    roughness: 0.92,
-    side: THREE.DoubleSide,
+  buildArm(rig.leftArm, rig.leftForearm, materials, -1, shoulderNeckBlend);
+  buildArm(rig.rightArm, rig.rightForearm, materials, 1, shoulderNeckBlend);
+  buildHand(group(rig.sockets.leftHand, 'left-hand'), materials);
+  const sword = buildSword(rig.sockets.rightHand, materials);
+  head.name = 'helmet';
+  buildHelmet(rig.sockets.head, materials);
+  const { cape, capePanels } = buildCape(rig.sockets.back, materials, options.capeNeckBlend ?? 1);
+  applyPaintedFinish(model);
+  rig.soleSamples = [rig.leftFoot, rig.rightFoot].map(foot => {
+    const sole = foot.getObjectByName('boot-sole') as THREE.Mesh;
+    const position = sole.geometry.getAttribute('position');
+    sole.updateMatrix();
+    const points = Array.from({ length: position.count }, (_, vertex) =>
+      new THREE.Vector3().fromBufferAttribute(position, vertex).applyMatrix4(sole.matrix),
+    );
+    return { foot, points };
   });
 
-  const capeMesh = new THREE.Mesh(geometry, capeMat);
-  capeMesh.position.y = -0.60;
-  group.add(capeMesh);
-
-  const edgeLeft = new THREE.Mesh(
-    new THREE.BoxGeometry(0.035, 1.58, 0.02),
-    materials.gold,
-  );
-  edgeLeft.position.set(-0.47, -0.58, -0.01);
-  edgeLeft.rotation.z = -0.10;
-
-  const edgeRight = edgeLeft.clone();
-  edgeRight.position.x = 0.47;
-  edgeRight.rotation.z = 0.10;
-  group.add(edgeLeft, edgeRight);
-
-  const hem = new THREE.Mesh(
-    new THREE.TorusGeometry(0.48, 0.018, 6, 30, Math.PI),
-    materials.gold,
-  );
-  hem.rotation.set(Math.PI / 2, 0, Math.PI);
-  hem.position.set(0, -1.53, -0.18);
-  hem.scale.set(1.12, 1, 0.72);
-  group.add(hem);
-
-  const emblemShape = new THREE.Shape();
-  emblemShape.moveTo(0, 0.26);
-  emblemShape.lineTo(0.10, 0.05);
-  emblemShape.lineTo(0.04, -0.02);
-  emblemShape.lineTo(0, -0.22);
-  emblemShape.lineTo(-0.04, -0.02);
-  emblemShape.lineTo(-0.10, 0.05);
-  emblemShape.closePath();
-
-  const emblem = new THREE.Mesh(
-    new THREE.ShapeGeometry(emblemShape),
-    materials.gold,
-  );
-  emblem.position.set(0, -0.62, 0.02);
-  emblem.rotation.y = Math.PI;
-  emblem.scale.setScalar(1.24);
-  group.add(emblem);
-
-  return group;
+  return {
+    ...rig,
+    cape, capeMotion: 0, capePanels, sword,
+  };
 }
 
-function buildSword(materials: AldenMaterials) {
-  const sword = new THREE.Group();
+function buildLeg(pivot: THREE.Group, shin: THREE.Group, foot: THREE.Group, materials: AldenMaterials) {
+  mesh(pivot, 'thigh-mail', createLoftGeometry([
+    { y: -0.54, width: 0.11, front: 0.11, back: 0.10 },
+    { y: -0.29, width: 0.145, front: 0.145, back: 0.13 },
+    { y: -0.05, width: 0.16, front: 0.14, back: 0.135 },
+  ]), materials.chain);
+  mesh(pivot, 'cuisses', createPlateGeometry([
+    [-0.115, -0.16], [0.12, -0.16], [0.105, -0.42], [0, -0.49], [-0.10, -0.42],
+  ], 0.04, 0.025), materials.steel, 0, 0, 0.105);
+  mesh(shin, 'greave', createGreaveGeometry(), materials.steel);
+  const kneeOutline: Array<[number, number]> = [[0, 0.13], [0.13, 0.055], [0.115, -0.07], [0, -0.14], [-0.115, -0.07], [-0.13, 0.055]];
+  mesh(shin, 'poleyn-gold-rim', createPlateGeometry(kneeOutline, 0.025, 0.012), materials.gold, 0, 0, 0.115);
+  const knee = mesh(shin, 'poleyn', createPlateGeometry(kneeOutline, 0.045, 0.021), materials.steel, 0, 0.007, 0.137);
+  knee.scale.set(0.88, 0.82, 1);
+  piping(shin, 'greave-ridge', [new THREE.Vector3(0, -0.12, 0.172), new THREE.Vector3(0, -0.29, 0.17), new THREE.Vector3(0, -0.49, 0.104)], materials.steel, 0.012);
+  mesh(foot, 'boot', createBootGeometry(), materials.leather, 0, -0.15);
+  mesh(foot, 'boot-sole', createBootGeometry(true), materials.visor, 0, -0.15);
+  for (const height of [0.115, 0.17]) {
+    piping(foot, 'boot-vamp-seam', [
+      new THREE.Vector3(-0.105, height - 0.15, 0.12),
+      new THREE.Vector3(0, height - 0.126, height === 0.115 ? 0.27 : 0.19),
+      new THREE.Vector3(0.105, height - 0.15, 0.12),
+    ], materials.leather, 0.011);
+  }
+}
 
-  const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.045, 0.05, 0.34, 12),
-    materials.leather,
+function buildArm(pivot: THREE.Group, forearm: THREE.Group, materials: AldenMaterials, side: number, neckBlend: number) {
+  const shoulder = group(pivot, 'pauldron');
+  shoulder.scale.x = side;
+  mesh(shoulder, 'pauldron-shell', createPauldronGeometry(neckBlend), materials.steel);
+  const surface = createPauldronSurface(neckBlend);
+  const rimSurface: Surface = (across, down) => surface(across, down).add(new THREE.Vector3(0.006, 0.004, 0));
+  ribbon(shoulder, 'pauldron-gold-rim', rimSurface, [-1, 0.96], [1, 0.96], 0.09, 0, materials.gold);
+  const lame = mesh(shoulder, 'pauldron-lame', createPauldronGeometry(), materials.steelDark, 0.013, -0.13);
+  lame.scale.set(0.84, 0.65, 0.91);
+  mesh(pivot, 'upper-arm-mail', createLoftGeometry([
+    { y: -0.46, width: 0.087, front: 0.09, back: 0.085 },
+    { y: -0.24, width: 0.116, front: 0.12, back: 0.10 },
+    { y: -0.06, width: 0.135, front: 0.125, back: 0.11 },
+  ]), materials.chain);
+  mesh(pivot, 'rerebrace', createLoftGeometry([
+    { y: -0.35, width: 0.103, front: 0.107, back: 0.095 },
+    { y: -0.18, width: 0.125, front: 0.13, back: 0.114 },
+  ]), materials.steelDark);
+  mesh(forearm, 'elbow-mail-joint', createLoftGeometry([
+    { y: -0.06, width: 0.086, front: 0.085, back: 0.085 },
+    { y: 0.065, width: 0.087, front: 0.085, back: 0.085 },
+  ], 10), materials.chain);
+  mesh(forearm, 'elbow-couter', createPlateGeometry([
+    [0, 0.08], [0.11, 0], [0.075, -0.09], [0, -0.13], [-0.08, -0.065], [-0.10, 0],
+  ], 0.03, 0.018), materials.steel, 0, 0, 0.08);
+  mesh(forearm, 'vambrace', createLoftGeometry([
+    { y: -0.385, width: 0.077, front: 0.08, back: 0.07 },
+    { y: -0.30, width: 0.085, front: 0.10, back: 0.08 },
+    { y: -0.09, width: 0.115, front: 0.14, back: 0.10 },
+    { y: -0.035, width: 0.105, front: 0.10, back: 0.095 },
+  ]), materials.steel);
+  mesh(forearm, 'gauntlet-cuff', createLoftGeometry([
+    { y: -0.415, width: 0.087, front: 0.082, back: 0.077 },
+    { y: -0.355, width: 0.105, front: 0.10, back: 0.09 },
+  ]), materials.gold);
+}
+
+function buildHand(parent: THREE.Group, materials: AldenMaterials) {
+  mesh(parent, 'closed-glove', createLoftGeometry([
+    { y: -0.078, width: 0.06, front: 0.06, back: 0.055 },
+    { y: -0.04, width: 0.075, front: 0.08, back: 0.065 },
+    { y: 0.058, width: 0.073, front: 0.077, back: 0.065 },
+    { y: 0.079, width: 0.052, front: 0.055, back: 0.05 },
+  ], 8), materials.leather);
+  for (const height of [-0.043, -0.003, 0.037]) {
+    piping(parent, 'armored-knuckles', [new THREE.Vector3(-0.065, height, 0.022), new THREE.Vector3(-0.045, height, 0.078), new THREE.Vector3(0.04, height, 0.078)], materials.steelDark, 0.015);
+  }
+  const thumb = mesh(parent, 'glove-thumb', createPlateGeometry([[-0.02, 0.05], [0.02, 0.04], [0.035, -0.03], [0, -0.052], [-0.02, -0.015]], 0.025, 0.006), materials.leather, 0.057, 0, 0.019);
+  thumb.rotation.z = -0.3;
+}
+
+function buildSword(handSocket: THREE.Group, materials: AldenMaterials) {
+  const sword = group(handSocket, 'sword-grip-pivot', 0, 0, 0.008);
+  const bladeFrame = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, -1),
+    new THREE.Vector3(-1, 0, 0),
   );
-  grip.position.y = 0;
-  sword.add(grip);
-
-  const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), materials.gold);
-  pommel.position.y = 0.22;
-  sword.add(pommel);
-
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.07, 0.09), materials.gold);
-  guard.position.y = -0.17;
-  sword.add(guard);
-
-  const ricasso = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.14, 0.05), materials.steel);
-  ricasso.position.y = -0.29;
-  sword.add(ricasso);
-
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.05, 0.045), materials.steel);
-  blade.position.y = -0.86;
-  sword.add(blade);
-
-  const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.76, 0.006), materials.steelDark);
-  fuller.position.set(0, -0.86, 0.021);
-  sword.add(fuller);
-
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 4), materials.steel);
-  tip.position.y = -1.49;
-  tip.rotation.y = Math.PI / 4;
-  sword.add(tip);
-
+  handSocket.updateWorldMatrix(true, false);
+  const wristOrientation = handSocket.getWorldQuaternion(new THREE.Quaternion());
+  sword.quaternion.copy(wristOrientation.invert()).multiply(new THREE.Quaternion().setFromRotationMatrix(bladeFrame));
+  buildHand(sword, materials);
+  mesh(sword, 'sword-grip', createLoftGeometry([
+    { y: -0.16, width: 0.043, front: 0.043, back: 0.043 },
+    { y: 0.15, width: 0.039, front: 0.039, back: 0.039 },
+  ], 8), materials.leather);
+  for (const height of [-0.125, 0.115, 0.16]) {
+    const binding = mesh(sword, 'grip-binding', new THREE.TorusGeometry(0.042, 0.007, 4, 8), materials.gold, 0, height);
+    binding.rotation.x = Math.PI / 2;
+  }
+  const pommel = mesh(sword, 'sword-pommel', new THREE.OctahedronGeometry(0.076), materials.gold, 0, 0.225);
+  pommel.scale.y = 1.25;
+  mesh(sword, 'sword-guard', createPlateGeometry([
+    [-0.255, -0.24], [-0.24, -0.16], [-0.15, -0.155], [-0.065, -0.177],
+    [0, -0.15], [0.065, -0.177], [0.15, -0.155], [0.24, -0.16], [0.255, -0.24],
+    [0.16, -0.212], [0.075, -0.222], [0, -0.24], [-0.075, -0.222], [-0.16, -0.212],
+  ], 0.065, 0.012), materials.gold, 0, 0, -0.0325);
+  mesh(sword, 'sword-blade', createSwordGeometry(), materials.steel);
+  mesh(sword, 'guard-signet', new THREE.OctahedronGeometry(0.068), materials.gold, 0, -0.19, 0.045);
   return sword;
 }
 
-function buildHeroLabel() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
+function buildHelmet(head: THREE.Group, materials: AldenMaterials) {
+  const sections = [
+    { y: -0.26, width: 0.19, front: 0.24, back: 0.19 },
+    { y: -0.13, width: 0.265, front: 0.28, back: 0.235 },
+    { y: 0.12, width: 0.275, front: 0.30, back: 0.24 },
+    { y: 0.27, width: 0.215, front: 0.19, back: 0.21 },
+    { y: 0.35, width: 0.105, front: 0.10, back: 0.12 },
+    { y: 0.365, width: 0.015, front: 0.02, back: 0.03 },
+  ];
+  mesh(head, 'helmet-shell', createLoftGeometry(sections), materials.steel);
+  const helmetSurface = (horizontal: number, vertical: number, offset: number) => {
+    const clampedY = THREE.MathUtils.clamp(vertical, sections[0].y, sections[sections.length - 1].y);
+    const upperIndex = Math.max(1, sections.findIndex(section => section.y >= clampedY));
+    const lower = sections[upperIndex - 1];
+    const upper = sections[upperIndex];
+    const fraction = (clampedY - lower.y) / (upper.y - lower.y);
+    const width = THREE.MathUtils.lerp(lower.width, upper.width, fraction);
+    const depth = THREE.MathUtils.lerp(lower.front, upper.front, fraction);
+    return new THREE.Vector3(horizontal, vertical, depth * Math.sqrt(Math.max(0, 1 - (horizontal / width) ** 2)) + offset);
+  };
+  const face = (name: string, points: Array<[number, number]>, material: THREE.Material, offset: number) => {
+    const geometry = createProjectedShapeGeometry(points, (horizontal, vertical) => helmetSurface(horizontal, vertical, 0.015 + offset));
+    return mesh(head, name, geometry, material);
+  };
+  face('black-t-visor', [[-0.235, 0.12], [0.235, 0.12], [0.20, -0.18], [0, -0.30], [-0.20, -0.18]], materials.visor, 0);
+  for (const side of [-1, 1]) {
+    face('shield-cheek', [[0.225 * side, 0.038], [0.027 * side, -0.033], [0.021 * side, -0.259], [0.188 * side, -0.173]], materials.steel, 0.016);
+    piping(head, 'visor-gold-edge', [-0.035, -0.10, -0.18, -0.25].map(height => helmetSurface(side * 0.024, height, 0.038)), materials.gold, 0.008);
+  }
+  face('angular-brow', [[-0.235, 0.145], [-0.18, 0.24], [0, 0.29], [0.18, 0.24], [0.235, 0.145], [0, 0.067]], materials.steel, 0.008);
+  piping(head, 'brow-gold-rim', [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1].map(across => helmetSurface(across * 0.237, 0.047 + Math.abs(across) * 0.078, 0.033)), materials.gold, 0.010);
+  mesh(head, 'sagittal-gold-crest', createLoftGeometry([
+    { y: 0.20, width: 0.025, front: 0.17, back: 0.22 },
+    { y: 0.32, width: 0.075, front: 0.20, back: 0.20 },
+    { y: 0.48, width: 0.037, front: 0.10, back: 0.10 },
+    { y: 0.63, width: 0.001, front: 0.01, back: 0.01 },
+  ], 4), materials.gold);
+  for (const side of [-1, 1]) {
+    const hinge = mesh(head, 'visor-hinge', new THREE.CylinderGeometry(0.034, 0.034, 0.015, 8), materials.gold, side * 0.271, 0.04, 0.04);
+    hinge.rotation.z = Math.PI / 2;
+  }
+  return head;
+}
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = 'bold 34px Arial';
-  ctx.textAlign = 'center';
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = 'rgba(10,14,12,0.9)';
-  ctx.strokeText('Alden', 256, 39);
-  ctx.fillStyle = '#f5f1e7';
-  ctx.fillText('Alden', 256, 39);
-
-  ctx.fillStyle = 'rgba(8,15,13,0.96)';
-  ctx.fillRect(90, 57, 332, 38);
-  ctx.fillStyle = '#49ce61';
-  ctx.fillRect(98, 65, 316, 22);
-  ctx.strokeStyle = '#0a0f0d';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(90, 57, 332, 38);
-
-  ctx.fillStyle = '#0d1519';
-  ctx.fillRect(42, 56, 40, 40);
-  ctx.strokeStyle = '#70818c';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(42, 56, 40, 40);
-  ctx.font = 'bold 24px Arial';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('1', 62, 84);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3, 0.82, 1);
-  sprite.renderOrder = 10;
-  return sprite;
+function buildCape(backSocket: THREE.Group, materials: AldenMaterials, neckBlend: number) {
+  const cape = group(backSocket, 'cape');
+  const surface = createCapeSurface(neckBlend);
+  mesh(cape, 'pleated-cape', createCapeGeometry(neckBlend), materials.blue);
+  for (const side of [-1, 1]) {
+    ribbon(cape, 'cape-selvedge', surface, [side * 0.965, 0], [side * 0.965, 0.985], 0.063, -0.008, materials.gold);
+    ribbon(cape, 'cape-heraldic-border', surface, [side * 0.54, 0.18], [side * 0.54, 0.77], 0.033, -0.01, materials.gold);
+    ribbon(cape, 'cape-heraldic-point', surface, [side * 0.54, 0.77], [0, 0.91], 0.026, -0.012, materials.gold);
+  }
+  ribbon(cape, 'cape-gold-hem', surface, [-1, 0.984], [1, 0.984], 0.031, -0.008, materials.gold);
+  mesh(cape, 'cape-star', createEmblemGeometry(surface, 0.63, 0.28, 0.45, -0.019), materials.gold);
+  const capePanels: AldenRig['capePanels'] = [];
+  cape.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      capePanels.push({ geometry: object.geometry, rest: new Float32Array(object.geometry.getAttribute('position').array) });
+    }
+  });
+  return { cape, capePanels };
 }

@@ -1,41 +1,44 @@
-import type { AldenRig } from './types';
+import * as THREE from 'three';
+import type { AldenRig } from './buildAlden.js';
+import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from '../../characters/animateHumanoid.js';
 
-export function animateAlden(rig: AldenRig, elapsed: number, moving: boolean) {
-  if (moving) {
-    const stride = Math.sin(elapsed * 10.5);
-    const counter = Math.sin(elapsed * 10.5 + Math.PI);
-    const bob = Math.abs(Math.sin(elapsed * 10.5)) * 0.05;
+export {
+  HUMANOID_WALK_SPEED as ALDEN_WALK_SPEED,
+  HUMANOID_FAST_WALK_SPEED as ALDEN_FAST_WALK_SPEED,
+  HUMANOID_DEFAULT_MOVE_SPEED as ALDEN_DEFAULT_MOVE_SPEED,
+  HUMANOID_GAIT_RATE as ALDEN_GAIT_RATE,
+} from '../../characters/animateHumanoid.js';
 
-    rig.leftLeg.rotation.x = stride * 0.46;
-    rig.rightLeg.rotation.x = counter * 0.46;
-    rig.leftArm.rotation.x = counter * 0.20;
-    rig.rightArm.rotation.x = stride * 0.12 - 0.08;
+export function animateAlden(rig: AldenRig, elapsed: number, moving: boolean, delta = 1 / 60, speed = HUMANOID_DEFAULT_MOVE_SPEED) {
+  animateHumanoid(rig, elapsed, moving, delta, speed);
+  const dt = Math.max(0, Math.min(delta, 0.1));
+  const target = moving ? 1 : 0;
+  const weight = THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
+  const phase = rig.gait.phase;
 
-    rig.model.position.y = bob;
-    rig.model.rotation.z = stride * 0.012;
+  rig.capeMotion += (target - rig.capeMotion) * (1 - Math.exp(-dt * 6));
+  rig.cape.rotation.x = 0.025 + rig.capeMotion * 0.04;
+  rig.cape.rotation.z = Math.sin(phase - 0.6) * 0.018 * weight + Math.sin(elapsed * 1.2) * 0.003 * (1 - weight);
 
-    rig.cape.rotation.x = 0.12 + Math.abs(stride) * 0.08;
-    rig.cape.rotation.z = stride * 0.018;
-    rig.cape.position.z = -0.31 - Math.abs(stride) * 0.02;
-
-    rig.sword.rotation.z = -0.58 + stride * 0.04;
-    rig.sword.rotation.x = 0.04 + Math.abs(stride) * 0.02;
-  } else {
-    const breathe = Math.sin(elapsed * 2.25);
-
-    rig.leftLeg.rotation.x *= 0.80;
-    rig.rightLeg.rotation.x *= 0.80;
-    rig.leftArm.rotation.x *= 0.82;
-    rig.rightArm.rotation.x += (-0.08 - rig.rightArm.rotation.x) * 0.16;
-
-    rig.model.position.y = breathe * 0.012;
-    rig.model.rotation.z *= 0.84;
-
-    rig.cape.rotation.x = 0.10 + Math.sin(elapsed * 1.6) * 0.016;
-    rig.cape.rotation.z = Math.sin(elapsed * 1.2) * 0.008;
-    rig.cape.position.z += (-0.31 - rig.cape.position.z) * 0.12;
-
-    rig.sword.rotation.z += (-0.58 - rig.sword.rotation.z) * 0.16;
-    rig.sword.rotation.x += (0.04 - rig.sword.rotation.x) * 0.16;
+  for (const { geometry, rest } of rig.capePanels) {
+    const position = geometry.getAttribute('position');
+    for (let vertex = 0; vertex < position.count; vertex += 1) {
+      const horizontal = rest[vertex * 3];
+      const vertical = rest[vertex * 3 + 1];
+      const depth = rest[vertex * 3 + 2];
+      const weight = Math.min(1, Math.max(0, -vertical / 1.86)) ** 2;
+      const flutter = Math.sin(elapsed * 7.5 + vertical * 5 + horizontal * 2.1);
+      const ripple = Math.sin(elapsed * 11.5 + vertical * 7.2 - horizontal * 4);
+      const amplitude = 0.006 + rig.capeMotion * 0.14;
+      const billow = (flutter * 0.72 + ripple * 0.28) * weight * amplitude;
+      position.setXYZ(
+        vertex,
+        horizontal + Math.sin(elapsed * 5 + vertical * 3) * weight * amplitude * 0.35,
+        vertical + weight * rig.capeMotion * 0.025 + billow * 0.12,
+        depth - weight * rig.capeMotion * 0.025 + billow,
+      );
+    }
+    position.needsUpdate = true;
+    geometry.computeVertexNormals();
   }
 }
