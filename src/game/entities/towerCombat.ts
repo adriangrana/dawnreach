@@ -24,6 +24,7 @@ const RESPAWN_AT_KEY = 'dawnreachRespawnAtSeconds';
 const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
 const RESPAWN_RELEASE_KEY = 'dawnreachRespawnReleaseInstalled';
 const DEATH_COUNT_KEY = 'dawnreachDeaths';
+const DEATH_POSITION_KEY = 'dawnreachDeathPosition';
 const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncElapsed';
 
 const towerStates = new WeakMap<THREE.Object3D, TowerCombatState>();
@@ -202,7 +203,10 @@ function synchronizeWorldRuntimeOnce(
       scheduleHeroRespawn(entity, elapsed);
     }
 
-    if (!entity.alive) entity.root.visible = false;
+    if (!entity.alive) {
+      entity.root.visible = false;
+      holdDeadHeroAtDeathPosition(entity);
+    }
   }
 
   updateHeroRespawns(registry, elapsed);
@@ -225,6 +229,7 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
     entity.root.visible = true;
     entity.root.userData[RESPAWN_AT_KEY] = undefined;
     entity.root.userData[RESPAWN_HOLD_KEY] = true;
+    entity.root.userData[DEATH_POSITION_KEY] = undefined;
     entity.root.userData.currentHp = entity.currentHp;
     installRespawnCommandRelease(entity);
 
@@ -247,6 +252,16 @@ function enforceRespawnHolds(registry: GameEntityRegistry): void {
     entity.root.position.set(spawn.x, 0.03, spawn.z);
     entity.root.visible = true;
   }
+}
+
+function holdDeadHeroAtDeathPosition(entity: GameEntity): void {
+  if (entity.kind !== 'hero' || entity.alive) return;
+  let deathPosition = entity.root.userData[DEATH_POSITION_KEY] as THREE.Vector3 | undefined;
+  if (!deathPosition) {
+    deathPosition = entity.root.position.clone();
+    entity.root.userData[DEATH_POSITION_KEY] = deathPosition;
+  }
+  entity.root.position.copy(deathPosition);
 }
 
 function installRespawnCommandRelease(entity: GameEntity): void {
@@ -275,6 +290,7 @@ function scheduleHeroRespawn(entity: GameEntity, elapsed: number): number {
   const respawnSeconds = calculateHeroRespawnSeconds(entity.level);
   entity.root.userData[RESPAWN_AT_KEY] = elapsed + respawnSeconds;
   entity.root.userData[RESPAWN_HOLD_KEY] = false;
+  entity.root.userData[DEATH_POSITION_KEY] = entity.root.position.clone();
   entity.root.userData[DEATH_COUNT_KEY] = Number(entity.root.userData[DEATH_COUNT_KEY] ?? 0) + 1;
   return respawnSeconds;
 }
