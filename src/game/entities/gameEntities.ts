@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { attachEntityOverhead } from './entityOverheads';
 
@@ -196,18 +197,42 @@ export function getGameEntity(object: THREE.Object3D | null): GameEntity | null 
   return null;
 }
 
+function findSceneRoot(root: THREE.Object3D) {
+  let current: THREE.Object3D = root;
+  while (current.parent) current = current.parent;
+  return current instanceof THREE.Scene ? current : null;
+}
+
 export class GameEntityRegistry {
   private readonly byRoot = new Map<THREE.Object3D, GameEntity>();
+  private laneCreepSystemStarted = false;
 
   register(root: THREE.Object3D, definition: GameEntityDefinition) {
     const entity = registerGameEntity(root, definition);
     this.byRoot.set(root, entity);
+
+    if (!this.laneCreepSystemStarted && entity.kind === 'hero' && (entity.team === 'blue' || entity.team === 'red')) {
+      const scene = findSceneRoot(root);
+      if (scene) {
+        this.laneCreepSystemStarted = true;
+        ensureLaneCreepSystem(scene, this);
+      }
+    }
+
     return entity;
   }
 
   registerExisting(entity: GameEntity) {
     this.byRoot.set(entity.root, entity);
     return entity;
+  }
+
+  unregister(root: THREE.Object3D) {
+    const entity = this.byRoot.get(root);
+    if (!entity) return false;
+    this.byRoot.delete(root);
+    delete root.userData[ENTITY_KEY];
+    return true;
   }
 
   values() {
