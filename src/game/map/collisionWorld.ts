@@ -1,0 +1,384 @@
+import * as THREE from 'three';
+import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT } from './mapLayout';
+import { distanceToMapPath, sampleMapPath } from './buildMapVegetation';
+
+export type CollisionPoint = { x: number; z: number };
+
+type CircleCollider = {
+  x: number;
+  z: number;
+  radius: number;
+  kind: 'tree' | 'rock' | 'structure';
+};
+
+type SegmentCollider = {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  radius: number;
+  kind: 'wall' | 'elevation';
+};
+
+export type CollisionWorld = {
+  move(from: CollisionPoint, to: CollisionPoint, radius: number): CollisionPoint;
+  isBlocked(point: CollisionPoint, radius: number): boolean;
+  readonly counts: Readonly<Record<'trees' | 'rocks' | 'structures' | 'walls' | 'elevations', number>>;
+};
+
+const TREE_RADIUS = 0.31;
+const WALL_RADIUS = 0.48;
+const ELEVATION_RADIUS = 0.62;
+const MAX_SUBSTEP = 0.22;
+const SOLVER_PASSES = 4;
+
+export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
+  battlefield.updateMatrixWorld(true);
+
+  const circles: CircleCollider[] = [];
+  const segments: SegmentCollider[] = [];
+  const counts = { trees: 0, rocks: 0, structures: 0, walls: 0, elevations: 0 };
+
+  collectTreeColliders(battlefield, circles, counts);
+  collectRockColliders(battlefield, circles, counts);
+  collectStructureColliders(battlefield, circles, counts);
+  addRetainingWallColliders(segments, counts);
+  addBaseWallColliders(segments, counts);
+  addObjectiveWallColliders(segments, counts);
+
+  const resolvePoint = (point: CollisionPoint, previous: CollisionPoint, radius: number) => {
+    const resolved = {
+      x: THREE.MathUtils.clamp(point.x, MAP_BOUNDS.minX + radius, MAP_BOUNDS.maxX - radius),
+      z: THREE.MathUtils.clamp(point.z, MAP_BOUNDS.minZ + radius, MAP_BOUNDS.maxZ - radius),
+    };
+
+    for (let pass = 0; pass < SOLVER_PASSES; pass++) {
+      let changed = false;
+
+      for (const circle of circles) {
+        const required = radius + circle.radius;
+        const dx = resolved.x - circle.x;
+        const dz = resolved.z - circle.z;
+        const squared = dx * dx + dz * dz;
+        if (squared >= required * required) continue;
+
+        let distance = Math.sqrt(squared);
+        let nx: number;
+        let nz: number;
+        if (distance > 1e-6) {
+          nx = dx / distance;
+          nz = dz / distance;
+        } else {
+          const fallbackX = previous.x - circle.x;
+          const fallbackZ = previous.z - circle.z;
+          const fallbackLength = Math.hypot(fallbackX, fallbackZ) || 1;
+          nx = fallbackX / fallbackLength;
+          nz = fallbackZ / fallbackLength;
+          distance = 0;
+        }
+
+        const push = required - distance + 0.002;
+        resolved.x += nx * push;
+        resolved.z += nz * push;
+        changed = true;
+      }
+
+      for (const segment of segments) {
+        const vx = segment.bx - segment.ax;
+        const vz = segment.bz - segment.az;
+        const lengthSquared = vx * vx + vz * vz;
+        if (lengthSquared <= 1e-8) continue;
+
+        const t = THREE.MathUtils.clamp(
+          ((resolved.x - segment.ax) * vx + (resolved.z - segment.az) * vz) / lengthSquared,
+          0,
+          1,
+        );
+        const closestX = segment.ax + vx * t;
+        const closestZ = segment.az + vz * t;
+        const dx = resolved.x - closestX;
+        const dz = resolved.z - closestZ;
+        const required = radius + segment.radius;
+        const squared = dx * dx + dz * dz;
+        if (squared >= required * required) continue;
+
+        let distance = Math.sqrt(squared);
+        let nx: number;
+        let nz: number;
+        if (distance > 1e-6) {
+          nx = dx / distance;
+          nz = dz / distance;
+        } else {
+          const length = Math.sqrt(lengthSquared);
+          const side = Math.sign(vx * (previous.z - segment.az) - vz * (previous.x - segment.ax)) || 1;
+          nx = (-vz / length) * side;
+          nz = (vx / length) * side;
+          distance = 0;
+        }
+
+        const push = required - distance + 0.002;
+        resolved.x += nx * push;
+        resolved.z += nz * push;
+        changed = true;
+      }
+
+      resolved.x = THREE.MathUtils.clamp(resolved.x, MAP_BOUNDS.minX + radius, MAP_BOUNDS.maxX - radius);
+      resolved.z = THREE.MathUtils.clamp(resolved.z, MAP_BOUNDS.minZ + radius, MAP_BOUNDS.maxZ - radius);
+      if (!changed) break;
+    }
+
+    return resolved;
+  };
+
+  const isBlocked = (point: CollisionPoint, radius: number) => {
+    if (point.x - radius < MAP_BOUNDS.minX || point.x + radius > MAP_BOUNDS.maxX
+      || point.z - radius < MAP_BOUNDS.minZ || point.z + radius > MAP_BOUNDS.maxZ) return true;
+
+    for (const circle of circles) {
+      const required = radius + circle.radius;
+      if ((point.x - circle.x) ** 2 + (point.z - circle.z) ** 2 < required ** 2) return true;
+    }
+
+    for (const segment of segments) {
+      if (distanceToSegment(point.x, point.z, segment) < radius + segment.radius) return true;
+    }
+    return false;
+  };
+
+  return {
+    counts,
+    isBlocked,
+    move(from, to, radius) {
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= 1e-8) return resolvePoint(to, from, radius);
+
+      const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
+      const stepX = dx / steps;
+      const stepZ = dz / steps;
+      let current = { x: from.x, z: from.z };
+
+      for (let step = 0; step < steps; step++) {
+        const candidate = { x: current.x + stepX, z: current.z + stepZ };
+        current = resolvePoint(candidate, current, radius);
+      }
+      return current;
+    },
+  };
+}
+
+function collectTreeColliders(
+  battlefield: THREE.Object3D,
+  colliders: CircleCollider[],
+  counts: { trees: number },
+) {
+  const instanceMatrix = new THREE.Matrix4();
+  const worldMatrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+
+  battlefield.traverse((object) => {
+    if (!(object instanceof THREE.InstancedMesh) || !object.name.startsWith('pine-trunks:')) return;
+    for (let index = 0; index < object.count; index++) {
+      object.getMatrixAt(index, instanceMatrix);
+      worldMatrix.multiplyMatrices(object.matrixWorld, instanceMatrix);
+      worldMatrix.decompose(position, quaternion, scale);
+      colliders.push({
+        x: position.x,
+        z: position.z,
+        radius: TREE_RADIUS * Math.max(Math.abs(scale.x), Math.abs(scale.z)),
+        kind: 'tree',
+      });
+      counts.trees++;
+    }
+  });
+}
+
+function collectRockColliders(
+  battlefield: THREE.Object3D,
+  colliders: CircleCollider[],
+  counts: { rocks: number },
+) {
+  const center = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const position = new THREE.Vector3();
+
+  battlefield.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return;
+    if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return;
+
+    // Shrubs are built from clusters of several dodecahedrons. They are visual dressing,
+    // not hard collision. Standalone dodecahedrons with enough mass are authored rocks.
+    const dodecahedronSiblings = object.parent?.children.filter(child =>
+      child instanceof THREE.Mesh && child.geometry instanceof THREE.DodecahedronGeometry).length ?? 0;
+    if (dodecahedronSiblings >= 3) return;
+
+    const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
+    if (authoredRadius < 0.34) return;
+
+    object.matrixWorld.decompose(position, quaternion, scale);
+    const box = new THREE.Box3().setFromObject(object);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y < 0.28 || Math.max(size.x, size.z) < 0.42) return;
+    box.getCenter(center);
+
+    colliders.push({
+      x: center.x,
+      z: center.z,
+      radius: Math.max(0.24, Math.min(size.x, size.z) * 0.42),
+      kind: 'rock',
+    });
+    counts.rocks++;
+  });
+}
+
+function collectStructureColliders(
+  battlefield: THREE.Object3D,
+  colliders: CircleCollider[],
+  counts: { structures: number },
+) {
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  battlefield.traverse((object) => {
+    if (!(object instanceof THREE.Group)) return;
+    const name = object.name.toLowerCase();
+    if (!(name.endsWith('-tower') || name.endsWith('-defense-tower'))) return;
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
+    box.getCenter(center);
+    box.getSize(size);
+    colliders.push({
+      x: center.x,
+      z: center.z,
+      radius: THREE.MathUtils.clamp(Math.min(size.x, size.z) * 0.34, 0.65, 1.45),
+      kind: 'structure',
+    });
+    counts.structures++;
+  });
+}
+
+function addRetainingWallColliders(
+  colliders: SegmentCollider[],
+  counts: { elevations: number },
+) {
+  const lanes = Object.values(DAWNREACH_LAYOUT.lanes).map(sampleMapPath);
+  const river = sampleMapPath(DAWNREACH_LAYOUT.river);
+  const trails = DAWNREACH_LAYOUT.junglePaths.map(sampleMapPath);
+  const bases = [DAWNREACH_LAYOUT.blueBase, DAWNREACH_LAYOUT.redBase];
+
+  const isOpening = (x: number, z: number) => distanceToMapPath(x, z, river) < 5.2
+    || bases.some(base => Math.hypot(x - base.x, z - base.z) < BASE_LAYOUT.radius + 1)
+    || lanes.some(lane => distanceToMapPath(x, z, lane) < 3.1)
+    || trails.some(trail => distanceToMapPath(x, z, trail) < 1.7);
+
+  for (const path of DAWNREACH_LAYOUT.retainingWalls) {
+    for (let pointIndex = 0; pointIndex < path.length - 1; pointIndex++) {
+      const [ax, az] = path[pointIndex];
+      const [bx, bz] = path[pointIndex + 1];
+      const length = Math.hypot(bx - ax, bz - az);
+      const pieces = Math.max(1, Math.ceil(length / 1.1));
+      for (let piece = 0; piece < pieces; piece++) {
+        const start = piece / pieces;
+        const end = (piece + 1) / pieces;
+        const x1 = THREE.MathUtils.lerp(ax, bx, start);
+        const z1 = THREE.MathUtils.lerp(az, bz, start);
+        const x2 = THREE.MathUtils.lerp(ax, bx, end);
+        const z2 = THREE.MathUtils.lerp(az, bz, end);
+        const midX = (x1 + x2) / 2;
+        const midZ = (z1 + z2) / 2;
+        if (isOpening(midX, midZ)) continue;
+        colliders.push({ ax: x1, az: z1, bx: x2, bz: z2, radius: ELEVATION_RADIUS, kind: 'elevation' });
+        counts.elevations++;
+      }
+    }
+  }
+}
+
+function addBaseWallColliders(
+  colliders: SegmentCollider[],
+  counts: { walls: number; elevations: number },
+) {
+  const segmentCount = 112;
+  const gateHalfAngle = BASE_LAYOUT.rampWidth / (BASE_LAYOUT.radius * 2) + 0.055;
+
+  for (const [team, center] of [
+    ['blue', DAWNREACH_LAYOUT.blueBase],
+    ['red', DAWNREACH_LAYOUT.redBase],
+  ] as const) {
+    const rotation = team === 'blue' ? 0 : Math.PI;
+    const gates = BASE_LAYOUT.gates.map(angle => normalizeAngle(angle + rotation));
+
+    for (let index = 0; index < segmentCount; index++) {
+      const a = index / segmentCount * Math.PI * 2;
+      const b = (index + 1) / segmentCount * Math.PI * 2;
+      const middle = normalizeAngle((a + b) / 2);
+      if (gates.some(gate => angularDistance(middle, gate) < gateHalfAngle)) continue;
+
+      colliders.push({
+        ax: center.x + Math.cos(a) * BASE_LAYOUT.radius,
+        az: center.z + Math.sin(a) * BASE_LAYOUT.radius,
+        bx: center.x + Math.cos(b) * BASE_LAYOUT.radius,
+        bz: center.z + Math.sin(b) * BASE_LAYOUT.radius,
+        radius: WALL_RADIUS,
+        kind: 'wall',
+      });
+      counts.walls++;
+      counts.elevations++;
+    }
+  }
+}
+
+function addObjectiveWallColliders(
+  colliders: SegmentCollider[],
+  counts: { walls: number },
+) {
+  const river = sampleMapPath(DAWNREACH_LAYOUT.river);
+  const segmentCount = 72;
+
+  for (const pit of DAWNREACH_LAYOUT.objectivePits) {
+    let closest = river[0];
+    for (const point of river) {
+      if (Math.hypot(point.x - pit.x, point.z - pit.z) < Math.hypot(closest.x - pit.x, closest.z - pit.z)) closest = point;
+    }
+    const entranceAngle = Math.atan2(closest.z - pit.z, closest.x - pit.x);
+
+    for (let index = 0; index < segmentCount; index++) {
+      const a = index / segmentCount * Math.PI * 2;
+      const b = (index + 1) / segmentCount * Math.PI * 2;
+      const middle = (a + b) / 2;
+      if (angularDistance(middle, entranceAngle) < OBJECTIVE_LAYOUT.gateHalfAngle) continue;
+      colliders.push({
+        ax: pit.x + Math.cos(a) * OBJECTIVE_LAYOUT.wallRadius,
+        az: pit.z + Math.sin(a) * OBJECTIVE_LAYOUT.wallRadius,
+        bx: pit.x + Math.cos(b) * OBJECTIVE_LAYOUT.wallRadius,
+        bz: pit.z + Math.sin(b) * OBJECTIVE_LAYOUT.wallRadius,
+        radius: WALL_RADIUS,
+        kind: 'wall',
+      });
+      counts.walls++;
+    }
+  }
+}
+
+function distanceToSegment(x: number, z: number, segment: SegmentCollider) {
+  const vx = segment.bx - segment.ax;
+  const vz = segment.bz - segment.az;
+  const lengthSquared = vx * vx + vz * vz;
+  if (lengthSquared <= 1e-8) return Math.hypot(x - segment.ax, z - segment.az);
+  const t = THREE.MathUtils.clamp(((x - segment.ax) * vx + (z - segment.az) * vz) / lengthSquared, 0, 1);
+  return Math.hypot(x - (segment.ax + vx * t), z - (segment.az + vz * t));
+}
+
+function normalizeAngle(angle: number) {
+  let normalized = angle % (Math.PI * 2);
+  if (normalized < -Math.PI) normalized += Math.PI * 2;
+  if (normalized > Math.PI) normalized -= Math.PI * 2;
+  return normalized;
+}
+
+function angularDistance(a: number, b: number) {
+  return Math.abs(normalizeAngle(a - b));
+}
