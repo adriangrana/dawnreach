@@ -133,8 +133,10 @@ export async function createDawnreachGame(
   });
   battlefield.updateMatrixWorld(true);
 
-  const animateCamps = battlefield.getObjectByName('jungle-camps')?.userData.animate as
-    ((elapsed: number) => void) | undefined;
+  const mapAnimations: Array<(elapsed: number) => void> = [];
+  battlefield.traverse(object => {
+    if (typeof object.userData.animate === 'function') mapAnimations.push(object.userData.animate);
+  });
   const collisionWorld = createMapCollisionWorld(battlefield);
   battlefield.userData.collisionCounts = collisionWorld.counts;
   const navigation = createDawnreachNavigationWorld(battlefield, collisionWorld, HERO_COLLISION_RADIUS);
@@ -769,7 +771,7 @@ export async function createDawnreachGame(
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
     waterEffects.update(elapsed, [hero.root]);
-    animateCamps?.(elapsed);
+    for (const animateMapObject of mapAnimations) animateMapObject(elapsed);
     heroOverlay.update(getHeroState?.() ?? null);
     renderer.render(scene, camera);
     if (elapsed - lastMinimapRender >= 0.16) {

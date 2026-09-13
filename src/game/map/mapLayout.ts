@@ -49,7 +49,7 @@ const layout = {
     [[12, -24], [9, -17], [7, -10], [3, -5]],
   ] satisfies MapPoint[][],
   // Neutral camps live in grassy jungle clearings, away from river water and visible travel routes.
-  camps: [[-33.6, -10], [-8, -19], [-15, 28], [-4, 13], [33.6, 10], [8, 19], [15, -28], [4, -13]] satisfies MapPoint[],
+  camps: [[-32, -12.8], [-8, -19], [-15, 28], [-4, 13], [32, 12.8], [8, 19], [15, -28], [4, -13]] satisfies MapPoint[],
   retainingWalls: [
     [[-34, 5], [-33, -2], [-30, -10]],
     [[-23, -18], [-19, -15], [-18, -10]],

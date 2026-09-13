@@ -128,7 +128,7 @@ export function buildJungleCamps(textures: DawnreachTextures) {
     // Local +Z is the open entrance. Reserve four clear monster positions around the hearth.
     camp.userData.clearingRadius = CAMP_LAYOUT.radius;
     camp.userData.authoredEntrance = true;
-    camp.userData.spawnPoints = [[-1.5, 0, -1], [1.5, 0, -1], [-1.4, 0, 1.25], [1.4, 0, 1.25]];
+    camp.userData.spawnPoints = [[-1.1, 0, -1.05], [1.1, 0, -1.05], [-1.1, 0, 1.15], [1.1, 0, 1.15]];
     const floor = new THREE.Mesh(groundPatch(CAMP_LAYOUT.radius + 0.4, CAMP_LAYOUT.radius + 0.4, index), dirt);
     floor.name = 'camp-clearing';
     floor.position.y = 0.027;
@@ -145,7 +145,7 @@ export function buildJungleCamps(textures: DawnreachTextures) {
 
     // Broken clusters at the back and sides leave the entrance and interior open.
     for (let cluster = 0; cluster < 5; cluster++) {
-      const angle = 0.95 + cluster * (Math.PI * 2 - 1.9) / 4;
+      const angle = [1.02, 1.92, 3.18, 4.22, 5.16][cluster];
       const radius = 2.9 + mapRandom(index, cluster) * 0.18;
       for (let part = 0; part < 2; part++) {
         const rock = weatheredRock(index * 29 + cluster * 3 + part, rockMaterial);
@@ -153,7 +153,8 @@ export function buildJungleCamps(textures: DawnreachTextures) {
         const size = part === 0 ? 0.48 + mapRandom(index, cluster, 4) * 0.23 : 0.22;
         rock.scale.set(size * 1.22, size * (cluster === 2 ? 1.5 : 0.95), size);
         rock.rotation.y = angle + mapRandom(index, part, cluster) * 2;
-        rock.position.set(Math.sin(angle) * radius + part * 0.38, size * 0.4, Math.cos(angle) * radius + part * 0.15);
+        rock.position.set(Math.sin(angle) * radius + Math.cos(angle) * part * 0.63,
+          size * 0.4, Math.cos(angle) * radius - Math.sin(angle) * part * 0.63);
         camp.add(rock);
       }
     }

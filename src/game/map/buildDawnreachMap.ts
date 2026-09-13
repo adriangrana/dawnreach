@@ -750,6 +750,9 @@ function addRuins(world: THREE.Group, materials: MapMaterials) {
   ];
 
   sites.forEach(([x, z, rotation], index) => {
+    // Old ruin decorations must not occupy the expanded camp interiors.
+    if (DAWNREACH_LAYOUT.camps.some(([campX, campZ]) =>
+      Math.hypot(x - campX, z - campZ) < CAMP_LAYOUT.clearingRadius + 1.5)) return;
     const ruin = new THREE.Group();
     ruin.position.set(x, 0, z);
     ruin.rotation.y = rotation;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildThrone } from './buildThrone';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BASE_LAYOUT, OBJECTIVE_LAYOUT } from './mapLayout';
 
@@ -249,36 +250,13 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
     }
   }
 
-  build.cylinder(stone.stoneDark, 3.22, 3.5, 0.18, 0, 0.09, 0, 48);
-  build.cylinder(stone.stoneLight, 2.92, 3.15, 0.18, 0, 0.27, 0, 48);
-  build.cylinder(faction.metal, 2.25, 2.62, 0.45, 0, 0.56, 0, 32);
-  build.ring(faction.trim, 2.28, 2.4, 0.80);
-  build.cylinder(stone.stoneDark, 1.25, 1.75, 0.57, 0, 1.0, 0, 16);
-  build.ring(faction.light, 1.38, 1.52, 1.2);
-  const crystal = new THREE.OctahedronGeometry(1, 0);
-  crystal.scale(0.88, 2.35, 0.88);
-  build.add(crystal, faction.crystal, new THREE.Vector3(0, 3.05, 0), new THREE.Euler(0, 0.3, 0.10));
-  for (let shardIndex = 0; shardIndex < 5; shardIndex++) {
-    const angle = shardIndex * Math.PI * 2 / 5;
-    const x = Math.cos(angle) * 1.14;
-    const z = Math.sin(angle) * 1.14;
-    const shard = new THREE.OctahedronGeometry(0.38, 0);
-    shard.scale(0.65, 2.7, 0.7);
-    build.add(shard, faction.crystal, new THREE.Vector3(x, 1.9, z), new THREE.Euler(Math.sin(angle) * 0.2, angle, Math.cos(angle) * 0.2));
-  }
-  for (let support = 0; support < 8; support++) {
-    const angle = support * Math.PI / 4;
-    const points = [new THREE.Vector3(Math.cos(angle) * 2.65, 0.2, Math.sin(angle) * 2.65),
-      new THREE.Vector3(Math.cos(angle) * 1.95, 0.95, Math.sin(angle) * 1.95),
-      new THREE.Vector3(Math.cos(angle) * 1.6, 1.65, Math.sin(angle) * 1.6)];
-    build.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 12, 0.14, 6, false), faction.trim);
-  }
   const fountainX = team === 'blue' ? -4.7 : 4.7;
   const fountainZ = -fountainX;
   build.cylinder(stone.stoneLight, 2.02, 2.22, 0.11, fountainX, 0.09, fountainZ, 48);
   build.cylinder(faction.metal, 1.8, 1.9, 0.1, fountainX, 0.17, fountainZ, 48);
   for (const ring of [0.65, 1.25, 1.65]) build.ring(faction.light, ring - 0.04, ring + 0.04, 0.23, 0, Math.PI * 2, fountainX, fountainZ);
   const group = build.finish(`${team}-base`);
+  group.add(buildThrone(team, stone.stone.map));
   group.userData.gates = gates;
   group.userData.plazaRadius = radius;
   group.userData.towerSites = [];
