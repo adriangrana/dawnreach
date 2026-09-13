@@ -26,6 +26,13 @@ if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
 }
 
+// The Three.js game is created once from App.useEffect(). React Fast Refresh preserves
+// that mounted effect, so editing constants in this module used to leave the old game
+// instance alive. Force a page reload whenever this module changes during development.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => window.location.reload());
+}
+
 export async function createDawnreachGame(
   host: HTMLDivElement,
   minimapHost?: HTMLDivElement | null,
