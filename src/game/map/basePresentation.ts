@@ -56,19 +56,52 @@ function buildBaseElevation(
   const group = new THREE.Group();
   group.name = `${team}-base-elevation`;
 
-  const platform = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      BASE_LAYOUT.radius - 0.18,
-      BASE_LAYOUT.radius + 0.55,
-      BASE_LAYOUT.elevation,
-      128,
-    ),
-    materials.stoneDark,
-  );
-  platform.position.y = BASE_LAYOUT.elevation / 2;
-  platform.castShadow = true;
-  platform.receiveShadow = true;
-  group.add(platform);
+  const rotation = team === 'blue' ? 0 : Math.PI;
+  const gateAngles = BASE_LAYOUT.gates.map(angle => angle + rotation);
+  const gateHalfAngle = BASE_LAYOUT.rampWidth / (BASE_LAYOUT.radius * 2) + 0.11;
+
+  // Build the elevated retaining edge as individual sections and leave genuine openings
+  // at every gate. A solid cylinder here intersected the ramps and visually swallowed the
+  // hero's lower body while he crossed the base threshold.
+  const wallRadius = BASE_LAYOUT.radius - 0.02;
+  const wallThickness = 0.66;
+  const wallSegments = 144;
+  const segmentAngle = Math.PI * 2 / wallSegments;
+  const segmentWidth = 2 * wallRadius * Math.sin(segmentAngle / 2) * 1.08;
+
+  for (let index = 0; index < wallSegments; index++) {
+    const angle = (index + 0.5) * segmentAngle;
+    const blockedByGate = gateAngles.some(gate => angularDistance(angle, gate) < gateHalfAngle);
+    if (blockedByGate) continue;
+
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(segmentWidth, BASE_LAYOUT.elevation, wallThickness),
+      materials.stoneDark,
+    );
+    wall.position.set(
+      Math.cos(angle) * wallRadius,
+      BASE_LAYOUT.elevation / 2,
+      Math.sin(angle) * wallRadius,
+    );
+    wall.rotation.y = Math.PI / 2 - angle;
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    group.add(wall);
+
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(segmentWidth, 0.14, wallThickness + 0.14),
+      materials.stoneLight,
+    );
+    cap.position.set(
+      Math.cos(angle) * wallRadius,
+      BASE_LAYOUT.elevation + 0.07,
+      Math.sin(angle) * wallRadius,
+    );
+    cap.rotation.y = Math.PI / 2 - angle;
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    group.add(cap);
+  }
 
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(BASE_LAYOUT.radius - 0.42, 128),
@@ -81,24 +114,13 @@ function buildBaseElevation(
   plaza.receiveShadow = true;
   group.add(plaza);
 
-  const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(BASE_LAYOUT.radius - 0.65, 0.11, 8, 128),
-    materials.stoneLight,
-  );
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = BASE_LAYOUT.elevation + 0.085;
-  rim.castShadow = true;
-  group.add(rim);
-
-  const rotation = team === 'blue' ? 0 : Math.PI;
   const edgeMaterial = new THREE.MeshStandardMaterial({
     color: team === 'blue' ? 0x7398b2 : 0x9e706b,
     roughness: 0.78,
     metalness: 0.08,
   });
 
-  for (const authoredGate of BASE_LAYOUT.gates) {
-    const angle = authoredGate + rotation;
+  for (const angle of gateAngles) {
     const ramp = new THREE.Mesh(createRampGeometry(angle), materials.stoneWarm);
     ramp.name = `${team}-base-ramp`;
     ramp.userData.commandSurface = true;
@@ -113,6 +135,10 @@ function buildBaseElevation(
   }
 
   return group;
+}
+
+function angularDistance(a: number, b: number) {
+  return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
 
 function createRampGeometry(angle: number) {
@@ -147,22 +173,12 @@ function createRampGeometry(angle: number) {
     ...outerLeftBottom, ...outerRightBottom, ...innerLeftBottom, ...innerRightBottom,
   ];
 
-  // The previous top triangles were wound downward. With FrontSide materials that made
-  // the actual sloped surface invisible to both rendering and raycasting, so the hero
-  // sampled the flat terrain underneath. These faces are now wound upward and the ramp
-  // is a real wedge from ground level to BASE_LAYOUT.elevation.
   const indices = [
-    // top (+Y)
     0, 1, 2, 1, 3, 2,
-    // bottom (-Y)
     4, 6, 5, 5, 6, 7,
-    // left side
     0, 2, 4, 4, 2, 6,
-    // right side
     1, 5, 3, 5, 7, 3,
-    // inner/high end
     2, 3, 6, 3, 7, 6,
-    // outer/ground end
     0, 4, 1, 1, 4, 5,
   ];
 
@@ -211,9 +227,6 @@ function replaceLegacyThroneCrystal(
   team: 'blue' | 'red',
   materials: BasePresentationMaterials,
 ) {
-  // The old core crystal and its five satellite diamonds were merged into the single
-  // MeshPhysicalMaterial child. Remove only that legacy crystal mesh; keep the authored
-  // plaza, metallic supports and surrounding defensive architecture.
   for (const child of [...citadel.children]) {
     if (!(child instanceof THREE.Mesh)) continue;
     const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
@@ -304,9 +317,6 @@ function replaceLegacyThroneCrystal(
   baseGem.castShadow = true;
   throne.add(baseGem);
 
-  // Keep the main prism physically separated from the socket so it reads as a suspended
-  // power crystal. The animation is absolute-time based, so main-view and minimap renders
-  // cannot make it spin faster by invoking the render hook more than once per frame.
   const floatingPrism = new THREE.Group();
   floatingPrism.name = `${team}-throne-prism`;
   const prismBaseY = 5.05;
