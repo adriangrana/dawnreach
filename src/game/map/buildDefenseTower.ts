@@ -26,34 +26,53 @@ function towerMaterials(team: 'blue' | 'red', stone: TowerStoneMaterials): Tower
   if (cached) return cached;
 
   const blue = team === 'blue';
+  const darkTexture = stone.stoneDark.map ?? stone.stone.map;
+  const darkBump = stone.stoneDark.bumpMap ?? darkTexture;
+  const bodyTexture = stone.stone.map ?? stone.stoneLight.map;
+  const bodyBump = stone.stone.bumpMap ?? bodyTexture;
+
   const materials: TowerMaterials = {
+    // Keep the tower dark, but never near-black. The texture now carries the visual breakup
+    // instead of being multiplied by an almost black tint.
     foundation: new THREE.MeshStandardMaterial({
-      map: stone.stoneDark.map,
-      color: blue ? 0x252f38 : 0x33292d,
-      roughness: 0.88,
+      map: darkTexture,
+      bumpMap: darkBump,
+      bumpScale: 0.11,
+      color: blue ? 0x69777f : 0x796b6d,
+      emissive: blue ? 0x071116 : 0x16090a,
+      emissiveIntensity: 0.10,
+      roughness: 0.84,
       metalness: 0.08,
     }),
     stone: new THREE.MeshStandardMaterial({
-      map: stone.stone.map,
-      color: blue ? 0x45535d : 0x554347,
-      roughness: 0.72,
-      metalness: 0.12,
+      map: bodyTexture,
+      bumpMap: bodyBump,
+      bumpScale: 0.13,
+      color: blue ? 0x9aa4a6 : 0xa29493,
+      emissive: blue ? 0x081114 : 0x130909,
+      emissiveIntensity: 0.06,
+      roughness: 0.76,
+      metalness: 0.10,
     }),
     armor: new THREE.MeshStandardMaterial({
-      map: stone.stoneDark.map,
-      color: blue ? 0x172934 : 0x341d24,
-      roughness: 0.38,
-      metalness: 0.48,
+      map: darkTexture,
+      bumpMap: darkBump,
+      bumpScale: 0.075,
+      color: blue ? 0x4b5f6a : 0x684b51,
+      emissive: blue ? 0x06131a : 0x1a0709,
+      emissiveIntensity: 0.14,
+      roughness: 0.43,
+      metalness: 0.42,
     }),
     armorEdge: new THREE.MeshStandardMaterial({
-      color: blue ? 0x667985 : 0x75565d,
-      roughness: 0.31,
-      metalness: 0.68,
+      color: blue ? 0x93a8b1 : 0xa58488,
+      roughness: 0.28,
+      metalness: 0.70,
     }),
     trim: new THREE.MeshStandardMaterial({
-      color: blue ? 0x8da0aa : 0x8b6e72,
-      roughness: 0.29,
-      metalness: 0.76,
+      color: blue ? 0xb8c5c8 : 0xc0a4a4,
+      roughness: 0.25,
+      metalness: 0.78,
     }),
     energy: new THREE.MeshBasicMaterial({
       color: blue ? 0x5fe6ff : 0xff5d54,
@@ -338,6 +357,10 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   const light = new THREE.PointLight(team === 'blue' ? 0x58dfff : 0xff5147, 4.4, 4.5, 2);
   light.position.set(0, 2.75, 0);
   tower.add(light);
+
+  // The final authored proportion belongs to the asset itself. Call sites must never scale
+  // towers differently by location; this keeps lane/base towers identical in footprint and height.
+  tower.scale.set(0.88, 1.72, 0.88);
 
   tower.userData.animate = (elapsed: number) => {
     weapon.rotation.y = elapsed * (team === 'blue' ? 0.34 : -0.34);
