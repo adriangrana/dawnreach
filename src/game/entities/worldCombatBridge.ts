@@ -51,6 +51,10 @@ export function getWorldEntityRuntime(entityId: string): WorldEntityRuntimeSnaps
   return runtimeSnapshots.get(entityId);
 }
 
+export function removeWorldEntityRuntime(entityId: string): void {
+  runtimeSnapshots.delete(entityId);
+}
+
 export function subscribeWorldCombatEvents(listener: WorldCombatListener): () => void {
   combatListeners.add(listener);
   return () => combatListeners.delete(listener);
