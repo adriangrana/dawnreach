@@ -31,6 +31,7 @@ type CommandMarkerKind = 'move' | 'attack';
 const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(0, 34, 16.3);
+const CAMERA_PAN_SPEED = 8.5;
 const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;
@@ -188,6 +189,8 @@ export async function createDawnreachGame(
   let elapsed = 0;
   let animationFrame = 0;
   let lastMinimapRender = -Infinity;
+  let cameraFocus: Point3 | null = null;
+  const cameraAnchor = hero.root.position.clone();
 
   const clampMapPoint = (point: THREE.Vector3): Point3 => ({
     x: THREE.MathUtils.clamp(point.x, MAP_BOUNDS.minX + MAP_EDGE_PADDING, MAP_BOUNDS.maxX - MAP_EDGE_PADDING),
@@ -310,7 +313,12 @@ export async function createDawnreachGame(
       return;
     }
 
-    if (!attackArmed) return;
+    if (!attackArmed) {
+      const ground = pickGround();
+      if (ground) cameraFocus = { x: ground.x, z: ground.z };
+      return;
+    }
+
     const target = pickAttackable();
     if (target) {
       issueTargetAttack(target);
@@ -329,6 +337,12 @@ export async function createDawnreachGame(
       event.preventDefault();
       attackArmed = true;
       setCommandCursor(true);
+      return;
+    }
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      cameraFocus = null;
       return;
     }
 
@@ -396,8 +410,18 @@ export async function createDawnreachGame(
 
   const clock = new THREE.Clock();
 
-  const updateCamera = () => {
-    const target = hero.root.position;
+  const updateCamera = (dt = 1 / 60) => {
+    if (cameraFocus) {
+      const targetY = sampleSurfaceHeight(cameraFocus.x, cameraFocus.z, 0) + HERO_GROUND_OFFSET;
+      const blend = 1 - Math.exp(-CAMERA_PAN_SPEED * dt);
+      cameraAnchor.x = THREE.MathUtils.lerp(cameraAnchor.x, cameraFocus.x, blend);
+      cameraAnchor.y = THREE.MathUtils.lerp(cameraAnchor.y, targetY, blend);
+      cameraAnchor.z = THREE.MathUtils.lerp(cameraAnchor.z, cameraFocus.z, blend);
+    } else {
+      cameraAnchor.copy(hero.root.position);
+    }
+
+    const target = cameraAnchor;
     sunlight.position.set(target.x - 16, target.y + 32, target.z + 14);
     sunlight.target.position.set(target.x, target.y, target.z);
     sunlight.target.updateMatrixWorld(true);
@@ -566,7 +590,7 @@ export async function createDawnreachGame(
       if (glowMaterial) glowMaterial.opacity = 0.16 + (Math.sin(elapsed * 5) + 1) * 0.055;
     }
 
-    updateCamera();
+    updateCamera(dt);
     textures.water.offset.set(Math.sin(elapsed * 0.12) * 0.025, -elapsed * 0.055);
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
