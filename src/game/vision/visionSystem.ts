@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GameEntity, GameEntityRegistry, TeamId } from '../entities/gameEntities';
-import { MAP_BOUNDS } from '../map/mapLayout';
+import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT } from '../map/mapLayout';
+import { distanceToMapPath, sampleMapPath } from '../map/buildMapVegetation';
 
 export type VisionPoint = Readonly<{ x: number; z: number }>;
 export type VisionLineOfSight = (
@@ -20,17 +21,49 @@ const FOG_PIXELS_PER_WORLD_UNIT = 4;
 const FOG_ALPHA = 0.56;
 const FOG_INNER_FRACTION = 0.82;
 const FOG_RENDER_ORDER = 20;
-const FOG_VISIBILITY_RAYS = 128;
-const FOG_SOURCE_REBUILD_DISTANCE = 0.10;
-const FOG_SOURCE_REBUILD_HEIGHT = 0.08;
-const FOG_RAY_ORIGIN_MIN_LIFT = 0.62;
-const FOG_RAY_ORIGIN_MAX_LIFT = 0.96;
-const OCCLUSION_HIT_EPSILON = 0.075;
-
-const OCCLUDER_NAME_PATTERN = /(?:^|[-_:])(wall|walls|retaining|cliff|cliffs|ruin|ruins|rock|rocks|boulder|boulders|barrier|barriers|rampart|ramparts|citadel)(?:$|[-_:])/;
+const FOG_VISIBILITY_RAYS = 64;
+const FOG_SOURCE_REBUILD_DISTANCE = 0.16;
+const FOG_SOURCE_REBUILD_HEIGHT = 0.12;
+const VISION_EPSILON = 0.06;
+const TREE_VISION_RADIUS = 0.34;
+const WALL_RADIUS = 0.48;
+const ELEVATION_RADIUS = 0.42;
 
 type WorldPoint3 = Readonly<{ x: number; y: number; z: number }>;
-type FogTraceDistance = (source: WorldPoint3, angle: number, maxDistance: number) => number;
+
+type CircleOccluder = {
+  kind: 'circle';
+  x: number;
+  z: number;
+  radius: number;
+  minY: number;
+  maxY: number;
+};
+
+type EllipseOccluder = {
+  kind: 'ellipse';
+  x: number;
+  z: number;
+  radiusX: number;
+  radiusZ: number;
+  cos: number;
+  sin: number;
+  minY: number;
+  maxY: number;
+};
+
+type SegmentOccluder = {
+  kind: 'segment';
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  radius: number;
+  minY: number;
+  maxY: number;
+};
+
+type VisionOccluder = CircleOccluder | EllipseOccluder | SegmentOccluder;
 
 type FogVisibilityCache = {
   x: number;
@@ -40,97 +73,396 @@ type FogVisibilityCache = {
   points: Array<{ x: number; z: number }>;
 };
 
-type EnvironmentVisionOcclusion = {
-  lineOfSight: VisionLineOfSight;
-  traceDistance: FogTraceDistance;
-  occluderCount: number;
-};
-
 function findScene(object: THREE.Object3D | undefined) {
   let current = object;
   while (current?.parent) current = current.parent;
   return current instanceof THREE.Scene ? current : null;
 }
 
-function hasOccluderAncestor(object: THREE.Object3D) {
-  let current: THREE.Object3D | null = object;
-  while (current) {
-    if (OCCLUDER_NAME_PATTERN.test(current.name.toLowerCase())) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
 function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
   if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return false;
   if (object.userData.collisionRock === true || object.userData.visionOccluder === true) return true;
   if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return false;
-
   const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
   if (authoredRadius < 0.34) return false;
   const materials = Array.isArray(object.material) ? object.material : [object.material];
   return materials.some(material => material instanceof THREE.MeshStandardMaterial && material.map !== null);
 }
 
-function isEnvironmentVisionOccluder(object: THREE.Object3D) {
-  if (!(object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh)) return false;
-  if (object.userData.blocksVision === false) return false;
-  if (object.userData.blocksVision === true || object.userData.visionOccluder === true
-    || object.userData.collisionBarrier === true || object.userData.collisionRock === true) return true;
-
-  const name = object.name.toLowerCase();
-  if (object instanceof THREE.InstancedMesh
-    && (name.startsWith('pine-crowns:') || name.startsWith('pine-trunks:'))) return true;
-  if (isStoneRock(object)) return true;
-  return hasOccluderAncestor(object);
+function pointInsideOccluder(occluder: VisionOccluder, x: number, z: number) {
+  if (occluder.kind === 'circle') {
+    return (x - occluder.x) ** 2 + (z - occluder.z) ** 2 <= occluder.radius ** 2;
+  }
+  if (occluder.kind === 'ellipse') {
+    const dx = x - occluder.x;
+    const dz = z - occluder.z;
+    const localX = occluder.cos * dx - occluder.sin * dz;
+    const localZ = occluder.sin * dx + occluder.cos * dz;
+    return (localX / occluder.radiusX) ** 2 + (localZ / occluder.radiusZ) ** 2 <= 1;
+  }
+  return distancePointToSegment(x, z, occluder.ax, occluder.az, occluder.bx, occluder.bz) <= occluder.radius;
 }
 
-function createEnvironmentVisionOcclusion(scene: THREE.Scene): EnvironmentVisionOcclusion {
-  const occluders: THREE.Object3D[] = [];
+function rayCircleEntry(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  cx: number,
+  cz: number,
+  radius: number,
+) {
+  const mx = ox - cx;
+  const mz = oz - cz;
+  const b = mx * dx + mz * dz;
+  const c = mx * mx + mz * mz - radius * radius;
+  if (c <= 0) return 0;
+  if (b > 0) return Infinity;
+  const discriminant = b * b - c;
+  if (discriminant < 0) return Infinity;
+  const distance = -b - Math.sqrt(discriminant);
+  return distance >= 0 && distance <= maxDistance ? distance : Infinity;
+}
+
+function rayEllipseEntry(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  ellipse: EllipseOccluder,
+) {
+  const worldX = ox - ellipse.x;
+  const worldZ = oz - ellipse.z;
+  const localX = ellipse.cos * worldX - ellipse.sin * worldZ;
+  const localZ = ellipse.sin * worldX + ellipse.cos * worldZ;
+  const localDx = ellipse.cos * dx - ellipse.sin * dz;
+  const localDz = ellipse.sin * dx + ellipse.cos * dz;
+  const nx = localX / ellipse.radiusX;
+  const nz = localZ / ellipse.radiusZ;
+  const ndx = localDx / ellipse.radiusX;
+  const ndz = localDz / ellipse.radiusZ;
+  const a = ndx * ndx + ndz * ndz;
+  const b = 2 * (nx * ndx + nz * ndz);
+  const c = nx * nx + nz * nz - 1;
+  if (c <= 0) return 0;
+  const discriminant = b * b - 4 * a * c;
+  if (a <= 1e-9 || discriminant < 0) return Infinity;
+  const distance = (-b - Math.sqrt(discriminant)) / (2 * a);
+  return distance >= 0 && distance <= maxDistance ? distance : Infinity;
+}
+
+function raySlabEntry(position: number, direction: number, minimum: number, maximum: number) {
+  if (Math.abs(direction) <= 1e-9) {
+    return position >= minimum && position <= maximum
+      ? { near: -Infinity, far: Infinity }
+      : null;
+  }
+  const first = (minimum - position) / direction;
+  const second = (maximum - position) / direction;
+  return { near: Math.min(first, second), far: Math.max(first, second) };
+}
+
+function rayCapsuleEntry(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+  segment: SegmentOccluder,
+) {
+  const sx = segment.bx - segment.ax;
+  const sz = segment.bz - segment.az;
+  const length = Math.hypot(sx, sz);
+  if (length <= 1e-6) {
+    return rayCircleEntry(ox, oz, dx, dz, maxDistance, segment.ax, segment.az, segment.radius);
+  }
+
+  const ux = sx / length;
+  const uz = sz / length;
+  const nx = -uz;
+  const nz = ux;
+  const px = ox - segment.ax;
+  const pz = oz - segment.az;
+  const localX = px * ux + pz * uz;
+  const localZ = px * nx + pz * nz;
+  const localDx = dx * ux + dz * uz;
+  const localDz = dx * nx + dz * nz;
+
+  let best = Infinity;
+  const xSlab = raySlabEntry(localX, localDx, 0, length);
+  const zSlab = raySlabEntry(localZ, localDz, -segment.radius, segment.radius);
+  if (xSlab && zSlab) {
+    const near = Math.max(xSlab.near, zSlab.near, 0);
+    const far = Math.min(xSlab.far, zSlab.far, maxDistance);
+    if (near <= far) best = near;
+  }
+
+  best = Math.min(
+    best,
+    rayCircleEntry(ox, oz, dx, dz, maxDistance, segment.ax, segment.az, segment.radius),
+    rayCircleEntry(ox, oz, dx, dz, maxDistance, segment.bx, segment.bz, segment.radius),
+  );
+  return best;
+}
+
+function rayOccluderEntry(
+  occluder: VisionOccluder,
+  source: WorldPoint3,
+  dx: number,
+  dz: number,
+  maxDistance: number,
+) {
+  if (source.y < occluder.minY - VISION_EPSILON || source.y > occluder.maxY + VISION_EPSILON) return Infinity;
+  if (pointInsideOccluder(occluder, source.x, source.z)) return Infinity;
+  if (occluder.kind === 'circle') {
+    return rayCircleEntry(source.x, source.z, dx, dz, maxDistance, occluder.x, occluder.z, occluder.radius);
+  }
+  if (occluder.kind === 'ellipse') {
+    return rayEllipseEntry(source.x, source.z, dx, dz, maxDistance, occluder);
+  }
+  return rayCapsuleEntry(source.x, source.z, dx, dz, maxDistance, occluder);
+}
+
+function distancePointToSegment(
+  x: number,
+  z: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+) {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const lengthSquared = vx * vx + vz * vz;
+  if (lengthSquared <= 1e-9) return Math.hypot(x - ax, z - az);
+  const t = THREE.MathUtils.clamp(((x - ax) * vx + (z - az) * vz) / lengthSquared, 0, 1);
+  return Math.hypot(x - (ax + vx * t), z - (az + vz * t));
+}
+
+function collectVisionOccluders(scene: THREE.Scene) {
+  const occluders: VisionOccluder[] = [];
+  const instanceMatrix = new THREE.Matrix4();
+  const worldMatrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const worldEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const localCenter = new THREE.Vector3();
+  const localSize = new THREE.Vector3();
+  const worldCenter = new THREE.Vector3();
+
   scene.updateMatrixWorld(true);
+
   scene.traverse((object) => {
-    if (isEnvironmentVisionOccluder(object)) occluders.push(object);
+    if (object instanceof THREE.InstancedMesh && object.name.startsWith('pine-trunks:')) {
+      for (let index = 0; index < object.count; index++) {
+        object.getMatrixAt(index, instanceMatrix);
+        worldMatrix.multiplyMatrices(object.matrixWorld, instanceMatrix);
+        worldMatrix.decompose(position, quaternion, scale);
+        occluders.push({
+          kind: 'circle',
+          x: position.x,
+          z: position.z,
+          radius: TREE_VISION_RADIUS * Math.max(Math.abs(scale.x), Math.abs(scale.z)),
+          minY: position.y,
+          maxY: position.y + 4.7 * Math.abs(scale.y),
+        });
+      }
+      return;
+    }
+
+    if (isStoneRock(object)) {
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      const box = object.geometry.boundingBox;
+      if (!box) return;
+      box.getSize(localSize);
+      if (localSize.y < 0.28 || Math.max(localSize.x, localSize.z) < 0.42) return;
+      box.getCenter(localCenter);
+      worldCenter.copy(localCenter).applyMatrix4(object.matrixWorld);
+      object.getWorldScale(scale);
+      object.getWorldQuaternion(quaternion);
+      worldEuler.setFromQuaternion(quaternion, 'YXZ');
+      const bounds = new THREE.Box3().setFromObject(object);
+      occluders.push({
+        kind: 'ellipse',
+        x: worldCenter.x,
+        z: worldCenter.z,
+        radiusX: Math.max(0.18, localSize.x * Math.abs(scale.x) * 0.41),
+        radiusZ: Math.max(0.18, localSize.z * Math.abs(scale.z) * 0.41),
+        cos: Math.cos(worldEuler.y),
+        sin: Math.sin(worldEuler.y),
+        minY: bounds.min.y,
+        maxY: bounds.max.y,
+      });
+      return;
+    }
+
+    if (!(object instanceof THREE.Group)) return;
+    const authoredRadius = Number(object.userData.collisionRadius ?? 0);
+    const name = object.name.toLowerCase();
+    if (authoredRadius <= 0 && !(name.endsWith('-tower') || name.endsWith('-defense-tower'))) return;
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (bounds.isEmpty()) return;
+    bounds.getCenter(worldCenter);
+    bounds.getSize(localSize);
+    occluders.push({
+      kind: 'circle',
+      x: worldCenter.x,
+      z: worldCenter.z,
+      radius: authoredRadius > 0
+        ? authoredRadius
+        : THREE.MathUtils.clamp(Math.min(localSize.x, localSize.z) * 0.34, 0.65, 1.45),
+      minY: bounds.min.y,
+      maxY: bounds.max.y,
+    });
   });
 
-  const raycaster = new THREE.Raycaster();
-  const origin = new THREE.Vector3();
-  const direction = new THREE.Vector3();
+  addRetainingWallOccluders(occluders);
+  addBaseWallOccluders(occluders);
+  addObjectiveWallOccluders(occluders);
+  return occluders;
+}
 
-  const firstHitDistance = (from: WorldPoint3, dirX: number, dirY: number, dirZ: number, maxDistance: number) => {
-    if (maxDistance <= OCCLUSION_HIT_EPSILON || occluders.length === 0) return maxDistance;
-    origin.set(from.x, from.y, from.z);
-    direction.set(dirX, dirY, dirZ);
-    const length = direction.length();
-    if (length <= 1e-7) return maxDistance;
-    direction.multiplyScalar(1 / length);
-    raycaster.set(origin, direction);
-    raycaster.near = OCCLUSION_HIT_EPSILON;
-    raycaster.far = Math.max(OCCLUSION_HIT_EPSILON, maxDistance - OCCLUSION_HIT_EPSILON);
-    const hit = raycaster.intersectObjects(occluders, false)[0];
-    return hit ? Math.max(0, hit.distance - OCCLUSION_HIT_EPSILON) : maxDistance;
+function addRetainingWallOccluders(occluders: VisionOccluder[]) {
+  const lanes = Object.values(DAWNREACH_LAYOUT.lanes).map(sampleMapPath);
+  const river = sampleMapPath(DAWNREACH_LAYOUT.river);
+  const trails = DAWNREACH_LAYOUT.junglePaths.map(sampleMapPath);
+  const bases = [DAWNREACH_LAYOUT.blueBase, DAWNREACH_LAYOUT.redBase];
+  const isOpening = (x: number, z: number) => distanceToMapPath(x, z, river) < 5.2
+    || bases.some(base => Math.hypot(x - base.x, z - base.z) < BASE_LAYOUT.radius + 1)
+    || lanes.some(lane => distanceToMapPath(x, z, lane) < 3.1)
+    || trails.some(trail => distanceToMapPath(x, z, trail) < 1.7);
+
+  for (const path of DAWNREACH_LAYOUT.retainingWalls) {
+    for (let pointIndex = 0; pointIndex < path.length - 1; pointIndex++) {
+      const [ax, az] = path[pointIndex];
+      const [bx, bz] = path[pointIndex + 1];
+      const length = Math.hypot(bx - ax, bz - az);
+      const pieces = Math.max(1, Math.ceil(length / 1.1));
+      for (let piece = 0; piece < pieces; piece++) {
+        const start = piece / pieces;
+        const end = (piece + 1) / pieces;
+        const x1 = THREE.MathUtils.lerp(ax, bx, start);
+        const z1 = THREE.MathUtils.lerp(az, bz, start);
+        const x2 = THREE.MathUtils.lerp(ax, bx, end);
+        const z2 = THREE.MathUtils.lerp(az, bz, end);
+        if (isOpening((x1 + x2) * 0.5, (z1 + z2) * 0.5)) continue;
+        occluders.push({
+          kind: 'segment', ax: x1, az: z1, bx: x2, bz: z2,
+          radius: ELEVATION_RADIUS, minY: -0.5, maxY: 2.8,
+        });
+      }
+    }
+  }
+}
+
+function addBaseWallOccluders(occluders: VisionOccluder[]) {
+  const segmentCount = 80;
+  const gateHalfAngle = BASE_LAYOUT.rampWidth / (BASE_LAYOUT.radius * 2) + 0.055;
+  for (const [team, center] of [
+    ['blue', DAWNREACH_LAYOUT.blueBase],
+    ['red', DAWNREACH_LAYOUT.redBase],
+  ] as const) {
+    const rotation = team === 'blue' ? 0 : Math.PI;
+    const gates = BASE_LAYOUT.gates.map(angle => normalizeAngle(angle + rotation));
+    for (let index = 0; index < segmentCount; index++) {
+      const a = index / segmentCount * Math.PI * 2;
+      const b = (index + 1) / segmentCount * Math.PI * 2;
+      const middle = normalizeAngle((a + b) / 2);
+      if (gates.some(gate => angularDistance(middle, gate) < gateHalfAngle)) continue;
+      occluders.push({
+        kind: 'segment',
+        ax: center.x + Math.cos(a) * BASE_LAYOUT.radius,
+        az: center.z + Math.sin(a) * BASE_LAYOUT.radius,
+        bx: center.x + Math.cos(b) * BASE_LAYOUT.radius,
+        bz: center.z + Math.sin(b) * BASE_LAYOUT.radius,
+        radius: WALL_RADIUS,
+        minY: -0.5,
+        maxY: BASE_LAYOUT.elevation + 1.55,
+      });
+    }
+  }
+}
+
+function addObjectiveWallOccluders(occluders: VisionOccluder[]) {
+  const river = sampleMapPath(DAWNREACH_LAYOUT.river);
+  const segmentCount = 52;
+  for (const pit of DAWNREACH_LAYOUT.objectivePits) {
+    let closest = river[0];
+    for (const point of river) {
+      if (Math.hypot(point.x - pit.x, point.z - pit.z) < Math.hypot(closest.x - pit.x, closest.z - pit.z)) closest = point;
+    }
+    const entranceAngle = Math.atan2(closest.z - pit.z, closest.x - pit.x);
+    for (let index = 0; index < segmentCount; index++) {
+      const a = index / segmentCount * Math.PI * 2;
+      const b = (index + 1) / segmentCount * Math.PI * 2;
+      if (angularDistance((a + b) * 0.5, entranceAngle) < OBJECTIVE_LAYOUT.gateHalfAngle) continue;
+      occluders.push({
+        kind: 'segment',
+        ax: pit.x + Math.cos(a) * OBJECTIVE_LAYOUT.wallRadius,
+        az: pit.z + Math.sin(a) * OBJECTIVE_LAYOUT.wallRadius,
+        bx: pit.x + Math.cos(b) * OBJECTIVE_LAYOUT.wallRadius,
+        bz: pit.z + Math.sin(b) * OBJECTIVE_LAYOUT.wallRadius,
+        radius: WALL_RADIUS,
+        minY: -0.5,
+        maxY: 4.2,
+      });
+    }
+  }
+}
+
+function normalizeAngle(angle: number) {
+  let normalized = angle % (Math.PI * 2);
+  if (normalized < -Math.PI) normalized += Math.PI * 2;
+  if (normalized > Math.PI) normalized -= Math.PI * 2;
+  return normalized;
+}
+
+function angularDistance(a: number, b: number) {
+  return Math.abs(normalizeAngle(a - b));
+}
+
+function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
+  const occluders = collectVisionOccluders(scene);
+
+  const traceDistance = (source: WorldPoint3, angle: number, maxDistance: number) => {
+    const dx = Math.cos(angle);
+    const dz = Math.sin(angle);
+    let nearest = maxDistance;
+    for (const occluder of occluders) {
+      const distance = rayOccluderEntry(occluder, source, dx, dz, nearest);
+      if (distance < nearest) nearest = distance;
+    }
+    return nearest;
   };
 
   const lineOfSight: VisionLineOfSight = (source, target) => {
     const dx = target.x - source.x;
-    const dy = target.y - source.y;
     const dz = target.z - source.z;
-    const distance = Math.hypot(dx, dy, dz);
-    if (distance <= OCCLUSION_HIT_EPSILON) return true;
-    return firstHitDistance(source, dx, dy, dz, distance) >= distance - OCCLUSION_HIT_EPSILON * 2;
+    const horizontalDistance = Math.hypot(dx, dz);
+    if (horizontalDistance <= VISION_EPSILON) return true;
+    const nx = dx / horizontalDistance;
+    const nz = dz / horizontalDistance;
+    for (const occluder of occluders) {
+      if (pointInsideOccluder(occluder, source.x, source.z)) continue;
+      const entry = rayOccluderEntry(occluder, source, nx, nz, horizontalDistance);
+      if (!Number.isFinite(entry) || entry >= horizontalDistance - VISION_EPSILON) continue;
+      const progress = entry / horizontalDistance;
+      const sightY = THREE.MathUtils.lerp(source.y, target.y, progress);
+      if (sightY >= occluder.minY - VISION_EPSILON && sightY <= occluder.maxY + VISION_EPSILON) return false;
+    }
+    return true;
   };
 
-  const traceDistance: FogTraceDistance = (source, angle, maxDistance) => firstHitDistance(
-    source,
-    Math.cos(angle),
-    0,
-    Math.sin(angle),
-    maxDistance,
-  );
-
-  return { lineOfSight, traceDistance, occluderCount: occluders.length };
+  return { lineOfSight, traceDistance };
 }
 
-function createFogOverlay(registry: GameEntityRegistry, traceDistance?: FogTraceDistance) {
+function createFogOverlay(
+  registry: GameEntityRegistry,
+  traceDistance?: (source: WorldPoint3, angle: number, maxDistance: number) => number,
+) {
   const scene = findScene(registry.values()[0]?.root);
   if (!scene || typeof document === 'undefined') return null;
 
@@ -179,12 +511,7 @@ function createFogOverlay(registry: GameEntityRegistry, traceDistance?: FogTrace
   const getVisibilityPoints = (source: GameEntity) => {
     source.root.getWorldPosition(sourcePosition);
     const radius = source.visionRadius;
-    const eyeLift = THREE.MathUtils.clamp(
-      source.visionHeight * 0.52,
-      FOG_RAY_ORIGIN_MIN_LIFT,
-      FOG_RAY_ORIGIN_MAX_LIFT,
-    );
-    const eyeY = sourcePosition.y + eyeLift;
+    const eyeY = sourcePosition.y + source.visionHeight;
     const cached = visibilityCache.get(source.id);
     const moved = !cached
       || Math.hypot(sourcePosition.x - cached.x, sourcePosition.z - cached.z) > FOG_SOURCE_REBUILD_DISTANCE
@@ -202,13 +529,7 @@ function createFogOverlay(registry: GameEntityRegistry, traceDistance?: FogTrace
         z: sourcePosition.z + Math.sin(angle) * visibleDistance,
       });
     }
-    visibilityCache.set(source.id, {
-      x: sourcePosition.x,
-      y: eyeY,
-      z: sourcePosition.z,
-      radius,
-      points,
-    });
+    visibilityCache.set(source.id, { x: sourcePosition.x, y: eyeY, z: sourcePosition.z, radius, points });
     return points;
   };
 
@@ -218,21 +539,16 @@ function createFogOverlay(registry: GameEntityRegistry, traceDistance?: FogTrace
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = `rgba(5, 10, 15, ${FOG_ALPHA})`;
       context.fillRect(0, 0, canvas.width, canvas.height);
-
       context.globalCompositeOperation = 'destination-out';
+
       for (const source of sources) {
         source.root.getWorldPosition(sourcePosition);
         const center = worldToCanvas(sourcePosition.x, sourcePosition.z);
         const radius = source.visionRadius * FOG_PIXELS_PER_WORLD_UNIT;
         if (radius <= 0) continue;
-
         const gradient = context.createRadialGradient(
-          center.x,
-          center.y,
-          radius * FOG_INNER_FRACTION,
-          center.x,
-          center.y,
-          radius,
+          center.x, center.y, radius * FOG_INNER_FRACTION,
+          center.x, center.y, radius,
         );
         gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
         gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
@@ -250,6 +566,7 @@ function createFogOverlay(registry: GameEntityRegistry, traceDistance?: FogTrace
         context.closePath();
         context.fill();
       }
+
       context.globalCompositeOperation = 'source-over';
       texture.needsUpdate = true;
     },
@@ -277,14 +594,12 @@ export function createVisionSystem(
       const dz = point.z - sourcePosition.z;
       if (dx * dx + dz * dz > source.visionRadius * source.visionRadius) continue;
       if (!resolvedLineOfSight) return true;
-
       const from = {
         x: sourcePosition.x,
         y: sourcePosition.y + source.visionHeight,
         z: sourcePosition.z,
       };
-      const to = { x: point.x, y, z: point.z };
-      if (resolvedLineOfSight(from, to)) return true;
+      if (resolvedLineOfSight(from, { x: point.x, y, z: point.z })) return true;
     }
     return false;
   };
@@ -313,10 +628,6 @@ export function createVisionSystem(
       const visible = isEntityVisibleAgainst(entity, sources);
       entity.revealed = visible;
       entity.root.userData.inVision = visible;
-
-      // Living/dynamic entities vanish completely outside allied vision. Structures remain
-      // present so the transparent fog can preserve their static silhouette. Animated or
-      // emissive structure effects can later be tagged as vision-only child entities.
       if (entity.visibilityPolicy === 'vision-only' && entity.team !== team) {
         entity.root.visible = visible;
       } else if (!entity.root.visible && entity.alive) {
@@ -325,11 +636,5 @@ export function createVisionSystem(
     }
   };
 
-  return {
-    team,
-    isPointVisible,
-    isEntityVisible,
-    updateEntityVisibility,
-    getSources,
-  };
+  return { team, isPointVisible, isEntityVisible, updateEntityVisibility, getSources };
 }
