@@ -6,25 +6,24 @@ import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
+import { polishRiverBridges } from './map/polishRiverBridges';
 import { createWaterEffects } from './map/waterEffects';
 import { createProceduralTextures } from './shared/textures';
 
 type Point3 = { x: number; z: number };
+type AttackOrder =
+  | { kind: 'ground'; point: Point3 }
+  | { kind: 'target'; target: THREE.Object3D };
 
 const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(10.5, 14, 12.5);
 const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
-const GAME_HERO_SCALE = 0.68 ;
+const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
-
-// The Three.js game is created once from App.useEffect(). React Fast Refresh preserves
-// that mounted effect, so editing constants in this module used to leave the old game
-// instance alive. Force a page reload whenever this module changes during development.
-if (import.meta.hot) {
-  import.meta.hot.accept(() => window.location.reload());
-}
+const ATTACK_RANGE = 1.35;
+const ATTACK_COOLDOWN = 0.72;
 
 // The Three.js game is created once from App.useEffect(). React Fast Refresh preserves
 // that mounted effect, so editing constants in this module used to leave the old game
@@ -83,11 +82,25 @@ export async function createDawnreachGame(
     minimapCamera.updateMatrixWorld();
   }
 
+  if (minimapHeroMarker) minimapHeroMarker.style.pointerEvents = 'none';
+
   const sunlight = addLighting(scene);
 
   const textures = createProceduralTextures();
   const battlefield = buildDawnreachMap(textures);
+  polishRiverBridges(battlefield);
   scene.add(battlefield);
+
+  const attackables: THREE.Object3D[] = [];
+  battlefield.traverse((object) => {
+    const name = object.name.toLowerCase();
+    const enemyStructure = name.startsWith('red-')
+      && (name.endsWith('-tower') || name.endsWith('-base') || name === 'red-defense-tower');
+    if (!enemyStructure) return;
+    object.userData.attackable = true;
+    attackables.push(object);
+  });
+
   const waterSurfaces: THREE.Mesh<THREE.BufferGeometry>[] = [];
   battlefield.traverse(object => {
     if (object instanceof THREE.Mesh && object.userData.waterSurface) waterSurfaces.push(object);
@@ -110,53 +123,179 @@ export async function createDawnreachGame(
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
-  const targetMarker = buildTargetMarker();
+  const targetMarker = buildTargetMarker(0x79ff71, 0xc3ffab);
   targetMarker.visible = false;
   scene.add(targetMarker);
+
+  const attackMarker = buildTargetMarker(0xff5f58, 0xffc27c);
+  attackMarker.visible = false;
+  scene.add(attackMarker);
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
   const minimapHeroPosition = new THREE.Vector3();
+  const attackTargetPosition = new THREE.Vector3();
+  const swordRestRotation = alden ? alden.sword.rotation.clone() : null;
 
   let destination: Point3 | null = null;
+  let attackOrder: AttackOrder | null = null;
+  let attackArmed = false;
+  let attackCooldown = 0;
+  let attackSwing = 0;
   let targetYaw = 0;
   let currentYaw = 0;
   let elapsed = 0;
   let animationFrame = 0;
   let lastMinimapRender = -Infinity;
 
+  const clampMapPoint = (point: THREE.Vector3): Point3 => ({
+    x: THREE.MathUtils.clamp(point.x, MAP_BOUNDS.minX + MAP_EDGE_PADDING, MAP_BOUNDS.maxX - MAP_EDGE_PADDING),
+    z: THREE.MathUtils.clamp(point.z, MAP_BOUNDS.minZ + MAP_EDGE_PADDING, MAP_BOUNDS.maxZ - MAP_EDGE_PADDING),
+  });
+
+  const setPointerFromEvent = (event: PointerEvent, element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+  };
+
+  const findAttackableAncestor = (object: THREE.Object3D | null) => {
+    let current = object;
+    while (current) {
+      if (current.userData.attackable === true) return current;
+      current = current.parent;
+    }
+    return null;
+  };
+
+  const pickAttackable = () => {
+    const hits = raycaster.intersectObjects(attackables, true);
+    for (const hit of hits) {
+      const attackable = findAttackableAncestor(hit.object);
+      if (attackable) return attackable;
+    }
+    return null;
+  };
+
+  const pickGround = () => {
+    if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return null;
+    return clampMapPoint(hitPoint);
+  };
+
+  const setCommandCursor = (armed: boolean) => {
+    renderer.domElement.style.cursor = armed ? 'crosshair' : '';
+    if (minimapHost) minimapHost.style.cursor = armed ? 'crosshair' : 'default';
+  };
+
+  const disarmAttack = () => {
+    attackArmed = false;
+    setCommandCursor(false);
+  };
+
+  const issueMoveCommand = (point: Point3) => {
+    attackOrder = null;
+    destination = point;
+    disarmAttack();
+    attackMarker.visible = false;
+    targetMarker.position.set(point.x, 0.055, point.z);
+    targetMarker.visible = true;
+  };
+
+  const issueGroundAttack = (point: Point3) => {
+    attackOrder = { kind: 'ground', point };
+    destination = point;
+    disarmAttack();
+    targetMarker.visible = false;
+    attackMarker.position.set(point.x, 0.058, point.z);
+    attackMarker.visible = true;
+  };
+
+  const issueTargetAttack = (target: THREE.Object3D) => {
+    attackOrder = { kind: 'target', target };
+    destination = null;
+    disarmAttack();
+    targetMarker.visible = false;
+    target.getWorldPosition(attackTargetPosition);
+    attackMarker.position.set(attackTargetPosition.x, 0.058, attackTargetPosition.z);
+    attackMarker.visible = true;
+  };
+
+  const triggerAttack = () => {
+    attackCooldown = ATTACK_COOLDOWN;
+    attackSwing = 0.0001;
+  };
+
   const onContextMenu = (event: MouseEvent) => event.preventDefault();
 
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 2) return;
-
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
+    if (event.button !== 0 && event.button !== 2) return;
+    setPointerFromEvent(event, renderer.domElement);
     raycaster.setFromCamera(pointer, camera);
-    if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return;
 
-    const x = THREE.MathUtils.clamp(
-      hitPoint.x,
-      MAP_BOUNDS.minX + MAP_EDGE_PADDING,
-      MAP_BOUNDS.maxX - MAP_EDGE_PADDING,
-    );
-    const z = THREE.MathUtils.clamp(
-      hitPoint.z,
-      MAP_BOUNDS.minZ + MAP_EDGE_PADDING,
-      MAP_BOUNDS.maxZ - MAP_EDGE_PADDING,
-    );
+    if (event.button === 2) {
+      const ground = pickGround();
+      if (ground) issueMoveCommand(ground);
+      return;
+    }
 
-    destination = { x, z };
-    targetMarker.position.set(x, 0.055, z);
-    targetMarker.visible = true;
+    if (!attackArmed) return;
+    const target = pickAttackable();
+    if (target) {
+      issueTargetAttack(target);
+      return;
+    }
+    const ground = pickGround();
+    if (ground) issueGroundAttack(ground);
+  };
+
+  const onMinimapPointerDown = (event: PointerEvent) => {
+    if (!minimapHost || !minimapCamera || (event.button !== 0 && event.button !== 2)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPointerFromEvent(event, minimapHost);
+    raycaster.setFromCamera(pointer, minimapCamera);
+
+    if (event.button === 2) {
+      const ground = pickGround();
+      if (ground) issueMoveCommand(ground);
+      return;
+    }
+
+    if (!attackArmed) return;
+    const target = pickAttackable();
+    if (target) {
+      issueTargetAttack(target);
+      return;
+    }
+    const ground = pickGround();
+    if (ground) issueGroundAttack(ground);
+  };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.repeat) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+
+    if (event.code === 'KeyA') {
+      event.preventDefault();
+      attackArmed = true;
+      setCommandCursor(true);
+      return;
+    }
+
+    if (event.code === 'Escape' && attackArmed) {
+      event.preventDefault();
+      disarmAttack();
+    }
   };
 
   renderer.domElement.addEventListener('contextmenu', onContextMenu);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  minimapHost?.addEventListener('contextmenu', onContextMenu);
+  minimapHost?.addEventListener('pointerdown', onMinimapPointerDown);
+  window.addEventListener('keydown', onKeyDown);
 
   const resizeMinimap = () => {
     if (!minimapRenderer || !minimapCamera || !minimapHost) return;
@@ -260,8 +399,30 @@ export async function createDawnreachGame(
     animationFrame = requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
+    attackCooldown = Math.max(0, attackCooldown - dt);
+
+    if (attackOrder?.kind === 'target') {
+      if (!attackOrder.target.parent) {
+        attackOrder = null;
+        attackMarker.visible = false;
+      } else {
+        attackOrder.target.getWorldPosition(attackTargetPosition);
+        attackMarker.position.set(attackTargetPosition.x, 0.058, attackTargetPosition.z);
+        const dx = attackTargetPosition.x - hero.root.position.x;
+        const dz = attackTargetPosition.z - hero.root.position.z;
+        const distance = Math.hypot(dx, dz);
+        targetYaw = Math.atan2(dx, dz);
+        if (distance > ATTACK_RANGE) {
+          destination = { x: attackTargetPosition.x, z: attackTargetPosition.z };
+        } else {
+          destination = null;
+          if (attackCooldown <= 0) triggerAttack();
+        }
+      }
+    }
 
     let moving = false;
+    let reachedDestination = false;
 
     if (destination) {
       const dx = destination.x - hero.root.position.x;
@@ -273,6 +434,7 @@ export async function createDawnreachGame(
         hero.root.position.x = destination.x;
         hero.root.position.z = destination.z;
         destination = null;
+        reachedDestination = true;
         targetMarker.visible = false;
       } else {
         moving = true;
@@ -282,6 +444,12 @@ export async function createDawnreachGame(
         hero.root.position.z += nz * step;
         targetYaw = Math.atan2(nx, nz);
       }
+    }
+
+    if (reachedDestination && attackOrder?.kind === 'ground') {
+      triggerAttack();
+      attackOrder = null;
+      attackMarker.visible = false;
     }
 
     const yawDelta = Math.atan2(
@@ -294,10 +462,27 @@ export async function createDawnreachGame(
     if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
     else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
-    if (targetMarker.visible) {
+    if (alden && swordRestRotation) {
+      if (attackSwing > 0) {
+        attackSwing = Math.min(1, attackSwing + dt * 3.4);
+        const slash = Math.sin(attackSwing * Math.PI);
+        alden.sword.rotation.set(
+          swordRestRotation.x - slash * 0.95,
+          swordRestRotation.y + slash * 0.12,
+          swordRestRotation.z + slash * 0.34,
+        );
+        if (attackSwing >= 1) {
+          attackSwing = 0;
+          alden.sword.rotation.copy(swordRestRotation);
+        }
+      }
+    }
+
+    for (const marker of [targetMarker, attackMarker]) {
+      if (!marker.visible) continue;
       const pulse = 1 + Math.sin(elapsed * 8) * 0.12;
-      targetMarker.scale.setScalar(pulse);
-      targetMarker.rotation.z += dt * 0.8;
+      marker.scale.setScalar(pulse);
+      marker.rotation.z += dt * 0.8;
     }
 
     updateCamera();
@@ -322,6 +507,9 @@ export async function createDawnreachGame(
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('contextmenu', onContextMenu);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      minimapHost?.removeEventListener('contextmenu', onContextMenu);
+      minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
       disposeScene(scene);
       renderer.dispose();
       minimapRenderer?.dispose();
@@ -417,19 +605,19 @@ function buildHeroLabel(name: string, scale = 1) {
   return sprite;
 }
 
-function buildTargetMarker() {
+function buildTargetMarker(color: number, innerColor: number) {
   const group = new THREE.Group();
 
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.28, 0.38, 40),
-    new THREE.MeshBasicMaterial({ color: 0x79ff71, transparent: true, opacity: 0.95, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide }),
   );
   ring.rotation.x = -Math.PI / 2;
   group.add(ring);
 
   const inner = new THREE.Mesh(
     new THREE.CircleGeometry(0.07, 24),
-    new THREE.MeshBasicMaterial({ color: 0xc3ffab, transparent: true, opacity: 0.82, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ color: innerColor, transparent: true, opacity: 0.82, side: THREE.DoubleSide }),
   );
   inner.rotation.x = -Math.PI / 2;
   inner.position.y = 0.003;
