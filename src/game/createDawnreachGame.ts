@@ -558,49 +558,78 @@ function addHeroOverlay(root: THREE.Group, name: string, scale = 1) {
   selection.position.y = 0.025;
   root.add(selection);
 
-  const label = buildHeroLabel(name, scale);
-  label.position.set(0, 3.57 * scale, 0);
-  root.add(label);
+  // Name, level, HP and mana are rendered in one billboard. Keeping them in a single
+  // sprite makes their screen-space alignment independent from the camera inclination.
+  const statusLabel = buildHeroStatusLabel(name, 1, scale);
+  statusLabel.position.set(0, 4.25 * scale, 0);
+  root.add(statusLabel);
 }
 
-function buildHeroLabel(name: string, scale = 1) {
+function buildHeroStatusLabel(name: string, level: number, scale = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
-  canvas.height = 128;
+  canvas.height = 160;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
+  const barX = 90;
+  const barWidth = 332;
+  const barHeight = 38;
+  const hpY = 54;
+  const manaY = 96;
+  const innerX = 98;
+  const innerWidth = 316;
+  const innerHeight = 22;
+  const innerYOffset = 8;
+  const levelX = 42;
+  const levelWidth = 40;
+  const levelY = hpY;
+  const levelHeight = manaY + barHeight - hpY;
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = 'bold 34px Arial';
+
+  ctx.font = 'bold 50px Arial';
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
   ctx.lineWidth = 8;
   ctx.strokeStyle = 'rgba(10,14,12,0.9)';
-  ctx.strokeText(name, 256, 39);
+  ctx.strokeText(name, 256, 44);
   ctx.fillStyle = '#f5f1e7';
-  ctx.fillText(name, 256, 39);
+  ctx.fillText(name, 256, 44);
 
-  ctx.fillStyle = 'rgba(8,15,13,0.96)';
-  ctx.fillRect(90, 57, 332, 38);
-  ctx.fillStyle = '#49ce61';
-  ctx.fillRect(98, 65, 316, 22);
-  ctx.strokeStyle = '#0a0f0d';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(90, 57, 332, 38);
+  const drawBar = (y: number, fill: string) => {
+    ctx.fillStyle = 'rgba(8,15,13,0.96)';
+    ctx.fillRect(barX, y, barWidth, barHeight);
+    ctx.fillStyle = fill;
+    ctx.fillRect(innerX, y + innerYOffset, innerWidth, innerHeight);
+    ctx.strokeStyle = '#0a0f0d';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(barX, y, barWidth, barHeight);
+  };
 
+  drawBar(hpY, '#49ce61');
+  drawBar(manaY, '#4a90e2');
+
+  // The level tile uses the exact top of the HP bar and bottom of the mana bar, so it
+  // always occupies the full combined height of both bars including the small gap.
   ctx.fillStyle = '#0d1519';
-  ctx.fillRect(42, 56, 40, 40);
+  ctx.fillRect(levelX, levelY, levelWidth, levelHeight);
   ctx.strokeStyle = '#70818c';
   ctx.lineWidth = 3;
-  ctx.strokeRect(42, 56, 40, 40);
-  ctx.font = 'bold 24px Arial';
+  ctx.strokeRect(levelX, levelY, levelWidth, levelHeight);
+  ctx.font = 'bold 26px Arial';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('1', 62, 84);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(level.toString(), levelX + levelWidth / 2, levelY + levelHeight / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3 * scale, 0.82 * scale, 1);
+
+  // Preserve the same pixel density/width that the old 512x128 / 3.3x0.82 sprite used.
+  sprite.scale.set(3.3 * scale, 0.82 * (canvas.height / 128) * scale, 1);
   sprite.renderOrder = 10;
   return sprite;
 }
