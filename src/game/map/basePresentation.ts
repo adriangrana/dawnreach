@@ -2,10 +2,25 @@ import * as THREE from 'three';
 import { BASE_LAYOUT } from './mapLayout';
 
 type BasePresentationMaterials = {
-  stoneDark: THREE.Material;
-  stoneLight: THREE.Material;
-  stoneWarm: THREE.Material;
+  stoneDark: THREE.MeshStandardMaterial;
+  stoneLight: THREE.MeshStandardMaterial;
+  stoneWarm: THREE.MeshStandardMaterial;
+  rampStoneA: THREE.MeshStandardMaterial;
+  rampStoneB: THREE.MeshStandardMaterial;
+  rampStoneC: THREE.MeshStandardMaterial;
+  rampJoint: THREE.MeshStandardMaterial;
+  factionTrim: THREE.MeshStandardMaterial;
+  factionGlow: THREE.MeshStandardMaterial;
+  metal: THREE.MeshStandardMaterial;
 };
+
+const RAMP_INNER_RADIUS = BASE_LAYOUT.radius - 1.75;
+const RAMP_BASE_RADIUS = BASE_LAYOUT.radius + 0.08;
+const RAMP_OUTER_RADIUS = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86;
+const RAMP_HALF_WIDTH = BASE_LAYOUT.rampWidth / 2;
+const RAMP_HIGH = BASE_LAYOUT.elevation + 0.19;
+const RAMP_LOW = 0.045;
+const RAMP_BOTTOM = 0.015;
 
 export function upgradeBasePresentation(
   battlefield: THREE.Group,
@@ -46,6 +61,43 @@ function createPresentationMaterials(team: 'blue' | 'red'): BasePresentationMate
       roughness: 0.9,
       metalness: 0.02,
     }),
+    rampStoneA: new THREE.MeshStandardMaterial({
+      color: blue ? 0x8e9994 : 0x998a82,
+      roughness: 0.93,
+      metalness: 0.015,
+    }),
+    rampStoneB: new THREE.MeshStandardMaterial({
+      color: blue ? 0xa2aaa2 : 0xaa9a8f,
+      roughness: 0.89,
+      metalness: 0.02,
+    }),
+    rampStoneC: new THREE.MeshStandardMaterial({
+      color: blue ? 0x737f7d : 0x81716d,
+      roughness: 0.95,
+      metalness: 0.015,
+    }),
+    rampJoint: new THREE.MeshStandardMaterial({
+      color: blue ? 0x3c494f : 0x4d3e40,
+      roughness: 0.96,
+      metalness: 0.03,
+    }),
+    factionTrim: new THREE.MeshStandardMaterial({
+      color: blue ? 0x5d9abb : 0xa85a57,
+      roughness: 0.52,
+      metalness: 0.36,
+    }),
+    factionGlow: new THREE.MeshStandardMaterial({
+      color: blue ? 0x72b7d2 : 0xc2756b,
+      emissive: blue ? 0x143e53 : 0x501c1a,
+      emissiveIntensity: 0.42,
+      roughness: 0.5,
+      metalness: 0.3,
+    }),
+    metal: new THREE.MeshStandardMaterial({
+      color: blue ? 0x48575d : 0x57484a,
+      roughness: 0.46,
+      metalness: 0.48,
+    }),
   };
 }
 
@@ -59,9 +111,9 @@ function buildBaseElevation(
   const rotation = team === 'blue' ? 0 : Math.PI;
   const gateAngles = BASE_LAYOUT.gates.map(angle => angle + rotation);
 
-  // Match the retaining-wall opening to the *visible* ramp width instead of adding a large
-  // arbitrary angular clearance. The rail sits 0.14 units outside the ramp on each side;
-  // keep only a tiny construction margin beyond that so the wall visually meets the ramp.
+  // Match the retaining-wall opening to the visible ramp width. Decorative ramp masonry
+  // stays outside the command surface, so this clearance can remain tight without creating
+  // invisible movement blockers or exposing a large gap in the citadel wall.
   const wallRadius = BASE_LAYOUT.radius - 0.02;
   const rampRailHalfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
   const gateMargin = 0.06;
@@ -122,23 +174,22 @@ function buildBaseElevation(
   plaza.receiveShadow = true;
   group.add(plaza);
 
-  const edgeMaterial = new THREE.MeshStandardMaterial({
-    color: team === 'blue' ? 0x7398b2 : 0x9e706b,
-    roughness: 0.78,
-    metalness: 0.08,
-  });
-
   for (const angle of gateAngles) {
-    const ramp = new THREE.Mesh(createRampGeometry(angle), materials.stoneWarm);
+    // This remains the single continuous, authoritative command/raycast surface. All
+    // ceremonial stonework below is visual-only and deliberately carries no collider data.
+    const ramp = new THREE.Mesh(createRampGeometry(angle), materials.rampJoint);
     ramp.name = `${team}-base-ramp`;
     ramp.userData.commandSurface = true;
     ramp.castShadow = true;
     ramp.receiveShadow = true;
     group.add(ramp);
 
+    group.add(createRampSurfaceDetails(angle, materials));
+    group.add(createRampThreshold(angle, materials));
+    group.add(createRampApproach(angle, materials));
+
     for (const side of [-1, 1]) {
-      const rail = createRampRail(angle, side, edgeMaterial);
-      group.add(rail);
+      group.add(createRampRail(angle, side, materials));
     }
   }
 
@@ -149,17 +200,320 @@ function angularDistance(a: number, b: number) {
   return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
 
+function rampHeightAt(radius: number) {
+  if (radius <= RAMP_BASE_RADIUS) return RAMP_HIGH;
+  if (radius >= RAMP_OUTER_RADIUS) return RAMP_LOW;
+  const t = (RAMP_OUTER_RADIUS - radius) / (RAMP_OUTER_RADIUS - RAMP_BASE_RADIUS);
+  return THREE.MathUtils.lerp(RAMP_LOW, RAMP_HIGH, t);
+}
+
+function rampPoint(angle: number, radius: number, lateral: number, yOffset = 0) {
+  const radialX = Math.cos(angle);
+  const radialZ = Math.sin(angle);
+  const tangentX = -radialZ;
+  const tangentZ = radialX;
+  return new THREE.Vector3(
+    radialX * radius + tangentX * lateral,
+    rampHeightAt(radius) + yOffset,
+    radialZ * radius + tangentZ * lateral,
+  );
+}
+
+function createRampPanelGeometry(
+  angle: number,
+  outerRadius: number,
+  innerRadius: number,
+  outerMinLateral: number,
+  outerMaxLateral: number,
+  innerMinLateral: number,
+  innerMaxLateral: number,
+  yOffset: number,
+) {
+  const outerLeft = rampPoint(angle, outerRadius, outerMaxLateral, yOffset);
+  const outerRight = rampPoint(angle, outerRadius, outerMinLateral, yOffset);
+  const innerLeft = rampPoint(angle, innerRadius, innerMaxLateral, yOffset);
+  const innerRight = rampPoint(angle, innerRadius, innerMinLateral, yOffset);
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+    ...outerLeft.toArray(), ...outerRight.toArray(),
+    ...innerLeft.toArray(), ...innerRight.toArray(),
+  ], 3));
+  geometry.setIndex([0, 1, 2, 1, 3, 2]);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function addRampPanel(
+  group: THREE.Group,
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  name: string,
+) {
+  const panel = new THREE.Mesh(geometry, material);
+  panel.name = name;
+  panel.receiveShadow = true;
+  group.add(panel);
+  return panel;
+}
+
+function createRampSurfaceDetails(angle: number, materials: BasePresentationMaterials) {
+  const group = new THREE.Group();
+  group.name = 'base-ramp-surface-details';
+  const segmentCount = 7;
+  const panelHalfWidth = RAMP_HALF_WIDTH - 0.48;
+  const sideBandInner = panelHalfWidth + 0.08;
+  const sideBandOuter = RAMP_HALF_WIDTH - 0.10;
+  const slabMaterials = [materials.rampStoneA, materials.rampStoneB, materials.rampStoneA,
+    materials.rampStoneC, materials.rampStoneB, materials.rampStoneA, materials.rampStoneB];
+
+  for (let index = 0; index < segmentCount; index++) {
+    // Keep generous, top-down-readable joints rather than tiny masonry noise. The tiny
+    // per-segment inset exposes the dark foundation as a stable transverse grout line.
+    const outerT = (index + 0.055) / segmentCount;
+    const innerT = (index + 0.945) / segmentCount;
+    const outerRadius = THREE.MathUtils.lerp(RAMP_OUTER_RADIUS, RAMP_BASE_RADIUS, outerT);
+    const innerRadius = THREE.MathUtils.lerp(RAMP_OUTER_RADIUS, RAMP_BASE_RADIUS, innerT);
+    const widthVariation = index === 0 ? -0.16 : index === 1 ? -0.08 : index >= 5 ? 0.08 : 0;
+    const outerHalfWidth = panelHalfWidth + widthVariation;
+    const innerHalfWidth = panelHalfWidth + (index >= 4 ? 0.08 : widthVariation * 0.45);
+
+    addRampPanel(
+      group,
+      createRampPanelGeometry(
+        angle, outerRadius, innerRadius,
+        -outerHalfWidth, outerHalfWidth, -innerHalfWidth, innerHalfWidth, 0.008,
+      ),
+      slabMaterials[index],
+      `base-ramp-slab-${index + 1}`,
+    );
+
+    for (const side of [-1, 1]) {
+      const outerMin = side > 0 ? sideBandInner : -sideBandOuter;
+      const outerMax = side > 0 ? sideBandOuter : -sideBandInner;
+      addRampPanel(
+        group,
+        createRampPanelGeometry(
+          angle, outerRadius, innerRadius,
+          outerMin, outerMax, outerMin, outerMax, 0.010,
+        ),
+        index % 2 === 0 ? materials.stoneLight : materials.rampStoneC,
+        `base-ramp-side-band-${index + 1}`,
+      );
+    }
+
+    // The narrow central inlay is intentionally segmented with the slabs. It reads as a
+    // ceremonial guidance line from the isometric camera without becoming a neon runway.
+    addRampPanel(
+      group,
+      createRampPanelGeometry(
+        angle, outerRadius, innerRadius,
+        -0.11, 0.11, -0.11, 0.11, 0.014,
+      ),
+      index === 3 ? materials.factionGlow : materials.factionTrim,
+      `base-ramp-center-inlay-${index + 1}`,
+    );
+  }
+
+  return group;
+}
+
+function createRampThreshold(angle: number, materials: BasePresentationMaterials) {
+  const group = new THREE.Group();
+  group.name = 'base-ramp-threshold';
+
+  // Keep the landing flush with the existing walkable ramp lip. These are paper-thin visual
+  // overlays, not raised collision bars, so the hero can cross the threshold without a step.
+  addRampPanel(
+    group,
+    createRampPanelGeometry(
+      angle,
+      RAMP_BASE_RADIUS - 0.04,
+      RAMP_INNER_RADIUS + 0.10,
+      -RAMP_HALF_WIDTH + 0.14,
+      RAMP_HALF_WIDTH - 0.14,
+      -RAMP_HALF_WIDTH + 0.22,
+      RAMP_HALF_WIDTH - 0.22,
+      0.008,
+    ),
+    materials.rampStoneB,
+    'base-ramp-landing-stone',
+  );
+
+  const thresholdOuter = RAMP_BASE_RADIUS - 0.22;
+  const thresholdInner = RAMP_BASE_RADIUS - 0.54;
+  addRampPanel(
+    group,
+    createRampPanelGeometry(
+      angle, thresholdOuter, thresholdInner,
+      -RAMP_HALF_WIDTH + 0.12, RAMP_HALF_WIDTH - 0.12,
+      -RAMP_HALF_WIDTH + 0.16, RAMP_HALF_WIDTH - 0.16,
+      0.016,
+    ),
+    materials.stoneLight,
+    'base-ramp-threshold-band',
+  );
+
+  addRampPanel(
+    group,
+    createRampPanelGeometry(
+      angle, thresholdOuter - 0.055, thresholdInner + 0.055,
+      -0.78, 0.78, -0.72, 0.72, 0.022,
+    ),
+    materials.factionTrim,
+    'base-ramp-threshold-faction-inlay',
+  );
+
+  for (const side of [-1, 1]) {
+    addRampPanel(
+      group,
+      createRampPanelGeometry(
+        angle,
+        RAMP_BASE_RADIUS - 0.66,
+        RAMP_INNER_RADIUS + 0.28,
+        side > 0 ? 1.86 : -2.34,
+        side > 0 ? 2.34 : -1.86,
+        side > 0 ? 1.75 : -2.24,
+        side > 0 ? 2.24 : -1.75,
+        0.013,
+      ),
+      materials.rampStoneC,
+      'base-ramp-landing-side-panel',
+    );
+  }
+
+  return group;
+}
+
+function createRampApproach(angle: number, materials: BasePresentationMaterials) {
+  const group = new THREE.Group();
+  group.name = 'base-ramp-approach';
+  const approachOuter = RAMP_OUTER_RADIUS + 0.82;
+  const approachInner = RAMP_OUTER_RADIUS + 0.08;
+  const stones = [
+    { min: -1.82, max: -0.66, material: materials.rampStoneC },
+    { min: -0.56, max: 0.56, material: materials.rampStoneA },
+    { min: 0.66, max: 1.82, material: materials.rampStoneB },
+  ];
+
+  for (const [index, stone] of stones.entries()) {
+    addRampPanel(
+      group,
+      createRampPanelGeometry(
+        angle, approachOuter - index * 0.06, approachInner,
+        stone.min * 0.92, stone.max * 0.92,
+        stone.min, stone.max,
+        0.006,
+      ),
+      stone.material,
+      `base-ramp-approach-stone-${index + 1}`,
+    );
+  }
+  return group;
+}
+
+function createRampBeam(
+  angle: number,
+  startRadius: number,
+  endRadius: number,
+  lateral: number,
+  yOffset: number,
+  width: number,
+  height: number,
+  material: THREE.Material,
+) {
+  const start = rampPoint(angle, startRadius, lateral, yOffset);
+  const end = rampPoint(angle, endRadius, lateral, yOffset);
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = direction.length();
+  const xAxis = direction.clone().normalize();
+  const zAxis = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle)).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  const basis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(length, height, width), material);
+  beam.position.copy(start).add(end).multiplyScalar(0.5);
+  beam.quaternion.setFromRotationMatrix(basis);
+  beam.castShadow = true;
+  beam.receiveShadow = true;
+  return beam;
+}
+
+function createRampRail(
+  angle: number,
+  side: number,
+  materials: BasePresentationMaterials,
+) {
+  const group = new THREE.Group();
+  group.name = 'base-ramp-architectural-edge';
+  const lateral = side * (RAMP_HALF_WIDTH + 0.24);
+  const slopeOuter = RAMP_OUTER_RADIUS + 0.02;
+  const landingInner = RAMP_INNER_RADIUS + 0.12;
+
+  // Layered stone plinth + cap + faction trim. The entire assembly lives outside the
+  // command surface; its inner face only kisses the ramp edge and never narrows the path.
+  group.add(createRampBeam(
+    angle, slopeOuter, RAMP_BASE_RADIUS, lateral, 0.14, 0.46, 0.24, materials.stoneDark,
+  ));
+  group.add(createRampBeam(
+    angle, RAMP_BASE_RADIUS, landingInner, lateral, 0.14, 0.46, 0.24, materials.stoneDark,
+  ));
+  group.add(createRampBeam(
+    angle, slopeOuter, RAMP_BASE_RADIUS, lateral, 0.285, 0.36, 0.085, materials.stoneLight,
+  ));
+  group.add(createRampBeam(
+    angle, RAMP_BASE_RADIUS, landingInner, lateral, 0.285, 0.36, 0.085, materials.stoneLight,
+  ));
+  group.add(createRampBeam(
+    angle, slopeOuter + 0.12, RAMP_BASE_RADIUS - 0.10, lateral, 0.345, 0.17, 0.055, materials.factionTrim,
+  ));
+
+  const postRadii = [0.12, 0.38, 0.65, 0.9].map(t =>
+    THREE.MathUtils.lerp(RAMP_OUTER_RADIUS, RAMP_BASE_RADIUS, t));
+  postRadii.push(RAMP_BASE_RADIUS - 0.72);
+
+  for (const [index, radius] of postRadii.entries()) {
+    const postLateral = side * (RAMP_HALF_WIDTH + (index === postRadii.length - 1 ? 0.31 : 0.33));
+    const basePosition = rampPoint(angle, radius, postLateral, 0.11);
+
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.18, 0.52), materials.stoneDark);
+    foot.position.copy(basePosition);
+    foot.position.y += 0.09;
+    foot.rotation.y = Math.PI / 4 - angle;
+    foot.castShadow = true;
+    foot.receiveShadow = true;
+    group.add(foot);
+
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.38, 6), materials.stoneLight);
+    post.position.copy(basePosition);
+    post.position.y += 0.31;
+    post.rotation.y = angle;
+    post.castShadow = true;
+    post.receiveShadow = true;
+    group.add(post);
+
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.205, 0.205, 0.075, 6),
+      index === postRadii.length - 1 ? materials.factionGlow : materials.metal,
+    );
+    cap.position.copy(basePosition);
+    cap.position.y += 0.535;
+    cap.rotation.y = angle;
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    group.add(cap);
+  }
+
+  return group;
+}
+
 function createRampGeometry(angle: number) {
-  // The sloped part now reaches full plaza height exactly at the base perimeter.
-  // A short flat landing continues inside the base so there is no low seam or dark
-  // threshold strip for the hero to intersect while stepping onto the plaza.
-  const innerRadius = BASE_LAYOUT.radius - 1.75;
-  const baseRadius = BASE_LAYOUT.radius + 0.08;
-  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86;
-  const halfWidth = BASE_LAYOUT.rampWidth / 2;
-  const high = BASE_LAYOUT.elevation + 0.19;
-  const low = 0.045;
-  const bottom = 0.015;
+  // The sloped part reaches the current gameplay-tested plaza lip height exactly at the
+  // base perimeter. Preserve these dimensions: this mesh is the raycast/ground-height
+  // authority, while the redesigned ceremonial pieces remain visual overlays only.
+  const halfWidth = RAMP_HALF_WIDTH;
   const radialX = Math.cos(angle);
   const radialZ = Math.sin(angle);
   const tangentX = -radialZ;
@@ -171,19 +525,19 @@ function createRampGeometry(angle: number) {
     radialZ * radius + tangentZ * halfWidth * side,
   ] as const;
 
-  const outerLeft = point(outerRadius, 1, low);
-  const outerRight = point(outerRadius, -1, low);
-  const baseLeft = point(baseRadius, 1, high);
-  const baseRight = point(baseRadius, -1, high);
-  const innerLeft = point(innerRadius, 1, high);
-  const innerRight = point(innerRadius, -1, high);
+  const outerLeft = point(RAMP_OUTER_RADIUS, 1, RAMP_LOW);
+  const outerRight = point(RAMP_OUTER_RADIUS, -1, RAMP_LOW);
+  const baseLeft = point(RAMP_BASE_RADIUS, 1, RAMP_HIGH);
+  const baseRight = point(RAMP_BASE_RADIUS, -1, RAMP_HIGH);
+  const innerLeft = point(RAMP_INNER_RADIUS, 1, RAMP_HIGH);
+  const innerRight = point(RAMP_INNER_RADIUS, -1, RAMP_HIGH);
 
-  const outerLeftBottom = point(outerRadius, 1, bottom);
-  const outerRightBottom = point(outerRadius, -1, bottom);
-  const baseLeftBottom = point(baseRadius, 1, bottom);
-  const baseRightBottom = point(baseRadius, -1, bottom);
-  const innerLeftBottom = point(innerRadius, 1, bottom);
-  const innerRightBottom = point(innerRadius, -1, bottom);
+  const outerLeftBottom = point(RAMP_OUTER_RADIUS, 1, RAMP_BOTTOM);
+  const outerRightBottom = point(RAMP_OUTER_RADIUS, -1, RAMP_BOTTOM);
+  const baseLeftBottom = point(RAMP_BASE_RADIUS, 1, RAMP_BOTTOM);
+  const baseRightBottom = point(RAMP_BASE_RADIUS, -1, RAMP_BOTTOM);
+  const innerLeftBottom = point(RAMP_INNER_RADIUS, 1, RAMP_BOTTOM);
+  const innerRightBottom = point(RAMP_INNER_RADIUS, -1, RAMP_BOTTOM);
 
   const vertices = [
     ...outerLeft, ...outerRight,
@@ -226,46 +580,6 @@ function createRampGeometry(angle: number) {
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
-}
-
-function createRampRail(angle: number, side: number, material: THREE.Material) {
-  const group = new THREE.Group();
-  const innerRadius = BASE_LAYOUT.radius - 0.95;
-  const baseRadius = BASE_LAYOUT.radius + 0.08;
-  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86 - 0.25;
-  const halfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
-  const radialX = Math.cos(angle);
-  const radialZ = Math.sin(angle);
-  const tangentX = -radialZ;
-  const tangentZ = radialX;
-  const highY = BASE_LAYOUT.elevation + 0.28;
-  const lowY = 0.2;
-
-  const point = (radius: number, y: number) => new THREE.Vector3(
-    radialX * radius + tangentX * halfWidth * side,
-    y,
-    radialZ * radius + tangentZ * halfWidth * side,
-  );
-
-  const outer = point(outerRadius, lowY);
-  const base = point(baseRadius, highY);
-  const inner = point(innerRadius, highY);
-
-  const addSegment = (start: THREE.Vector3, end: THREE.Vector3) => {
-    const direction = new THREE.Vector3().subVectors(end, start);
-    const length = direction.length();
-    direction.normalize();
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.18, 0.18), material);
-    rail.position.copy(start).add(end).multiplyScalar(0.5);
-    rail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
-    rail.castShadow = true;
-    rail.receiveShadow = true;
-    group.add(rail);
-  };
-
-  addSegment(outer, base);
-  addSegment(base, inner);
-  return group;
 }
 
 function replaceLegacyThroneCrystal(
