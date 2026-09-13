@@ -149,7 +149,7 @@ function createRampGeometry(angle: number) {
   const baseRadius = BASE_LAYOUT.radius + 0.08;
   const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86;
   const halfWidth = BASE_LAYOUT.rampWidth / 2;
-  const high = BASE_LAYOUT.elevation + 0.10;
+  const high = BASE_LAYOUT.elevation + 0.19;
   const low = 0.045;
   const bottom = 0.015;
   const radialX = Math.cos(angle);
