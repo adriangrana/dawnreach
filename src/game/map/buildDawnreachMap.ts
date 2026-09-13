@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import type { DawnreachTextures } from '../shared/textures';
 import { DAWNREACH_LAYOUT, type MapPoint } from './mapLayout';
 
+const TREE_VISUAL_SCALE = 1.38;
+const JUNGLE_ROCK_VISUAL_SCALE = 1.18;
+const BASE_VISUAL_SCALE = 1.16;
+
 export function buildDawnreachMap(textures: DawnreachTextures) {
   const world = new THREE.Group();
   world.name = 'dawnreach-map';
@@ -104,6 +108,7 @@ function createRibbonGeometry(
 function buildBase(team: 'blue' | 'red', x: number, z: number) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
+  group.scale.setScalar(BASE_VISUAL_SCALE);
   group.name = `${team}-base`;
 
   const stone = new THREE.MeshStandardMaterial({ color: 0x73776f, roughness: 0.88 });
@@ -164,13 +169,13 @@ function buildForestCluster(x: number, z: number, scale: number) {
     [-0.9, 1.5, 0.9], [0.3, 1.7, 1.05],
   ];
 
-  for (const [tx, tz, ts] of positions) group.add(buildTree(tx, tz, ts));
+  for (const [tx, tz, ts] of positions) group.add(buildTree(tx, tz, ts * TREE_VISUAL_SCALE));
 
   const rock = new THREE.Mesh(
     new THREE.DodecahedronGeometry(0.75, 0),
     new THREE.MeshStandardMaterial({ color: 0x59615b, roughness: 0.95 }),
   );
-  rock.scale.set(1.5, 0.85, 1.1);
+  rock.scale.set(1.5, 0.85, 1.1).multiplyScalar(JUNGLE_ROCK_VISUAL_SCALE);
   rock.position.set(0.2, 0.55, -0.1);
   rock.rotation.set(0.1, 0.6, -0.08);
   rock.castShadow = true;
