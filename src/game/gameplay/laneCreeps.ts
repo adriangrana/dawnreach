@@ -7,6 +7,7 @@ import {
   publishWorldEntityRuntime,
   removeWorldEntityRuntime,
 } from '../entities/worldCombatBridge';
+import { createMapCollisionWorld, type CollisionWorld } from '../map/collisionWorld';
 import { DAWNREACH_LAYOUT, type MapPoint } from '../map/mapLayout';
 
 export type LaneName = 'top' | 'mid' | 'bot';
@@ -22,6 +23,7 @@ type CreepStats = Readonly<{
   attackInterval: number;
   moveSpeed: number;
   selectionRadius: number;
+  collisionRadius: number;
 }>;
 
 type AttackActivity = Readonly<{
@@ -31,11 +33,11 @@ type AttackActivity = Readonly<{
 
 type LaneCreepRuntime = {
   entity: GameEntity;
+  model: THREE.Group;
   type: LaneCreepType;
   lane: LaneName;
   team: CombatTeam;
   route: readonly MapPoint[];
-  routeHeights: readonly number[];
   routeIndex: number;
   state: LaneCreepState;
   target: GameEntity | null;
@@ -45,10 +47,14 @@ type LaneCreepRuntime = {
   nextScanAt: number;
   aggroLockUntil: number;
   returnNodeIndex: number;
-  deathAt: number | null;
   reachedEndAt: number | null;
   spawnedAt: number;
   phase: number;
+  seed: number;
+  spatialX: number;
+  spatialZ: number;
+  heightCellKey: number;
+  targetY: number;
 };
 
 type LaneTeamBucket = Record<CombatTeam, Set<LaneCreepRuntime>>;
@@ -58,6 +64,15 @@ const GAME_UNIT_TO_WORLD = 0.01;
 const WORLD_UNITS = (gameUnits: number) => gameUnits * GAME_UNIT_TO_WORLD;
 const ACQUISITION_RANGE_SQ = WORLD_UNITS(500) ** 2;
 const LEASH_DISTANCE_SQ = WORLD_UNITS(400) ** 2;
+const HERO_COLLISION_RADIUS = 0.48;
+const UNIT_SEPARATION_PADDING = 0.045;
+const SPATIAL_CELL_SIZE = 1.25;
+const SPATIAL_STRIDE = 4096;
+const SPATIAL_OFFSET = 1024;
+const HEIGHT_CACHE_STEP = 0.18;
+const HEIGHT_STRIDE = 8192;
+const HEIGHT_OFFSET = 2048;
+const HEIGHT_DAMPING = 30;
 const TEMP_A = new THREE.Vector3();
 const TEMP_B = new THREE.Vector3();
 const SURFACE_RAY = new THREE.Raycaster();
@@ -74,10 +89,9 @@ export const LANE_CREEP_TUNING = {
   aggroLockSeconds: 2.3,
   outOfLaneAttackGraceSeconds: 3,
   activeAttackWindowSeconds: 1.6,
-  scanIntervalSeconds: 0.20,
+  scanIntervalSeconds: 0.2,
   laneReturnThreshold: 0.55,
   laneNodeArrivalDistance: 0.32,
-  corpseLifetimeSeconds: 0,
   endOfLaneCleanupSeconds: 4,
   maximumLifetimeSeconds: 120,
   visionLeaderRebalanceSeconds: 0.45,
@@ -89,33 +103,37 @@ const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
     maxHp: 550,
     damage: 24,
     attackRange: 1.2,
-    attackInterval: 1.0,
-    moveSpeed: 3.0,
+    attackInterval: 1,
+    moveSpeed: 3,
     selectionRadius: 0.56,
+    collisionRadius: 0.34,
   },
   flagbearer: {
     maxHp: 550,
     damage: 24,
     attackRange: 1.2,
-    attackInterval: 1.0,
-    moveSpeed: 3.0,
+    attackInterval: 1,
+    moveSpeed: 3,
     selectionRadius: 0.58,
+    collisionRadius: 0.35,
   },
   ranged: {
     maxHp: 360,
     damage: 28,
     attackRange: 4.35,
     attackInterval: 1.2,
-    moveSpeed: 3.0,
+    moveSpeed: 3,
     selectionRadius: 0.54,
+    collisionRadius: 0.32,
   },
   siege: {
     maxHp: 900,
     damage: 58,
-    attackRange: 5.0,
-    attackInterval: 2.0,
+    attackRange: 5,
+    attackInterval: 2,
     moveSpeed: 2.45,
     selectionRadius: 0.82,
+    collisionRadius: 0.48,
   },
 };
 
@@ -161,15 +179,13 @@ class LaneCreepManager {
   private readonly attackActivity = new Map<string, AttackActivity>();
   private readonly commandSurfaces: THREE.Mesh[] = [];
   private readonly resources: VisualResources = createVisualResources();
+  private readonly collisionWorld: CollisionWorld;
+  private readonly spatialCells = new Map<number, Set<LaneCreepRuntime>>();
+  private readonly heightCache = new Map<number, number>();
   private readonly buckets: Record<LaneName, LaneTeamBucket> = {
     top: { blue: new Set(), red: new Set() },
     mid: { blue: new Set(), red: new Set() },
     bot: { blue: new Set(), red: new Set() },
-  };
-  private readonly laneHeights: Record<LaneName, number[]> = {
-    top: [],
-    mid: [],
-    bot: [],
   };
   private readonly staticCandidates: GameEntity[] = [];
   private readonly staticById = new Map<string, GameEntity>();
@@ -188,13 +204,23 @@ class LaneCreepManager {
     private readonly scene: THREE.Scene,
     private readonly registry: GameEntityRegistry,
   ) {
+    const battlefield = scene.getObjectByName('dawnreach-map');
+    if (!battlefield) throw new Error('Lane creep system requires dawnreach-map');
+
     scene.traverse((object) => {
       if (object instanceof THREE.Mesh && object.userData.commandSurface) this.commandSurfaces.push(object);
     });
 
-    for (const lane of LANES) {
-      this.laneHeights[lane] = DAWNREACH_LAYOUT.lanes[lane].map(([x, z]) => this.raycastSurfaceHeight(x, z));
-    }
+    // The gameplay bootstrap already builds the hero collision world before the first hero
+    // registration. createMapCollisionWorld also opens camp entrances, so mark those groups
+    // as already authored before constructing the creep-side static solver to keep that step
+    // idempotent instead of removing another pair of rocks from every camp.
+    battlefield.traverse((object) => {
+      if (object instanceof THREE.Group && object.name.startsWith('jungle-camp-')) {
+        object.userData.authoredEntrance = true;
+      }
+    });
+    this.collisionWorld = createMapCollisionWorld(battlefield);
 
     this.refreshStaticCandidates();
     const canvases = document.querySelectorAll<HTMLCanvasElement>('.game-canvas');
@@ -269,7 +295,6 @@ class LaneCreepManager {
   ) {
     const authoredLane = DAWNREACH_LAYOUT.lanes[lane];
     const route = team === 'blue' ? authoredLane : [...authoredLane].reverse();
-    const routeHeights = team === 'blue' ? this.laneHeights[lane] : [...this.laneHeights[lane]].reverse();
     const start = route[0];
     const next = route[1] ?? route[0];
     const dx = next[0] - start[0];
@@ -280,23 +305,25 @@ class LaneCreepManager {
     const sideX = -dirZ;
     const sideZ = dirX;
     const lateralSlot = formationIndex < 3
-      ? (formationIndex - 1) * 0.72
+      ? (formationIndex - 1) * 0.78
       : formationIndex === 3
         ? 0
-        : (formationIndex - (formationSize - 1) / 2) * 0.58;
-    const trailingOffset = formationIndex < 3 ? 0 : formationIndex === 3 ? 0.92 : 1.65;
+        : (formationIndex - (formationSize - 1) / 2) * 0.66;
+    const trailingOffset = formationIndex < 3 ? 0 : formationIndex === 3 ? 1 : 1.8;
+    const stats = CREEP_STATS[type];
 
-    const root = buildCreepVisual(this.resources, team, type);
+    const rawSpawnX = start[0] + sideX * lateralSlot - dirX * trailingOffset;
+    const rawSpawnZ = start[1] + sideZ * lateralSlot - dirZ * trailingOffset;
+    const spawn = this.findFreeSpawnPoint(rawSpawnX, rawSpawnZ, dirX, dirZ, stats.collisionRadius);
+
+    const { root, model } = buildCreepVisual(this.resources, team, type);
     root.name = `${team}-${lane}-${type}-wave-${waveIndex}-${this.serial}`;
-    root.position.set(
-      start[0] + sideX * lateralSlot - dirX * trailingOffset,
-      routeHeights[0] + 0.03,
-      start[1] + sideZ * lateralSlot - dirZ * trailingOffset,
-    );
+    const initialSurface = this.surfaceHeightAt(spawn.x, spawn.z) + 0.03;
+    root.position.set(spawn.x, initialSurface, spawn.z);
     root.rotation.y = Math.atan2(dirX, dirZ);
+    root.userData.collisionRadius = stats.collisionRadius;
     this.scene.add(root);
 
-    const stats = CREEP_STATS[type];
     const id = `lane-creep:${team}:${lane}:${waveIndex}:${this.serial++}`;
     const entity = this.registry.register(root, {
       id,
@@ -305,8 +332,6 @@ class LaneCreepManager {
       team,
       selectable: true,
       targetable: true,
-      // Fog-of-war vision is represented by one moving allied leader per lane instead
-      // of every creep becoming a 64-ray occlusion source.
       grantsVision: false,
       visionRadius: 8,
       visionHeight: type === 'siege' ? 1.45 : 1.15,
@@ -327,13 +352,14 @@ class LaneCreepManager {
     entity.root.userData.laneCreepState = 'ATTACK_MOVE' satisfies LaneCreepState;
     publishWorldEntityRuntime(entity.id, runtimeSnapshot(entity));
 
+    const spatial = spatialCoords(root.position.x, root.position.z);
     const runtime: LaneCreepRuntime = {
       entity,
+      model,
       type,
       lane,
       team,
       route,
-      routeHeights,
       routeIndex: 1,
       state: 'ATTACK_MOVE',
       target: null,
@@ -343,15 +369,39 @@ class LaneCreepManager {
       nextScanAt: now + (this.serial % 10) * (LANE_CREEP_TUNING.scanIntervalSeconds / 10),
       aggroLockUntil: 0,
       returnNodeIndex: 0,
-      deathAt: null,
       reachedEndAt: null,
       spawnedAt: now,
       phase: (this.serial % 17) / 17 * Math.PI * 2,
+      seed: this.serial,
+      spatialX: spatial.x,
+      spatialZ: spatial.z,
+      heightCellKey: heightKey(root.position.x, root.position.z),
+      targetY: initialSurface,
     };
 
     this.creeps.push(runtime);
     this.creepById.set(entity.id, runtime);
     this.buckets[lane][team].add(runtime);
+    this.addToSpatialCell(runtime);
+  }
+
+  private findFreeSpawnPoint(
+    x: number,
+    z: number,
+    dirX: number,
+    dirZ: number,
+    radius: number,
+  ) {
+    const step = 0.28;
+    for (let index = 0; index <= 36; index++) {
+      const candidate = { x: x + dirX * step * index, z: z + dirZ * step * index };
+      if (this.collisionWorld.isBlocked(candidate, radius)) continue;
+      if (this.hasDynamicOverlapAt(null, candidate.x, candidate.z, radius)) continue;
+      return candidate;
+    }
+
+    const fallback = { x: x + dirX * 6, z: z + dirZ * 6 };
+    return this.collisionWorld.move({ x, z }, fallback, radius);
   }
 
   private refreshStaticCandidates() {
@@ -382,9 +432,9 @@ class LaneCreepManager {
         const bucket = this.buckets[lane][event.targetTeam as CombatTeam];
         for (const creep of bucket) {
           if (!creep.entity.alive || creep.state === 'RETURNING' || nowSeconds < creep.aggroLockUntil) continue;
-          const dx = creep.entity.root.position.x - event.attackerPosition.x;
-          const dz = creep.entity.root.position.z - event.attackerPosition.z;
-          if (dx * dx + dz * dz > ACQUISITION_RANGE_SQ) continue;
+          const cx = creep.entity.root.position.x - event.attackerPosition.x;
+          const cz = creep.entity.root.position.z - event.attackerPosition.z;
+          if (cx * cx + cz * cz > ACQUISITION_RANGE_SQ) continue;
           if (!this.isVisibleToCreep(creep, attacker)) continue;
 
           creep.target = attacker;
@@ -401,22 +451,22 @@ class LaneCreepManager {
   private updateCreep(creep: LaneCreepRuntime, now: number, dt: number) {
     const { entity } = creep;
 
-    if (now - creep.spawnedAt >= LANE_CREEP_TUNING.maximumLifetimeSeconds) return false;
-
     if (!entity.alive || entity.currentHp <= 0) {
-      if (creep.deathAt === null) creep.deathAt = now;
       entity.alive = false;
       entity.currentHp = 0;
+      entity.root.visible = false;
       entity.root.userData.currentHp = 0;
-      entity.root.userData.laneCreepState = 'DEAD';
-      return now - creep.deathAt < LANE_CREEP_TUNING.corpseLifetimeSeconds;
+      return false;
     }
+
+    if (now - creep.spawnedAt >= LANE_CREEP_TUNING.maximumLifetimeSeconds) return false;
 
     if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) this.clearTarget(creep);
 
     if (creep.state === 'RETURNING') {
-      this.updateReturning(creep, dt);
-      this.animateCreep(creep, now, true);
+      const moving = this.updateReturning(creep, dt, now);
+      this.updateSurfaceHeight(creep, dt, moving);
+      this.animateCreep(creep, now, moving);
       return true;
     }
 
@@ -430,6 +480,7 @@ class LaneCreepManager {
       );
       if (laneDistanceSq > LEASH_DISTANCE_SQ) {
         this.beginReturning(creep);
+        this.updateSurfaceHeight(creep, dt, false);
         this.animateCreep(creep, now, false);
         return true;
       }
@@ -438,6 +489,7 @@ class LaneCreepManager {
         const lastAttackAt = this.attackActivity.get(creep.target.id)?.atSeconds ?? creep.targetAcquiredAt;
         if (now - Math.max(creep.targetAcquiredAt, lastAttackAt) > LANE_CREEP_TUNING.outOfLaneAttackGraceSeconds) {
           this.beginReturning(creep);
+          this.updateSurfaceHeight(creep, dt, false);
           this.animateCreep(creep, now, false);
           return true;
         }
@@ -461,7 +513,8 @@ class LaneCreepManager {
       const dx = targetPosition.x - entity.root.position.x;
       const dz = targetPosition.z - entity.root.position.z;
       const distanceSq = dx * dx + dz * dz;
-      if (distanceSq <= creep.stats.attackRange * creep.stats.attackRange) {
+      const reach = this.combatReach(creep, creep.target);
+      if (distanceSq <= reach * reach) {
         this.faceVector(creep, dx, dz);
         if (now >= creep.nextAttackAt) this.attackTarget(creep, creep.target, now);
       } else {
@@ -472,6 +525,7 @@ class LaneCreepManager {
       moving = this.followLane(creep, dt, now);
     }
 
+    this.updateSurfaceHeight(creep, dt, moving);
     this.animateCreep(creep, now, moving);
     return creep.reachedEndAt === null
       || now - creep.reachedEndAt < LANE_CREEP_TUNING.endOfLaneCleanupSeconds;
@@ -534,11 +588,23 @@ class LaneCreepManager {
     if (candidate.kind === 'hero' && attackingAlly) return 3;
     if ((candidate.kind === 'tower' || candidate.kind === 'building') && attackingAlly) return 4;
 
-    if (distanceSq > creep.stats.attackRange * creep.stats.attackRange) return null;
+    const reach = this.combatReach(creep, candidate);
+    if (distanceSq > reach * reach) return null;
     if (candidate.kind === 'creep') return 5;
     if (candidate.kind === 'hero') return 6;
     if (candidate.kind === 'tower' || candidate.kind === 'building') return 7;
     return null;
+  }
+
+  private combatReach(creep: LaneCreepRuntime, target: GameEntity) {
+    const targetCreep = this.creepById.get(target.id);
+    const targetRadius = targetCreep?.stats.collisionRadius
+      ?? (target.kind === 'hero'
+        ? HERO_COLLISION_RADIUS
+        : (target.kind === 'tower' || target.kind === 'building')
+          ? target.selectionRadius * 0.62
+          : 0.25);
+    return creep.stats.attackRange + targetRadius;
   }
 
   private isHostileCombatTarget(creep: LaneCreepRuntime, target: GameEntity) {
@@ -585,7 +651,10 @@ class LaneCreepManager {
 
     target.currentHp = Math.max(0, target.currentHp - creep.stats.damage);
     target.root.userData.currentHp = target.currentHp;
-    if (target.currentHp <= 0) target.alive = false;
+    if (target.currentHp <= 0) {
+      target.alive = false;
+      if (target.kind === 'creep') target.root.visible = false;
+    }
 
     publishWorldEntityRuntime(target.id, runtimeSnapshot(target));
     emitWorldCombatEvent({
@@ -597,12 +666,7 @@ class LaneCreepManager {
       atMs: eventNow,
     });
 
-    const model = creep.entity.root.getObjectByName('lane-creep-model');
-    if (model) {
-      const baseScale = Number(model.userData.baseScale ?? 1);
-      model.scale.set(baseScale * 1.06, baseScale * 0.95, baseScale * 1.06);
-    }
-
+    creep.model.scale.set(1.06, 0.95, 1.06);
     if (!target.alive) this.clearTarget(creep);
   }
 
@@ -646,7 +710,7 @@ class LaneCreepManager {
     this.writeState(creep);
   }
 
-  private updateReturning(creep: LaneCreepRuntime, dt: number) {
+  private updateReturning(creep: LaneCreepRuntime, dt: number, _now: number) {
     const node = creep.route[creep.returnNodeIndex] ?? creep.route[0];
     const dx = node[0] - creep.entity.root.position.x;
     const dz = node[1] - creep.entity.root.position.z;
@@ -655,9 +719,9 @@ class LaneCreepManager {
       creep.state = 'ATTACK_MOVE';
       creep.nextScanAt = 0;
       this.writeState(creep);
-      return;
+      return false;
     }
-    this.moveToward(creep, node[0], node[1], dt, false);
+    return this.moveToward(creep, node[0], node[1], dt, false);
   }
 
   private moveToward(
@@ -677,19 +741,161 @@ class LaneCreepManager {
     const travel = Math.min(distance, creep.stats.moveSpeed * dt);
     const nx = dx / distance;
     const nz = dz / distance;
-    const nextX = root.position.x + nx * travel;
-    const nextZ = root.position.z + nz * travel;
+    const from = { x: root.position.x, z: root.position.z };
+    const desired = {
+      x: root.position.x + nx * travel,
+      z: root.position.z + nz * travel,
+    };
 
-    if (enforceLeash && distanceToPolylineSquared(nextX, nextZ, creep.route) > LEASH_DISTANCE_SQ) {
+    if (enforceLeash && distanceToPolylineSquared(desired.x, desired.z, creep.route) > LEASH_DISTANCE_SQ) {
       this.beginReturning(creep);
       return false;
     }
 
-    root.position.x = nextX;
-    root.position.z = nextZ;
-    root.position.y = samplePolylineHeight(nextX, nextZ, creep.route, creep.routeHeights) + 0.03;
+    let resolved = this.collisionWorld.isBlocked(desired, creep.stats.collisionRadius)
+      ? this.collisionWorld.move(from, desired, creep.stats.collisionRadius)
+      : desired;
+
+    const separated = this.resolveDynamicCollision(creep, resolved.x, resolved.z);
+    if (!this.collisionWorld.isBlocked(separated, creep.stats.collisionRadius)) {
+      resolved = separated;
+    } else {
+      resolved = this.collisionWorld.move(from, separated, creep.stats.collisionRadius);
+    }
+
+    if (this.hasDynamicOverlapAt(creep, resolved.x, resolved.z, creep.stats.collisionRadius)) {
+      const retry = this.resolveDynamicCollision(creep, resolved.x, resolved.z);
+      if (!this.collisionWorld.isBlocked(retry, creep.stats.collisionRadius)
+        && !this.hasDynamicOverlapAt(creep, retry.x, retry.z, creep.stats.collisionRadius)) {
+        resolved = retry;
+      } else {
+        resolved = from;
+      }
+    }
+
+    root.position.x = resolved.x;
+    root.position.z = resolved.z;
     root.rotation.y = Math.atan2(nx, nz);
-    return true;
+    this.updateSpatialCell(creep);
+    return Math.hypot(resolved.x - from.x, resolved.z - from.z) > 0.0005;
+  }
+
+  private resolveDynamicCollision(creep: LaneCreepRuntime, startX: number, startZ: number) {
+    let x = startX;
+    let z = startZ;
+
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false;
+      const cell = spatialCoords(x, z);
+
+      for (let cellX = cell.x - 1; cellX <= cell.x + 1; cellX++) {
+        for (let cellZ = cell.z - 1; cellZ <= cell.z + 1; cellZ++) {
+          const occupants = this.spatialCells.get(spatialKey(cellX, cellZ));
+          if (!occupants) continue;
+          for (const other of occupants) {
+            if (other === creep || !other.entity.alive) continue;
+            const required = creep.stats.collisionRadius + other.stats.collisionRadius + UNIT_SEPARATION_PADDING;
+            let dx = x - other.entity.root.position.x;
+            let dz = z - other.entity.root.position.z;
+            let distanceSq = dx * dx + dz * dz;
+            if (distanceSq >= required * required) continue;
+
+            if (distanceSq <= 1e-10) {
+              const angle = ((creep.seed * 37 + other.seed * 17) % 360) * Math.PI / 180;
+              dx = Math.cos(angle);
+              dz = Math.sin(angle);
+              distanceSq = 1;
+            }
+
+            const distance = Math.sqrt(distanceSq);
+            const push = required - distance + 0.002;
+            x += dx / distance * push;
+            z += dz / distance * push;
+            changed = true;
+          }
+        }
+      }
+
+      for (const candidate of this.staticCandidates) {
+        if (candidate.kind !== 'hero' || !candidate.alive) continue;
+        const position = this.getEntityPosition(candidate, TEMP_B);
+        const required = creep.stats.collisionRadius + HERO_COLLISION_RADIUS + UNIT_SEPARATION_PADDING;
+        let dx = x - position.x;
+        let dz = z - position.z;
+        let distanceSq = dx * dx + dz * dz;
+        if (distanceSq >= required * required) continue;
+        if (distanceSq <= 1e-10) {
+          const angle = (creep.seed % 360) * Math.PI / 180;
+          dx = Math.cos(angle);
+          dz = Math.sin(angle);
+          distanceSq = 1;
+        }
+        const distance = Math.sqrt(distanceSq);
+        const push = required - distance + 0.002;
+        x += dx / distance * push;
+        z += dz / distance * push;
+        changed = true;
+      }
+
+      if (!changed) break;
+    }
+
+    return { x, z };
+  }
+
+  private hasDynamicOverlapAt(
+    creep: LaneCreepRuntime | null,
+    x: number,
+    z: number,
+    radius: number,
+  ) {
+    const cell = spatialCoords(x, z);
+    for (let cellX = cell.x - 1; cellX <= cell.x + 1; cellX++) {
+      for (let cellZ = cell.z - 1; cellZ <= cell.z + 1; cellZ++) {
+        const occupants = this.spatialCells.get(spatialKey(cellX, cellZ));
+        if (!occupants) continue;
+        for (const other of occupants) {
+          if (other === creep || !other.entity.alive) continue;
+          const required = radius + other.stats.collisionRadius + UNIT_SEPARATION_PADDING * 0.5;
+          const dx = x - other.entity.root.position.x;
+          const dz = z - other.entity.root.position.z;
+          if (dx * dx + dz * dz < required * required) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private updateSurfaceHeight(creep: LaneCreepRuntime, dt: number, moving: boolean) {
+    if (moving) {
+      const key = heightKey(creep.entity.root.position.x, creep.entity.root.position.z);
+      if (key !== creep.heightCellKey) {
+        creep.heightCellKey = key;
+        creep.targetY = this.surfaceHeightAt(
+          creep.entity.root.position.x,
+          creep.entity.root.position.z,
+        ) + 0.03;
+      }
+    }
+
+    const blend = 1 - Math.exp(-HEIGHT_DAMPING * dt);
+    creep.entity.root.position.y = THREE.MathUtils.lerp(
+      creep.entity.root.position.y,
+      creep.targetY,
+      blend,
+    );
+  }
+
+  private surfaceHeightAt(x: number, z: number) {
+    const key = heightKey(x, z);
+    const cached = this.heightCache.get(key);
+    if (cached !== undefined) return cached;
+
+    SURFACE_RAY.ray.origin.set(x, 64, z);
+    const hit = SURFACE_RAY.intersectObjects(this.commandSurfaces, false)[0];
+    const height = hit?.point.y ?? 0;
+    this.heightCache.set(key, height);
+    return height;
   }
 
   private faceVector(creep: LaneCreepRuntime, dx: number, dz: number) {
@@ -697,16 +903,11 @@ class LaneCreepManager {
   }
 
   private animateCreep(creep: LaneCreepRuntime, now: number, moving: boolean) {
-    const model = creep.entity.root.getObjectByName('lane-creep-model');
-    if (!model) return;
-    const baseScale = Number(model.userData.baseScale ?? 1);
-    const desired = moving
-      ? baseScale * (1 + Math.sin(now * 9 + creep.phase) * 0.025)
-      : baseScale;
-    model.position.y = moving ? Math.abs(Math.sin(now * 7 + creep.phase)) * 0.028 : 0;
-    model.scale.x += (desired - model.scale.x) * 0.16;
-    model.scale.y += (baseScale - model.scale.y) * 0.16;
-    model.scale.z += (desired - model.scale.z) * 0.16;
+    const desired = moving ? 1 + Math.sin(now * 9 + creep.phase) * 0.025 : 1;
+    creep.model.position.y = moving ? Math.abs(Math.sin(now * 7 + creep.phase)) * 0.028 : 0;
+    creep.model.scale.x += (desired - creep.model.scale.x) * 0.16;
+    creep.model.scale.y += (1 - creep.model.scale.y) * 0.16;
+    creep.model.scale.z += (desired - creep.model.scale.z) * 0.16;
   }
 
   private clearTarget(creep: LaneCreepRuntime) {
@@ -730,12 +931,6 @@ class LaneCreepManager {
 
   private findEntityById(id: string): GameEntity | null {
     return this.creepById.get(id)?.entity ?? this.staticById.get(id) ?? null;
-  }
-
-  private raycastSurfaceHeight(x: number, z: number) {
-    SURFACE_RAY.ray.origin.set(x, 64, z);
-    const hit = SURFACE_RAY.intersectObjects(this.commandSurfaces, false)[0];
-    return hit?.point.y ?? 0;
   }
 
   private rebalanceVisionLeaders() {
@@ -768,13 +963,45 @@ class LaneCreepManager {
     }
   }
 
+  private addToSpatialCell(creep: LaneCreepRuntime) {
+    const key = spatialKey(creep.spatialX, creep.spatialZ);
+    let bucket = this.spatialCells.get(key);
+    if (!bucket) {
+      bucket = new Set();
+      this.spatialCells.set(key, bucket);
+    }
+    bucket.add(creep);
+  }
+
+  private updateSpatialCell(creep: LaneCreepRuntime) {
+    const next = spatialCoords(creep.entity.root.position.x, creep.entity.root.position.z);
+    if (next.x === creep.spatialX && next.z === creep.spatialZ) return;
+
+    const previousKey = spatialKey(creep.spatialX, creep.spatialZ);
+    const previous = this.spatialCells.get(previousKey);
+    previous?.delete(creep);
+    if (previous?.size === 0) this.spatialCells.delete(previousKey);
+
+    creep.spatialX = next.x;
+    creep.spatialZ = next.z;
+    this.addToSpatialCell(creep);
+  }
+
+  private removeFromSpatialCell(creep: LaneCreepRuntime) {
+    const key = spatialKey(creep.spatialX, creep.spatialZ);
+    const bucket = this.spatialCells.get(key);
+    bucket?.delete(creep);
+    if (bucket?.size === 0) this.spatialCells.delete(key);
+  }
+
   private cleanupCreep(index: number) {
     const creep = this.creeps[index];
+    this.removeFromSpatialCell(creep);
     this.buckets[creep.lane][creep.team].delete(creep);
     this.creepById.delete(creep.entity.id);
     this.attackActivity.delete(creep.entity.id);
     creep.entity.grantsVision = false;
-    disposeCreepOverhead(creep.entity);
+    disposeEntityOverhead(creep.entity.root);
     this.registry.unregister(creep.entity.root);
     removeWorldEntityRuntime(creep.entity.id);
     this.scene.remove(creep.entity.root);
@@ -787,17 +1014,10 @@ class LaneCreepManager {
     cancelAnimationFrame(this.animationFrame);
     for (let index = this.creeps.length - 1; index >= 0; index--) this.cleanupCreep(index);
     this.resources.dispose();
+    this.heightCache.clear();
+    this.spatialCells.clear();
     managerByScene.delete(this.scene);
   }
-}
-
-function disposeCreepOverhead(entity: GameEntity) {
-  const overhead = entity.root.getObjectByName(`${entity.id}-overhead`);
-  if (!(overhead instanceof THREE.Sprite)) return;
-  overhead.onBeforeRender = () => {};
-  overhead.material.map?.dispose();
-  overhead.material.dispose();
-  entity.root.remove(overhead);
 }
 
 function runtimeSnapshot(entity: GameEntity) {
@@ -819,6 +1039,23 @@ function creepDisplayName(team: CombatTeam, type: LaneCreepType) {
     case 'siege': return `${teamName} Siege Creep`;
     case 'melee': return `${teamName} Melee Creep`;
   }
+}
+
+function spatialCoords(x: number, z: number) {
+  return {
+    x: Math.floor(x / SPATIAL_CELL_SIZE),
+    z: Math.floor(z / SPATIAL_CELL_SIZE),
+  };
+}
+
+function spatialKey(x: number, z: number) {
+  return (x + SPATIAL_OFFSET) * SPATIAL_STRIDE + z + SPATIAL_OFFSET;
+}
+
+function heightKey(x: number, z: number) {
+  const cellX = Math.round(x / HEIGHT_CACHE_STEP);
+  const cellZ = Math.round(z / HEIGHT_CACHE_STEP);
+  return (cellX + HEIGHT_OFFSET) * HEIGHT_STRIDE + cellZ + HEIGHT_OFFSET;
 }
 
 function nearestNodeIndex(x: number, z: number, route: readonly MapPoint[]) {
@@ -843,14 +1080,8 @@ function distanceToNextWaypointSquared(creep: LaneCreepRuntime) {
   return dx * dx + dz * dz;
 }
 
-function closestPolylineSegment(
-  x: number,
-  z: number,
-  route: readonly MapPoint[],
-) {
+function distanceToPolylineSquared(x: number, z: number, route: readonly MapPoint[]) {
   let bestDistanceSq = Number.POSITIVE_INFINITY;
-  let bestIndex = 0;
-  let bestT = 0;
   for (let index = 0; index < route.length - 1; index++) {
     const a = route[index];
     const b = route[index + 1];
@@ -864,30 +1095,18 @@ function closestPolylineSegment(
     const pz = a[1] + vz * t;
     const dx = x - px;
     const dz = z - pz;
-    const distanceSq = dx * dx + dz * dz;
-    if (distanceSq < bestDistanceSq) {
-      bestDistanceSq = distanceSq;
-      bestIndex = index;
-      bestT = t;
-    }
+    bestDistanceSq = Math.min(bestDistanceSq, dx * dx + dz * dz);
   }
-  return { distanceSq: bestDistanceSq, index: bestIndex, t: bestT };
+  return Number.isFinite(bestDistanceSq) ? bestDistanceSq : 0;
 }
 
-function distanceToPolylineSquared(x: number, z: number, route: readonly MapPoint[]) {
-  return closestPolylineSegment(x, z, route).distanceSq;
-}
-
-function samplePolylineHeight(
-  x: number,
-  z: number,
-  route: readonly MapPoint[],
-  heights: readonly number[],
-) {
-  const closest = closestPolylineSegment(x, z, route);
-  const from = heights[closest.index] ?? 0;
-  const to = heights[closest.index + 1] ?? from;
-  return THREE.MathUtils.lerp(from, to, closest.t);
+function disposeEntityOverhead(root: THREE.Object3D) {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Sprite) || !object.name.endsWith('-overhead')) return;
+    const material = object.material;
+    material.map?.dispose();
+    material.dispose();
+  });
 }
 
 function createVisualResources() {
@@ -955,9 +1174,8 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     const crest = new THREE.Mesh(resources.geometries.siegeCrest, teamMaterial);
     crest.position.set(0, 0.67, 0.49);
     model.add(crest);
-    model.userData.baseScale = 0.92;
     model.scale.setScalar(0.92);
-    return root;
+    return { root, model };
   }
 
   const body = new THREE.Mesh(resources.geometries.body, teamMaterial);
@@ -1004,7 +1222,6 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     model.add(flag);
   }
 
-  model.userData.baseScale = 0.82;
   model.scale.setScalar(0.82);
-  return root;
+  return { root, model };
 }
