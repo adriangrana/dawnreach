@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-game-window",
+  "description": "Dawnreach gameplay window permissions, including cursor confinement for MOBA camera controls.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-cursor-grab"
+  ]
+}
