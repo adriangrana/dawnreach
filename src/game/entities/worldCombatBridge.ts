@@ -29,6 +29,9 @@ export type WorldCombatEvent = Readonly<{
   alive: boolean;
   atMs: number;
   respawnSeconds?: number;
+  amount?: number;
+  sourceEntityId?: string;
+  critical?: boolean;
 }>;
 
 export type WorldAttackEvent = Readonly<{
@@ -46,12 +49,19 @@ export type WorldAttackEvent = Readonly<{
 
 type WorldCombatListener = (event: WorldCombatEvent) => void;
 
+type PendingHpChange = Readonly<{
+  amount: number;
+  kind: 'damage' | 'heal';
+}>;
+
 const runtimeSnapshots = new Map<string, WorldEntityRuntimeSnapshot>();
+const pendingHpChanges = new Map<string, PendingHpChange>();
 const combatListeners = new Set<WorldCombatListener>();
 const attackEvents: WorldAttackEvent[] = [];
 let attackSequence = 0;
 
 const MAX_ATTACK_EVENTS = 160;
+const ATTACK_SOURCE_MATCH_WINDOW_MS = 160;
 
 function cloneRuntimeSnapshot(snapshot: WorldEntityRuntimeSnapshot): WorldEntityRuntimeSnapshot {
   return {
@@ -64,6 +74,16 @@ function cloneRuntimeSnapshot(snapshot: WorldEntityRuntimeSnapshot): WorldEntity
 }
 
 export function publishWorldEntityRuntime(entityId: string, snapshot: WorldEntityRuntimeSnapshot): void {
+  const previous = runtimeSnapshots.get(entityId);
+  if (previous) {
+    const hpDelta = snapshot.currentHp - previous.currentHp;
+    if (Math.abs(hpDelta) > 0.001) {
+      pendingHpChanges.set(entityId, {
+        amount: Math.abs(hpDelta),
+        kind: hpDelta < 0 ? 'damage' : 'heal',
+      });
+    }
+  }
   runtimeSnapshots.set(entityId, cloneRuntimeSnapshot(snapshot));
 }
 
@@ -73,6 +93,7 @@ export function getWorldEntityRuntime(entityId: string): WorldEntityRuntimeSnaps
 
 export function removeWorldEntityRuntime(entityId: string): void {
   runtimeSnapshots.delete(entityId);
+  pendingHpChanges.delete(entityId);
 }
 
 export function subscribeWorldCombatEvents(listener: WorldCombatListener): () => void {
@@ -82,6 +103,25 @@ export function subscribeWorldCombatEvents(listener: WorldCombatListener): () =>
 
 export function emitWorldCombatEvent(event: WorldCombatEvent): void {
   const snapshot = runtimeSnapshots.get(event.entityId);
+  const pending = pendingHpChanges.get(event.entityId);
+  const expectedKind = event.reason === 'heal' || event.reason === 'respawn' ? 'heal' : 'damage';
+  const snapshotAmount = snapshot
+    ? expectedKind === 'damage'
+      ? Math.max(0, snapshot.currentHp - event.currentHp)
+      : Math.max(0, event.currentHp - snapshot.currentHp)
+    : 0;
+  const inferredAmount = event.amount
+    ?? (pending?.kind === expectedKind ? pending.amount : undefined)
+    ?? (snapshotAmount > 0.001 ? snapshotAmount : undefined);
+  const sourceEntityId = event.sourceEntityId ?? inferRecentAttackSource(event);
+  const published: WorldCombatEvent = {
+    ...event,
+    amount: inferredAmount,
+    sourceEntityId,
+  };
+
+  pendingHpChanges.delete(event.entityId);
+
   if (snapshot) {
     runtimeSnapshots.set(event.entityId, {
       ...snapshot,
@@ -91,7 +131,20 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
     });
   }
 
-  for (const listener of combatListeners) listener(event);
+  for (const listener of combatListeners) listener(published);
+}
+
+function inferRecentAttackSource(event: WorldCombatEvent): string | undefined {
+  if (event.reason !== 'damage' && event.reason !== 'death') return undefined;
+
+  for (let index = attackEvents.length - 1; index >= 0; index--) {
+    const attack = attackEvents[index];
+    const ageMs = event.atMs - attack.atMs;
+    if (ageMs > ATTACK_SOURCE_MATCH_WINDOW_MS) break;
+    if (ageMs < -4) continue;
+    if (attack.targetId === event.entityId) return attack.attackerId;
+  }
+  return undefined;
 }
 
 export function publishWorldAttackEvent(
