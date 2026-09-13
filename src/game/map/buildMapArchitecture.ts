@@ -201,7 +201,7 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
   // The authored citadel wall used to leave only a hairline clearance around each ramp.
   // Its lowest dark course could therefore poke through the ramp surface at the threshold.
   // Give every entrance a real architectural opening wider than the ramp itself.
-  const gateHalfAngle = rampWidth / (radius * 2) + 0.13;
+  const gateHalfAngle = rampWidth / (radius * 2) + 0.015;
 
   build.cylinder(stone.stoneDark, radius + 0.38, radius + 0.55, 0.24, 0, -0.11, 0, 128);
   for (let band = 0; band < 17; band++) {
