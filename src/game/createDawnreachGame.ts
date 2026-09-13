@@ -10,6 +10,13 @@ import { createMapCollisionWorld } from './map/collisionWorld';
 import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
 import { polishRiverBridges } from './map/polishRiverBridges';
 import { createWaterEffects } from './map/waterEffects';
+import {
+  createDawnreachNavigationWorld,
+  createNavigationDebugGroup,
+  NAVIGATION_DEBUG,
+  updateNavigationDebugPath,
+} from './navigation/dawnreachNavigation';
+import type { NavigationPath } from './navigation/navigationWorld';
 import { createProceduralTextures } from './shared/textures';
 import type { HeroStats, MatchHeroState } from './match';
 
@@ -42,6 +49,11 @@ const SURFACE_RAY_HEIGHT = 64;
 const ATTACK_RANGE = 1.35;
 const ATTACK_COOLDOWN = 0.72;
 const COMMAND_MARKER_Y = 0.12;
+const WAYPOINT_REACHED_DISTANCE = 0.22;
+const STUCK_REPATH_DELAY = 0.42;
+const REPATH_COOLDOWN = 0.7;
+const TARGET_REPATH_DISTANCE = 0.75;
+const TARGET_REPATH_COOLDOWN = 0.35;
 
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
@@ -119,6 +131,9 @@ export async function createDawnreachGame(
     ((elapsed: number) => void) | undefined;
   const collisionWorld = createMapCollisionWorld(battlefield);
   battlefield.userData.collisionCounts = collisionWorld.counts;
+  const navigation = createDawnreachNavigationWorld(battlefield, collisionWorld, HERO_COLLISION_RADIUS);
+  const navigationDebug = NAVIGATION_DEBUG ? createNavigationDebugGroup(navigation) : null;
+  if (navigationDebug) scene.add(navigationDebug);
 
   const attackables: THREE.Object3D[] = [];
   battlefield.traverse((object) => {
@@ -180,6 +195,13 @@ export async function createDawnreachGame(
   ) + HERO_GROUND_OFFSET;
 
   let destination: Point3 | null = null;
+  let currentPath: Point3[] = [];
+  let currentWaypointIndex = 0;
+  let routeRequest: Point3 | null = null;
+  let stuckDuration = 0;
+  let lastRepathAt = -Infinity;
+  let lastAttackPathTarget: Point3 | null = null;
+  let lastTargetRepathAt = -Infinity;
   let attackOrder: AttackOrder | null = null;
   let attackArmed = false;
   let attackCooldown = 0;
@@ -191,6 +213,36 @@ export async function createDawnreachGame(
   let lastMinimapRender = -Infinity;
   let cameraFocus: Point3 | null = null;
   const cameraAnchor = hero.root.position.clone();
+
+  const heroPoint = (): Point3 => ({ x: hero.root.position.x, z: hero.root.position.z });
+
+  const clearMovementRoute = () => {
+    destination = null;
+    currentPath = [];
+    currentWaypointIndex = 0;
+    routeRequest = null;
+    stuckDuration = 0;
+    updateNavigationDebugPath(navigationDebug, null, heroPoint());
+  };
+
+  const applyNavigationPath = (path: NavigationPath, requested: Point3) => {
+    destination = { x: path.resolvedTarget.x, z: path.resolvedTarget.z };
+    routeRequest = { x: requested.x, z: requested.z };
+    currentPath = path.waypoints.map(point => ({ x: point.x, z: point.z }));
+    currentWaypointIndex = 0;
+    stuckDuration = 0;
+    updateNavigationDebugPath(navigationDebug, path, heroPoint());
+  };
+
+  const planMovementRoute = (point: Point3, allowPartial = true) => {
+    const path = navigation.findPath(heroPoint(), point, { allowPartial });
+    if (!path) {
+      clearMovementRoute();
+      return null;
+    }
+    applyNavigationPath(path, point);
+    return path;
+  };
 
   const clampMapPoint = (point: THREE.Vector3): Point3 => ({
     x: THREE.MathUtils.clamp(point.x, MAP_BOUNDS.minX + MAP_EDGE_PADDING, MAP_BOUNDS.maxX - MAP_EDGE_PADDING),
@@ -249,27 +301,37 @@ export async function createDawnreachGame(
 
   const issueMoveCommand = (point: Point3) => {
     attackOrder = null;
-    destination = point;
+    lastAttackPathTarget = null;
     disarmAttack();
     attackMarker.visible = false;
-    showCommandMarker(targetMarker, point);
+    const path = planMovementRoute(point, true);
+    if (path) showCommandMarker(targetMarker, path.resolvedTarget);
+    else targetMarker.visible = false;
   };
 
   const issueGroundAttack = (point: Point3) => {
     attackOrder = { kind: 'ground', point };
-    destination = point;
+    lastAttackPathTarget = null;
+    const path = planMovementRoute(point, true);
     disarmAttack();
     targetMarker.visible = false;
-    showCommandMarker(attackMarker, point);
+    if (path) showCommandMarker(attackMarker, path.resolvedTarget);
+    else {
+      attackOrder = null;
+      attackMarker.visible = false;
+    }
   };
 
   const issueTargetAttack = (target: THREE.Object3D) => {
     attackOrder = { kind: 'target', target };
-    destination = null;
     disarmAttack();
     targetMarker.visible = false;
     target.getWorldPosition(attackTargetPosition);
-    showCommandMarker(attackMarker, { x: attackTargetPosition.x, z: attackTargetPosition.z });
+    const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
+    lastAttackPathTarget = targetPoint;
+    lastTargetRepathAt = elapsed;
+    planMovementRoute(targetPoint, true);
+    showCommandMarker(attackMarker, targetPoint);
   };
 
   const triggerAttack = () => {
@@ -473,6 +535,7 @@ export async function createDawnreachGame(
     if (attackOrder?.kind === 'target') {
       if (!attackOrder.target.parent) {
         attackOrder = null;
+        clearMovementRoute();
         attackMarker.visible = false;
       } else {
         attackOrder.target.getWorldPosition(attackTargetPosition);
@@ -484,11 +547,18 @@ export async function createDawnreachGame(
         const dx = attackTargetPosition.x - hero.root.position.x;
         const dz = attackTargetPosition.z - hero.root.position.z;
         const distance = Math.hypot(dx, dz);
-        targetYaw = Math.atan2(dx, dz);
         if (distance > ATTACK_RANGE) {
-          destination = { x: attackTargetPosition.x, z: attackTargetPosition.z };
+          const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
+          const targetMoved = !lastAttackPathTarget
+            || Math.hypot(targetPoint.x - lastAttackPathTarget.x, targetPoint.z - lastAttackPathTarget.z) >= TARGET_REPATH_DISTANCE;
+          if ((targetMoved || !destination) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
+            planMovementRoute(targetPoint, true);
+            lastAttackPathTarget = targetPoint;
+            lastTargetRepathAt = elapsed;
+          }
         } else {
-          destination = null;
+          clearMovementRoute();
+          targetYaw = Math.atan2(dx, dz);
           if (attackCooldown <= 0) triggerAttack();
         }
       }
@@ -497,21 +567,27 @@ export async function createDawnreachGame(
     let moving = false;
     let reachedDestination = false;
 
-    if (destination) {
-      const dx = destination.x - hero.root.position.x;
-      const dz = destination.z - hero.root.position.z;
-      const distance = Math.hypot(dx, dz);
-      const step = heroMoveSpeed * dt;
+    if (destination && currentPath.length > 0) {
+      while (currentWaypointIndex < currentPath.length) {
+        const waypoint = currentPath[currentWaypointIndex];
+        if (Math.hypot(waypoint.x - hero.root.position.x, waypoint.z - hero.root.position.z) > WAYPOINT_REACHED_DISTANCE) break;
+        currentWaypointIndex++;
+      }
 
-      if (distance <= 1e-6) {
-        destination = null;
+      if (currentWaypointIndex >= currentPath.length) {
+        clearMovementRoute();
         reachedDestination = true;
         targetMarker.visible = false;
       } else {
-        const nx = dx / distance;
-        const nz = dz / distance;
+        const waypoint = currentPath[currentWaypointIndex];
+        const dx = waypoint.x - hero.root.position.x;
+        const dz = waypoint.z - hero.root.position.z;
+        const distance = Math.hypot(dx, dz);
+        const step = heroMoveSpeed * dt;
+        const nx = distance > 1e-8 ? dx / distance : 0;
+        const nz = distance > 1e-8 ? dz / distance : 0;
         const travel = Math.min(step, distance);
-        const from = { x: hero.root.position.x, z: hero.root.position.z };
+        const from = heroPoint();
         const desired = { x: from.x + nx * travel, z: from.z + nz * travel };
         const resolved = collisionWorld.move(from, desired, HERO_COLLISION_RADIUS);
         const movedDistance = Math.hypot(resolved.x - from.x, resolved.z - from.z);
@@ -525,19 +601,24 @@ export async function createDawnreachGame(
         ) + HERO_GROUND_OFFSET;
         targetYaw = Math.atan2(nx, nz);
         moving = movedDistance > 0.001;
+        stuckDuration = movedDistance <= 0.0005 && travel > 0.001 ? stuckDuration + dt : 0;
 
-        const remaining = Math.hypot(destination.x - resolved.x, destination.z - resolved.z);
-        if (remaining <= 0.04) {
-          destination = null;
+        const waypointRemaining = Math.hypot(waypoint.x - resolved.x, waypoint.z - resolved.z);
+        if (waypointRemaining <= WAYPOINT_REACHED_DISTANCE) currentWaypointIndex++;
+        if (currentWaypointIndex >= currentPath.length) {
+          clearMovementRoute();
           reachedDestination = true;
           targetMarker.visible = false;
-        } else if (movedDistance <= 0.0005 && attackOrder?.kind !== 'target') {
-          // Direct movement has reached a hard obstacle. Do not tunnel or attack through it.
-          destination = null;
-          targetMarker.visible = false;
-          if (attackOrder?.kind === 'ground') {
-            attackOrder = null;
-            attackMarker.visible = false;
+        } else if (stuckDuration >= STUCK_REPATH_DELAY && routeRequest && elapsed - lastRepathAt >= REPATH_COOLDOWN) {
+          const requested = { ...routeRequest };
+          lastRepathAt = elapsed;
+          const path = planMovementRoute(requested, true);
+          if (!path && attackOrder?.kind !== 'target') {
+            targetMarker.visible = false;
+            if (attackOrder?.kind === 'ground') {
+              attackOrder = null;
+              attackMarker.visible = false;
+            }
           }
         }
       }
