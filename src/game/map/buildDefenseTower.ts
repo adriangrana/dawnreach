@@ -10,9 +10,9 @@ type TowerStoneMaterials = {
 type TowerMaterials = {
   foundation: THREE.MeshStandardMaterial;
   stone: THREE.MeshStandardMaterial;
-  armor: THREE.MeshStandardMaterial;
-  armorEdge: THREE.MeshStandardMaterial;
-  trim: THREE.MeshStandardMaterial;
+  armor: THREE.MeshPhysicalMaterial;
+  armorEdge: THREE.MeshPhysicalMaterial;
+  trim: THREE.MeshPhysicalMaterial;
   energy: THREE.MeshBasicMaterial;
   energySoft: THREE.MeshBasicMaterial;
   crystal: THREE.MeshPhysicalMaterial;
@@ -21,84 +21,121 @@ type TowerMaterials = {
 const materialCache = new Map<string, TowerMaterials>();
 
 function towerMaterials(team: 'blue' | 'red', stone: TowerStoneMaterials): TowerMaterials {
-  const key = `${team}:${stone.stoneDark.map?.uuid ?? 'no-map'}`;
+  const key = [
+    team,
+    stone.stone.map?.uuid ?? 'stone-no-map',
+    stone.stoneDark.map?.uuid ?? 'dark-no-map',
+    stone.stoneLight.map?.uuid ?? 'light-no-map',
+    stone.stone.bumpMap?.uuid ?? 'stone-no-bump',
+    stone.stoneDark.bumpMap?.uuid ?? 'dark-no-bump',
+    stone.stoneLight.bumpMap?.uuid ?? 'light-no-bump',
+  ].join(':');
   const cached = materialCache.get(key);
   if (cached) return cached;
 
   const blue = team === 'blue';
-  const darkTexture = stone.stoneDark.map ?? stone.stone.map;
-  const darkBump = stone.stoneDark.bumpMap ?? darkTexture;
-  const bodyTexture = stone.stone.map ?? stone.stoneLight.map;
-  const bodyBump = stone.stone.bumpMap ?? bodyTexture;
+
+  // Keep the existing authored stone textures as the material breakup instead of hiding them
+  // behind dark flat tints. Blue favours the light stone source; red stays on the neutral/dark set.
+  const foundationTexture = stone.stoneDark.map ?? stone.stone.map ?? stone.stoneLight.map;
+  const foundationBump = stone.stoneDark.bumpMap ?? stone.stone.bumpMap ?? foundationTexture;
+  const bodySource = blue ? stone.stoneLight : stone.stone;
+  const bodyTexture = bodySource.map ?? stone.stone.map ?? stone.stoneLight.map ?? foundationTexture;
+  const bodyBump = bodySource.bumpMap ?? stone.stone.bumpMap ?? stone.stoneLight.bumpMap ?? bodyTexture;
+  const armorSource = blue ? stone.stone : stone.stoneDark;
+  const armorTexture = armorSource.map ?? bodyTexture;
+  const armorBump = armorSource.bumpMap ?? stone.stoneDark.bumpMap ?? armorTexture;
 
   const materials: TowerMaterials = {
-    // Keep the tower dark, but never near-black. The texture now carries the visual breakup
-    // instead of being multiplied by an almost black tint.
+    // Structural stone: deliberately mid-value so the pedestal remains readable in shadow.
     foundation: new THREE.MeshStandardMaterial({
-      map: darkTexture,
-      bumpMap: darkBump,
-      bumpScale: 0.11,
-      color: blue ? 0x69777f : 0x796b6d,
-      emissive: blue ? 0x071116 : 0x16090a,
-      emissiveIntensity: 0.10,
-      roughness: 0.84,
-      metalness: 0.08,
+      map: foundationTexture,
+      bumpMap: foundationBump,
+      bumpScale: 0.14,
+      color: blue ? 0x929b99 : 0x5f575b,
+      emissive: blue ? 0x455052 : 0x2a191c,
+      emissiveIntensity: blue ? 0.055 : 0.065,
+      roughness: 0.92,
+      metalness: 0.025,
     }),
+
+    // Main carved body. The blue faction is intentionally ivory-grey rather than charcoal.
     stone: new THREE.MeshStandardMaterial({
       map: bodyTexture,
       bumpMap: bodyBump,
-      bumpScale: 0.13,
-      color: blue ? 0x9aa4a6 : 0xa29493,
-      emissive: blue ? 0x081114 : 0x130909,
-      emissiveIntensity: 0.06,
-      roughness: 0.76,
-      metalness: 0.10,
+      bumpScale: 0.16,
+      color: blue ? 0xd4d1c5 : 0x857678,
+      emissive: blue ? 0x5b5d58 : 0x351f22,
+      emissiveIntensity: blue ? 0.052 : 0.06,
+      roughness: 0.86,
+      metalness: 0.018,
     }),
-    armor: new THREE.MeshStandardMaterial({
-      map: darkTexture,
-      bumpMap: darkBump,
-      bumpScale: 0.075,
-      color: blue ? 0x4b5f6a : 0x684b51,
-      emissive: blue ? 0x06131a : 0x1a0709,
-      emissiveIntensity: 0.14,
+
+    // Reinforced plates retain a restrained stone grain but read as treated metal at game distance.
+    armor: new THREE.MeshPhysicalMaterial({
+      map: armorTexture,
+      bumpMap: armorBump,
+      bumpScale: 0.052,
+      color: blue ? 0x748791 : 0x684b52,
+      emissive: blue ? 0x24343a : 0x32171b,
+      emissiveIntensity: 0.055,
       roughness: 0.43,
-      metalness: 0.42,
+      metalness: 0.52,
+      clearcoat: 0.18,
+      clearcoatRoughness: 0.48,
     }),
-    armorEdge: new THREE.MeshStandardMaterial({
-      color: blue ? 0x93a8b1 : 0xa58488,
-      roughness: 0.28,
-      metalness: 0.70,
+
+    // Clean metallic ridges separate the armor layers from the textured masonry.
+    armorEdge: new THREE.MeshPhysicalMaterial({
+      color: blue ? 0xb4c0c2 : 0x987164,
+      emissive: blue ? 0x2f3a3c : 0x351f1b,
+      emissiveIntensity: 0.045,
+      roughness: 0.30,
+      metalness: 0.74,
+      clearcoat: 0.30,
+      clearcoatRoughness: 0.24,
     }),
-    trim: new THREE.MeshStandardMaterial({
-      color: blue ? 0xb8c5c8 : 0xc0a4a4,
-      roughness: 0.25,
-      metalness: 0.78,
+
+    // Premium faction trim: soft brass for blue, aged refined bronze/copper for red.
+    trim: new THREE.MeshPhysicalMaterial({
+      color: blue ? 0xc5a86d : 0x9c6846,
+      emissive: blue ? 0x3d3019 : 0x321b12,
+      emissiveIntensity: 0.04,
+      roughness: 0.31,
+      metalness: 0.79,
+      clearcoat: 0.38,
+      clearcoatRoughness: 0.22,
     }),
+
+    // The hard energy lines stay unlit for readability, but are tone-mapped to avoid cheap neon.
     energy: new THREE.MeshBasicMaterial({
-      color: blue ? 0x5fe6ff : 0xff5d54,
-      toneMapped: false,
+      color: blue ? 0x55cbe5 : 0xe2574e,
+      toneMapped: true,
       transparent: true,
-      opacity: 0.96,
+      opacity: 0.88,
       depthWrite: false,
     }),
     energySoft: new THREE.MeshBasicMaterial({
-      color: blue ? 0x8cf0ff : 0xff9184,
+      color: blue ? 0x88dced : 0xff887d,
       toneMapped: false,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.20,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
+
+    // Physical crystal with a polished surface and controlled internal emission.
     crystal: new THREE.MeshPhysicalMaterial({
-      color: blue ? 0x56c9ed : 0xf5544f,
-      emissive: blue ? 0x128bc2 : 0xbd251f,
-      emissiveIntensity: 1.05,
-      roughness: 0.16,
-      metalness: 0.08,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
+      color: blue ? 0x69d2ec : 0xf05b53,
+      emissive: blue ? 0x137fa8 : 0xa72a24,
+      emissiveIntensity: blue ? 0.80 : 0.76,
+      roughness: 0.13,
+      metalness: 0.035,
+      ior: 1.46,
+      clearcoat: 0.88,
+      clearcoatRoughness: 0.065,
       transparent: true,
-      opacity: 0.96,
+      opacity: 0.95,
     }),
   };
   materialCache.set(key, materials);
@@ -354,7 +391,7 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   addRing(crown, 0.28, 0.43, 0.22, materials.energy, 40);
   addTorus(crown, 0.47, 0.028, 0.235, materials.trim);
 
-  const light = new THREE.PointLight(team === 'blue' ? 0x58dfff : 0xff5147, 4.4, 4.5, 2);
+  const light = new THREE.PointLight(team === 'blue' ? 0x61cde8 : 0xe4574e, 3.2, 4.4, 2);
   light.position.set(0, 2.75, 0);
   tower.add(light);
 
@@ -365,10 +402,10 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   tower.userData.animate = (elapsed: number) => {
     weapon.rotation.y = elapsed * (team === 'blue' ? 0.34 : -0.34);
     weapon.position.y = 2.60 + Math.sin(elapsed * 1.55 + (team === 'blue' ? 0 : 0.8)) * 0.045;
-    materials.crystal.emissiveIntensity = 0.96 + Math.sin(elapsed * 2.15) * 0.13;
-    materials.energy.opacity = 0.90 + Math.sin(elapsed * 2.6 + 0.5) * 0.06;
-    materials.energySoft.opacity = 0.23 + (Math.sin(elapsed * 1.9) + 1) * 0.06;
-    light.intensity = 4.1 + (Math.sin(elapsed * 2.1) + 1) * 0.55;
+    materials.crystal.emissiveIntensity = (team === 'blue' ? 0.76 : 0.72) + Math.sin(elapsed * 2.15) * 0.09;
+    materials.energy.opacity = 0.84 + Math.sin(elapsed * 2.6 + 0.5) * 0.04;
+    materials.energySoft.opacity = 0.17 + (Math.sin(elapsed * 1.9) + 1) * 0.035;
+    light.intensity = 2.8 + (Math.sin(elapsed * 2.1) + 1) * 0.28;
   };
 
   return tower;
