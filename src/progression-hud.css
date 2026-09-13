@@ -1,0 +1,105 @@
+.hero-level-ring {
+  position: absolute;
+  z-index: 7;
+  right: -9px;
+  bottom: -7px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px #101719,
+    0 0 9px rgba(103, 212, 255, 0.35);
+  pointer-events: auto;
+}
+
+.hero-level-ring > span {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #d4bd7f;
+  background: linear-gradient(#26302e, #080e11);
+  color: #f9e9b9;
+  font: 700 13px/1 "Palatino Linotype", Georgia, serif;
+  box-shadow: inset 0 0 0 1px rgba(90, 83, 64, 0.8);
+}
+
+.ability-control .ability-upgrade {
+  position: absolute;
+  z-index: 9;
+  top: -10px;
+  right: -6px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #e6d28f;
+  border-radius: 50%;
+  background: linear-gradient(#56a557, #1c4d29 62%, #12341d);
+  color: #fff1bd;
+  box-shadow:
+    0 0 0 2px #0b1112,
+    0 0 10px rgba(119, 228, 110, 0.58),
+    inset 0 1px rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.ability-control .ability-upgrade:hover {
+  filter: brightness(1.18);
+  border-color: #fff0ae;
+}
+
+.ability-control .ability-upgrade:active {
+  transform: translateY(1px);
+}
+
+.ability-control .ability-upgrade svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+
+.ability-row[data-unspent-points]:not([data-unspent-points="0"])::after {
+  content: attr(data-unspent-points) " punto";
+  position: absolute;
+  right: 10px;
+  top: -2px;
+  padding: 2px 5px;
+  border: 1px solid rgba(225, 198, 118, 0.56);
+  background: rgba(8, 15, 15, 0.92);
+  color: #e7d18e;
+  font-size: 8px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.combat-panel .ability-row {
+  position: relative;
+}
+
+.inventory-slot--empty {
+  background:
+    linear-gradient(145deg, rgba(24, 33, 38, 0.72), rgba(7, 11, 14, 0.94));
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.52),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.inventory-slot--empty::after {
+  content: "";
+  width: 45%;
+  height: 45%;
+  border: 1px solid rgba(146, 154, 148, 0.13);
+  transform: rotate(45deg);
+}
+
+.inventory-item-label {
+  color: #d8c58d;
+  font: 700 16px/1 Georgia, serif;
+}
