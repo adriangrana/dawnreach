@@ -15,6 +15,7 @@ import {
   publishWorldAttackEvent,
   publishWorldEntityRuntime,
 } from './entities/worldCombatBridge';
+import { connectLocalLaneProgression } from './gameplay/localLaneProgression';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
@@ -32,7 +33,7 @@ import {
 } from './navigation/dawnreachNavigation';
 import type { NavigationPath } from './navigation/navigationWorld';
 import { createProceduralTextures } from './shared/textures';
-import type { HeroStats, MatchHeroState } from './match';
+import { HERO_PROGRESSION_TUNING, type HeroStats, type MatchHeroState } from './match';
 import { createVisionSystem } from './vision/visionSystem';
 
 type HeroOverlayState = {
@@ -209,6 +210,7 @@ export async function createDawnreachGame(
     interaction: 'unit',
     selectionRadius: 0.78,
   });
+  const disconnectLaneProgression = connectLocalLaneProgression(entityRegistry, localHeroEntity);
   const vision = createVisionSystem(entityRegistry, 'blue');
   scene.userData.entityRegistry = entityRegistry;
   scene.userData.visionSystem = vision;
@@ -403,7 +405,11 @@ export async function createDawnreachGame(
   const isHostileAttackTarget = (entity: GameEntity | null): entity is GameEntity => {
     if (!entity || entity === localHeroEntity) return false;
     if (!entity.targetable || !entity.alive || entity.currentHp <= 0 || entity.maxHp <= 0) return false;
-    if (entity.team === localHeroEntity.team) return false;
+    if (entity.team === localHeroEntity.team) {
+      if (entity.kind !== 'creep') return false;
+      if (entity.currentHp / entity.maxHp > HERO_PROGRESSION_TUNING.denyHealthFraction) return false;
+      return true;
+    }
     if ((entity.kind === 'tower' || entity.kind === 'building') && entity.interaction !== 'attackable-structure') return false;
     if (!vision.isEntityVisible(entity)) return false;
     return true;
@@ -592,8 +598,6 @@ export async function createDawnreachGame(
 
     const target = pickAttackable();
     if (target) {
-      // Attack-command clicks intentionally do not alter selection. The player's hero
-      // stays selected while the click is interpreted exclusively as a combat order.
       issueTargetAttack(target);
       return;
     }
@@ -1055,6 +1059,7 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('contextmenu', onContextMenu);
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
+      disconnectLaneProgression();
       selection.dispose();
       heroOverlay.dispose();
       disposeScene(scene);
