@@ -9,7 +9,7 @@ export type WorldEntityRuntimeSnapshot = Readonly<{
   alive: boolean;
 }>;
 
-export type WorldCombatEventReason = 'damage' | 'death' | 'respawn';
+export type WorldCombatEventReason = 'damage' | 'heal' | 'death' | 'respawn';
 
 export type WorldCombatEvent = Readonly<{
   entityId: string;
