@@ -17,7 +17,24 @@ const PRECISION_FALLBACK_DISTANCE = 16;
 const PRECISION_MIN_EXPANSIONS = 1800;
 const PRECISION_MAX_EXPANSIONS = 4200;
 
+// The game controller currently asks for another path while a partial route is still being
+// followed. Do not turn those polling calls into fresh A* searches. A route is recalculated
+// only when its partial endpoint has actually been reached, or when validation reports that
+// the current segment became blocked.
+const TARGET_MATCH_DISTANCE = 0.16;
+const PARTIAL_ENDPOINT_REACHED_DISTANCE = 0.42;
+const MIN_REPLAN_PROGRESS_DISTANCE = 0.38;
+const TERMINAL_RESET_DISTANCE = 0.7;
+
 export const NAVIGATION_DEBUG = false;
+
+function pointDistance(a: NavigationPoint, b: NavigationPoint) {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function copyPoint(point: NavigationPoint): NavigationPoint {
+  return { x: point.x, z: point.z };
+}
 
 export function createDawnreachNavigationWorld(
   battlefield: THREE.Object3D,
@@ -50,15 +67,31 @@ export function createDawnreachNavigationWorld(
     nearestSearchRadius: 5.5,
   });
 
-  const findPath = (
+  let activeTarget: NavigationPoint | null = null;
+  let activeEndpoint: NavigationPoint | null = null;
+  let activePathPartial = false;
+  let routeInvalidated = false;
+  let terminalTarget: NavigationPoint | null = null;
+  let terminalPosition: NavigationPoint | null = null;
+
+  const resetOrderState = (target: NavigationPoint) => {
+    activeTarget = copyPoint(target);
+    activeEndpoint = null;
+    activePathPartial = false;
+    routeInvalidated = false;
+    terminalTarget = null;
+    terminalPosition = null;
+  };
+
+  const computePath = (
     start: NavigationPoint,
     target: NavigationPoint,
-    options: FindPathOptions = {},
+    options: FindPathOptions,
   ): NavigationPath | null => {
     const primaryPath = primary.findPath(start, target, options);
     if (primaryPath && !primaryPath.partial) return primaryPath;
 
-    const distance = Math.hypot(target.x - start.x, target.z - start.z);
+    const distance = pointDistance(target, start);
     if (distance > PRECISION_FALLBACK_DISTANCE) return primaryPath;
 
     const precisionBudget = THREE.MathUtils.clamp(
@@ -79,12 +112,86 @@ export function createDawnreachNavigationWorld(
     return primaryPath;
   };
 
+  const findPath = (
+    start: NavigationPoint,
+    target: NavigationPoint,
+    options: FindPathOptions = {},
+  ): NavigationPath | null => {
+    const sameTarget = activeTarget !== null && pointDistance(activeTarget, target) <= TARGET_MATCH_DISTANCE;
+    if (!sameTarget) resetOrderState(target);
+
+    // Once a recalculation proves that the closest reachable endpoint is effectively the
+    // hero's current position, there is no route to continue. Do not keep running A* for the
+    // same order. A genuinely new order, or moving well away from this position first,
+    // releases the terminal state.
+    const sameTerminalTarget = terminalTarget !== null
+      && pointDistance(terminalTarget, target) <= TARGET_MATCH_DISTANCE;
+    if (sameTerminalTarget && terminalPosition) {
+      if (pointDistance(start, terminalPosition) <= TERMINAL_RESET_DISTANCE) return null;
+      terminalTarget = null;
+      terminalPosition = null;
+    }
+
+    const reachedPartialEndpoint = activePathPartial
+      && activeEndpoint !== null
+      && pointDistance(start, activeEndpoint) <= PARTIAL_ENDPOINT_REACHED_DISTANCE;
+
+    // This is the important anti-thrashing rule. While Alden is still travelling along the
+    // partial path already returned, repeated controller polling is ignored. Replan only at
+    // the endpoint or after the current segment has actually become invalid.
+    if (sameTarget && activePathPartial && !reachedPartialEndpoint && !routeInvalidated) {
+      return null;
+    }
+
+    const isReplan = sameTarget && (reachedPartialEndpoint || routeInvalidated);
+    routeInvalidated = false;
+
+    const path = computePath(start, target, options);
+    if (!path) {
+      if (isReplan) {
+        terminalTarget = copyPoint(target);
+        terminalPosition = copyPoint(start);
+      }
+      activeTarget = copyPoint(target);
+      activeEndpoint = copyPoint(start);
+      activePathPartial = true;
+      return null;
+    }
+
+    // Base case: after a real replan, if the best reachable endpoint is essentially where
+    // Alden already stands, there is no further access. Record that fact and stop searching
+    // until the player gives another order (or Alden is moved elsewhere).
+    if (isReplan && pointDistance(start, path.resolvedTarget) <= MIN_REPLAN_PROGRESS_DISTANCE) {
+      terminalTarget = copyPoint(target);
+      terminalPosition = copyPoint(start);
+      activeTarget = copyPoint(target);
+      activeEndpoint = copyPoint(start);
+      activePathPartial = true;
+      return null;
+    }
+
+    terminalTarget = null;
+    terminalPosition = null;
+    activeTarget = copyPoint(target);
+    activeEndpoint = copyPoint(path.resolvedTarget);
+    activePathPartial = path.partial;
+    return path;
+  };
+
+  const segmentIsWalkable = (from: NavigationPoint, to: NavigationPoint) => {
+    // Use the precision representation for short runtime validation. A false result is an
+    // event: the next findPath call is allowed to replan immediately around the new blocker.
+    const walkable = precision.segmentIsWalkable(from, to);
+    if (!walkable) routeInvalidated = true;
+    return walkable;
+  };
+
   return {
     cellSize: primary.cellSize,
     agentRadius: primary.agentRadius,
     isWalkable: primary.isWalkable,
     findNearestWalkable: primary.findNearestWalkable,
-    segmentIsWalkable: primary.segmentIsWalkable,
+    segmentIsWalkable,
     smoothPath: primary.smoothPath,
     findPath,
     getDebugSnapshot: primary.getDebugSnapshot,
