@@ -11,10 +11,11 @@ export function upgradeBasePresentation(
   battlefield: THREE.Group,
   team: 'blue' | 'red',
   center: { x: number; z: number },
-  materials: BasePresentationMaterials,
 ) {
   const citadel = battlefield.getObjectByName(`${team}-base`) as THREE.Group | undefined;
   if (!citadel) return;
+
+  const materials = createPresentationMaterials(team);
 
   // The authored citadel is meant to sit on an elevated plaza. Keep all of its
   // architecture together and lift it as a single unit so towers/walls/core remain aligned.
@@ -25,6 +26,27 @@ export function upgradeBasePresentation(
   battlefield.add(elevation);
 
   replaceLegacyThroneCrystal(citadel, team, materials);
+}
+
+function createPresentationMaterials(team: 'blue' | 'red'): BasePresentationMaterials {
+  const blue = team === 'blue';
+  return {
+    stoneDark: new THREE.MeshStandardMaterial({
+      color: blue ? 0x46545d : 0x594849,
+      roughness: 0.94,
+      metalness: 0.02,
+    }),
+    stoneLight: new THREE.MeshStandardMaterial({
+      color: blue ? 0xaeb9b4 : 0xb7aaa3,
+      roughness: 0.86,
+      metalness: 0.03,
+    }),
+    stoneWarm: new THREE.MeshStandardMaterial({
+      color: blue ? 0x8f927f : 0x94877c,
+      roughness: 0.9,
+      metalness: 0.02,
+    }),
+  };
 }
 
 function buildBaseElevation(
@@ -69,6 +91,12 @@ function buildBaseElevation(
   group.add(rim);
 
   const rotation = team === 'blue' ? 0 : Math.PI;
+  const edgeMaterial = new THREE.MeshStandardMaterial({
+    color: team === 'blue' ? 0x7398b2 : 0x9e706b,
+    roughness: 0.78,
+    metalness: 0.08,
+  });
+
   for (const authoredGate of BASE_LAYOUT.gates) {
     const angle = authoredGate + rotation;
     const ramp = new THREE.Mesh(createRampGeometry(angle), materials.stoneWarm);
@@ -78,11 +106,6 @@ function buildBaseElevation(
     ramp.receiveShadow = true;
     group.add(ramp);
 
-    const edgeMaterial = new THREE.MeshStandardMaterial({
-      color: team === 'blue' ? 0x7398b2 : 0x9e706b,
-      roughness: 0.78,
-      metalness: 0.08,
-    });
     for (const side of [-1, 1]) {
       const rail = createRampRail(angle, side, edgeMaterial);
       group.add(rail);
