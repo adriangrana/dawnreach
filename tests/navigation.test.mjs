@@ -47,6 +47,30 @@ test('A* routes around an obstacle instead of intersecting it', () => {
   }
 });
 
+test('bounded partial A* can move away from the target to escape a U-shaped pocket', () => {
+  const navigation = createTestWorld({
+    bounds: { minX: 0, maxX: 10, minZ: 0, maxZ: 8 },
+    cellSize: 0.5,
+    blocked: point => {
+      const top = point.x > 1 && point.x < 5 && point.z > 2 && point.z < 3;
+      const bottom = point.x > 1 && point.x < 5 && point.z > 5 && point.z < 6;
+      const closedEnd = point.x > 4 && point.x < 5 && point.z > 2 && point.z < 6;
+      return top || bottom || closedEnd;
+    },
+  });
+  const start = { x: 3.5, z: 4 };
+  const target = { x: 8.5, z: 4 };
+  const path = navigation.findPath(start, target, { allowPartial: true, maxExpandedNodes: 20 });
+
+  assert.ok(path);
+  assert.equal(path.partial, true);
+  assert.ok(path.waypoints.length > 0);
+  const endpoint = path.waypoints[path.waypoints.length - 1];
+  const startDistance = Math.hypot(target.x - start.x, target.z - start.z);
+  const endpointDistance = Math.hypot(target.x - endpoint.x, target.z - endpoint.z);
+  assert.ok(endpointDistance > startDistance, 'partial route should be allowed to detour away from the target');
+});
+
 test('replanning sees an obstacle that appears after the navigation grid was built', () => {
   let obstacleActive = false;
   const navigation = createTestWorld({
