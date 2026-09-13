@@ -8,7 +8,16 @@ type CircleCollider = {
   x: number;
   z: number;
   radius: number;
-  kind: 'tree' | 'rock' | 'structure';
+  kind: 'tree' | 'structure';
+};
+
+type RockCollider = {
+  x: number;
+  z: number;
+  radiusX: number;
+  radiusZ: number;
+  cos: number;
+  sin: number;
 };
 
 type SegmentCollider = {
@@ -31,7 +40,8 @@ const WALL_RADIUS = 0.48;
 const ELEVATION_RADIUS = 0.62;
 const MAX_SUBSTEP = 0.18;
 const SOLVER_PASSES = 8;
-const ROCK_COLLISION_SCALE = 0.92;
+const ROCK_FOOTPRINT_SCALE = 0.82;
+const ROCK_MIN_RADIUS = 0.18;
 const LANE_ROCK_CLEARANCE = 2.35;
 const TRAIL_ROCK_CLEARANCE = 1.25;
 
@@ -46,11 +56,12 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   battlefield.updateMatrixWorld(true);
 
   const circles: CircleCollider[] = [];
+  const rocks: RockCollider[] = [];
   const segments: SegmentCollider[] = [];
   const counts = { trees: 0, rocks: 0, structures: 0, walls: 0, elevations: 0 };
 
   collectTreeColliders(battlefield, circles, counts);
-  collectRockColliders(battlefield, circles, counts);
+  collectRockColliders(battlefield, rocks, counts);
   collectStructureColliders(battlefield, circles, counts);
   addRetainingWallColliders(segments, counts);
   addBaseWallColliders(segments, counts);
@@ -63,6 +74,16 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
     for (const circle of circles) {
       const required = radius + circle.radius;
       if ((point.x - circle.x) ** 2 + (point.z - circle.z) ** 2 < required ** 2) return true;
+    }
+
+    for (const rock of rocks) {
+      const dx = point.x - rock.x;
+      const dz = point.z - rock.z;
+      const localX = rock.cos * dx - rock.sin * dz;
+      const localZ = rock.sin * dx + rock.cos * dz;
+      const radiusX = rock.radiusX + radius;
+      const radiusZ = rock.radiusZ + radius;
+      if ((localX / radiusX) ** 2 + (localZ / radiusZ) ** 2 < 1) return true;
     }
 
     for (const segment of segments) {
@@ -105,6 +126,37 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
         const push = required - distance + 0.003;
         resolved.x += nx * push;
         resolved.z += nz * push;
+        changed = true;
+      }
+
+      for (const rock of rocks) {
+        const dx = resolved.x - rock.x;
+        const dz = resolved.z - rock.z;
+        let localX = rock.cos * dx - rock.sin * dz;
+        let localZ = rock.sin * dx + rock.cos * dz;
+        const radiusX = rock.radiusX + radius;
+        const radiusZ = rock.radiusZ + radius;
+        let normalized = Math.hypot(localX / radiusX, localZ / radiusZ);
+        if (normalized >= 1) continue;
+
+        if (normalized <= 1e-6) {
+          const previousDx = previous.x - rock.x;
+          const previousDz = previous.z - rock.z;
+          localX = rock.cos * previousDx - rock.sin * previousDz;
+          localZ = rock.sin * previousDx + rock.cos * previousDz;
+          normalized = Math.hypot(localX / radiusX, localZ / radiusZ);
+          if (normalized <= 1e-6) {
+            localX = radiusX;
+            localZ = 0;
+            normalized = 1;
+          }
+        }
+
+        const boundaryScale = (1 / normalized) * 1.003;
+        const targetLocalX = localX * boundaryScale;
+        const targetLocalZ = localZ * boundaryScale;
+        resolved.x = rock.x + rock.cos * targetLocalX + rock.sin * targetLocalZ;
+        resolved.z = rock.z - rock.sin * targetLocalX + rock.cos * targetLocalZ;
         changed = true;
       }
 
@@ -276,30 +328,48 @@ function collectTreeColliders(
 
 function collectRockColliders(
   battlefield: THREE.Object3D,
-  colliders: CircleCollider[],
+  colliders: RockCollider[],
   counts: { rocks: number },
 ) {
-  const center = new THREE.Vector3();
-  const size = new THREE.Vector3();
+  const localCenter = new THREE.Vector3();
+  const localSize = new THREE.Vector3();
+  const worldCenter = new THREE.Vector3();
+  const worldScale = new THREE.Vector3();
+  const worldQuaternion = new THREE.Quaternion();
+  const worldEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
   battlefield.traverse((object) => {
     if (!isStoneRock(object)) return;
 
-    const box = new THREE.Box3().setFromObject(object);
-    if (box.isEmpty()) return;
-    box.getSize(size);
-    if (size.y < 0.28 || Math.max(size.x, size.z) < 0.42) return;
-    box.getCenter(center);
+    if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+    const box = object.geometry.boundingBox;
+    if (!box) return;
+    box.getSize(localSize);
+    if (localSize.y < 0.28 || Math.max(localSize.x, localSize.z) < 0.42) return;
+    box.getCenter(localCenter);
 
-    // Use the horizontal AABB half-diagonal instead of the old min-axis estimate.
-    // It encloses irregular, rotated and non-uniformly scaled rocks closely enough that
-    // Alden cannot visually enter the stone before the collision response begins.
-    const horizontalHalfDiagonal = Math.hypot(size.x, size.z) * 0.5;
+    worldCenter.copy(localCenter).applyMatrix4(object.matrixWorld);
+    object.getWorldScale(worldScale);
+    object.getWorldQuaternion(worldQuaternion);
+    worldEuler.setFromQuaternion(worldQuaternion, 'YXZ');
+
+    const radiusX = Math.max(
+      ROCK_MIN_RADIUS,
+      localSize.x * Math.abs(worldScale.x) * 0.5 * ROCK_FOOTPRINT_SCALE,
+    );
+    const radiusZ = Math.max(
+      ROCK_MIN_RADIUS,
+      localSize.z * Math.abs(worldScale.z) * 0.5 * ROCK_FOOTPRINT_SCALE,
+    );
+    const rotation = worldEuler.y;
+
     colliders.push({
-      x: center.x,
-      z: center.z,
-      radius: Math.max(0.28, horizontalHalfDiagonal * ROCK_COLLISION_SCALE),
-      kind: 'rock',
+      x: worldCenter.x,
+      z: worldCenter.z,
+      radiusX,
+      radiusZ,
+      cos: Math.cos(rotation),
+      sin: Math.sin(rotation),
     });
     counts.rocks++;
   });
