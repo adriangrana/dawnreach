@@ -1,32 +1,11 @@
 import * as THREE from 'three';
-import type { GameEntity, GameEntityKind, GameEntityRegistry } from './gameEntities';
+import type { GameEntity, GameEntityKind } from './gameEntities';
 
 const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
   eager: true,
   query: '?url',
   import: 'default',
 });
-
-type OverlayRecord = {
-  readonly entity: GameEntity;
-  readonly sprite: THREE.Sprite;
-  readonly canvas: HTMLCanvasElement;
-  readonly ctx: CanvasRenderingContext2D;
-  readonly texture: THREE.CanvasTexture;
-  readonly material: THREE.SpriteMaterial;
-  readonly anchorHeight: number;
-  readonly worldWidth: number;
-  lastSignature: string;
-  icon: HTMLImageElement | null;
-  iconPath: string | undefined;
-  dirty: boolean;
-};
-
-export type EntityOverheadController = Readonly<{
-  readonly group: THREE.Group;
-  update(): void;
-  dispose(): void;
-}>;
 
 function worldBarWidth(kind: GameEntityKind) {
   switch (kind) {
@@ -49,78 +28,73 @@ function healthSegments(kind: GameEntityKind) {
   }
 }
 
-function isVisibleInHierarchy(object: THREE.Object3D) {
-  let current: THREE.Object3D | null = object;
-  while (current) {
-    if (!current.visible) return false;
-    current = current.parent;
-  }
-  return true;
-}
-
 function resourceFraction(current: number, maximum: number) {
   if (!Number.isFinite(current) || !Number.isFinite(maximum) || maximum <= 0) return 0;
   return THREE.MathUtils.clamp(current / maximum, 0, 1);
 }
 
-function createOverlayRecord(group: THREE.Group, entity: GameEntity): OverlayRecord {
-  const hero = entity.kind === 'hero';
-  const canvas = document.createElement('canvas');
-  canvas.width = hero ? 440 : 320;
-  canvas.height = hero ? 88 : 48;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
-
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const sprite = new THREE.Sprite(material);
-  sprite.name = `${entity.id}-overhead`;
-  sprite.renderOrder = 95;
-  const worldWidth = worldBarWidth(entity.kind);
-  sprite.scale.set(worldWidth, worldWidth * canvas.height / canvas.width, 1);
-  sprite.visible = false;
-  group.add(sprite);
-
-  entity.root.updateWorldMatrix(true, true);
-  const rootPosition = new THREE.Vector3();
-  entity.root.getWorldPosition(rootPosition);
-  const bounds = new THREE.Box3().setFromObject(entity.root);
-  const visibleHeight = bounds.isEmpty()
-    ? entity.visionHeight
-    : Math.max(entity.visionHeight, bounds.max.y - rootPosition.y);
-  const anchorHeight = visibleHeight + (hero ? 0.48 : 0.58);
-
-  return {
-    entity,
-    sprite,
-    canvas,
-    ctx,
-    texture,
-    material,
-    anchorHeight,
-    worldWidth,
-    lastSignature: '',
-    icon: null,
-    iconPath: undefined,
-    dirty: true,
-  };
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
 }
 
-function drawHeroFrame(record: OverlayRecord) {
-  const { entity, ctx, canvas } = record;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function drawHeroHealth(ctx: CanvasRenderingContext2D, hp: number, maxHp: number) {
+  ctx.fillStyle = '#050805';
+  ctx.fillRect(78, 12, 302, 37);
+  ctx.fillStyle = '#1c2916';
+  ctx.fillRect(82, 16, 294, 29);
+  const health = ctx.createLinearGradient(0, 16, 0, 45);
+  health.addColorStop(0, '#83e844');
+  health.addColorStop(1, '#46c526');
+  ctx.fillStyle = health;
+  ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
+  ctx.fillStyle = 'rgba(5, 30, 4, 0.4)';
+  for (let segment = 1; segment < 3; segment++) {
+    ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
+  }
+}
 
+function drawHeroResource(
+  ctx: CanvasRenderingContext2D,
+  resource: number,
+  maxResource: number,
+) {
+  ctx.fillStyle = '#050805';
+  ctx.fillRect(78, 46, 302, 18);
+  ctx.fillStyle = '#14213a';
+  ctx.fillRect(82, 49, 294, 11);
+  ctx.fillStyle = '#367eff';
+  ctx.fillRect(82, 49, 294 * resourceFraction(resource, maxResource), 11);
+}
+
+function drawHeroLevel(ctx: CanvasRenderingContext2D, level: number) {
+  ctx.font = 'bold 38px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#080b09';
+  ctx.fillText(String(Math.max(1, Math.floor(level))), 406, 40, 50);
+}
+
+function drawHeroFrame(
+  entity: GameEntity,
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  icon: HTMLImageElement | null,
+) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   const frame = ctx.createLinearGradient(0, 8, 0, 72);
   frame.addColorStop(0, '#fafafa');
   frame.addColorStop(1, '#9caaa7');
@@ -140,11 +114,11 @@ function drawHeroFrame(record: OverlayRecord) {
   drawHeroResource(ctx, entity.currentResource, entity.maxResource);
   drawHeroLevel(ctx, entity.level);
 
-  if (record.icon?.complete && record.icon.naturalWidth > 0) {
-    const size = Math.min(80 / record.icon.naturalWidth, 80 / record.icon.naturalHeight);
-    const width = record.icon.naturalWidth * size;
-    const height = record.icon.naturalHeight * size;
-    ctx.drawImage(record.icon, (80 - width) / 2, (80 - height) / 2, width, height);
+  if (icon?.complete && icon.naturalWidth > 0) {
+    const scale = Math.min(80 / icon.naturalWidth, 80 / icon.naturalHeight);
+    const width = icon.naturalWidth * scale;
+    const height = icon.naturalHeight * scale;
+    ctx.drawImage(icon, (80 - width) / 2, (80 - height) / 2, width, height);
   } else {
     ctx.font = 'bold 38px Arial';
     ctx.textAlign = 'center';
@@ -154,51 +128,15 @@ function drawHeroFrame(record: OverlayRecord) {
   }
 }
 
-function drawHeroLevel(ctx: CanvasRenderingContext2D, level: number) {
-  ctx.font = 'bold 38px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#080b09';
-  ctx.fillText(String(Math.max(1, Math.floor(level))), 406, 40, 50);
-}
-
-function drawHeroResource(
+function drawHealthOnlyFrame(
+  entity: GameEntity,
   ctx: CanvasRenderingContext2D,
-  resource: number,
-  maxResource: number,
+  canvas: HTMLCanvasElement,
 ) {
-  ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 46, 302, 18);
-  ctx.fillStyle = '#14213a';
-  ctx.fillRect(82, 49, 294, 11);
-  ctx.fillStyle = '#367eff';
-  ctx.fillRect(82, 49, 294 * resourceFraction(resource, maxResource), 11);
-}
-
-function drawHeroHealth(ctx: CanvasRenderingContext2D, hp: number, maxHp: number) {
-  ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 12, 302, 37);
-  ctx.fillStyle = '#1c2916';
-  ctx.fillRect(82, 16, 294, 29);
-  const health = ctx.createLinearGradient(0, 16, 0, 45);
-  health.addColorStop(0, '#83e844');
-  health.addColorStop(1, '#46c526');
-  ctx.fillStyle = health;
-  ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
-  ctx.fillStyle = 'rgba(5, 30, 4, 0.4)';
-  for (let segment = 1; segment < 3; segment++) {
-    ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
-  }
-}
-
-function drawHealthOnlyFrame(record: OverlayRecord) {
-  const { entity, ctx, canvas } = record;
   const fraction = resourceFraction(entity.currentHp, entity.maxHp);
   const segments = healthSegments(entity.kind);
-
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Restrained metallic frame: readable at MOBA camera height without becoming a second UI panel.
   const frame = ctx.createLinearGradient(0, 4, 0, 44);
   frame.addColorStop(0, '#dbe2df');
   frame.addColorStop(0.48, '#879590');
@@ -231,14 +169,12 @@ function drawHealthOnlyFrame(record: OverlayRecord) {
     ctx.fillRect(13, 15, fillWidth, 18);
   }
 
-  // Fine subdivisions give structures/creeps an at-a-glance damage read without text.
   ctx.fillStyle = 'rgba(4, 12, 5, 0.38)';
   for (let segment = 1; segment < segments; segment++) {
     const x = 13 + 294 * segment / segments;
     ctx.fillRect(x, 15, 1.25, 18);
   }
 
-  // Tiny team accent along the upper edge keeps ownership readable without adding labels.
   ctx.fillStyle = entity.team === 'blue'
     ? 'rgba(74, 194, 255, 0.9)'
     : entity.team === 'red'
@@ -247,46 +183,7 @@ function drawHealthOnlyFrame(record: OverlayRecord) {
   ctx.fillRect(15, 11, 290, 2);
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + width, y, x + width, y + height, r);
-  ctx.arcTo(x + width, y + height, x, y + height, r);
-  ctx.arcTo(x, y + height, x, y, r);
-  ctx.arcTo(x, y, x + width, y, r);
-  ctx.closePath();
-}
-
-function heroIconPath(entity: GameEntity) {
-  if (!entity.definitionId) return undefined;
-  return heroIcons[`../heroes/${entity.displayName.toLowerCase()}/images/${entity.definitionId}I.png`];
-}
-
-function refreshHeroIcon(record: OverlayRecord) {
-  const nextPath = heroIconPath(record.entity);
-  if (nextPath === record.iconPath) return;
-
-  if (record.icon) record.icon.onload = record.icon.onerror = null;
-  record.iconPath = nextPath;
-  record.icon = null;
-  record.dirty = true;
-
-  if (!nextPath) return;
-  const icon = new Image();
-  icon.onload = icon.onerror = () => { record.dirty = true; };
-  icon.src = nextPath;
-  record.icon = icon;
-}
-
-function signature(entity: GameEntity) {
+function entitySignature(entity: GameEntity) {
   if (entity.kind === 'hero') {
     return [
       entity.displayName,
@@ -301,70 +198,103 @@ function signature(entity: GameEntity) {
   return `${entity.currentHp}|${entity.maxHp}|${entity.team}`;
 }
 
-export function createEntityOverheadController(
-  scene: THREE.Scene,
-  registry: GameEntityRegistry,
-  canReveal: (entity: GameEntity) => boolean = entity => entity.revealed,
-): EntityOverheadController {
-  const group = new THREE.Group();
-  group.name = 'entity-overheads';
-  scene.add(group);
+function heroIconPath(entity: GameEntity) {
+  if (!entity.definitionId) return undefined;
+  return heroIcons[`../heroes/${entity.displayName.toLowerCase()}/images/${entity.definitionId}I.png`];
+}
 
-  const records = new Map<string, OverlayRecord>();
-  const worldPosition = new THREE.Vector3();
+/**
+ * Attaches world-space status UI directly to an entity. The sprite self-updates before
+ * rendering, so future creeps/fauna/towers gain bars as soon as they are registered.
+ * Existing hero overlays are respected to avoid duplicating Alden's current HUD.
+ */
+export function attachEntityOverhead(entity: GameEntity) {
+  if (!entity.showHealthBar || entity.maxHp <= 0) return;
+  if (entity.kind === 'hero' && entity.root.getObjectByName('hero-status-overlay')) return;
 
-  const ensureRecord = (entity: GameEntity) => {
-    const existing = records.get(entity.id);
-    if (existing) return existing;
-    if (!entity.showHealthBar) return null;
-    const record = createOverlayRecord(group, entity);
-    records.set(entity.id, record);
-    return record;
+  const overheadName = `${entity.id}-overhead`;
+  if (entity.root.getObjectByName(overheadName)) return;
+
+  const hero = entity.kind === 'hero';
+  const canvas = document.createElement('canvas');
+  canvas.width = hero ? 440 : 320;
+  canvas.height = hero ? 88 : 48;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.name = overheadName;
+  sprite.renderOrder = 95;
+
+  entity.root.updateWorldMatrix(true, true);
+  const rootPosition = new THREE.Vector3();
+  const worldScale = new THREE.Vector3();
+  entity.root.getWorldPosition(rootPosition);
+  entity.root.getWorldScale(worldScale);
+  const bounds = new THREE.Box3().setFromObject(entity.root);
+  const visibleWorldHeight = bounds.isEmpty()
+    ? entity.visionHeight
+    : Math.max(entity.visionHeight, bounds.max.y - rootPosition.y);
+  const margin = hero ? 0.48 : 0.58;
+  const safeScaleX = Math.max(0.001, Math.abs(worldScale.x));
+  const safeScaleY = Math.max(0.001, Math.abs(worldScale.y));
+  const worldWidth = worldBarWidth(entity.kind);
+  const worldHeight = worldWidth * canvas.height / canvas.width;
+  sprite.position.set(0, (visibleWorldHeight + margin) / safeScaleY, 0);
+  sprite.scale.set(worldWidth / safeScaleX, worldHeight / safeScaleY, 1);
+
+  let lastSignature = '';
+  let icon: HTMLImageElement | null = null;
+  let iconPath: string | undefined;
+  let dirty = true;
+
+  const ensureIcon = () => {
+    if (!hero) return;
+    const nextPath = heroIconPath(entity);
+    if (nextPath === iconPath) return;
+    if (icon) icon.onload = icon.onerror = null;
+    iconPath = nextPath;
+    icon = null;
+    dirty = true;
+    if (!nextPath) return;
+    icon = new Image();
+    icon.onload = icon.onerror = () => { dirty = true; };
+    icon.src = nextPath;
   };
 
-  const update = () => {
-    for (const entity of registry.values()) {
-      if (!entity.showHealthBar) continue;
-      const record = ensureRecord(entity);
-      if (!record) continue;
-
-      const visible = entity.alive
-        && entity.maxHp > 0
-        && isVisibleInHierarchy(entity.root)
-        && (entity.team === 'blue' || canReveal(entity));
-      record.sprite.visible = visible;
-      if (!visible) continue;
-
-      entity.root.getWorldPosition(worldPosition);
-      record.sprite.position.set(
-        worldPosition.x,
-        worldPosition.y + record.anchorHeight,
-        worldPosition.z,
-      );
-
-      if (entity.kind === 'hero') refreshHeroIcon(record);
-      const nextSignature = signature(entity);
-      if (!record.dirty && record.lastSignature === nextSignature) continue;
-      record.lastSignature = nextSignature;
-      record.dirty = false;
-
-      if (entity.kind === 'hero') drawHeroFrame(record);
-      else drawHealthOnlyFrame(record);
-      record.texture.needsUpdate = true;
-    }
+  const redraw = () => {
+    ensureIcon();
+    const nextSignature = entitySignature(entity);
+    if (!dirty && nextSignature === lastSignature) return;
+    lastSignature = nextSignature;
+    dirty = false;
+    if (hero) drawHeroFrame(entity, ctx, canvas, icon);
+    else drawHealthOnlyFrame(entity, ctx, canvas);
+    texture.needsUpdate = true;
   };
 
-  return {
-    group,
-    update,
-    dispose() {
-      for (const record of records.values()) {
-        if (record.icon) record.icon.onload = record.icon.onerror = null;
-        record.texture.dispose();
-        record.material.dispose();
-      }
-      records.clear();
-      scene.remove(group);
-    },
+  redraw();
+  sprite.onBeforeRender = (_renderer, _scene, camera) => {
+    // Overhead UI belongs to the gameplay camera, not the top-down minimap render.
+    const minimapCamera = camera.position.y > 60 && camera.up.z < -0.5;
+    const revealed = entity.team === 'blue' || entity.revealed;
+    material.opacity = !minimapCamera && revealed && entity.alive && entity.maxHp > 0 ? 1 : 0;
+    if (material.opacity > 0) redraw();
   };
+
+  entity.root.add(sprite);
 }
