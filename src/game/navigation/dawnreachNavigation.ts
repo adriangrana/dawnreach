@@ -3,6 +3,7 @@ import type { CollisionWorld } from '../map/collisionWorld';
 import { MAP_BOUNDS } from '../map/mapLayout';
 import {
   createNavigationWorld,
+  type FindPathOptions,
   type NavigationPath,
   type NavigationPoint,
   type NavigationWorld,
@@ -10,6 +11,11 @@ import {
 
 const NAVIGATION_CELL_SIZE = 0.5;
 const NAVIGATION_CLEARANCE = 0.04;
+const PRECISION_CELL_SIZE = 0.3;
+const PRECISION_CLEARANCE = 0.025;
+const PRECISION_FALLBACK_DISTANCE = 16;
+const PRECISION_MIN_EXPANSIONS = 1800;
+const PRECISION_MAX_EXPANSIONS = 4200;
 
 export const NAVIGATION_DEBUG = false;
 
@@ -17,13 +23,13 @@ export function createDawnreachNavigationWorld(
   battlefield: THREE.Object3D,
   collisionWorld: CollisionWorld,
   agentRadius: number,
-) {
+): NavigationWorld {
   // Keep the presentation tree settled before navigation is built. Dawnreach water is
   // intentionally playable terrain, so walkability is governed only by the collision
   // world: walls, rocks, trees, structures, elevation barriers and authored railings.
   battlefield.updateMatrixWorld(true);
 
-  return createNavigationWorld({
+  const primary = createNavigationWorld({
     bounds: MAP_BOUNDS,
     collisionWorld,
     agentRadius,
@@ -31,6 +37,58 @@ export function createDawnreachNavigationWorld(
     clearance: NAVIGATION_CLEARANCE,
     nearestSearchRadius: 5.5,
   });
+
+  // A single coarse grid can falsely disconnect a narrow but physically valid passage when
+  // its cell centres happen to land on both sides of trees/rocks. Keep a finer secondary
+  // grid available only as a local fallback; long/global orders still use the cheaper grid.
+  const precision = createNavigationWorld({
+    bounds: MAP_BOUNDS,
+    collisionWorld,
+    agentRadius,
+    cellSize: PRECISION_CELL_SIZE,
+    clearance: PRECISION_CLEARANCE,
+    nearestSearchRadius: 5.5,
+  });
+
+  const findPath = (
+    start: NavigationPoint,
+    target: NavigationPoint,
+    options: FindPathOptions = {},
+  ): NavigationPath | null => {
+    const primaryPath = primary.findPath(start, target, options);
+    if (primaryPath && !primaryPath.partial) return primaryPath;
+
+    const distance = Math.hypot(target.x - start.x, target.z - start.z);
+    if (distance > PRECISION_FALLBACK_DISTANCE) return primaryPath;
+
+    const precisionBudget = THREE.MathUtils.clamp(
+      Math.ceil(PRECISION_MIN_EXPANSIONS + distance * 145),
+      PRECISION_MIN_EXPANSIONS,
+      PRECISION_MAX_EXPANSIONS,
+    );
+    const precisionPath = precision.findPath(start, target, {
+      ...options,
+      allowPartial: options.allowPartial ?? true,
+      maxExpandedNodes: Math.max(options.maxExpandedNodes ?? 0, precisionBudget),
+    });
+
+    // Prefer the precision result when it proves the destination is connected. If the coarse
+    // grid found nothing at all, even a precision partial route is more useful than standing.
+    if (precisionPath && !precisionPath.partial) return precisionPath;
+    if (!primaryPath) return precisionPath;
+    return primaryPath;
+  };
+
+  return {
+    cellSize: primary.cellSize,
+    agentRadius: primary.agentRadius,
+    isWalkable: primary.isWalkable,
+    findNearestWalkable: primary.findNearestWalkable,
+    segmentIsWalkable: primary.segmentIsWalkable,
+    smoothPath: primary.smoothPath,
+    findPath,
+    getDebugSnapshot: primary.getDebugSnapshot,
+  };
 }
 
 export function createNavigationDebugGroup(navigation: NavigationWorld) {
