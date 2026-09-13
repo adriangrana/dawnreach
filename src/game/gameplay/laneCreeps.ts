@@ -52,7 +52,6 @@ type LaneCreepRuntime = {
 };
 
 type LaneTeamBucket = Record<CombatTeam, Set<LaneCreepRuntime>>;
-
 type VisualResources = ReturnType<typeof createVisualResources>;
 
 const GAME_UNIT_TO_WORLD = 0.01;
@@ -78,9 +77,9 @@ export const LANE_CREEP_TUNING = {
   scanIntervalSeconds: 0.20,
   laneReturnThreshold: 0.55,
   laneNodeArrivalDistance: 0.32,
-  corpseLifetimeSeconds: 0.55,
+  corpseLifetimeSeconds: 0,
   endOfLaneCleanupSeconds: 4,
-  maximumLifetimeSeconds: 180,
+  maximumLifetimeSeconds: 120,
   visionLeaderRebalanceSeconds: 0.45,
   candidateRefreshSeconds: 1,
 } as const;
@@ -306,8 +305,8 @@ class LaneCreepManager {
       team,
       selectable: true,
       targetable: true,
-      // Vision is delegated to one moving leader per allied lane. This preserves lane
-      // information while avoiding dozens of expensive 64-ray fog sources.
+      // Fog-of-war vision is represented by one moving allied leader per lane instead
+      // of every creep becoming a 64-ray occlusion source.
       grantsVision: false,
       visionRadius: 8,
       visionHeight: type === 'siege' ? 1.45 : 1.15,
@@ -341,8 +340,6 @@ class LaneCreepManager {
       targetAcquiredAt: 0,
       stats,
       nextAttackAt: now,
-      // Stagger scans across creeps so an entire wave never performs target acquisition
-      // on the same browser frame.
       nextScanAt: now + (this.serial % 10) * (LANE_CREEP_TUNING.scanIntervalSeconds / 10),
       aggroLockUntil: 0,
       returnNodeIndex: 0,
@@ -415,9 +412,7 @@ class LaneCreepManager {
       return now - creep.deathAt < LANE_CREEP_TUNING.corpseLifetimeSeconds;
     }
 
-    if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) {
-      this.clearTarget(creep);
-    }
+    if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) this.clearTarget(creep);
 
     if (creep.state === 'RETURNING') {
       this.updateReturning(creep, dt);
@@ -603,7 +598,10 @@ class LaneCreepManager {
     });
 
     const model = creep.entity.root.getObjectByName('lane-creep-model');
-    if (model) model.scale.set(1.06, 0.95, 1.06);
+    if (model) {
+      const baseScale = Number(model.userData.baseScale ?? 1);
+      model.scale.set(baseScale * 1.06, baseScale * 0.95, baseScale * 1.06);
+    }
 
     if (!target.alive) this.clearTarget(creep);
   }
@@ -701,10 +699,13 @@ class LaneCreepManager {
   private animateCreep(creep: LaneCreepRuntime, now: number, moving: boolean) {
     const model = creep.entity.root.getObjectByName('lane-creep-model');
     if (!model) return;
-    const desired = moving ? 1 + Math.sin(now * 9 + creep.phase) * 0.025 : 1;
+    const baseScale = Number(model.userData.baseScale ?? 1);
+    const desired = moving
+      ? baseScale * (1 + Math.sin(now * 9 + creep.phase) * 0.025)
+      : baseScale;
     model.position.y = moving ? Math.abs(Math.sin(now * 7 + creep.phase)) * 0.028 : 0;
     model.scale.x += (desired - model.scale.x) * 0.16;
-    model.scale.y += (1 - model.scale.y) * 0.16;
+    model.scale.y += (baseScale - model.scale.y) * 0.16;
     model.scale.z += (desired - model.scale.z) * 0.16;
   }
 
@@ -740,8 +741,6 @@ class LaneCreepManager {
   private rebalanceVisionLeaders() {
     for (const creep of this.creeps) creep.entity.grantsVision = false;
 
-    // The local fog system only renders blue vision. Keep one moving source per lane;
-    // choose the most advanced living creep so coverage tracks the front of the wave.
     for (const lane of LANES) {
       let leader: LaneCreepRuntime | null = null;
       let leaderProgress = Number.NEGATIVE_INFINITY;
@@ -775,6 +774,7 @@ class LaneCreepManager {
     this.creepById.delete(creep.entity.id);
     this.attackActivity.delete(creep.entity.id);
     creep.entity.grantsVision = false;
+    disposeCreepOverhead(creep.entity);
     this.registry.unregister(creep.entity.root);
     removeWorldEntityRuntime(creep.entity.id);
     this.scene.remove(creep.entity.root);
@@ -789,6 +789,15 @@ class LaneCreepManager {
     this.resources.dispose();
     managerByScene.delete(this.scene);
   }
+}
+
+function disposeCreepOverhead(entity: GameEntity) {
+  const overhead = entity.root.getObjectByName(`${entity.id}-overhead`);
+  if (!(overhead instanceof THREE.Sprite)) return;
+  overhead.onBeforeRender = () => {};
+  overhead.material.map?.dispose();
+  overhead.material.dispose();
+  entity.root.remove(overhead);
 }
 
 function runtimeSnapshot(entity: GameEntity) {
@@ -946,6 +955,7 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     const crest = new THREE.Mesh(resources.geometries.siegeCrest, teamMaterial);
     crest.position.set(0, 0.67, 0.49);
     model.add(crest);
+    model.userData.baseScale = 0.92;
     model.scale.setScalar(0.92);
     return root;
   }
@@ -994,8 +1004,7 @@ function buildCreepVisual(resources: VisualResources, team: CombatTeam, type: La
     model.add(flag);
   }
 
-  // Lane creeps deliberately do not cast dynamic shadows. At MOBA camera scale the
-  // visual difference is tiny, while every additional shadow caster multiplies GPU work.
+  model.userData.baseScale = 0.82;
   model.scale.setScalar(0.82);
   return root;
 }
