@@ -1,0 +1,13 @@
+/* Input layer for battlefield commands that originate from the HUD.
+   The HUD itself remains click-through, but the live minimap must receive pointer input. */
+.game-hud .minimap-live {
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.game-hud .minimap-hero-icon,
+.game-hud .minimap-tools,
+.game-hud .minimap-ornament {
+  pointer-events: none;
+}
