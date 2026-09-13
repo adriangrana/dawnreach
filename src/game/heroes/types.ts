@@ -24,13 +24,17 @@ export type StatProgression =
   | { kind: 'linear'; perLevel: number }
   | { kind: 'percentOfBase'; percentPerLevel: number };
 
+export type AbilityUnlockLevels =
+  | readonly [number, number, number]
+  | readonly [number, number, number, number];
+
 export interface HeroAbilityDefinition {
   key: AbilityKey;
   name: string;
   type: 'active' | 'passive' | 'active_with_passive' | 'ultimate';
   lore: string;
   technicalDescription: string;
-  unlockLevels: readonly [number, number, number, number];
+  unlockLevels: AbilityUnlockLevels;
 }
 
 export interface HeroDefinition {
