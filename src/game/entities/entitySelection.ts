@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GameEntity, GameEntityKind, GameEntityRegistry, TeamId } from './gameEntities';
 import { getGameEntity } from './gameEntities';
+import { createSelectionHudBridge } from './selectionHudOverlay';
 
 export type EntitySelectionController = Readonly<{
   getSelected(): GameEntity | null;
@@ -244,7 +245,6 @@ function markerMaterial(color: number, opacity: number, additive = false) {
     opacity,
     side: THREE.DoubleSide,
     depthWrite: false,
-    // Selection graphics exist in world space and must be occluded by the selected model.
     depthTest: true,
     toneMapped: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -359,8 +359,6 @@ function buildTowerRangeVisual(entity: GameEntity): RangeVisual | null {
   root.name = 'tower-attack-range';
   root.visible = false;
 
-  // A very faint interior wash makes the covered territory readable without obscuring
-  // terrain. The boundary itself carries most of the information.
   const fillMaterial = groundOverlayMaterial(palette.glow, 0.018, true);
   const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 128), fillMaterial);
   fill.rotation.x = -Math.PI / 2;
@@ -411,6 +409,31 @@ function disposeRangeVisual(visual: RangeVisual | null) {
   if (visual) disposeObjectVisual(visual.root);
 }
 
+function hideLegacyHeroRing(hero: GameEntity | null) {
+  if (!hero) return;
+  hero.root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || !(object.geometry instanceof THREE.RingGeometry)) return;
+    const parameters = object.geometry.parameters as { innerRadius?: number; outerRadius?: number };
+    const innerRadius = Number(parameters.innerRadius ?? 0);
+    const outerRadius = Number(parameters.outerRadius ?? 0);
+    if (Math.abs(innerRadius - 0.62) > 0.025 || Math.abs(outerRadius - 0.72) > 0.025) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const legacyMintRing = materials.some(material =>
+      material instanceof THREE.MeshBasicMaterial && material.color.getHex() === 0x63f0c2,
+    );
+    if (legacyMintRing) object.visible = false;
+  });
+}
+
+function focusLocalHeroViaGameCamera() {
+  window.dispatchEvent(new KeyboardEvent('keydown', {
+    key: ' ',
+    code: 'Space',
+    bubbles: true,
+    cancelable: true,
+  }));
+}
+
 export function createEntitySelectionController(
   scene: THREE.Scene,
   registry: GameEntityRegistry,
@@ -422,6 +445,10 @@ export function createEntitySelectionController(
   marker.visible = false;
   marker.renderOrder = 78;
   scene.add(marker);
+
+  const localHero = registry.values().find(entity => entity.kind === 'hero' && entity.team === localTeam) ?? null;
+  hideLegacyHeroRing(localHero);
+  const hudBridge = createSelectionHudBridge(localHero);
 
   const worldPosition = new THREE.Vector3();
   const enemyTowerWorldPosition = new THREE.Vector3();
@@ -448,11 +475,15 @@ export function createEntitySelectionController(
     rangeVisual = null;
   };
 
+  const clearSelectionVisual = () => {
+    if (!visual) return;
+    marker.remove(visual.root);
+    disposeSelectionVisual(visual);
+    visual = null;
+  };
+
   const rebuildVisual = (entity: GameEntity) => {
-    if (visual) {
-      marker.remove(visual.root);
-      disposeSelectionVisual(visual);
-    }
+    clearSelectionVisual();
     visual = buildSelectionVisual(entity);
     marker.add(visual.root);
 
@@ -463,26 +494,36 @@ export function createEntitySelectionController(
     selectedAt = performance.now() * 0.001;
   };
 
+  const canKeepSelected = (entity: GameEntity) => entity.selectable
+    && canSelect(entity)
+    && (entity.alive || entity === localHero);
+
   const setSelected = (entity: GameEntity | null) => {
-    const next = entity && entity.selectable && entity.alive && canSelect(entity) ? entity : null;
-    if (selected === next) return;
+    const next = entity && canKeepSelected(entity) ? entity : null;
+    if (selected === next) {
+      hudBridge.refresh(selected);
+      return;
+    }
 
     if (selected) selected.root.userData.selected = false;
     selected = next;
-    marker.visible = selected !== null;
 
     if (!selected) {
-      if (visual) {
-        marker.remove(visual.root);
-        disposeSelectionVisual(visual);
-        visual = null;
-      }
+      marker.visible = false;
+      clearSelectionVisual();
       clearRangeVisual();
+      hudBridge.setSelection(null);
       return;
     }
 
     selected.root.userData.selected = true;
-    rebuildVisual(selected);
+    marker.visible = selected.alive;
+    if (selected.alive) rebuildVisual(selected);
+    else {
+      clearSelectionVisual();
+      clearRangeVisual();
+    }
+    hudBridge.setSelection(selected);
   };
 
   const pick = (raycaster: THREE.Raycaster) => {
@@ -506,8 +547,16 @@ export function createEntitySelectionController(
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') altHeld = true;
+    if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') {
+      altHeld = true;
+      return;
+    }
+    if (event.code !== 'F1') return;
+    event.preventDefault();
+    if (localHero) setSelected(localHero);
+    focusLocalHeroViaGameCamera();
   };
+
   const onKeyUp = (event: KeyboardEvent) => {
     if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') altHeld = false;
   };
@@ -538,11 +587,20 @@ export function createEntitySelectionController(
   const update = () => {
     const now = performance.now() * 0.001;
     updateEnemyTowerRanges(now);
+    hudBridge.refresh(selected);
 
-    if (!selected || !selected.alive || !selected.root.parent || !canSelect(selected)) {
+    if (!selected || !selected.root.parent || !canSelect(selected) || (!selected.alive && selected !== localHero)) {
       setSelected(null);
       return;
     }
+
+    if (!selected.alive) {
+      marker.visible = false;
+      clearRangeVisual();
+      return;
+    }
+
+    marker.visible = true;
     if (!visual) rebuildVisual(selected);
     if (!visual) return;
 
@@ -574,6 +632,10 @@ export function createEntitySelectionController(
     }
   };
 
+  // The controlled hero is the default selection from the first playable frame.
+  if (localHero) setSelected(localHero);
+  else hudBridge.setSelection(null);
+
   return {
     getSelected: () => selected,
     pick,
@@ -585,17 +647,14 @@ export function createEntitySelectionController(
       window.removeEventListener('blur', onWindowBlur);
       if (selected) selected.root.userData.selected = false;
       selected = null;
-      if (visual) {
-        marker.remove(visual.root);
-        disposeSelectionVisual(visual);
-        visual = null;
-      }
+      clearSelectionVisual();
       clearRangeVisual();
       for (const enemyRangeVisual of enemyTowerRanges.values()) {
         scene.remove(enemyRangeVisual.root);
         disposeRangeVisual(enemyRangeVisual);
       }
       enemyTowerRanges.clear();
+      hudBridge.dispose();
       scene.remove(marker);
     },
   };
