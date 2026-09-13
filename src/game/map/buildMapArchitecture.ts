@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildThrone } from './buildThrone';
+import { buildDefenseTowerVisual } from './buildDefenseTower';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BASE_LAYOUT, OBJECTIVE_LAYOUT } from './mapLayout';
 
@@ -281,28 +282,7 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
 }
 
 export function buildDefenseTower(team: 'blue' | 'red', stone: StoneMaterials) {
-  const build = new Masonry();
-  const faction = factionMaterials(team);
-  build.cylinder(stone.stoneDark, 1.1, 1.27, 0.14, 0, 0.07, 0, 32);
-  build.cylinder(stone.stoneLight, 0.98, 1.1, 0.18, 0, 0.23, 0, 32);
-  build.ring(faction.trim, 0.82, 0.91, 0.33);
-  build.cylinder(faction.metal, 0.53, 0.76, 1.5, 0, 1.08, 0, 12);
-  for (let support = 0; support < 4; support++) {
-    const angle = support * Math.PI / 2 + Math.PI / 4;
-    build.box(stone.stoneLight, 0.16, 1.2, 0.22, Math.cos(angle) * 0.61, 0.94, Math.sin(angle) * 0.61, -angle);
-  }
-  build.cylinder(stone.stoneLight, 0.7, 0.6, 0.17, 0, 1.88, 0, 12);
-  build.cylinder(faction.trim, 0.59, 0.66, 0.16, 0, 2.06, 0, 12);
-  const crystal = new THREE.OctahedronGeometry(0.42, 0);
-  crystal.scale(0.8, 1.55, 0.8);
-  build.add(crystal, faction.crystal, new THREE.Vector3(0, 2.62, 0));
-  for (let prong = 0; prong < 4; prong++) {
-    const angle = prong * Math.PI / 2;
-    build.cylinder(faction.metal, 0.05, 0.11, 0.8, Math.cos(angle) * 0.46, 2.45, Math.sin(angle) * 0.46, 5);
-  }
-  const tower = build.finish(`${team}-defense-tower`);
-  tower.scale.y = 2;
-  return tower;
+  return buildDefenseTowerVisual(team, stone);
 }
 
 export function buildMasonryWalls(paths: readonly (readonly (readonly [number, number])[])[], stone: StoneMaterials,
