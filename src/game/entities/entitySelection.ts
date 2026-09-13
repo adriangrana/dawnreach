@@ -356,7 +356,7 @@ function buildTowerRangeVisual(entity: GameEntity): RangeVisual | null {
 
   const palette = teamPalette(entity.team);
   const root = new THREE.Group();
-  root.name = 'selected-tower-attack-range';
+  root.name = 'tower-attack-range';
   root.visible = false;
 
   // A very faint interior wash makes the covered territory readable without obscuring
@@ -376,6 +376,13 @@ function buildTowerRangeVisual(entity: GameEntity): RangeVisual | null {
 
   root.scale.setScalar(entity.attackRange);
   return { root, fillMaterial, haloMaterial, edgeMaterial };
+}
+
+function updateRangeVisualPulse(visual: RangeVisual, now: number) {
+  const rangePulse = (Math.sin(now * 1.6) + 1) * 0.5;
+  visual.fillMaterial.opacity = 0.014 + rangePulse * 0.008;
+  visual.haloMaterial.opacity = 0.072 + rangePulse * 0.026;
+  visual.edgeMaterial.opacity = 0.36 + rangePulse * 0.10;
 }
 
 function disposeObjectVisual(root: THREE.Object3D) {
@@ -408,6 +415,7 @@ export function createEntitySelectionController(
   scene: THREE.Scene,
   registry: GameEntityRegistry,
   canSelect: (entity: GameEntity) => boolean = () => true,
+  localTeam: TeamId = 'blue',
 ): EntitySelectionController {
   const marker = new THREE.Group();
   marker.name = 'selected-entity-marker';
@@ -416,11 +424,22 @@ export function createEntitySelectionController(
   scene.add(marker);
 
   const worldPosition = new THREE.Vector3();
+  const enemyTowerWorldPosition = new THREE.Vector3();
+  const enemyTowerRanges = new Map<GameEntity, RangeVisual>();
   let selected: GameEntity | null = null;
   let visual: SelectionVisual | null = null;
   let rangeVisual: RangeVisual | null = null;
   let selectedAt = 0;
   let altHeld = false;
+
+  for (const entity of registry.values()) {
+    if (entity.kind !== 'tower' || entity.team === localTeam || entity.team === 'neutral' || entity.attackRange <= 0) continue;
+    const enemyRangeVisual = buildTowerRangeVisual(entity);
+    if (!enemyRangeVisual) continue;
+    enemyRangeVisual.root.name = `enemy-${entity.id}-attack-range`;
+    scene.add(enemyRangeVisual.root);
+    enemyTowerRanges.set(entity, enemyRangeVisual);
+  }
 
   const clearRangeVisual = () => {
     if (!rangeVisual) return;
@@ -497,7 +516,29 @@ export function createEntitySelectionController(
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onWindowBlur);
 
+  const updateEnemyTowerRanges = (now: number) => {
+    for (const [entity, enemyRangeVisual] of enemyTowerRanges) {
+      const visible = altHeld
+        && entity.alive
+        && entity.revealed
+        && entity.root.parent !== null;
+      enemyRangeVisual.root.visible = visible;
+      if (!visible) continue;
+
+      entity.root.getWorldPosition(enemyTowerWorldPosition);
+      enemyRangeVisual.root.position.set(
+        enemyTowerWorldPosition.x,
+        enemyTowerWorldPosition.y + 0.035,
+        enemyTowerWorldPosition.z,
+      );
+      updateRangeVisualPulse(enemyRangeVisual, now);
+    }
+  };
+
   const update = () => {
+    const now = performance.now() * 0.001;
+    updateEnemyTowerRanges(now);
+
     if (!selected || !selected.alive || !selected.root.parent || !canSelect(selected)) {
       setSelected(null);
       return;
@@ -506,7 +547,6 @@ export function createEntitySelectionController(
     if (!visual) return;
 
     selected.root.getWorldPosition(worldPosition);
-    const now = performance.now() * 0.001;
     const age = Math.max(0, now - selectedAt);
     const intro = THREE.MathUtils.smoothstep(age, 0, 0.15);
     const pulse = Math.sin(now * visual.style.pulseSpeed);
@@ -523,11 +563,14 @@ export function createEntitySelectionController(
 
     if (rangeVisual) {
       rangeVisual.root.position.set(worldPosition.x, worldPosition.y + 0.035, worldPosition.z);
-      rangeVisual.root.visible = altHeld && selected.kind === 'tower' && selected.attackRange > 0;
-      const rangePulse = (Math.sin(now * 1.6) + 1) * 0.5;
-      rangeVisual.fillMaterial.opacity = 0.014 + rangePulse * 0.008;
-      rangeVisual.haloMaterial.opacity = 0.072 + rangePulse * 0.026;
-      rangeVisual.edgeMaterial.opacity = 0.36 + rangePulse * 0.10;
+      const selectedRangeHandledGlobally = selected.kind === 'tower'
+        && selected.team !== localTeam
+        && selected.team !== 'neutral';
+      rangeVisual.root.visible = altHeld
+        && selected.kind === 'tower'
+        && selected.attackRange > 0
+        && !selectedRangeHandledGlobally;
+      updateRangeVisualPulse(rangeVisual, now);
     }
   };
 
@@ -548,6 +591,11 @@ export function createEntitySelectionController(
         visual = null;
       }
       clearRangeVisual();
+      for (const enemyRangeVisual of enemyTowerRanges.values()) {
+        scene.remove(enemyRangeVisual.root);
+        disposeRangeVisual(enemyRangeVisual);
+      }
+      enemyTowerRanges.clear();
       scene.remove(marker);
     },
   };
