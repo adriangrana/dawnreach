@@ -52,7 +52,6 @@ const COMMAND_MARKER_Y = 0.12;
 const WAYPOINT_REACHED_DISTANCE = 0.22;
 const STUCK_REPATH_DELAY = 0.42;
 const REPATH_COOLDOWN = 0.7;
-const ACTIVE_ROUTE_REPATH_INTERVAL = 0.75;
 const PARTIAL_ROUTE_REPATH_INTERVAL = 0.24;
 const BLOCKED_ROUTE_REPATH_COOLDOWN = 0.12;
 const TARGET_REPATH_DISTANCE = 0.75;
@@ -205,6 +204,7 @@ export async function createDawnreachGame(
   let stuckDuration = 0;
   let lastRepathAt = -Infinity;
   let lastRoutePlanAt = -Infinity;
+  let lastRouteValidationAt = -Infinity;
   let lastAttackPathTarget: Point3 | null = null;
   let lastTargetRepathAt = -Infinity;
   let attackOrder: AttackOrder | null = null;
@@ -567,8 +567,8 @@ export async function createDawnreachGame(
           const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
           const targetMoved = !lastAttackPathTarget
             || Math.hypot(targetPoint.x - lastAttackPathTarget.x, targetPoint.z - lastAttackPathTarget.z) >= TARGET_REPATH_DISTANCE;
-          const routeExpired = elapsed - lastTargetRepathAt >= ACTIVE_ROUTE_REPATH_INTERVAL;
-          if ((targetMoved || !destination || routeExpired) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
+          const retryPartial = currentPathPartial && elapsed - lastRoutePlanAt >= PARTIAL_ROUTE_REPATH_INTERVAL;
+          if ((targetMoved || !destination || retryPartial) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
             planMovementRoute(targetPoint, true, true);
             lastAttackPathTarget = targetPoint;
             lastTargetRepathAt = elapsed;
@@ -581,20 +581,24 @@ export async function createDawnreachGame(
       }
     }
 
-    // Movement orders are persistent intents. Re-check the current route while travelling,
-    // not only when the player clicks. This lets a partial route continue from its new
-    // position and lets newly blocked segments be replaced when the collision world changes.
+    // Movement orders are persistent intents. A valid full route is left alone, but its
+    // next segment is revalidated frequently. Partial/missing routes are retried from the
+    // hero's new position until the original requested destination becomes reachable.
     if (routeRequest && attackOrder?.kind !== 'target') {
       const nextWaypoint = destination && currentWaypointIndex < currentPath.length
         ? currentPath[currentWaypointIndex]
         : null;
-      const segmentBlocked = nextWaypoint ? !navigation.segmentIsWalkable(heroPoint(), nextWaypoint) : false;
-      const routeMissing = !destination || currentPath.length === 0 || currentWaypointIndex >= currentPath.length;
-      const interval = currentPathPartial ? PARTIAL_ROUTE_REPATH_INTERVAL : ACTIVE_ROUTE_REPATH_INTERVAL;
-      const periodicRepath = elapsed - lastRoutePlanAt >= interval;
-      const blockedRepath = segmentBlocked && elapsed - lastRepathAt >= BLOCKED_ROUTE_REPATH_COOLDOWN;
+      let segmentBlocked = false;
+      if (nextWaypoint && elapsed - lastRouteValidationAt >= BLOCKED_ROUTE_REPATH_COOLDOWN) {
+        lastRouteValidationAt = elapsed;
+        segmentBlocked = !navigation.segmentIsWalkable(heroPoint(), nextWaypoint);
+      }
 
-      if (routeMissing || periodicRepath || blockedRepath) {
+      const routeMissing = !destination || currentPath.length === 0 || currentWaypointIndex >= currentPath.length;
+      const retryPartial = (routeMissing || currentPathPartial)
+        && elapsed - lastRoutePlanAt >= PARTIAL_ROUTE_REPATH_INTERVAL;
+
+      if (retryPartial || segmentBlocked) {
         const requested = { ...routeRequest };
         lastRepathAt = elapsed;
         planMovementRoute(requested, true, !routeMissing && !segmentBlocked);
