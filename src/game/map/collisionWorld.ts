@@ -37,7 +37,9 @@ export type CollisionWorld = {
 
 const TREE_RADIUS = 0.31;
 const WALL_RADIUS = 0.48;
-const ELEVATION_RADIUS = 0.62;
+// Retaining-wall masonry is 0.84 units wide at its foundation/coping, so its
+// collision half-width should match the visible 0.42-unit footprint.
+const ELEVATION_RADIUS = 0.42;
 const MAX_SUBSTEP = 0.18;
 const SOLVER_PASSES = 8;
 const ROCK_FOOTPRINT_SCALE = 0.82;
