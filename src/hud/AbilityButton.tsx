@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Infinity as PassiveIcon } from 'lucide-react';
+import { Infinity as PassiveIcon, Plus } from 'lucide-react';
 import type { AbilityKey, HeroAbilityDefinition } from '../game/heroes/types';
 
 type AbilityButtonProps = {
@@ -21,6 +21,8 @@ type AbilityButtonProps = {
   art: string;
   children: ReactNode;
   onUse?: () => void;
+  canUpgrade?: boolean;
+  onUpgrade?: () => void;
 };
 
 const kindLabels = { active: 'Activa', passive: 'Pasiva', active_with_passive: 'Activa + pasiva', ultimate: 'Definitiva' };
@@ -28,7 +30,7 @@ const kindLabels = { active: 'Activa', passive: 'Pasiva', active_with_passive: '
 export default function AbilityButton({
   hotkey, name, kind, description, lore, rank, maxRank = 4, nextLevel,
   remainingMs = 0, cooldownSeconds = 0, resourceCost = 0, resourceName,
-  blockedReason, image, art, children, onUse,
+  blockedReason, image, art, children, onUse, canUpgrade = false, onUpgrade,
 }: AbilityButtonProps) {
   const passive = kind === 'passive';
   const tooltipId = useId();
@@ -82,6 +84,20 @@ export default function AbilityButton({
       aria-label={passive ? `${name}, pasiva` : undefined}
       aria-describedby={passive && tooltipOpen ? tooltipId : undefined}
     >
+      {canUpgrade && !passive && (
+        <button
+          type="button"
+          className="ability-upgrade"
+          aria-label={`Subir ${name} al rango ${(rank ?? 0) + 1}`}
+          title={`Subir ${name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onUpgrade?.();
+          }}
+        >
+          <Plus aria-hidden="true" />
+        </button>
+      )}
       <button
         type="button"
         className={`ability-slot ability-slot--${art}${cooling ? ' is-cooling' : ''}${passive ? ' is-passive' : ''}${rank === 0 ? ' is-locked' : ''}`}
