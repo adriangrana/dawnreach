@@ -20,6 +20,15 @@ export const ATTACK_RANGES = {
   tower: 8.5,
 } as const;
 
+// Initial health values live with entity metadata so overhead UI, combat and targeting
+// all read the same authoritative state. These are tuning values, not presentation constants.
+export const ENTITY_MAX_HP = {
+  creep: 550,
+  tower: 1800,
+  throne: 5000,
+  jungleCreature: 900,
+} as const;
+
 export type GameEntityDefinition = Readonly<{
   id?: string;
   displayName: string;
@@ -34,6 +43,13 @@ export type GameEntityDefinition = Readonly<{
   visibilityPolicy?: EntityVisibilityPolicy;
   interaction?: EntityInteraction;
   selectionRadius?: number;
+  maxHp?: number;
+  currentHp?: number;
+  showHealthBar?: boolean;
+  definitionId?: string | null;
+  level?: number;
+  maxResource?: number;
+  currentResource?: number;
   alive?: boolean;
 }>;
 
@@ -52,6 +68,13 @@ export type GameEntity = {
   visibilityPolicy: EntityVisibilityPolicy;
   interaction: EntityInteraction;
   selectionRadius: number;
+  maxHp: number;
+  currentHp: number;
+  showHealthBar: boolean;
+  definitionId: string | null;
+  level: number;
+  maxResource: number;
+  currentResource: number;
   alive: boolean;
   revealed: boolean;
 };
@@ -71,6 +94,19 @@ function defaultVisionRadius(kind: GameEntityKind) {
 
 function defaultAttackRange(kind: GameEntityKind) {
   return kind === 'tower' ? ATTACK_RANGES.tower : 0;
+}
+
+function defaultMaxHp(kind: GameEntityKind) {
+  switch (kind) {
+    case 'creep': return ENTITY_MAX_HP.creep;
+    case 'tower': return ENTITY_MAX_HP.tower;
+    case 'jungle-creature': return ENTITY_MAX_HP.jungleCreature;
+    default: return 0;
+  }
+}
+
+function defaultShowHealthBar(kind: GameEntityKind) {
+  return kind === 'hero' || kind === 'creep' || kind === 'tower' || kind === 'jungle-creature';
 }
 
 function defaultSelectionRadius(kind: GameEntityKind) {
@@ -114,6 +150,8 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   const existing = root.userData[ENTITY_KEY] as GameEntity | undefined;
   if (existing) return existing;
 
+  const maxHp = Math.max(0, definition.maxHp ?? defaultMaxHp(definition.kind));
+  const currentHp = THREE.MathUtils.clamp(definition.currentHp ?? maxHp, 0, maxHp);
   const entity: GameEntity = {
     id: definition.id ?? `${definition.kind}:${root.name || 'entity'}:${root.uuid}`,
     root,
@@ -129,6 +167,13 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
     visibilityPolicy: definition.visibilityPolicy ?? defaultVisibilityPolicy(definition.kind),
     interaction: definition.interaction ?? defaultInteraction(definition.kind),
     selectionRadius: Math.max(0.2, definition.selectionRadius ?? defaultSelectionRadius(definition.kind)),
+    maxHp,
+    currentHp,
+    showHealthBar: definition.showHealthBar ?? defaultShowHealthBar(definition.kind),
+    definitionId: definition.definitionId ?? null,
+    level: Math.max(1, Math.floor(definition.level ?? 1)),
+    maxResource: Math.max(0, definition.maxResource ?? 0),
+    currentResource: Math.max(0, definition.currentResource ?? 0),
     alive: definition.alive ?? true,
     revealed: definition.team !== 'red',
   };
@@ -137,6 +182,8 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   root.userData.selectable = entity.selectable;
   root.userData.visionRadius = entity.visionRadius;
   root.userData.attackRange = entity.attackRange;
+  root.userData.maxHp = entity.maxHp;
+  root.userData.currentHp = entity.currentHp;
   return entity;
 }
 
@@ -215,6 +262,9 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         visionHeight: 5.2,
         attackRange: 0,
         selectionRadius: 4.25,
+        maxHp: ENTITY_MAX_HP.throne,
+        currentHp: ENTITY_MAX_HP.throne,
+        showHealthBar: true,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'attackable-structure',
       });
@@ -232,6 +282,9 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         visionRadius: VISION_RANGES.tower,
         visionHeight: 4.5,
         attackRange: ATTACK_RANGES.tower,
+        maxHp: ENTITY_MAX_HP.tower,
+        currentHp: ENTITY_MAX_HP.tower,
+        showHealthBar: true,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'attackable-structure',
       });
@@ -249,6 +302,8 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         visionRadius: VISION_RANGES.building,
         visionHeight: 5,
         attackRange: 0,
+        maxHp: 0,
+        showHealthBar: false,
         visibilityPolicy: 'structure-in-fog',
         interaction: 'structure',
       });
