@@ -197,7 +197,12 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
   const rotation = team === 'blue' ? 0 : Math.PI;
   const gates = BASE_LAYOUT.gates.map(angle => angle + rotation);
   const { radius, rampWidth } = BASE_LAYOUT;
-  const gateHalfAngle = rampWidth / (radius * 2) + 0.015;
+
+  // The authored citadel wall used to leave only a hairline clearance around each ramp.
+  // Its lowest dark course could therefore poke through the ramp surface at the threshold.
+  // Give every entrance a real architectural opening wider than the ramp itself.
+  const gateHalfAngle = rampWidth / (radius * 2) + 0.13;
+
   build.cylinder(stone.stoneDark, radius + 0.38, radius + 0.55, 0.24, 0, -0.11, 0, 128);
   for (let band = 0; band < 17; band++) {
     const inner = 0.6 + band * 1.16;
@@ -209,10 +214,15 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
         inner + 0.025, Math.min(radius, inner + 1.12), 0.018 + band * 0.0005, start + 0.004, Math.PI * 2 / sections - 0.008);
     }
   }
-  for (const edge of [3.5, 5.9, 12.8, radius - 0.25]) {
+
+  // Keep the internal floor rings, but drop the old outer perimeter ring. The elevated
+  // presentation now owns that edge, and the legacy ring was the thin dark strip visible
+  // through the top of the entrance ramp.
+  for (const edge of [3.5, 5.9, 12.8]) {
     build.ring(stone.stoneDark, edge - 0.07, edge + 0.12, 0.035);
     build.ring(faction.trim, edge, edge + 0.035, 0.038);
   }
+
   for (let segment = 0; segment < 128; segment++) {
     const angle = segment / 128 * Math.PI * 2;
     const distanceToGate = Math.min(...gates.map(gate => Math.abs(Math.atan2(Math.sin(angle - gate), Math.cos(angle - gate)))));
