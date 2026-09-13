@@ -43,8 +43,10 @@ export function createEntitySelectionController(
   const worldPosition = new THREE.Vector3();
   let selected: GameEntity | null = null;
 
-  const select = (entity: GameEntity | null) => {
-    selected = entity && entity.selectable && entity.alive && canSelect(entity) ? entity : null;
+  const setSelected = (entity: GameEntity | null) => {
+    const next = entity && entity.selectable && entity.alive && canSelect(entity) ? entity : null;
+    if (selected && selected !== next) selected.root.userData.selected = false;
+    selected = next;
     marker.visible = selected !== null;
     if (!selected) return;
     material.color.setHex(teamColor(selected.team));
@@ -55,7 +57,7 @@ export function createEntitySelectionController(
   const pick = (raycaster: THREE.Raycaster) => {
     const selectable = registry.selectable().filter(canSelect);
     if (selectable.length === 0) {
-      select(null);
+      setSelected(null);
       return null;
     }
 
@@ -64,19 +66,17 @@ export function createEntitySelectionController(
     for (const hit of hits) {
       const entity = getGameEntity(hit.object);
       if (!entity || !entity.selectable || !entity.alive || !canSelect(entity)) continue;
-      select(entity);
+      setSelected(entity);
       return entity;
     }
 
-    select(null);
+    setSelected(null);
     return null;
   };
 
   const update = () => {
     if (!selected || !selected.alive || !selected.root.parent || !canSelect(selected)) {
-      if (selected) selected.root.userData.selected = false;
-      selected = null;
-      marker.visible = false;
+      setSelected(null);
       return;
     }
     selected.root.getWorldPosition(worldPosition);
@@ -86,13 +86,11 @@ export function createEntitySelectionController(
   return {
     getSelected: () => selected,
     pick,
-    select(entity) {
-      if (selected && selected !== entity) selected.root.userData.selected = false;
-      select(entity);
-    },
+    select: setSelected,
     update,
     dispose() {
       if (selected) selected.root.userData.selected = false;
+      selected = null;
       scene.remove(marker);
       geometry.dispose();
       material.dispose();
