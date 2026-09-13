@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, type RefObject, type SyntheticEvent } from 'react';
+import { useEffect, useReducer, useRef, type Dispatch, type RefObject, type SyntheticEvent } from 'react';
 import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
 import { createDawnreachGame } from './game/createDawnreachGame';
 import AbilityButton from './hud/AbilityButton';
@@ -91,14 +91,14 @@ function TeamPortraits({ team, side, heroLevel = 11 }: { team: TeamHero[]; side:
 function GameHud({
   minimapRef,
   minimapHeroRef,
+  runtime,
+  dispatch,
 }: {
   minimapRef: RefObject<HTMLDivElement | null>;
   minimapHeroRef: RefObject<HTMLImageElement | null>;
+  runtime: HudRuntime;
+  dispatch: Dispatch<HudAction>;
 }) {
-  const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
-    const nowMs = performance.now();
-    return { match: createPlayableMatch('H001', 11, nowMs), nowMs, feedback: '' };
-  });
   const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const definition = getHeroDefinition(hero.definitionId);
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
@@ -245,6 +245,19 @@ export default function App() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const minimapHeroRef = useRef<HTMLImageElement | null>(null);
+  const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
+    const nowMs = performance.now();
+    return { match: createPlayableMatch('H001', 11, nowMs), nowMs, feedback: '' };
+  });
+  const getOverlayState = () => ({
+    hero: getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID),
+    stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
+  });
+  const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
+
+  useEffect(() => {
+    overlayStateRef.current = getOverlayState();
+  }, [runtime]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -255,7 +268,7 @@ export default function App() {
     let disposed = false;
     let destroy: (() => void) | undefined;
 
-    void createDawnreachGame(host, minimapHost, minimapHeroMarker).then((game) => {
+    void createDawnreachGame(host, minimapHost, minimapHeroMarker, () => overlayStateRef.current).then((game) => {
       if (disposed) {
         game.destroy();
         return;
@@ -272,7 +285,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <div ref={hostRef} className="game-host" />
-      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} />
+      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} />
     </main>
   );
 }
