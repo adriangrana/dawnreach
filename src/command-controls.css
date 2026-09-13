@@ -11,3 +11,17 @@
 .game-hud .minimap-ornament {
   pointer-events: none;
 }
+
+/* Dawnreach gameplay cursors.
+   createDawnreachGame switches the inline cursor to `crosshair` while attack mode is armed;
+   these selectors turn that state into a dedicated visual cursor without coupling the renderer
+   to presentation assets. `!important` is intentional so it can replace the inline fallback. */
+.game-canvas,
+.game-hud .minimap-live {
+  cursor: url('/assets/cursors/dawnreach-pointer.svg') 4 4, default !important;
+}
+
+.game-canvas[style*='cursor: crosshair'],
+.game-hud .minimap-live[style*='cursor: crosshair'] {
+  cursor: url('/assets/cursors/dawnreach-attack.svg') 18 18, crosshair !important;
+}
