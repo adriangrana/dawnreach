@@ -142,14 +142,14 @@ function angularDistance(a: number, b: number) {
 }
 
 function createRampGeometry(angle: number) {
-  // Push the ramp farther into the plaza and finish it slightly above the old citadel
-  // perimeter trim. That legacy ring sits almost coplanar with the former ramp top and
-  // showed up as the dark bar across the entrance. The overlap removes the seam while
-  // keeping the walkable transition continuous.
+  // The sloped part now reaches full plaza height exactly at the base perimeter.
+  // A short flat landing continues inside the base so there is no low seam or dark
+  // threshold strip for the hero to intersect while stepping onto the plaza.
   const innerRadius = BASE_LAYOUT.radius - 1.75;
-  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength;
+  const baseRadius = BASE_LAYOUT.radius + 0.08;
+  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86;
   const halfWidth = BASE_LAYOUT.rampWidth / 2;
-  const high = BASE_LAYOUT.elevation + 0.12;
+  const high = BASE_LAYOUT.elevation + 0.10;
   const low = 0.045;
   const bottom = 0.015;
   const radialX = Math.cos(angle);
@@ -165,25 +165,50 @@ function createRampGeometry(angle: number) {
 
   const outerLeft = point(outerRadius, 1, low);
   const outerRight = point(outerRadius, -1, low);
+  const baseLeft = point(baseRadius, 1, high);
+  const baseRight = point(baseRadius, -1, high);
   const innerLeft = point(innerRadius, 1, high);
   const innerRight = point(innerRadius, -1, high);
+
   const outerLeftBottom = point(outerRadius, 1, bottom);
   const outerRightBottom = point(outerRadius, -1, bottom);
+  const baseLeftBottom = point(baseRadius, 1, bottom);
+  const baseRightBottom = point(baseRadius, -1, bottom);
   const innerLeftBottom = point(innerRadius, 1, bottom);
   const innerRightBottom = point(innerRadius, -1, bottom);
 
   const vertices = [
-    ...outerLeft, ...outerRight, ...innerLeft, ...innerRight,
-    ...outerLeftBottom, ...outerRightBottom, ...innerLeftBottom, ...innerRightBottom,
+    ...outerLeft, ...outerRight,
+    ...baseLeft, ...baseRight,
+    ...innerLeft, ...innerRight,
+    ...outerLeftBottom, ...outerRightBottom,
+    ...baseLeftBottom, ...baseRightBottom,
+    ...innerLeftBottom, ...innerRightBottom,
   ];
 
   const indices = [
+    // sloped top: ground -> full base elevation
     0, 1, 2, 1, 3, 2,
-    4, 6, 5, 5, 6, 7,
-    0, 2, 4, 4, 2, 6,
-    1, 5, 3, 5, 7, 3,
-    2, 3, 6, 3, 7, 6,
-    0, 4, 1, 1, 4, 5,
+    // flat landing: full elevation -> inside plaza
+    2, 3, 4, 3, 5, 4,
+
+    // bottom
+    6, 8, 7, 7, 8, 9,
+    8, 10, 9, 9, 10, 11,
+
+    // left side
+    0, 2, 6, 6, 2, 8,
+    2, 4, 8, 8, 4, 10,
+
+    // right side
+    1, 7, 3, 7, 9, 3,
+    3, 9, 5, 9, 11, 5,
+
+    // inner/high end
+    4, 5, 10, 5, 11, 10,
+
+    // outer/ground end
+    0, 6, 1, 1, 6, 7,
   ];
 
   const geometry = new THREE.BufferGeometry();
@@ -196,34 +221,43 @@ function createRampGeometry(angle: number) {
 }
 
 function createRampRail(angle: number, side: number, material: THREE.Material) {
-  const innerRadius = BASE_LAYOUT.radius - 0.6;
-  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength - 0.35;
+  const group = new THREE.Group();
+  const innerRadius = BASE_LAYOUT.radius - 0.95;
+  const baseRadius = BASE_LAYOUT.radius + 0.08;
+  const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength * 0.86 - 0.25;
   const halfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
   const radialX = Math.cos(angle);
   const radialZ = Math.sin(angle);
   const tangentX = -radialZ;
   const tangentZ = radialX;
+  const highY = BASE_LAYOUT.elevation + 0.28;
+  const lowY = 0.2;
 
-  const inner = new THREE.Vector3(
-    radialX * innerRadius + tangentX * halfWidth * side,
-    BASE_LAYOUT.elevation + 0.2,
-    radialZ * innerRadius + tangentZ * halfWidth * side,
+  const point = (radius: number, y: number) => new THREE.Vector3(
+    radialX * radius + tangentX * halfWidth * side,
+    y,
+    radialZ * radius + tangentZ * halfWidth * side,
   );
-  const outer = new THREE.Vector3(
-    radialX * outerRadius + tangentX * halfWidth * side,
-    0.2,
-    radialZ * outerRadius + tangentZ * halfWidth * side,
-  );
-  const direction = new THREE.Vector3().subVectors(inner, outer);
-  const length = direction.length();
-  direction.normalize();
 
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.18, 0.18), material);
-  rail.position.copy(outer).add(inner).multiplyScalar(0.5);
-  rail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
-  rail.castShadow = true;
-  rail.receiveShadow = true;
-  return rail;
+  const outer = point(outerRadius, lowY);
+  const base = point(baseRadius, highY);
+  const inner = point(innerRadius, highY);
+
+  const addSegment = (start: THREE.Vector3, end: THREE.Vector3) => {
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = direction.length();
+    direction.normalize();
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.18, 0.18), material);
+    rail.position.copy(start).add(end).multiplyScalar(0.5);
+    rail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
+    rail.castShadow = true;
+    rail.receiveShadow = true;
+    group.add(rail);
+  };
+
+  addSegment(outer, base);
+  addSegment(base, inner);
+  return group;
 }
 
 function replaceLegacyThroneCrystal(
