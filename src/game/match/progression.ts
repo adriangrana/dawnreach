@@ -11,9 +11,9 @@ export const HERO_PROGRESSION_TUNING = {
   experienceRadiusWorld: 13,
   denyHealthFraction: 0.5,
   creepRewards: {
-    melee: { experience: 55, gold: 40 },
-    flagbearer: { experience: 55, gold: 40 },
-    ranged: { experience: 75, gold: 50 },
+    melee: { experience: 55, gold: 33 },
+    flagbearer: { experience: 55, gold: 33 },
+    ranged: { experience: 75, gold: 44 },
     siege: { experience: 100, gold: 70 },
   },
 } as const;
