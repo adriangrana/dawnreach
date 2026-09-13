@@ -119,9 +119,9 @@ function createRampGeometry(angle: number) {
   const innerRadius = BASE_LAYOUT.radius - 1.15;
   const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength;
   const halfWidth = BASE_LAYOUT.rampWidth / 2;
-  const high = BASE_LAYOUT.elevation + 0.025;
-  const low = 0.035;
-  const bottom = 0.02;
+  const high = BASE_LAYOUT.elevation + 0.035;
+  const low = 0.045;
+  const bottom = 0.015;
   const radialX = Math.cos(angle);
   const radialZ = Math.sin(angle);
   const tangentX = -radialZ;
@@ -133,57 +133,74 @@ function createRampGeometry(angle: number) {
     radialZ * radius + tangentZ * halfWidth * side,
   ] as const;
 
-  const innerLeft = point(innerRadius, 1, high);
-  const innerRight = point(innerRadius, -1, high);
   const outerLeft = point(outerRadius, 1, low);
   const outerRight = point(outerRadius, -1, low);
-  const innerLeftBottom = point(innerRadius, 1, bottom);
-  const innerRightBottom = point(innerRadius, -1, bottom);
+  const innerLeft = point(innerRadius, 1, high);
+  const innerRight = point(innerRadius, -1, high);
   const outerLeftBottom = point(outerRadius, 1, bottom);
   const outerRightBottom = point(outerRadius, -1, bottom);
+  const innerLeftBottom = point(innerRadius, 1, bottom);
+  const innerRightBottom = point(innerRadius, -1, bottom);
 
   const vertices = [
     ...outerLeft, ...outerRight, ...innerLeft, ...innerRight,
     ...outerLeftBottom, ...outerRightBottom, ...innerLeftBottom, ...innerRightBottom,
   ];
+
+  // The previous top triangles were wound downward. With FrontSide materials that made
+  // the actual sloped surface invisible to both rendering and raycasting, so the hero
+  // sampled the flat terrain underneath. These faces are now wound upward and the ramp
+  // is a real wedge from ground level to BASE_LAYOUT.elevation.
   const indices = [
-    0, 2, 1, 1, 2, 3,
-    4, 5, 6, 5, 7, 6,
-    0, 4, 2, 4, 6, 2,
-    1, 3, 5, 5, 3, 7,
-    2, 6, 3, 6, 7, 3,
-    0, 1, 4, 1, 5, 4,
+    // top (+Y)
+    0, 1, 2, 1, 3, 2,
+    // bottom (-Y)
+    4, 6, 5, 5, 6, 7,
+    // left side
+    0, 2, 4, 4, 2, 6,
+    // right side
+    1, 5, 3, 5, 7, 3,
+    // inner/high end
+    2, 3, 6, 3, 7, 6,
+    // outer/ground end
+    0, 4, 1, 1, 4, 5,
   ];
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 
 function createRampRail(angle: number, side: number, material: THREE.Material) {
   const innerRadius = BASE_LAYOUT.radius - 0.6;
   const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength - 0.35;
-  const middleRadius = (innerRadius + outerRadius) / 2;
-  const run = outerRadius - innerRadius;
   const halfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
   const radialX = Math.cos(angle);
   const radialZ = Math.sin(angle);
   const tangentX = -radialZ;
   const tangentZ = radialX;
-  const slope = Math.atan2(BASE_LAYOUT.elevation, run);
 
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(run, 0.18, 0.18), material);
-  rail.position.set(
-    radialX * middleRadius + tangentX * halfWidth * side,
-    BASE_LAYOUT.elevation / 2 + 0.18,
-    radialZ * middleRadius + tangentZ * halfWidth * side,
+  const inner = new THREE.Vector3(
+    radialX * innerRadius + tangentX * halfWidth * side,
+    BASE_LAYOUT.elevation + 0.2,
+    radialZ * innerRadius + tangentZ * halfWidth * side,
   );
-  rail.rotation.order = 'YXZ';
-  rail.rotation.y = -angle;
-  // Both rails follow the same ramp plane. Side only offsets them laterally.
-  rail.rotation.z = -slope;
+  const outer = new THREE.Vector3(
+    radialX * outerRadius + tangentX * halfWidth * side,
+    0.2,
+    radialZ * outerRadius + tangentZ * halfWidth * side,
+  );
+  const direction = new THREE.Vector3().subVectors(inner, outer);
+  const length = direction.length();
+  direction.normalize();
+
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.18, 0.18), material);
+  rail.position.copy(outer).add(inner).multiplyScalar(0.5);
+  rail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
   rail.castShadow = true;
   rail.receiveShadow = true;
   return rail;
