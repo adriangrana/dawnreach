@@ -6,6 +6,7 @@ import {
   getWorldAttackEventsAfter,
   getWorldEntityRuntime,
   publishWorldAttackEvent,
+  publishWorldEntityRuntime,
   type WorldAttackEvent,
 } from './worldCombatBridge';
 
@@ -23,7 +24,6 @@ export const TOWER_COMBAT_TUNING = {
 
 const RESPAWN_AT_KEY = 'dawnreachRespawnAtSeconds';
 const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
-const RESPAWN_RELEASE_KEY = 'dawnreachRespawnReleaseInstalled';
 const DEATH_COUNT_KEY = 'dawnreachDeaths';
 const DEATH_POSITION_KEY = 'dawnreachDeathPosition';
 const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncAtSeconds';
@@ -258,19 +258,22 @@ function synchronizeWorldRuntime(
       scheduleHeroRespawn(entity, elapsed);
     }
 
-    if (!entity.alive) {
-      if (entity.kind === 'hero') {
-        entity.root.visible = true;
-        setHeroCorpsePose(entity, true);
+    if (entity.kind === 'hero') {
+      if (entity.alive) {
+        setHeroRenderVisible(entity);
+        setHeroStatusOverlayVisible(entity, true);
       } else {
-        entity.root.visible = false;
+        setHeroRenderVisible(entity);
+        setHeroStatusOverlayVisible(entity, false);
+        setHeroCorpsePose(entity, true);
+        holdDeadHeroAtDeathPosition(entity);
       }
-      holdDeadHeroAtDeathPosition(entity);
+    } else if (!entity.alive) {
+      entity.root.visible = false;
     }
   }
 
   updateHeroRespawns(registry, elapsed);
-  enforceRespawnHolds(registry);
 }
 
 function updateHeroDeathPresentationOnce(
@@ -285,15 +288,15 @@ function updateHeroDeathPresentationOnce(
     if (entity.kind !== 'hero') continue;
     if (!entity.alive) {
       holdDeadHeroAtDeathPosition(entity);
-      entity.root.visible = true;
+      setHeroRenderVisible(entity);
+      setHeroStatusOverlayVisible(entity, false);
       setHeroCorpsePose(entity, true);
       continue;
     }
 
-    if (entity.root.userData[RESPAWN_HOLD_KEY] === true) {
-      entity.root.visible = true;
-      setHeroCorpsePose(entity, false);
-    }
+    setHeroRenderVisible(entity);
+    setHeroStatusOverlayVisible(entity, true);
+    setHeroCorpsePose(entity, false);
   }
 }
 
@@ -310,13 +313,24 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
     entity.currentHp = entity.maxHp;
     entity.currentResource = entity.maxResource;
     entity.alive = true;
-    entity.root.visible = true;
-    setHeroCorpsePose(entity, false);
     entity.root.userData[RESPAWN_AT_KEY] = undefined;
-    entity.root.userData[RESPAWN_HOLD_KEY] = true;
+    entity.root.userData[RESPAWN_HOLD_KEY] = false;
     entity.root.userData[DEATH_POSITION_KEY] = undefined;
     entity.root.userData.currentHp = entity.currentHp;
-    installRespawnCommandRelease(entity);
+    setHeroRenderVisible(entity);
+    setHeroStatusOverlayVisible(entity, true);
+    setHeroCorpsePose(entity, false);
+
+    // Publish the alive snapshot before notifying React. This prevents the next tower sync
+    // from consuming the stale dead snapshot and briefly hiding/re-killing the just-respawned hero.
+    publishWorldEntityRuntime(entity.id, {
+      level: entity.level,
+      maxHp: entity.maxHp,
+      currentHp: entity.currentHp,
+      maxResource: entity.maxResource,
+      currentResource: entity.currentResource,
+      alive: true,
+    });
 
     emitWorldCombatEvent({
       entityId: entity.id,
@@ -326,16 +340,6 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
       alive: true,
       atMs: worldNowMs(),
     });
-  }
-}
-
-function enforceRespawnHolds(registry: GameEntityRegistry): void {
-  for (const entity of registry.values()) {
-    if (entity.kind !== 'hero' || !entity.alive || entity.root.userData[RESPAWN_HOLD_KEY] !== true) continue;
-    const spawn = getTeamSpawn(entity.team);
-    if (!spawn) continue;
-    entity.root.position.set(spawn.x, 0.03, spawn.z);
-    entity.root.visible = true;
   }
 }
 
@@ -349,32 +353,39 @@ function holdDeadHeroAtDeathPosition(entity: GameEntity): void {
   entity.root.position.copy(deathPosition);
 }
 
-function setHeroCorpsePose(entity: GameEntity, dead: boolean): void {
-  if (entity.kind !== 'hero') return;
+function getHeroModel(entity: GameEntity): THREE.Object3D | null {
+  if (entity.kind !== 'hero') return null;
   const expectedModelName = `${entity.root.name}-model`;
-  const model = entity.root.getObjectByName(expectedModelName)
-    ?? entity.root.children.find(child => child.name.endsWith('-model'));
+  return entity.root.getObjectByName(expectedModelName)
+    ?? entity.root.children.find(child => child.name.endsWith('-model'))
+    ?? null;
+}
+
+function setHeroRenderVisible(entity: GameEntity): void {
+  if (entity.kind !== 'hero') return;
+  entity.root.visible = true;
+  const model = getHeroModel(entity);
+  if (model) model.visible = true;
+}
+
+function setHeroStatusOverlayVisible(entity: GameEntity, visible: boolean): void {
+  if (entity.kind !== 'hero') return;
+  const overlay = entity.root.getObjectByName('hero-status-overlay');
+  if (!(overlay instanceof THREE.Sprite)) return;
+  const material = overlay.material;
+  if (material instanceof THREE.SpriteMaterial) {
+    material.transparent = true;
+    material.opacity = visible ? 1 : 0;
+  }
+}
+
+function setHeroCorpsePose(entity: GameEntity, dead: boolean): void {
+  const model = getHeroModel(entity);
   if (!model) return;
 
   // The procedural humanoid animator owns model Y/Z but not X rotation. Using X here keeps
   // the corpse pose stable without fighting the regular gait animation every frame.
   model.rotation.x = dead ? -Math.PI * 0.48 : 0;
-}
-
-function installRespawnCommandRelease(entity: GameEntity): void {
-  if (typeof window === 'undefined' || entity.root.userData[RESPAWN_RELEASE_KEY] === true) return;
-  entity.root.userData[RESPAWN_RELEASE_KEY] = true;
-
-  const release = (event: PointerEvent) => {
-    if (event.button !== 0 && event.button !== 2) return;
-    const target = event.target;
-    if (!(target instanceof Element) || !target.closest('.game-canvas, .minimap-live')) return;
-    entity.root.userData[RESPAWN_HOLD_KEY] = false;
-    entity.root.userData[RESPAWN_RELEASE_KEY] = false;
-    window.removeEventListener('pointerdown', release, true);
-  };
-
-  window.addEventListener('pointerdown', release, true);
 }
 
 function getTeamSpawn(team: TeamId): { x: number; z: number } | null {
@@ -389,7 +400,8 @@ function scheduleHeroRespawn(entity: GameEntity, elapsed: number): number {
   entity.root.userData[RESPAWN_HOLD_KEY] = false;
   entity.root.userData[DEATH_POSITION_KEY] = entity.root.position.clone();
   entity.root.userData[DEATH_COUNT_KEY] = Number(entity.root.userData[DEATH_COUNT_KEY] ?? 0) + 1;
-  entity.root.visible = true;
+  setHeroRenderVisible(entity);
+  setHeroStatusOverlayVisible(entity, false);
   setHeroCorpsePose(entity, true);
   return respawnSeconds;
 }
@@ -727,7 +739,8 @@ function applyTowerProjectileDamage(target: GameEntity, elapsed: number): void {
 
   target.alive = false;
   if (target.kind === 'hero') {
-    target.root.visible = true;
+    setHeroRenderVisible(target);
+    setHeroStatusOverlayVisible(target, false);
     setHeroCorpsePose(target, true);
   } else {
     target.root.visible = false;
