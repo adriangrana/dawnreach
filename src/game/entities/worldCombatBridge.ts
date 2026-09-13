@@ -1,5 +1,14 @@
 import type { GameEntityKind, TeamId } from './gameEntities';
 
+export type WorldStatusRuntimeSnapshot = Readonly<{
+  id: string;
+  sourceEntityId: string | null;
+  rank?: number;
+  stacks?: number;
+  expiresAtMs?: number | null;
+  data?: Readonly<Record<string, number | string | boolean>>;
+}>;
+
 export type WorldEntityRuntimeSnapshot = Readonly<{
   level: number;
   maxHp: number;
@@ -7,6 +16,7 @@ export type WorldEntityRuntimeSnapshot = Readonly<{
   maxResource: number;
   currentResource: number;
   alive: boolean;
+  statuses?: readonly WorldStatusRuntimeSnapshot[];
 }>;
 
 export type WorldCombatEventReason = 'damage' | 'heal' | 'death' | 'respawn';
@@ -43,8 +53,18 @@ let attackSequence = 0;
 
 const MAX_ATTACK_EVENTS = 160;
 
+function cloneRuntimeSnapshot(snapshot: WorldEntityRuntimeSnapshot): WorldEntityRuntimeSnapshot {
+  return {
+    ...snapshot,
+    statuses: snapshot.statuses?.map(status => ({
+      ...status,
+      data: status.data ? { ...status.data } : undefined,
+    })),
+  };
+}
+
 export function publishWorldEntityRuntime(entityId: string, snapshot: WorldEntityRuntimeSnapshot): void {
-  runtimeSnapshots.set(entityId, { ...snapshot });
+  runtimeSnapshots.set(entityId, cloneRuntimeSnapshot(snapshot));
 }
 
 export function getWorldEntityRuntime(entityId: string): WorldEntityRuntimeSnapshot | undefined {
