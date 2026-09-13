@@ -54,6 +54,13 @@ type SelectionVisual = Readonly<{
   style: SelectionStyle;
 }>;
 
+type RangeVisual = Readonly<{
+  root: THREE.Group;
+  fillMaterial: THREE.MeshBasicMaterial;
+  haloMaterial: THREE.MeshBasicMaterial;
+  edgeMaterial: THREE.MeshBasicMaterial;
+}>;
+
 const STYLE_BY_KIND: Record<GameEntityKind, SelectionStyle> = {
   hero: {
     glowInner: 0.79,
@@ -237,13 +244,19 @@ function markerMaterial(color: number, opacity: number, additive = false) {
     opacity,
     side: THREE.DoubleSide,
     depthWrite: false,
-    // Selection graphics live in the world, on the ground around the selected entity.
-    // They must therefore obey the scene depth buffer: the rear half of a marker is
-    // naturally occluded by a tower, hero or building instead of being drawn through it.
+    // Selection graphics exist in world space and must be occluded by the selected model.
     depthTest: true,
     toneMapped: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
   });
+}
+
+function groundOverlayMaterial(color: number, opacity: number, additive = false) {
+  const material = markerMaterial(color, opacity, additive);
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -1;
+  material.polygonOffsetUnits = -2;
+  return material;
 }
 
 function addHorizontalRing(
@@ -314,8 +327,6 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
   }
   root.add(innerRotor);
 
-  // Large/interactable structures receive restrained pips so their footprint feels framed,
-  // but the marker stays thin enough to preserve ground readability.
   if (entity.kind === 'tower' || entity.kind === 'building' || entity.kind === 'shop') {
     const pipCount = entity.kind === 'shop' ? 6 : 4;
     const pipRadius = style.tickRadius - 0.02;
@@ -340,11 +351,37 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
   };
 }
 
-function disposeSelectionVisual(visual: SelectionVisual | null) {
-  if (!visual) return;
+function buildTowerRangeVisual(entity: GameEntity): RangeVisual | null {
+  if (entity.kind !== 'tower' || entity.attackRange <= 0) return null;
+
+  const palette = teamPalette(entity.team);
+  const root = new THREE.Group();
+  root.name = 'selected-tower-attack-range';
+  root.visible = false;
+
+  // A very faint interior wash makes the covered territory readable without obscuring
+  // terrain. The boundary itself carries most of the information.
+  const fillMaterial = groundOverlayMaterial(palette.glow, 0.018, true);
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 128), fillMaterial);
+  fill.rotation.x = -Math.PI / 2;
+  fill.position.y = 0.006;
+  fill.renderOrder = 70;
+  root.add(fill);
+
+  const haloMaterial = groundOverlayMaterial(palette.glow, 0.085, true);
+  addHorizontalRing(root, 0.972, 1.0, haloMaterial, 71, 0.010);
+
+  const edgeMaterial = groundOverlayMaterial(palette.bright, 0.42);
+  addHorizontalRing(root, 0.994, 1.0, edgeMaterial, 72, 0.014);
+
+  root.scale.setScalar(entity.attackRange);
+  return { root, fillMaterial, haloMaterial, edgeMaterial };
+}
+
+function disposeObjectVisual(root: THREE.Object3D) {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
-  visual.root.traverse((object) => {
+  root.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
     if (!geometries.has(object.geometry)) {
       geometries.add(object.geometry);
@@ -357,6 +394,14 @@ function disposeSelectionVisual(visual: SelectionVisual | null) {
       material.dispose();
     }
   });
+}
+
+function disposeSelectionVisual(visual: SelectionVisual | null) {
+  if (visual) disposeObjectVisual(visual.root);
+}
+
+function disposeRangeVisual(visual: RangeVisual | null) {
+  if (visual) disposeObjectVisual(visual.root);
 }
 
 export function createEntitySelectionController(
@@ -373,7 +418,16 @@ export function createEntitySelectionController(
   const worldPosition = new THREE.Vector3();
   let selected: GameEntity | null = null;
   let visual: SelectionVisual | null = null;
+  let rangeVisual: RangeVisual | null = null;
   let selectedAt = 0;
+  let altHeld = false;
+
+  const clearRangeVisual = () => {
+    if (!rangeVisual) return;
+    scene.remove(rangeVisual.root);
+    disposeRangeVisual(rangeVisual);
+    rangeVisual = null;
+  };
 
   const rebuildVisual = (entity: GameEntity) => {
     if (visual) {
@@ -382,6 +436,11 @@ export function createEntitySelectionController(
     }
     visual = buildSelectionVisual(entity);
     marker.add(visual.root);
+
+    clearRangeVisual();
+    rangeVisual = buildTowerRangeVisual(entity);
+    if (rangeVisual) scene.add(rangeVisual.root);
+
     selectedAt = performance.now() * 0.001;
   };
 
@@ -399,6 +458,7 @@ export function createEntitySelectionController(
         disposeSelectionVisual(visual);
         visual = null;
       }
+      clearRangeVisual();
       return;
     }
 
@@ -426,6 +486,17 @@ export function createEntitySelectionController(
     return null;
   };
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') altHeld = true;
+  };
+  const onKeyUp = (event: KeyboardEvent) => {
+    if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') altHeld = false;
+  };
+  const onWindowBlur = () => { altHeld = false; };
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onWindowBlur);
+
   const update = () => {
     if (!selected || !selected.alive || !selected.root.parent || !canSelect(selected)) {
       setSelected(null);
@@ -449,6 +520,15 @@ export function createEntitySelectionController(
     visual.outerRotor.rotation.y = now * visual.style.rotationSpeed;
     visual.innerRotor.rotation.y = now * visual.style.counterRotationSpeed;
     visual.glowMaterial.opacity = visual.glowBaseOpacity * (0.92 + (pulse + 1) * 0.08) * intro;
+
+    if (rangeVisual) {
+      rangeVisual.root.position.set(worldPosition.x, worldPosition.y + 0.035, worldPosition.z);
+      rangeVisual.root.visible = altHeld && selected.kind === 'tower' && selected.attackRange > 0;
+      const rangePulse = (Math.sin(now * 1.6) + 1) * 0.5;
+      rangeVisual.fillMaterial.opacity = 0.014 + rangePulse * 0.008;
+      rangeVisual.haloMaterial.opacity = 0.072 + rangePulse * 0.026;
+      rangeVisual.edgeMaterial.opacity = 0.36 + rangePulse * 0.10;
+    }
   };
 
   return {
@@ -457,6 +537,9 @@ export function createEntitySelectionController(
     select: setSelected,
     update,
     dispose() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
       if (selected) selected.root.userData.selected = false;
       selected = null;
       if (visual) {
@@ -464,6 +547,7 @@ export function createEntitySelectionController(
         disposeSelectionVisual(visual);
         visual = null;
       }
+      clearRangeVisual();
       scene.remove(marker);
     },
   };
