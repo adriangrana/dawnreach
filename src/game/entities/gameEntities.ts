@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { attachEntityOverhead } from './entityOverheads';
 
 export type TeamId = 'blue' | 'red' | 'neutral';
 export type GameEntityKind = 'hero' | 'creep' | 'tower' | 'building' | 'shop' | 'jungle-creature';
@@ -184,6 +185,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   root.userData.attackRange = entity.attackRange;
   root.userData.maxHp = entity.maxHp;
   root.userData.currentHp = entity.currentHp;
+  attachEntityOverhead(entity);
   return entity;
 }
 
