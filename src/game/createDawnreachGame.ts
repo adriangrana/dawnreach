@@ -13,8 +13,10 @@ type Point3 = { x: number; z: number };
 const VIEW_HEIGHT = 18;
 const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(10.5, 14, 12.5);
+const MINIMAP_PADDING = 1.06;
+const MINIMAP_CAMERA_HEIGHT = 90;
 
-export async function createDawnreachGame(host: HTMLDivElement) {
+export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HTMLDivElement | null) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x17261f);
   scene.fog = new THREE.Fog(0x17261f, 25, 50);
@@ -33,6 +35,32 @@ export async function createDawnreachGame(host: HTMLDivElement) {
   host.appendChild(renderer.domElement);
 
   const camera = new THREE.OrthographicCamera(-10, 10, 9, -9, 0.1, 120);
+
+  const minimapRenderer = minimapHost
+    ? new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' })
+    : null;
+  const minimapCamera = minimapRenderer
+    ? new THREE.OrthographicCamera(-48, 48, 48, -48, 0.1, 180)
+    : null;
+
+  if (minimapRenderer && minimapCamera && minimapHost) {
+    minimapRenderer.setPixelRatio(1);
+    minimapRenderer.shadowMap.enabled = false;
+    minimapRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    minimapRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    minimapRenderer.toneMappingExposure = 1.08;
+    minimapRenderer.domElement.className = 'minimap-canvas';
+    minimapRenderer.domElement.style.display = 'block';
+    minimapRenderer.domElement.style.width = '100%';
+    minimapRenderer.domElement.style.height = '100%';
+    minimapRenderer.domElement.style.pointerEvents = 'none';
+    minimapHost.appendChild(minimapRenderer.domElement);
+
+    minimapCamera.position.set(0, MINIMAP_CAMERA_HEIGHT, 0);
+    minimapCamera.up.set(0, 0, -1);
+    minimapCamera.lookAt(0, 0, 0);
+    minimapCamera.updateMatrixWorld();
+  }
 
   addLighting(scene);
 
@@ -93,6 +121,35 @@ export async function createDawnreachGame(host: HTMLDivElement) {
   renderer.domElement.addEventListener('contextmenu', onContextMenu);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
+  const resizeMinimap = () => {
+    if (!minimapRenderer || !minimapCamera || !minimapHost) return;
+
+    const width = Math.max(1, minimapHost.clientWidth);
+    const height = Math.max(1, minimapHost.clientHeight);
+    const viewportAspect = width / height;
+    const mapWidth = MAP_BOUNDS.maxX - MAP_BOUNDS.minX;
+    const mapHeight = MAP_BOUNDS.maxZ - MAP_BOUNDS.minZ;
+    const mapAspect = mapWidth / mapHeight;
+
+    let halfWidth: number;
+    let halfHeight: number;
+
+    if (viewportAspect >= mapAspect) {
+      halfHeight = (mapHeight / 2) * MINIMAP_PADDING;
+      halfWidth = halfHeight * viewportAspect;
+    } else {
+      halfWidth = (mapWidth / 2) * MINIMAP_PADDING;
+      halfHeight = halfWidth / viewportAspect;
+    }
+
+    minimapCamera.left = -halfWidth;
+    minimapCamera.right = halfWidth;
+    minimapCamera.top = halfHeight;
+    minimapCamera.bottom = -halfHeight;
+    minimapCamera.updateProjectionMatrix();
+    minimapRenderer.setSize(width, height, false);
+  };
+
   const resize = () => {
     const width = Math.max(1, host.clientWidth);
     const height = Math.max(1, host.clientHeight);
@@ -106,10 +163,12 @@ export async function createDawnreachGame(host: HTMLDivElement) {
     camera.bottom = -halfH;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
+    resizeMinimap();
   };
 
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(host);
+  if (minimapHost) resizeObserver.observe(minimapHost);
   resize();
 
   const clock = new THREE.Clock();
@@ -123,6 +182,17 @@ export async function createDawnreachGame(host: HTMLDivElement) {
     );
     camera.lookAt(target.x, 0, target.z);
     camera.updateMatrixWorld();
+  };
+
+  const renderMinimap = () => {
+    if (!minimapRenderer || !minimapCamera) return;
+
+    // The gameplay scene uses distance fog, which would fully obscure a top-down camera.
+    // Temporarily disable it only for the minimap pass while rendering the exact same scene.
+    const fog = scene.fog;
+    scene.fog = null;
+    minimapRenderer.render(scene, minimapCamera);
+    scene.fog = fog;
   };
 
   updateCamera();
@@ -173,6 +243,7 @@ export async function createDawnreachGame(host: HTMLDivElement) {
 
     updateCamera();
     renderer.render(scene, camera);
+    renderMinimap();
   };
 
   animate();
@@ -185,7 +256,11 @@ export async function createDawnreachGame(host: HTMLDivElement) {
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       disposeScene(scene);
       renderer.dispose();
+      minimapRenderer?.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
+      if (minimapRenderer && minimapHost && minimapRenderer.domElement.parentElement === minimapHost) {
+        minimapHost.removeChild(minimapRenderer.domElement);
+      }
     },
   };
 }
