@@ -62,6 +62,8 @@ type RangeVisual = Readonly<{
   edgeMaterial: THREE.MeshBasicMaterial;
 }>;
 
+const COMMAND_MARKER_GROUND_OFFSET = 0.102;
+
 const STYLE_BY_KIND: Record<GameEntityKind, SelectionStyle> = {
   hero: {
     glowInner: 0.79,
@@ -409,6 +411,31 @@ function disposeRangeVisual(visual: RangeVisual | null) {
   if (visual) disposeObjectVisual(visual.root);
 }
 
+function groundCommandMarkers(scene: THREE.Scene) {
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.Group)) return;
+    const kind = object.userData.kind;
+    if (kind !== 'move' && kind !== 'attack') return;
+    if (object.userData.dawnreachGroundedCommandMarker === true) return;
+    object.userData.dawnreachGroundedCommandMarker = true;
+
+    object.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      child.position.y -= COMMAND_MARKER_GROUND_OFFSET;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (!(material instanceof THREE.MeshBasicMaterial)) continue;
+        material.depthTest = true;
+        material.depthWrite = false;
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -1;
+        material.needsUpdate = true;
+      }
+    });
+  });
+}
+
 function hideLegacyHeroRing(hero: GameEntity | null) {
   if (!hero) return;
   hero.root.traverse((object) => {
@@ -440,6 +467,8 @@ export function createEntitySelectionController(
   canSelect: (entity: GameEntity) => boolean = () => true,
   localTeam: TeamId = 'blue',
 ): EntitySelectionController {
+  groundCommandMarkers(scene);
+
   const marker = new THREE.Group();
   marker.name = 'selected-entity-marker';
   marker.visible = false;
