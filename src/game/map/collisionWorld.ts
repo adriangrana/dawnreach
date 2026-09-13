@@ -69,6 +69,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   collectTreeColliders(battlefield, circles, counts);
   collectRockColliders(battlefield, rocks, counts);
   collectStructureColliders(battlefield, circles, counts);
+  collectRuinColliders(battlefield, circles, segments, counts);
   addRetainingWallColliders(segments, counts);
   addBaseWallColliders(segments, counts);
   addObjectiveWallColliders(segments, counts);
@@ -466,6 +467,60 @@ function collectStructureColliders(
       kind: 'structure',
     });
     counts.structures++;
+  });
+}
+
+function collectRuinColliders(
+  battlefield: THREE.Object3D,
+  circles: CircleCollider[],
+  segments: SegmentCollider[],
+  counts: { structures: number },
+) {
+  const center = new THREE.Vector3();
+  const start = new THREE.Vector3();
+  const end = new THREE.Vector3();
+
+  battlefield.traverse((object) => {
+    if (!(object instanceof THREE.Group)) return;
+
+    const pillars = object.children.filter((child): child is THREE.Mesh<THREE.CylinderGeometry> => {
+      if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.CylinderGeometry)) return false;
+      const { radiusTop, radiusBottom, height, radialSegments } = child.geometry.parameters;
+      return Math.abs(radiusTop - 0.28) < 0.01
+        && Math.abs(radiusBottom - 0.36) < 0.01
+        && height >= 1.24 && height <= 1.62
+        && radialSegments === 8;
+    });
+    if (pillars.length !== 3) return;
+
+    const fallen = object.children.find((child): child is THREE.Mesh<THREE.BoxGeometry> => {
+      if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.BoxGeometry)) return false;
+      const { width, height, depth } = child.geometry.parameters;
+      return Math.abs(width - 2.65) < 0.01
+        && Math.abs(height - 0.28) < 0.01
+        && Math.abs(depth - 0.42) < 0.01;
+    });
+    if (!fallen) return;
+
+    // These authored jungle ruins are solid scenery. Keep the three narrow columns as
+    // circles and the fallen cross-piece as one oriented capsule so the visible gaps stay usable.
+    for (const pillar of pillars) {
+      pillar.getWorldPosition(center);
+      circles.push({ x: center.x, z: center.z, radius: 0.34, kind: 'structure' });
+      counts.structures++;
+    }
+
+    const { width, depth } = fallen.geometry.parameters;
+    start.set(-width / 2, 0, 0).applyMatrix4(fallen.matrixWorld);
+    end.set(width / 2, 0, 0).applyMatrix4(fallen.matrixWorld);
+    segments.push({
+      ax: start.x,
+      az: start.z,
+      bx: end.x,
+      bz: end.z,
+      radius: Math.max(0.18, depth * 0.5),
+      kind: 'barrier',
+    });
   });
 }
 
