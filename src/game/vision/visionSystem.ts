@@ -592,6 +592,12 @@ function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
     const nz = dz / horizontalDistance;
     for (const occluder of occluders) {
       if (pointInsideOccluder(occluder, source.x, source.z)) continue;
+      // An occluder must not block visibility of a target that lies inside that same
+      // volume. This is essential for towers/structures: the tower blocks what is behind
+      // it, but its own front-facing body is still a valid visible target.
+      if (pointInsideOccluder(occluder, target.x, target.z)
+        && target.y >= occluder.minY - VISION_EPSILON
+        && target.y <= occluder.maxY + VISION_EPSILON) continue;
       const entry = rayOccluderEntry(occluder, source, nx, nz, horizontalDistance);
       if (!Number.isFinite(entry) || entry >= horizontalDistance - VISION_EPSILON) continue;
       const progress = entry / horizontalDistance;
