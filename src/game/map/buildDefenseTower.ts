@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateDefenseTowerCombat } from '../entities/towerCombat';
 
 type TowerStoneMaterials = {
   stone: THREE.MeshStandardMaterial;
@@ -256,6 +257,7 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   const tower = new THREE.Group();
   tower.name = `${team}-defense-tower`;
   tower.userData.structureKind = 'defense-tower';
+  tower.userData.combatTeam = team;
 
   // Heavy stepped plinth: broad, low and faceted so the tower reads as anchored and fortified.
   addMesh(tower, new THREE.CylinderGeometry(1.16, 1.34, 0.16, 8), materials.foundation,
@@ -363,6 +365,7 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   const coreCrystal = addMesh(weapon, shardGeometry(0.46, 1.52), materials.crystal);
   coreCrystal.name = `${team}-tower-core-crystal`;
   coreCrystal.rotation.y = Math.PI / 4;
+  tower.userData.projectileOrigin = coreCrystal;
 
   const innerGlow = addMesh(weapon, shardGeometry(0.25, 1.20), materials.energySoft);
   innerGlow.position.y = -0.03;
@@ -406,6 +409,7 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
     materials.energy.opacity = 0.84 + Math.sin(elapsed * 2.6 + 0.5) * 0.04;
     materials.energySoft.opacity = 0.17 + (Math.sin(elapsed * 1.9) + 1) * 0.035;
     light.intensity = 2.8 + (Math.sin(elapsed * 2.1) + 1) * 0.28;
+    updateDefenseTowerCombat(tower, elapsed, team);
   };
 
   return tower;

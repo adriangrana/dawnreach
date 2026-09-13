@@ -1,6 +1,11 @@
 import { useEffect, useReducer, useRef, type Dispatch, type RefObject, type SyntheticEvent } from 'react';
 import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
 import { createDawnreachGame } from './game/createDawnreachGame';
+import {
+  publishWorldEntityRuntime,
+  subscribeWorldCombatEvents,
+  type WorldCombatEvent,
+} from './game/entities/worldCombatBridge';
 import AbilityButton from './hud/AbilityButton';
 import {
   ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID, calculateAldenInnate, calculateHeroStats,
@@ -11,6 +16,7 @@ import {
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.png', import.meta.url).href;
 const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import.meta.url).href;
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
+const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].png', {
   eager: true,
   query: '?url',
@@ -41,12 +47,41 @@ const heroImageCodes: Record<string, string> = { H001: 'H001' };
 const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
 
 type HudRuntime = { match: MatchState; nowMs: number; feedback: string };
-type HudAction = { type: 'tick'; nowMs: number } | { type: 'cast'; key: AbilityKey; nowMs: number };
+type HudAction =
+  | { type: 'tick'; nowMs: number }
+  | { type: 'cast'; key: AbilityKey; nowMs: number }
+  | { type: 'world-hero-sync'; event: WorldCombatEvent };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
-  const nowMs = Math.max(runtime.nowMs, action.nowMs);
+  const actionNowMs = action.type === 'world-hero-sync' ? action.event.atMs : action.nowMs;
+  const nowMs = Math.max(runtime.nowMs, actionNowMs);
   const match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, nowMs - runtime.nowMs, nowMs);
+
   if (action.type === 'tick') return { ...runtime, match, nowMs };
+
+  if (action.type === 'world-hero-sync') {
+    const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
+    const stats = calculateHeroStats(match, hero.heroEntityId, { nowMs });
+    const currentHp = Math.max(0, Math.min(stats.maxHp, action.event.currentHp));
+    const currentResource = action.event.currentResource === undefined
+      ? hero.currentResource
+      : Math.max(0, Math.min(stats.maxResource, action.event.currentResource));
+    const nextHero = { ...hero, currentHp, currentResource };
+    const feedback = action.event.reason === 'death'
+      ? `${hero.heroName} ha caído. Reaparición en ${Math.ceil(action.event.respawnSeconds ?? 0)} s.`
+      : action.event.reason === 'respawn'
+        ? `${hero.heroName} ha reaparecido en la base.`
+        : runtime.feedback;
+    return {
+      match: {
+        ...match,
+        heroes: { ...match.heroes, [LOCAL_HERO_ENTITY_ID]: nextHero },
+      },
+      nowMs,
+      feedback,
+    };
+  }
+
   const control = getAbilityControl(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
   return {
     match: useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs),
@@ -256,8 +291,22 @@ export default function App() {
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
 
   useEffect(() => {
-    overlayStateRef.current = getOverlayState();
+    const overlay = getOverlayState();
+    overlayStateRef.current = overlay;
+    publishWorldEntityRuntime(LOCAL_WORLD_HERO_ENTITY_ID, {
+      level: overlay.hero.level,
+      maxHp: overlay.stats.maxHp,
+      currentHp: overlay.hero.currentHp,
+      maxResource: overlay.stats.maxResource,
+      currentResource: overlay.hero.currentResource,
+      alive: overlay.hero.currentHp > 0,
+    });
   }, [runtime]);
+
+  useEffect(() => subscribeWorldCombatEvents((event) => {
+    if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
+    dispatch({ type: 'world-hero-sync', event });
+  }), []);
 
   useEffect(() => {
     const host = hostRef.current;
