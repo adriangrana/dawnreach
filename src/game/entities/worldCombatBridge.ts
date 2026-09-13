@@ -47,7 +47,32 @@ export type WorldAttackEvent = Readonly<{
   atMs: number;
 }>;
 
+export type WorldCreepType = 'melee' | 'ranged' | 'flagbearer' | 'siege';
+
+export type WorldCreepDeathEvent = Readonly<{
+  creepEntityId: string;
+  creepType: WorldCreepType;
+  creepTeam: TeamId;
+  killerEntityId: string | null;
+  killerTeam: TeamId | null;
+  killerKind: GameEntityKind | null;
+  position: Readonly<{ x: number; z: number }>;
+  atMs: number;
+}>;
+
+export type WorldHeroProgressionEvent = Readonly<{
+  heroEntityId: string;
+  atMs: number;
+  experienceDelta: number;
+  goldDelta: number;
+  lastHitsDelta: number;
+  deniesDelta: number;
+  reason: 'creep-death';
+}>;
+
 type WorldCombatListener = (event: WorldCombatEvent) => void;
+type WorldCreepDeathListener = (event: WorldCreepDeathEvent) => void;
+type WorldHeroProgressionListener = (event: WorldHeroProgressionEvent) => void;
 
 type PendingHpChange = Readonly<{
   amount: number;
@@ -57,6 +82,8 @@ type PendingHpChange = Readonly<{
 const runtimeSnapshots = new Map<string, WorldEntityRuntimeSnapshot>();
 const pendingHpChanges = new Map<string, PendingHpChange>();
 const combatListeners = new Set<WorldCombatListener>();
+const creepDeathListeners = new Set<WorldCreepDeathListener>();
+const heroProgressionListeners = new Set<WorldHeroProgressionListener>();
 const attackEvents: WorldAttackEvent[] = [];
 let attackSequence = 0;
 
@@ -101,6 +128,24 @@ export function subscribeWorldCombatEvents(listener: WorldCombatListener): () =>
   return () => combatListeners.delete(listener);
 }
 
+export function subscribeWorldCreepDeathEvents(listener: WorldCreepDeathListener): () => void {
+  creepDeathListeners.add(listener);
+  return () => creepDeathListeners.delete(listener);
+}
+
+export function emitWorldCreepDeathEvent(event: WorldCreepDeathEvent): void {
+  for (const listener of creepDeathListeners) listener(event);
+}
+
+export function subscribeWorldHeroProgressionEvents(listener: WorldHeroProgressionListener): () => void {
+  heroProgressionListeners.add(listener);
+  return () => heroProgressionListeners.delete(listener);
+}
+
+export function emitWorldHeroProgressionEvent(event: WorldHeroProgressionEvent): void {
+  for (const listener of heroProgressionListeners) listener(event);
+}
+
 export function emitWorldCombatEvent(event: WorldCombatEvent): void {
   const snapshot = runtimeSnapshots.get(event.entityId);
   const pending = pendingHpChanges.get(event.entityId);
@@ -136,15 +181,7 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
 
 function inferRecentAttackSource(event: WorldCombatEvent): string | undefined {
   if (event.reason !== 'damage' && event.reason !== 'death') return undefined;
-
-  for (let index = attackEvents.length - 1; index >= 0; index--) {
-    const attack = attackEvents[index];
-    const ageMs = event.atMs - attack.atMs;
-    if (ageMs > ATTACK_SOURCE_MATCH_WINDOW_MS) break;
-    if (ageMs < -4) continue;
-    if (attack.targetId === event.entityId) return attack.attackerId;
-  }
-  return undefined;
+  return getMostRecentAttackOnTarget(event.entityId, event.atMs, ATTACK_SOURCE_MATCH_WINDOW_MS)?.attackerId;
 }
 
 export function publishWorldAttackEvent(
@@ -164,4 +201,19 @@ export function publishWorldAttackEvent(
 export function getWorldAttackEventsAfter(sequence: number): readonly WorldAttackEvent[] {
   if (attackEvents.length === 0) return [];
   return attackEvents.filter(event => event.sequence > sequence);
+}
+
+export function getMostRecentAttackOnTarget(
+  targetId: string,
+  atMs = performance.now(),
+  maxAgeMs = 3_000,
+): WorldAttackEvent | undefined {
+  for (let index = attackEvents.length - 1; index >= 0; index--) {
+    const attack = attackEvents[index];
+    const ageMs = atMs - attack.atMs;
+    if (ageMs > maxAgeMs) break;
+    if (ageMs < -4 || attack.targetId !== targetId) continue;
+    return attack;
+  }
+  return undefined;
 }
