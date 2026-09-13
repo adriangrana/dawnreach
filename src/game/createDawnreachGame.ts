@@ -15,6 +15,8 @@ const MAP_EDGE_PADDING = 1.25;
 const CAMERA_OFFSET = new THREE.Vector3(10.5, 14, 12.5);
 const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
+const GAME_HERO_SCALE = 0.68;
+const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * GAME_HERO_SCALE;
 
 export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HTMLDivElement | null) {
   const scene = new THREE.Scene();
@@ -71,7 +73,11 @@ export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HT
   const previewHumanoid = new URLSearchParams(window.location.search).get('rig') === 'humanoid';
   const alden = previewHumanoid ? null : buildAlden(createAldenMaterials());
   const hero = alden ?? buildHumanoidBody();
-  addHeroOverlay(hero.root, alden ? 'Alden' : 'Humanoide');
+  const heroPresentationScale = alden ? GAME_HERO_SCALE : 1;
+  const heroMoveSpeed = alden ? GAME_MOVE_SPEED : HUMANOID_DEFAULT_MOVE_SPEED;
+
+  hero.model.scale.setScalar(heroPresentationScale);
+  addHeroOverlay(hero.root, alden ? 'Alden' : 'Humanoide', heroPresentationScale);
   hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
@@ -208,7 +214,7 @@ export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HT
       const dx = destination.x - hero.root.position.x;
       const dz = destination.z - hero.root.position.z;
       const distance = Math.hypot(dx, dz);
-      const step = HUMANOID_DEFAULT_MOVE_SPEED * dt;
+      const step = heroMoveSpeed * dt;
 
       if (distance <= Math.max(step, 0.035)) {
         hero.root.position.x = destination.x;
@@ -232,8 +238,8 @@ export async function createDawnreachGame(host: HTMLDivElement, minimapHost?: HT
     currentYaw += yawDelta * Math.min(1, dt * 11);
     hero.model.rotation.y = currentYaw;
 
-    if (alden) animateAlden(alden, elapsed, moving, dt, HUMANOID_DEFAULT_MOVE_SPEED);
-    else animateHumanoid(hero, elapsed, moving, dt, HUMANOID_DEFAULT_MOVE_SPEED);
+    if (alden) animateAlden(alden, elapsed, moving, dt, heroMoveSpeed);
+    else animateHumanoid(hero, elapsed, moving, dt, heroMoveSpeed);
 
     if (targetMarker.visible) {
       const pulse = 1 + Math.sin(elapsed * 8) * 0.12;
@@ -287,9 +293,9 @@ function addLighting(scene: THREE.Scene) {
   scene.add(fill);
 }
 
-function addHeroOverlay(root: THREE.Group, name: string) {
+function addHeroOverlay(root: THREE.Group, name: string, scale = 1) {
   const selection = new THREE.Mesh(
-    new THREE.RingGeometry(0.62, 0.72, 64),
+    new THREE.RingGeometry(0.62 * scale, 0.72 * scale, 64),
     new THREE.MeshBasicMaterial({
       color: 0x63f0c2,
       transparent: true,
@@ -301,12 +307,12 @@ function addHeroOverlay(root: THREE.Group, name: string) {
   selection.position.y = 0.025;
   root.add(selection);
 
-  const label = buildHeroLabel(name);
-  label.position.set(0, 3.57, 0);
+  const label = buildHeroLabel(name, scale);
+  label.position.set(0, 3.57 * scale, 0);
   root.add(label);
 }
 
-function buildHeroLabel(name: string) {
+function buildHeroLabel(name: string, scale = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
@@ -343,7 +349,7 @@ function buildHeroLabel(name: string) {
   texture.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.3, 0.82, 1);
+  sprite.scale.set(3.3 * scale, 0.82 * scale, 1);
   sprite.renderOrder = 10;
   return sprite;
 }
