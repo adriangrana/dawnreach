@@ -4,6 +4,7 @@ import { buildHumanoidBody } from './characters/buildHumanoidBody';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
+import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { createMapCollisionWorld } from './map/collisionWorld';
 import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
@@ -35,6 +36,8 @@ const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
 const HERO_COLLISION_RADIUS = 0.48;
+const HERO_GROUND_OFFSET = 0.03;
+const SURFACE_RAY_HEIGHT = 64;
 const ATTACK_RANGE = 1.35;
 const ATTACK_COOLDOWN = 0.72;
 const COMMAND_MARKER_Y = 0.12;
@@ -100,13 +103,17 @@ export async function createDawnreachGame(
 
   const textures = createProceduralTextures();
   const battlefield = buildDawnreachMap(textures);
+  upgradeBasePresentation(battlefield, 'blue', DAWNREACH_LAYOUT.blueBase);
+  upgradeBasePresentation(battlefield, 'red', DAWNREACH_LAYOUT.redBase);
   polishRiverBridges(battlefield);
   scene.add(battlefield);
+
   const commandSurfaces: THREE.Mesh[] = [];
   battlefield.traverse(object => {
     if (object instanceof THREE.Mesh && object.userData.commandSurface) commandSurfaces.push(object);
   });
   battlefield.updateMatrixWorld(true);
+
   const animateCamps = battlefield.getObjectByName('jungle-camps')?.userData.animate as
     ((elapsed: number) => void) | undefined;
   const collisionWorld = createMapCollisionWorld(battlefield);
@@ -116,7 +123,7 @@ export async function createDawnreachGame(
   battlefield.traverse((object) => {
     const name = object.name.toLowerCase();
     const enemyStructure = name.startsWith('red-')
-      && (name.endsWith('-tower') || name.endsWith('-base') || name === 'red-defense-tower');
+      && (name.endsWith('-tower') || name.endsWith('-base') || name.endsWith('-throne') || name === 'red-defense-tower');
     if (!enemyStructure) return;
     object.userData.attackable = true;
     attackables.push(object);
@@ -138,7 +145,7 @@ export async function createDawnreachGame(
 
   hero.root.scale.setScalar(heroPresentationScale);
   const heroOverlay = addHeroOverlay(hero.root);
-  hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, 0.03, DAWNREACH_LAYOUT.blueSpawn.z);
+  hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, HERO_GROUND_OFFSET, DAWNREACH_LAYOUT.blueSpawn.z);
   scene.add(hero.root);
 
   const targetMarker = buildTargetMarker('move', 0x79ff71, 0xc3ffab);
@@ -158,6 +165,18 @@ export async function createDawnreachGame(
   const minimapHeroPosition = new THREE.Vector3();
   const attackTargetPosition = new THREE.Vector3();
   const swordRestRotation = alden ? alden.sword.rotation.clone() : null;
+
+  const sampleSurfaceHeight = (x: number, z: number, fallback = 0) => {
+    surfaceRay.ray.origin.set(x, SURFACE_RAY_HEIGHT, z);
+    const hit = surfaceRay.intersectObjects(commandSurfaces, false)[0];
+    return hit?.point.y ?? fallback;
+  };
+
+  hero.root.position.y = sampleSurfaceHeight(
+    hero.root.position.x,
+    hero.root.position.z,
+    0,
+  ) + HERO_GROUND_OFFSET;
 
   let destination: Point3 | null = null;
   let attackOrder: AttackOrder | null = null;
@@ -217,9 +236,7 @@ export async function createDawnreachGame(
   };
 
   const showCommandMarker = (marker: THREE.Group, point: Point3) => {
-    surfaceRay.ray.origin.set(point.x, 20, point.z);
-    const surface = surfaceRay.intersectObjects(commandSurfaces, false)[0];
-    marker.userData.surfaceHeight = surface?.point.y ?? 0;
+    marker.userData.surfaceHeight = sampleSurfaceHeight(point.x, point.z, 0);
     marker.position.set(point.x, marker.userData.surfaceHeight + COMMAND_MARKER_Y, point.z);
     marker.rotation.set(0, 0, 0);
     marker.scale.setScalar(0.72);
@@ -381,15 +398,15 @@ export async function createDawnreachGame(
 
   const updateCamera = () => {
     const target = hero.root.position;
-    sunlight.position.set(target.x - 16, 32, target.z + 14);
-    sunlight.target.position.set(target.x, 0, target.z);
+    sunlight.position.set(target.x - 16, target.y + 32, target.z + 14);
+    sunlight.target.position.set(target.x, target.y, target.z);
     sunlight.target.updateMatrixWorld(true);
     camera.position.set(
       target.x + CAMERA_OFFSET.x,
-      CAMERA_OFFSET.y,
+      target.y + CAMERA_OFFSET.y,
       target.z + CAMERA_OFFSET.z,
     );
-    camera.lookAt(target.x, 0, target.z);
+    camera.lookAt(target.x, target.y, target.z);
     camera.updateMatrixWorld();
   };
 
@@ -438,8 +455,7 @@ export async function createDawnreachGame(
         if (attackMarker.position.x !== attackTargetPosition.x || attackMarker.position.z !== attackTargetPosition.z) {
           attackMarker.position.x = attackTargetPosition.x;
           attackMarker.position.z = attackTargetPosition.z;
-          surfaceRay.ray.origin.set(attackTargetPosition.x, 20, attackTargetPosition.z);
-          attackMarker.userData.surfaceHeight = surfaceRay.intersectObjects(commandSurfaces, false)[0]?.point.y ?? 0;
+          attackMarker.userData.surfaceHeight = sampleSurfaceHeight(attackTargetPosition.x, attackTargetPosition.z, 0);
         }
         const dx = attackTargetPosition.x - hero.root.position.x;
         const dz = attackTargetPosition.z - hero.root.position.z;
@@ -478,6 +494,11 @@ export async function createDawnreachGame(
 
         hero.root.position.x = resolved.x;
         hero.root.position.z = resolved.z;
+        hero.root.position.y = sampleSurfaceHeight(
+          resolved.x,
+          resolved.z,
+          Math.max(0, hero.root.position.y - HERO_GROUND_OFFSET),
+        ) + HERO_GROUND_OFFSET;
         targetYaw = Math.atan2(nx, nz);
         moving = movedDistance > 0.001;
 
