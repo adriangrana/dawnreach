@@ -5,6 +5,7 @@ import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
+import { createMapCollisionWorld } from './map/collisionWorld';
 import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
 import { polishRiverBridges } from './map/polishRiverBridges';
 import { createWaterEffects } from './map/waterEffects';
@@ -33,6 +34,7 @@ const MINIMAP_PADDING = 1.06;
 const MINIMAP_CAMERA_HEIGHT = 90;
 const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
+const HERO_COLLISION_RADIUS = 0.48;
 const ATTACK_RANGE = 1.35;
 const ATTACK_COOLDOWN = 0.72;
 const COMMAND_MARKER_Y = 0.12;
@@ -100,6 +102,8 @@ export async function createDawnreachGame(
   const battlefield = buildDawnreachMap(textures);
   polishRiverBridges(battlefield);
   scene.add(battlefield);
+  const collisionWorld = createMapCollisionWorld(battlefield);
+  battlefield.userData.collisionCounts = collisionWorld.counts;
 
   const attackables: THREE.Object3D[] = [];
   battlefield.traverse((object) => {
@@ -441,19 +445,38 @@ export async function createDawnreachGame(
       const distance = Math.hypot(dx, dz);
       const step = heroMoveSpeed * dt;
 
-      if (distance <= Math.max(step, 0.035)) {
-        hero.root.position.x = destination.x;
-        hero.root.position.z = destination.z;
+      if (distance <= 1e-6) {
         destination = null;
         reachedDestination = true;
         targetMarker.visible = false;
       } else {
-        moving = true;
         const nx = dx / distance;
         const nz = dz / distance;
-        hero.root.position.x += nx * step;
-        hero.root.position.z += nz * step;
+        const travel = Math.min(step, distance);
+        const from = { x: hero.root.position.x, z: hero.root.position.z };
+        const desired = { x: from.x + nx * travel, z: from.z + nz * travel };
+        const resolved = collisionWorld.move(from, desired, HERO_COLLISION_RADIUS);
+        const movedDistance = Math.hypot(resolved.x - from.x, resolved.z - from.z);
+
+        hero.root.position.x = resolved.x;
+        hero.root.position.z = resolved.z;
         targetYaw = Math.atan2(nx, nz);
+        moving = movedDistance > 0.001;
+
+        const remaining = Math.hypot(destination.x - resolved.x, destination.z - resolved.z);
+        if (remaining <= 0.04) {
+          destination = null;
+          reachedDestination = true;
+          targetMarker.visible = false;
+        } else if (movedDistance <= 0.0005 && attackOrder?.kind !== 'target') {
+          // Direct movement has reached a hard obstacle. Do not tunnel or attack through it.
+          destination = null;
+          targetMarker.visible = false;
+          if (attackOrder?.kind === 'ground') {
+            attackOrder = null;
+            attackMarker.visible = false;
+          }
+        }
       }
     }
 
@@ -494,7 +517,6 @@ export async function createDawnreachGame(
       const intro = THREE.MathUtils.smoothstep(age, 0, 0.16);
       const pulse = 1 + Math.sin(elapsed * (kind === 'attack' ? 8.5 : 6.5)) * 0.045;
       marker.scale.setScalar((0.72 + intro * 0.28) * pulse);
-      // Rotate around world Y only. Rotating Z tilts this horizontal marker into the terrain.
       marker.rotation.y += dt * (kind === 'attack' ? 2.1 : 1.25);
       marker.position.y = COMMAND_MARKER_Y + Math.sin(elapsed * 5 + (kind === 'attack' ? 0.8 : 0)) * 0.006;
 
