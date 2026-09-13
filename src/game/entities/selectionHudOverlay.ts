@@ -1,10 +1,17 @@
 import * as THREE from 'three';
 import { TOWER_GAMEPLAY, getTowerAbility } from '../gameplay/towerConfig';
 import type { GameEntity, GameEntityKind, TeamId } from './gameEntities';
+import {
+  getEntityStatusSignature,
+  getEntityStatusViews,
+  type EntityStatusTone,
+  type EntityStatusView,
+} from './entityStatusViews';
 import { getTowerAuraState, getTowerBackdoorRegenPerSecond } from './towerAuras';
 
 const STYLE_ID = 'dawnreach-selection-hud-style';
 const OVERLAY_CLASS = 'selected-entity-hud-overlay';
+const MAX_VISIBLE_STATUS_ICONS = 8;
 let activeBridgeCount = 0;
 
 function kindLabel(kind: GameEntityKind) {
@@ -50,6 +57,15 @@ function formatNumber(value: number, digits = 0) {
   return value.toFixed(digits);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 function installStyles() {
   if (typeof document === 'undefined' || document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
@@ -60,12 +76,177 @@ function installStyles() {
       inset: 0;
       z-index: 80;
       overflow: visible;
-      pointer-events: auto;
+      pointer-events: none;
       color: #edf5f4;
       font-family: "Trebuchet MS", "Segoe UI", sans-serif;
       text-shadow: 0 1px 2px rgba(0,0,0,.9);
     }
     .${OVERLAY_CLASS}[hidden] { display: none !important; }
+
+    .selected-entity-hud__status-tray {
+      position: absolute;
+      z-index: 180;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      max-width: 92%;
+      transform: translateX(-50%);
+      pointer-events: auto;
+    }
+    .selected-entity-hud__status-icon {
+      --status-ring: #d2b96d;
+      --status-glow: rgba(210,185,109,.28);
+      --status-art: #eedb9c;
+      position: relative;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 2px solid var(--status-ring);
+      border-radius: 50%;
+      outline: 1px solid rgba(5,8,10,.96);
+      background:
+        radial-gradient(circle at 38% 31%, color-mix(in srgb, var(--status-ring) 34%, transparent), transparent 36%),
+        radial-gradient(circle at 50% 55%, #263337 0 28%, #111719 66%, #070b0d 100%);
+      box-shadow:
+        0 0 0 2px rgba(13,17,18,.88),
+        0 0 9px var(--status-glow),
+        inset 0 0 8px rgba(0,0,0,.72),
+        inset 0 1px rgba(255,255,255,.12);
+      color: var(--status-art);
+      cursor: help;
+      font: inherit;
+    }
+    .selected-entity-hud__status-icon--positive {
+      --status-ring: #70d96b;
+      --status-glow: rgba(90,220,83,.32);
+      --status-art: #efe4a9;
+    }
+    .selected-entity-hud__status-icon--negative {
+      --status-ring: #e06660;
+      --status-glow: rgba(224,83,75,.34);
+      --status-art: #ffd0c6;
+    }
+    .selected-entity-hud__status-icon--neutral {
+      --status-ring: #cfb66d;
+      --status-glow: rgba(207,182,109,.26);
+      --status-art: #eadcae;
+    }
+    .selected-entity-hud__status-icon:hover,
+    .selected-entity-hud__status-icon:focus-visible {
+      filter: brightness(1.12);
+      outline: 2px solid rgba(244,232,191,.76);
+      outline-offset: 2px;
+    }
+    .selected-entity-hud__status-icon svg {
+      width: 25px;
+      height: 25px;
+      overflow: visible;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.35;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 1px 1px #000b);
+    }
+    .selected-entity-hud__status-badge {
+      position: absolute;
+      z-index: 3;
+      right: -3px;
+      bottom: -3px;
+      min-width: 15px;
+      height: 15px;
+      display: grid;
+      place-items: center;
+      padding: 0 3px;
+      border: 1px solid #e0c983;
+      border-radius: 8px;
+      background: #0a0f11;
+      color: #f6e8bb;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 1;
+      box-shadow: 0 1px 3px #000b;
+    }
+    .selected-entity-hud__status-time {
+      position: absolute;
+      z-index: 3;
+      left: 50%;
+      bottom: -16px;
+      transform: translateX(-50%);
+      color: #e8ece8;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 1;
+      white-space: nowrap;
+      text-shadow: 0 1px 2px #000, 0 0 5px #000;
+    }
+    .selected-entity-hud__status-tooltip {
+      position: absolute;
+      z-index: 260;
+      left: 50%;
+      bottom: calc(100% + 11px);
+      width: 274px;
+      padding: 11px 12px 12px;
+      visibility: hidden;
+      opacity: 0;
+      transform: translate(-50%, 5px);
+      transition: opacity .12s ease, transform .12s ease;
+      pointer-events: none;
+      text-align: left;
+      text-transform: none;
+      background: linear-gradient(135deg, #1d282d, #0b1216 64%);
+      border: 2px solid #05090b;
+      box-shadow: 0 8px 24px #000c, inset 0 1px rgba(255,255,255,.06);
+    }
+    .selected-entity-hud__status-icon:hover .selected-entity-hud__status-tooltip,
+    .selected-entity-hud__status-icon:focus-visible .selected-entity-hud__status-tooltip {
+      visibility: visible;
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+    .selected-entity-hud__status-tooltip strong {
+      display: block;
+      padding-right: 34px;
+      color: #f1efe8;
+      font: 700 14px/1.2 Georgia, serif;
+      text-transform: uppercase;
+    }
+    .selected-entity-hud__status-tooltip small {
+      display: block;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #2c3b40;
+      color: #88a3bd;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+    .selected-entity-hud__status-tooltip p {
+      margin: 8px 0 0;
+      color: #bdcde0;
+      font-size: 10px;
+      line-height: 1.38;
+    }
+    .selected-entity-hud__status-tooltip em {
+      position: absolute;
+      top: 11px;
+      right: 11px;
+      color: var(--status-ring);
+      font-style: normal;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .selected-entity-hud__status-more {
+      color: #e7ddb9;
+      font-size: 10px;
+      font-weight: 800;
+    }
 
     .selected-entity-hud__generic {
       position: absolute;
@@ -73,6 +254,7 @@ function installStyles() {
       display: grid;
       grid-template-columns: 29% 45% 26%;
       overflow: hidden;
+      pointer-events: auto;
       background: linear-gradient(180deg, rgba(35,44,46,.985), rgba(7,12,16,.99) 24%), #0b1014;
     }
     .selected-entity-hud__identity,
@@ -164,7 +346,7 @@ function installStyles() {
       text-transform: uppercase;
     }
     .selected-entity-hud__detail-row b { overflow: hidden; color: #dfd4ad; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-    .selected-entity-hud__empty { position: absolute; inset: 0; display: grid; place-items: center; color: #899994; background: #0b1014; font-family: Georgia, serif; font-size: 16px; }
+    .selected-entity-hud__empty { position: absolute; inset: 0; display: grid; place-items: center; color: #899994; background: #0b1014; font-family: Georgia, serif; font-size: 16px; pointer-events: auto; }
 
     .tower-hud {
       position: absolute;
@@ -172,6 +354,7 @@ function installStyles() {
       display: grid;
       grid-template-columns: 31% 43% 26%;
       overflow: visible;
+      pointer-events: auto;
       background: linear-gradient(180deg, rgba(36,43,43,.995), rgba(7,12,15,.995) 24%), #0a1013;
       box-shadow: inset 0 1px rgba(255,255,255,.05);
     }
@@ -364,9 +547,117 @@ function ensureOverlay() {
   if (getComputedStyle(deck).position === 'static') deck.style.position = 'relative';
   const overlay = document.createElement('div');
   overlay.className = OVERLAY_CLASS;
-  overlay.hidden = true;
+  overlay.hidden = false;
   deck.appendChild(overlay);
   return overlay;
+}
+
+function statusToneLabel(tone: EntityStatusTone) {
+  if (tone === 'positive') return 'Mejora';
+  if (tone === 'negative') return 'Perjuicio';
+  return 'Estado';
+}
+
+function statusIconSvg(icon: string) {
+  switch (icon) {
+    case 'backdoor-protection':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 7 49 14v15c0 12-6.7 22-17 28C21.7 51 15 41 15 29V14Z"/><path d="M24 39V26h16v13M28 26v-8h8v8"/><path d="M21 43h22"/></svg>';
+    case 'backdoor-suppressed':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 7 49 14v15c0 12-6.7 22-17 28C21.7 51 15 41 15 29V14Z"/><path d="M19 19 45 45"/><path d="M45 19 19 45"/></svg>';
+    case 'reinforced':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 7 48 14v15c0 12-6.4 21.5-16 28-9.6-6.5-16-16-16-28V14Z"/><path d="m32 18 7 8-7 16-7-16Z"/><path d="M10 31h8M46 31h8M32 8v7M18 15l6 6M46 15l-6 6"/></svg>';
+    case 'slow':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M15 18h34M15 30h26M15 42h18"/><path d="m39 38 8 8 8-8"/><path d="M47 27v19"/></svg>';
+    case 'stun':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M35 6 20 34h13l-5 24 18-31H34Z"/><path d="M12 15l6 5M52 15l-6 5M10 39l8-2M54 39l-8-2"/></svg>';
+    case 'taunt':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 18h36v25H31l-10 8v-8h-7Z"/><path d="M24 28h16M24 35h11"/></svg>';
+    case 'guard':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 7 49 14v15c0 12-6.7 22-17 28C21.7 51 15 41 15 29V14Z"/><path d="M23 34h18M32 18v27"/></svg>';
+    case 'reprisal':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M15 43 45 13M38 12l8 1-1 8"/><path d="M49 42 19 22M26 20l-8 2 2 8"/><circle cx="32" cy="32" r="22"/></svg>';
+    case 'majesty':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m12 23 10 9 10-17 10 17 10-9-4 25H16Z"/><path d="M16 48h32"/><circle cx="12" cy="21" r="2"/><circle cx="32" cy="13" r="2"/><circle cx="52" cy="21" r="2"/></svg>';
+    case 'judged':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21"/><path d="M32 14v36M14 32h36"/><path d="m24 24 16 16M40 24 24 40"/></svg>';
+    case 'debuff':
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21"/><path d="M21 21l22 22M43 21 21 43"/></svg>';
+    default:
+      return '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20"/><path d="M32 20v13l8 6"/></svg>';
+  }
+}
+
+function statusTooltipHtml(status: EntityStatusView) {
+  const meta = [
+    statusToneLabel(status.tone),
+    status.rank ? `Nivel ${status.rank}` : '',
+    status.sourceLabel ?? '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <span class="selected-entity-hud__status-tooltip" role="tooltip">
+      <strong>${escapeHtml(status.name)}</strong>
+      <em>${status.tone === 'positive' ? 'BUFF' : status.tone === 'negative' ? 'DEBUFF' : 'ESTADO'}</em>
+      <small>${escapeHtml(meta)}</small>
+      <p>${escapeHtml(status.description)}</p>
+    </span>`;
+}
+
+function statusIconHtml(status: EntityStatusView) {
+  const seconds = status.durationLeftMs == null
+    ? null
+    : Math.max(0, Math.ceil(status.durationLeftMs / 1000));
+  const stacks = status.stacks && status.stacks > 1
+    ? `<span class="selected-entity-hud__status-badge">${status.stacks}</span>`
+    : '';
+  const timer = seconds === null
+    ? ''
+    : `<span class="selected-entity-hud__status-time">${seconds}s</span>`;
+  return `
+    <button
+      type="button"
+      class="selected-entity-hud__status-icon selected-entity-hud__status-icon--${status.tone}"
+      aria-label="${escapeHtml(status.name)}"
+    >
+      ${statusIconSvg(status.icon)}
+      ${stacks}
+      ${timer}
+      ${statusTooltipHtml(status)}
+    </button>`;
+}
+
+function statusTrayHtml(entity: GameEntity | null) {
+  const statuses = getEntityStatusViews(entity);
+  if (statuses.length === 0) return '';
+  const visible = statuses.slice(0, MAX_VISIBLE_STATUS_ICONS);
+  const hidden = statuses.slice(MAX_VISIBLE_STATUS_ICONS);
+  const hiddenTooltip = hidden.length === 0
+    ? ''
+    : `
+      <button type="button" class="selected-entity-hud__status-icon selected-entity-hud__status-icon--neutral selected-entity-hud__status-more" aria-label="${hidden.length} estados adicionales">
+        +${hidden.length}
+        <span class="selected-entity-hud__status-tooltip" role="tooltip">
+          <strong>Estados adicionales</strong>
+          <em>+${hidden.length}</em>
+          <small>Más efectos activos</small>
+          <p>${hidden.map(status => escapeHtml(status.name)).join(' · ')}</p>
+        </span>
+      </button>`;
+  return `
+    <div class="selected-entity-hud__status-tray" data-status-tray>
+      ${visible.map(statusIconHtml).join('')}
+      ${hiddenTooltip}
+    </div>`;
+}
+
+function syncStatusTray(overlay: HTMLElement, entity: GameEntity | null) {
+  const current = overlay.querySelector<HTMLElement>('[data-status-tray]');
+  const nextHtml = statusTrayHtml(entity);
+  if (!nextHtml) {
+    current?.remove();
+    return;
+  }
+  if (current) current.outerHTML = nextHtml;
+  else overlay.insertAdjacentHTML('afterbegin', nextHtml);
 }
 
 function entitySignature(entity: GameEntity | null) {
@@ -386,6 +677,7 @@ function entitySignature(entity: GameEntity | null) {
     entity.visionRadius,
     entity.alive,
     entity.revealed,
+    getEntityStatusSignature(entity),
     aura?.reinforced ?? false,
     aura?.backdoorProtection ?? false,
     aura?.backdoorActive ?? false,
@@ -423,15 +715,15 @@ function abilityButtonHtml(id: string, active: boolean) {
   const ability = getTowerAbility(id);
   if (!ability) return '';
   return `
-    <button class="tower-ability${active ? ' is-active' : ''}" type="button" aria-label="${ability.name}">
+    <button class="tower-ability${active ? ' is-active' : ''}" type="button" aria-label="${escapeHtml(ability.name)}">
       ${abilityIcon(id)}
       <span class="tower-ability__level">${ability.level}</span>
       <span class="tower-ability__tooltip" role="tooltip">
-        <strong>${ability.name}</strong>
+        <strong>${escapeHtml(ability.name)}</strong>
         <em>Nivel ${ability.level}</em>
         <small>HABILIDAD: Pasiva</small>
-        <p>En inglés: <b>${ability.englishName}</b>.</p>
-        <p>${ability.description}</p>
+        <p>En inglés: <b>${escapeHtml(ability.englishName)}</b>.</p>
+        <p>${escapeHtml(ability.description)}</p>
         ${abilityEffectsHtml(id)}
       </span>
     </button>`;
@@ -445,13 +737,14 @@ function updateTowerDynamicHud(overlay: HTMLElement, entity: GameEntity) {
   const fill = overlay.querySelector<HTMLElement>('.tower-hud__health-fill');
   const text = overlay.querySelector<HTMLElement>('.tower-hud__health-text');
   const regenLabel = overlay.querySelector<HTMLElement>('.tower-hud__regen');
-  const backdoorButton = overlay.querySelector<HTMLElement>('[data-ability="backdoor-protection"]');
-  const reinforcedButton = overlay.querySelector<HTMLElement>('[data-ability="reinforced"]');
+  const backdoorButton = overlay.querySelector<HTMLElement>('[data-ability="backdoor-protection"] .tower-ability');
+  const reinforcedButton = overlay.querySelector<HTMLElement>('[data-ability="reinforced"] .tower-ability');
   if (fill) fill.style.width = `${hpFraction * 100}%`;
   if (text) text.textContent = hpText;
   if (regenLabel) regenLabel.textContent = regen > 0 ? `+${formatNumber(regen, 0)}/s` : '';
   backdoorButton?.classList.toggle('is-active', aura.backdoorActive);
   reinforcedButton?.classList.toggle('is-active', aura.reinforced);
+  syncStatusTray(overlay, entity);
 }
 
 function renderTowerEntity(overlay: HTMLElement, entity: GameEntity) {
@@ -465,6 +758,7 @@ function renderTowerEntity(overlay: HTMLElement, entity: GameEntity) {
     overlay.dataset.selectionKind = 'tower';
     overlay.dataset.selectionId = entity.id;
     overlay.innerHTML = `
+      ${statusTrayHtml(entity)}
       <div class="tower-hud">
         <div class="tower-hud__identity">
           <div class="tower-hud__portrait">
@@ -473,7 +767,7 @@ function renderTowerEntity(overlay: HTMLElement, entity: GameEntity) {
             <div class="tower-hud__level">${TOWER_GAMEPLAY.level}</div>
           </div>
           <div class="tower-hud__summary">
-            <div class="tower-hud__name">${entity.displayName}</div>
+            <div class="tower-hud__name">${escapeHtml(entity.displayName)}</div>
             <div class="tower-hud__team">${teamLabel(entity.team)}</div>
             <div class="tower-hud__metric"><span>Daño</span><b>${TOWER_GAMEPLAY.attack.damage}</b></div>
             <div class="tower-hud__metric"><span>Intervalo</span><b>${formatNumber(TOWER_GAMEPLAY.attack.intervalSeconds, 2)}s</b></div>
@@ -522,11 +816,12 @@ function renderGenericEntity(overlay: HTMLElement, entity: GameEntity | null, lo
   const levelText = entity.kind === 'hero' || entity.level > 1 ? String(entity.level) : '—';
 
   overlay.innerHTML = `
+    ${statusTrayHtml(entity)}
     <div class="selected-entity-hud__generic">
       <div class="selected-entity-hud__identity">
         <div class="selected-entity-hud__portrait"><span class="selected-entity-hud__glyph">${kindGlyph(entity.kind)}</span><i class="selected-entity-hud__team-dot"></i></div>
         <div class="selected-entity-hud__identity-text">
-          <strong>${entity.displayName}</strong><span>${kindLabel(entity.kind)} · ${teamLabel(entity.team)}</span>
+          <strong>${escapeHtml(entity.displayName)}</strong><span>${kindLabel(entity.kind)} · ${teamLabel(entity.team)}</span>
           <div class="selected-entity-hud__identity-stats"><span>Estado <b>${entity.alive ? 'VIVO' : 'CAÍDO'}</b></span><span>Nivel <b>${levelText}</b></span><span>Recurso <b>${resourceText}</b></span></div>
         </div>
       </div>
@@ -541,11 +836,18 @@ function renderGenericEntity(overlay: HTMLElement, entity: GameEntity | null, lo
       </div>
       <div class="selected-entity-hud__details">
         <div class="selected-entity-hud__detail-row"><span>Tipo</span><b>${kindLabel(entity.kind)}</b></div>
-        <div class="selected-entity-hud__detail-row"><span>Interacción</span><b>${entity.interaction}</b></div>
+        <div class="selected-entity-hud__detail-row"><span>Interacción</span><b>${escapeHtml(entity.interaction)}</b></div>
         <div class="selected-entity-hud__detail-row"><span>Selección</span><b>${entity.selectable ? 'SÍ' : 'NO'}</b></div>
         <div class="selected-entity-hud__detail-row"><span>Control</span><b>${entity === localHero ? 'PROPIO' : 'INSPECCIÓN'}</b></div>
       </div>
     </div>`;
+}
+
+function renderLocalHeroStatusLayer(overlay: HTMLElement, entity: GameEntity) {
+  overlay.style.setProperty('--selection-accent', teamAccent(entity.team));
+  overlay.dataset.selectionKind = 'hero';
+  overlay.dataset.selectionId = entity.id;
+  overlay.innerHTML = statusTrayHtml(entity);
 }
 
 type TowerPreviewController = Readonly<{ dispose(): void }>;
@@ -662,21 +964,18 @@ export function createSelectionHudBridge(localHero: GameEntity | null): Selectio
     }
     overlay ??= ensureOverlay();
     if (!overlay) return;
-
-    const localHeroSelected = selected !== null && localHero !== null && selected === localHero;
-    overlay.hidden = localHeroSelected;
-    if (localHeroSelected) {
-      disposePreview();
-      overlay.replaceChildren();
-      overlay.dataset.selectionKind = 'hero';
-      overlay.dataset.selectionId = selected?.id ?? '';
-      lastSignature = entitySignature(selected);
-      return;
-    }
+    overlay.hidden = false;
 
     const signature = entitySignature(selected);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
+
+    const localHeroSelected = selected !== null && localHero !== null && selected === localHero;
+    if (localHeroSelected && selected) {
+      disposePreview();
+      renderLocalHeroStatusLayer(overlay, selected);
+      return;
+    }
 
     if (selected?.kind === 'tower') {
       const rebuilt = renderTowerEntity(overlay, selected);
