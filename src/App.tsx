@@ -106,6 +106,15 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   }
 
   const control = getAbilityControl(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
+  const castingHero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
+  if (castingHero.currentHp <= 0) {
+    return {
+      ...runtime,
+      match,
+      nowMs,
+      feedback: `${control.ability.name}: no disponible mientras estás muerto.`,
+    };
+  }
   return {
     ...runtime,
     match: useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs),
@@ -321,7 +330,7 @@ function GameHud({
                 rank={control.rank} maxRank={ability.unlockLevels.length} nextLevel={ability.unlockLevels[control.rank]}
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
-                blockedReason={control.blockedReason} art={abilityArt[key]}
+                blockedReason={heroDead ? 'No disponible mientras estás muerto' : control.blockedReason} art={abilityArt[key]}
                 image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.png`]}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
