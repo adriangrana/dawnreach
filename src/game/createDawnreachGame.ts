@@ -52,6 +52,9 @@ const COMMAND_MARKER_Y = 0.12;
 const WAYPOINT_REACHED_DISTANCE = 0.22;
 const STUCK_REPATH_DELAY = 0.42;
 const REPATH_COOLDOWN = 0.7;
+const ACTIVE_ROUTE_REPATH_INTERVAL = 0.75;
+const PARTIAL_ROUTE_REPATH_INTERVAL = 0.24;
+const BLOCKED_ROUTE_REPATH_COOLDOWN = 0.12;
 const TARGET_REPATH_DISTANCE = 0.75;
 const TARGET_REPATH_COOLDOWN = 0.35;
 
@@ -197,9 +200,11 @@ export async function createDawnreachGame(
   let destination: Point3 | null = null;
   let currentPath: Point3[] = [];
   let currentWaypointIndex = 0;
+  let currentPathPartial = false;
   let routeRequest: Point3 | null = null;
   let stuckDuration = 0;
   let lastRepathAt = -Infinity;
+  let lastRoutePlanAt = -Infinity;
   let lastAttackPathTarget: Point3 | null = null;
   let lastTargetRepathAt = -Infinity;
   let attackOrder: AttackOrder | null = null;
@@ -216,13 +221,18 @@ export async function createDawnreachGame(
 
   const heroPoint = (): Point3 => ({ x: hero.root.position.x, z: hero.root.position.z });
 
-  const clearMovementRoute = () => {
+  const clearCurrentPath = () => {
     destination = null;
     currentPath = [];
     currentWaypointIndex = 0;
-    routeRequest = null;
+    currentPathPartial = false;
     stuckDuration = 0;
     updateNavigationDebugPath(navigationDebug, null, heroPoint());
+  };
+
+  const clearMovementRoute = () => {
+    clearCurrentPath();
+    routeRequest = null;
   };
 
   const applyNavigationPath = (path: NavigationPath, requested: Point3) => {
@@ -230,17 +240,26 @@ export async function createDawnreachGame(
     routeRequest = { x: requested.x, z: requested.z };
     currentPath = path.waypoints.map(point => ({ x: point.x, z: point.z }));
     currentWaypointIndex = 0;
+    currentPathPartial = path.partial;
     stuckDuration = 0;
+    lastRoutePlanAt = elapsed;
     updateNavigationDebugPath(navigationDebug, path, heroPoint());
   };
 
-  const planMovementRoute = (point: Point3, allowPartial = true) => {
-    const path = navigation.findPath(heroPoint(), point, { allowPartial });
+  const planMovementRoute = (point: Point3, allowPartial = true, keepCurrentOnFailure = false) => {
+    const requested = { x: point.x, z: point.z };
+    routeRequest = requested;
+    const path = navigation.findPath(heroPoint(), requested, { allowPartial });
+    lastRoutePlanAt = elapsed;
     if (!path) {
-      clearMovementRoute();
+      if (!keepCurrentOnFailure) {
+        clearCurrentPath();
+        currentPathPartial = true;
+      }
+      routeRequest = requested;
       return null;
     }
-    applyNavigationPath(path, point);
+    applyNavigationPath(path, requested);
     return path;
   };
 
@@ -304,22 +323,19 @@ export async function createDawnreachGame(
     lastAttackPathTarget = null;
     disarmAttack();
     attackMarker.visible = false;
-    const path = planMovementRoute(point, true);
-    if (path) showCommandMarker(targetMarker, path.resolvedTarget);
-    else targetMarker.visible = false;
+    planMovementRoute(point, true);
+    // The marker represents player intent, not the first partial endpoint. The order stays
+    // alive while Alden advances and replans toward this exact requested point.
+    showCommandMarker(targetMarker, point);
   };
 
   const issueGroundAttack = (point: Point3) => {
     attackOrder = { kind: 'ground', point };
     lastAttackPathTarget = null;
-    const path = planMovementRoute(point, true);
+    planMovementRoute(point, true);
     disarmAttack();
     targetMarker.visible = false;
-    if (path) showCommandMarker(attackMarker, path.resolvedTarget);
-    else {
-      attackOrder = null;
-      attackMarker.visible = false;
-    }
+    showCommandMarker(attackMarker, point);
   };
 
   const issueTargetAttack = (target: THREE.Object3D) => {
@@ -551,8 +567,9 @@ export async function createDawnreachGame(
           const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
           const targetMoved = !lastAttackPathTarget
             || Math.hypot(targetPoint.x - lastAttackPathTarget.x, targetPoint.z - lastAttackPathTarget.z) >= TARGET_REPATH_DISTANCE;
-          if ((targetMoved || !destination) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
-            planMovementRoute(targetPoint, true);
+          const routeExpired = elapsed - lastTargetRepathAt >= ACTIVE_ROUTE_REPATH_INTERVAL;
+          if ((targetMoved || !destination || routeExpired) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
+            planMovementRoute(targetPoint, true, true);
             lastAttackPathTarget = targetPoint;
             lastTargetRepathAt = elapsed;
           }
@@ -561,6 +578,26 @@ export async function createDawnreachGame(
           targetYaw = Math.atan2(dx, dz);
           if (attackCooldown <= 0) triggerAttack();
         }
+      }
+    }
+
+    // Movement orders are persistent intents. Re-check the current route while travelling,
+    // not only when the player clicks. This lets a partial route continue from its new
+    // position and lets newly blocked segments be replaced when the collision world changes.
+    if (routeRequest && attackOrder?.kind !== 'target') {
+      const nextWaypoint = destination && currentWaypointIndex < currentPath.length
+        ? currentPath[currentWaypointIndex]
+        : null;
+      const segmentBlocked = nextWaypoint ? !navigation.segmentIsWalkable(heroPoint(), nextWaypoint) : false;
+      const routeMissing = !destination || currentPath.length === 0 || currentWaypointIndex >= currentPath.length;
+      const interval = currentPathPartial ? PARTIAL_ROUTE_REPATH_INTERVAL : ACTIVE_ROUTE_REPATH_INTERVAL;
+      const periodicRepath = elapsed - lastRoutePlanAt >= interval;
+      const blockedRepath = segmentBlocked && elapsed - lastRepathAt >= BLOCKED_ROUTE_REPATH_COOLDOWN;
+
+      if (routeMissing || periodicRepath || blockedRepath) {
+        const requested = { ...routeRequest };
+        lastRepathAt = elapsed;
+        planMovementRoute(requested, true, !routeMissing && !segmentBlocked);
       }
     }
 
@@ -575,9 +612,17 @@ export async function createDawnreachGame(
       }
 
       if (currentWaypointIndex >= currentPath.length) {
-        clearMovementRoute();
-        reachedDestination = true;
-        targetMarker.visible = false;
+        if (currentPathPartial && routeRequest) {
+          const requested = { ...routeRequest };
+          clearCurrentPath();
+          routeRequest = requested;
+          currentPathPartial = true;
+          lastRoutePlanAt = -Infinity;
+        } else {
+          clearMovementRoute();
+          reachedDestination = true;
+          targetMarker.visible = false;
+        }
       } else {
         const waypoint = currentPath[currentWaypointIndex];
         const dx = waypoint.x - hero.root.position.x;
@@ -606,20 +651,21 @@ export async function createDawnreachGame(
         const waypointRemaining = Math.hypot(waypoint.x - resolved.x, waypoint.z - resolved.z);
         if (waypointRemaining <= WAYPOINT_REACHED_DISTANCE) currentWaypointIndex++;
         if (currentWaypointIndex >= currentPath.length) {
-          clearMovementRoute();
-          reachedDestination = true;
-          targetMarker.visible = false;
+          if (currentPathPartial && routeRequest) {
+            const requested = { ...routeRequest };
+            clearCurrentPath();
+            routeRequest = requested;
+            currentPathPartial = true;
+            lastRoutePlanAt = -Infinity;
+          } else {
+            clearMovementRoute();
+            reachedDestination = true;
+            targetMarker.visible = false;
+          }
         } else if (stuckDuration >= STUCK_REPATH_DELAY && routeRequest && elapsed - lastRepathAt >= REPATH_COOLDOWN) {
           const requested = { ...routeRequest };
           lastRepathAt = elapsed;
-          const path = planMovementRoute(requested, true);
-          if (!path && attackOrder?.kind !== 'target') {
-            targetMarker.visible = false;
-            if (attackOrder?.kind === 'ground') {
-              attackOrder = null;
-              attackMarker.visible = false;
-            }
-          }
+          planMovementRoute(requested, true);
         }
       }
     }
