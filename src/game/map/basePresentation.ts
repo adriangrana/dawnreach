@@ -142,10 +142,14 @@ function angularDistance(a: number, b: number) {
 }
 
 function createRampGeometry(angle: number) {
-  const innerRadius = BASE_LAYOUT.radius - 1.15;
+  // Push the ramp farther into the plaza and finish it slightly above the old citadel
+  // perimeter trim. That legacy ring sits almost coplanar with the former ramp top and
+  // showed up as the dark bar across the entrance. The overlap removes the seam while
+  // keeping the walkable transition continuous.
+  const innerRadius = BASE_LAYOUT.radius - 1.75;
   const outerRadius = BASE_LAYOUT.radius + BASE_LAYOUT.rampLength;
   const halfWidth = BASE_LAYOUT.rampWidth / 2;
-  const high = BASE_LAYOUT.elevation + 0.035;
+  const high = BASE_LAYOUT.elevation + 0.12;
   const low = 0.045;
   const bottom = 0.015;
   const radialX = Math.cos(angle);
