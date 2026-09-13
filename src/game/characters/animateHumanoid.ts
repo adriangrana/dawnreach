@@ -4,7 +4,7 @@ import type { HumanoidRig } from './humanoidRig.js';
 type GaitKey = readonly [phase: number, degrees: number];
 
 export const HUMANOID_WALK_SPEED = 2.4;
-export const HUMANOID_FAST_WALK_SPEED = 3.8;
+export const HUMANOID_FAST_WALK_SPEED = 5;
 export const HUMANOID_DEFAULT_MOVE_SPEED = HUMANOID_FAST_WALK_SPEED;
 const WALK_STEP_LENGTH = 1.2;
 export const HUMANOID_GAIT_RATE = Math.PI * HUMANOID_DEFAULT_MOVE_SPEED / WALK_STEP_LENGTH;

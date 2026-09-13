@@ -379,6 +379,20 @@ No esta implementada una salida `humanoid-shoulders.png`. Las camaras de inspecc
 
 Importar la misma instancia de Three.js que usa Vite, como hace el test. En inspecciones, anadir `rig.root`, no separar `model`: el apoyo depende de esa jerarquia. Limpiar `stage.onAfterRender` especifico de Alden al sustituirlo por otro cuerpo para evitar acceder a un modelo inexistente.
 
+### Verificacion del HUD
+
+El layout esta en [src/App.tsx](src/App.tsx). [src/main.tsx](src/main.tsx) carga primero los estilos base y despues [src/hud-overrides.css](src/hud-overrides.css); conservar ese orden para que los ajustes del HUD no queden sobrescritos. Las habilidades usan imagenes de la carpeta del heroe con la convencion `<codigo><tecla>.png`: Alden usa `H001Q.png`, `H001W.png`, `H001E.png` y `H001R.png` dentro de su carpeta `images`. Vite las descubre con `import.meta.glob` y las incluye en produccion; si falta un archivo se mantiene el icono provisional de [src/assets/hud-art.svg](src/assets/hud-art.svg), que tambien contiene el arte de objetos. Para otro heroe, ajustar carpeta y codigo en el mapeo del HUD. Los iconos de atributos y herramientas usan Lucide. Los retratos de Alden se resuelven con `new URL(..., import.meta.url)` para incluirlos tambien en produccion.
+
+El HUD conserva valores de muestra: marcador, atributos, cooldowns e inventario no estan conectados todavia al estado de combate. Las herramientas del minimapa siguen siendo decorativas. El contenido del minimapa y su marcador de heroe siguen usando el renderer existente; el rediseño no modifica mapa, camara ni animacion.
+
+Con Edge, Playwright y el servidor local disponibles:
+
+```sh
+node tests/verify-hud.mjs
+```
+
+[tests/verify-hud.mjs](tests/verify-hud.mjs) comprueba siete viewports (1440x900, 1176x768, 1024x768, 800x600, 390x844, 320x640 y 844x390), limites de paneles/textos, ausencia de solapamientos, carga de retratos/simbolos, pixeles de canvas e iconos y movimiento por clic derecho. Acepta `ALDEN_URL` igual que el test de Alden. Guarda capturas en `node_modules/.cache/hud-visual/`. Es una prueba del layout, no sustituye la bateria de animacion o gameplay.
+
 ## 8. Pendientes y diagnostico
 
 No estan implementados: Alden vestido sobre el cuerpo basico, ropa completa con skinning, retargeting anatomico, carrera, ataques, caidas, ragdoll, controlador de acciones, mezcla por capas, inventario, selector general, IA de combate, navegacion con obstaculos o locomocion fisica sobre pendientes.

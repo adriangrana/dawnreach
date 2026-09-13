@@ -1,9 +1,15 @@
 import { useEffect, useRef, type RefObject, type SyntheticEvent } from 'react';
+import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
 import { createDawnreachGame } from './game/createDawnreachGame';
-import './hud-overrides.css';
 
-const ALDEN_PORTRAIT_SRC = '/src/game/heroes/alden/images/H001.png';
-const ALDEN_MINIMAP_SRC = '/src/game/heroes/alden/images/H001I.png';
+const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.png', import.meta.url).href;
+const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.png', import.meta.url).href;
+const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
+const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
 
 type TeamHero = {
   initial: string;
@@ -25,12 +31,19 @@ const duskTeam: TeamHero[] = [
   { initial: 'R' },
 ];
 const abilities = [
-  { key: 'Q', glyph: '✦', cooldown: '' },
-  { key: 'W', glyph: '◈', cooldown: '9' },
-  { key: 'E', glyph: '✹', cooldown: '14' },
-  { key: 'R', glyph: '☀', cooldown: '' },
-];
-const inventory = ['⚔', '◆', '◇', '✧', '●', ''];
+  { key: 'Q', art: 'blade', cooldown: '' },
+  { key: 'W', art: 'aegis', cooldown: '9' },
+  { key: 'E', art: 'banner', cooldown: '14' },
+  { key: 'R', art: 'sun', cooldown: '' },
+].map(ability => ({
+  ...ability,
+  image: heroAbilityImages[`./game/heroes/alden/images/H001${ability.key}.png`],
+}));
+const inventory = ['boots', 'blade', 'gem', 'potion', 'ring', 'scroll'];
+
+function HudArt({ name }: { name: string }) {
+  return <svg className="hud-art" viewBox="0 0 100 100" aria-hidden="true"><use href={`${HUD_ART_SRC}#${name}`} /></svg>;
+}
 
 function hideMissingImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none';
@@ -42,6 +55,7 @@ function TeamPortraits({ team, side }: { team: TeamHero[]; side: 'dawn' | 'dusk'
       {team.map((hero, index) => (
         <div className="top-hero-slot" key={`${side}-${index}`}>
           <div className="top-hero-face">
+            <Shield className="top-hero-silhouette" />
             <span>{hero.initial}</span>
             {hero.portrait && (
               <img
@@ -99,10 +113,11 @@ function GameHud({
           />
         </div>
         <div className="minimap-tools">
-          <span>+</span>
-          <span>◎</span>
-          <span>⌖</span>
+          <span><ZoomIn /></span>
+          <span><Eye /></span>
+          <span><Crosshair /></span>
         </div>
+        <Diamond className="minimap-ornament" />
       </section>
 
       <section className="command-deck">
@@ -122,18 +137,23 @@ function GameHud({
             <strong>Alden</strong>
             <span>Vanguard</span>
             <div className="hero-attributes">
-              <b>⚔ 62</b>
-              <b>✦ 38</b>
-              <b>◆ 51</b>
+              <b><Sword />62</b>
+              <b><Sparkles />38</b>
+              <b><Shield />51</b>
             </div>
+            <div className="hero-sigil"><HudArt name="sun" /></div>
           </div>
         </div>
 
         <div className="combat-panel">
           <div className="ability-row">
             {abilities.map((ability) => (
-              <div className="ability-slot" key={ability.key}>
-                <span className="ability-glyph">{ability.glyph}</span>
+              <div className={`ability-slot ability-slot--${ability.art}${ability.cooldown ? ' is-cooling' : ''}`} key={ability.key} data-ability={ability.key}>
+                {ability.image ? (
+                  <img className="ability-image" src={ability.image} alt="" draggable={false} />
+                ) : (
+                  <HudArt name={ability.art} />
+                )}
                 {ability.cooldown && <b className="ability-cooldown">{ability.cooldown}</b>}
                 <i>{ability.key}</i>
               </div>
@@ -141,11 +161,11 @@ function GameHud({
           </div>
           <div className="resource-bars">
             <div className="resource resource--health">
-              <span style={{ width: '91%' }} />
+              <span style={{ width: `${1628 / 1780 * 100}%` }} />
               <b>1628 / 1780</b>
             </div>
             <div className="resource resource--mana">
-              <span style={{ width: '78%' }} />
+              <span style={{ width: `${612 / 780 * 100}%` }} />
               <b>612 / 780</b>
             </div>
           </div>
@@ -154,14 +174,18 @@ function GameHud({
         <div className="inventory-panel">
           <div className="inventory-grid">
             {inventory.map((item, index) => (
-              <div className="inventory-slot" key={index}>{item}</div>
+              <div className={`inventory-slot inventory-slot--${item}`} key={item}>
+                <HudArt name={item} />
+                <span className="item-key">{index + 1}</span>
+              </div>
             ))}
           </div>
           <div className="gold-row">
-            <span>●</span>
+            <Coins />
             <strong>1240</strong>
           </div>
         </div>
+        <div className="deck-crest"><Swords /></div>
       </section>
     </div>
   );
