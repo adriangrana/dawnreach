@@ -1,0 +1,139 @@
+/* Non-modal in-game shop: only the panel itself owns pointer input. The rest of the
+   viewport remains fully interactive while the shop is open. */
+.shop-overlay {
+  top: 64px !important;
+  right: auto !important;
+  bottom: 168px !important;
+  left: 0 !important;
+  width: clamp(720px, 58vw, 960px);
+  height: auto;
+  display: block;
+  place-items: initial;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.shop-window {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  pointer-events: auto;
+  box-shadow:
+    18px 0 44px rgba(0, 0, 0, 0.44),
+    0 0 0 1px rgba(189, 155, 87, 0.16),
+    inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.shop-header {
+  grid-template-columns: 44px minmax(140px, 1fr) auto auto 30px 34px !important;
+  gap: 10px;
+  padding: 0 13px;
+}
+
+.shop-header h2 {
+  font-size: 20px;
+}
+
+.shop-eyebrow {
+  font-size: 8px;
+}
+
+.shop-sell-dropzone {
+  min-width: 104px;
+  padding-inline: 9px;
+}
+
+.shop-gold {
+  min-width: 98px;
+  padding-inline: 9px;
+}
+
+.shop-hotkey {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(201, 164, 89, 0.42);
+  border-bottom-color: rgba(201, 164, 89, 0.7);
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(43, 52, 53, 0.96), rgba(9, 15, 17, 0.96));
+  color: #ead59c;
+  font: 800 11px/1 "Trebuchet MS", "Segoe UI", sans-serif;
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 2px 5px rgba(0,0,0,.34);
+}
+
+.shop-body {
+  grid-template-columns: 145px minmax(285px, 1fr) 245px;
+}
+
+.shop-categories {
+  padding: 14px 10px;
+}
+
+.shop-catalog {
+  padding: 14px 11px 10px;
+}
+
+.shop-details {
+  padding: 17px 14px 13px;
+}
+
+.shop-item-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.shop-item-card {
+  min-height: 62px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+}
+
+.shop-item-icon {
+  width: 38px;
+  height: 38px;
+}
+
+.shop-detail-icon {
+  width: 58px;
+  height: 58px;
+}
+
+.shop-details h3 {
+  font-size: 19px;
+}
+
+.shop-catalog-heading em {
+  max-width: 205px;
+  color: #d7a46b;
+}
+
+@media (max-width: 1280px) {
+  .shop-overlay { width: clamp(690px, 62vw, 820px); }
+  .shop-body { grid-template-columns: 132px minmax(265px, 1fr) 220px; }
+  .shop-sell-dropzone { min-width: 86px; }
+  .shop-sell-dropzone small { display: none; }
+  .shop-gold { min-width: 82px; }
+  .shop-gold span { display: none; }
+  .shop-item-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .shop-overlay {
+    top: 48px !important;
+    right: 0 !important;
+    bottom: 198px !important;
+    width: 100vw;
+  }
+
+  .shop-window { border-radius: 0; }
+  .shop-body { grid-template-columns: 120px minmax(240px, 1fr) 205px; }
+  .shop-title-mark,
+  .shop-sell-dropzone { display: none; }
+  .shop-header { grid-template-columns: minmax(140px, 1fr) auto 30px 34px !important; }
+}
