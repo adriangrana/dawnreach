@@ -87,7 +87,9 @@ const STYLE_BY_KIND: Record<GameEntityKind, SelectionStyle> = {
     rotationSpeed: 0.18,
     counterRotationSpeed: -0.08,
     pulseSpeed: 2.2,
-    pulseAmount: 0.012,
+    // Heroes move continuously every render frame. Keeping the geometry size stable
+    // avoids a perceived flicker/jump while the marker follows locomotion.
+    pulseAmount: 0,
     glowOpacity: 0.13,
     mainOpacity: 0.95,
     accentOpacity: 0.72,
@@ -488,6 +490,22 @@ export function createEntitySelectionController(
   let selectedAt = 0;
   let altHeld = false;
 
+  // Selection.update() is called before local hero locomotion in the main game loop.
+  // Sync the marker again when Three.js resolves world matrices for rendering so the
+  // halo uses the hero's current-frame transform instead of trailing by one frame.
+  const baseMarkerUpdateMatrixWorld = marker.updateMatrixWorld.bind(marker);
+  marker.updateMatrixWorld = (force?: boolean) => {
+    if (selected && visual && selected.alive && selected.root.parent) {
+      selected.root.getWorldPosition(worldPosition);
+      marker.position.set(
+        worldPosition.x,
+        worldPosition.y + visual.style.yOffset,
+        worldPosition.z,
+      );
+    }
+    baseMarkerUpdateMatrixWorld(force);
+  };
+
   for (const entity of registry.values()) {
     if (entity.kind !== 'tower' || entity.team === localTeam || entity.team === 'neutral' || entity.attackRange <= 0) continue;
     const enemyRangeVisual = buildTowerRangeVisual(entity);
@@ -646,7 +664,10 @@ export function createEntitySelectionController(
     marker.scale.setScalar(scale);
     visual.outerRotor.rotation.y = now * visual.style.rotationSpeed;
     visual.innerRotor.rotation.y = now * visual.style.counterRotationSpeed;
-    visual.glowMaterial.opacity = visual.glowBaseOpacity * (0.92 + (pulse + 1) * 0.08) * intro;
+    const glowPulseAmount = selected.kind === 'hero' ? 0.025 : 0.08;
+    visual.glowMaterial.opacity = visual.glowBaseOpacity
+      * (1 - glowPulseAmount + (pulse + 1) * glowPulseAmount)
+      * intro;
 
     if (rangeVisual) {
       rangeVisual.root.position.set(worldPosition.x, worldPosition.y + 0.035, worldPosition.z);
