@@ -2,9 +2,10 @@ import type { InventoryItem, InventorySlot, ItemStatModifier } from '../heroes/t
 import { getRequiredHero } from '../match/matchState';
 import { calculateHeroStats } from '../match/stats';
 import type { MatchState, TimedStatusState } from '../match/types';
+import { isLocalHeroNearShop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 
-export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | null;
+export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | 'out-of-shop-range' | null;
 export type ItemUseReason = 'missing-item' | 'not-active' | 'cooldown' | 'not-enough-resource' | 'dead' | null;
 
 export type ShopPurchaseResult = Readonly<{
@@ -65,13 +66,21 @@ export function purchaseShopItem(
   hero.gold = Math.max(0, hero.gold - definition.cost);
   const item = createInventoryItem(definition, instanceId);
   const emptySlot = hero.inventory.find(slot => slot.item === null);
+  const nearShop = isLocalHeroNearShop();
 
-  if (emptySlot) {
+  if (nearShop && emptySlot) {
     emptySlot.item = item;
     return { match: next, definition, item, ok: true, dropped: false, reason: null };
   }
 
-  return { match: next, definition, item, ok: true, dropped: true, reason: 'inventory-full' };
+  return {
+    match: next,
+    definition,
+    item,
+    ok: true,
+    dropped: true,
+    reason: nearShop ? 'inventory-full' : 'out-of-shop-range',
+  };
 }
 
 export function pickUpGroundItem(
