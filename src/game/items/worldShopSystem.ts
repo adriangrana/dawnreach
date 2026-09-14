@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry, TeamId } from '../entities/gameEntities';
 import { BASE_LAYOUT, DAWNREACH_LAYOUT } from '../map/mapLayout';
+import { setLocalShopProximity } from './shopAccess';
 import { getItemDefinition, type ItemDefinition } from './itemDatabase';
 import { getItemIconDataUrl, getItemVisualSpec } from './itemVisuals';
 import {
@@ -17,6 +18,7 @@ import {
 type GroundItem = {
   id: string;
   itemId: string;
+  ownerEntityId: string;
   root: THREE.Group;
   baseY: number;
   createdAt: number;
@@ -29,6 +31,7 @@ type WorldShopSystem = {
 
 const SYSTEM_KEY = 'dawnreachWorldShopSystem';
 const PICKUP_DISTANCE = 1.2;
+const SHOP_PURCHASE_DISTANCE = 4.5;
 const SHOP_WORLD_SCALE = 0.52;
 const SHOP_LOCAL_FOOTPRINT_RADIUS = 3.0;
 const SHOP_WORLD_FOOTPRINT_RADIUS = SHOP_LOCAL_FOOTPRINT_RADIUS * SHOP_WORLD_SCALE;
@@ -88,10 +91,30 @@ export function ensureWorldShopSystem(
   const pointer = new THREE.Vector2();
   const pointerRaycaster = new THREE.Raycaster();
   const heroPosition = new THREE.Vector3();
+  const shopPosition = new THREE.Vector3();
   let gameplayCamera: THREE.Camera | null = null;
   let pendingGroundId: string | null = null;
   let disposed = false;
   let dropCounter = 0;
+
+  const getLocalHero = () => registry.values().find(
+    entity => entity.kind === 'hero' && entity.team === localTeam,
+  ) ?? null;
+
+  const updateLocalShopProximity = () => {
+    const localHero = getLocalHero();
+    const localShop = shopRoots.get(localTeam);
+    if (!localHero?.alive || !localHero.root.parent || !localShop?.parent) {
+      setLocalShopProximity(false);
+      return;
+    }
+    localHero.root.getWorldPosition(heroPosition);
+    localShop.getWorldPosition(shopPosition);
+    setLocalShopProximity(Math.hypot(
+      shopPosition.x - heroPosition.x,
+      shopPosition.z - heroPosition.z,
+    ) <= SHOP_PURCHASE_DISTANCE);
+  };
 
   const isGameplayCanvas = (target: EventTarget | null): target is HTMLCanvasElement => (
     target instanceof HTMLCanvasElement && target.classList.contains('game-canvas')
@@ -141,7 +164,8 @@ export function ensureWorldShopSystem(
     if (dropRoots.length === 0) return;
     const hit = pointerRaycaster.intersectObjects(dropRoots, true)[0];
     const ground = findGroundItemFromObject(hit?.object ?? null);
-    if (!ground) return;
+    const localHero = getLocalHero();
+    if (!ground || !localHero || ground.ownerEntityId !== localHero.id) return;
     pendingGroundId = ground.id;
     ground.awaitingPickup = false;
   };
@@ -150,13 +174,14 @@ export function ensureWorldShopSystem(
     const detail = (event as CustomEvent<ItemDropDetail>).detail;
     if (!detail?.itemId || !detail.token || groundItems.has(detail.token)) return;
     const definition = getItemDefinition(detail.itemId);
-    const localHero = registry.values().find(entity => entity.kind === 'hero' && entity.team === localTeam);
+    const localHero = getLocalHero();
     if (!definition || !localHero?.root.parent) return;
 
     localHero.root.getWorldPosition(heroPosition);
     const angle = (dropCounter++ * 2.399963229728653) % (Math.PI * 2);
     const distance = 0.82 + (dropCounter % 3) * 0.18;
     const root = buildGroundItem(definition, detail.token);
+    root.userData.ownerEntityId = localHero.id;
     root.position.set(
       heroPosition.x + Math.cos(angle) * distance,
       heroPosition.y + 0.05,
@@ -167,6 +192,7 @@ export function ensureWorldShopSystem(
     groundItems.set(detail.token, {
       id: detail.token,
       itemId: detail.itemId,
+      ownerEntityId: localHero.id,
       root,
       baseY: root.position.y,
       createdAt: performance.now() * 0.001,
@@ -188,6 +214,8 @@ export function ensureWorldShopSystem(
   window.addEventListener(ITEM_DROP_EVENT, onItemDrop as EventListener);
   window.addEventListener(ITEM_PICKUP_RESULT_EVENT, onPickupResult as EventListener);
 
+  updateLocalShopProximity();
+
   const previousSceneBeforeRender = scene.onBeforeRender;
   const beforeRender: typeof scene.onBeforeRender = function(
     renderer,
@@ -198,7 +226,10 @@ export function ensureWorldShopSystem(
     group,
   ) {
     const minimapCamera = camera.position.y > 60 && camera.up.z < -0.5;
-    if (!minimapCamera) gameplayCamera = camera;
+    if (!minimapCamera) {
+      gameplayCamera = camera;
+      updateLocalShopProximity();
+    }
 
     const now = performance.now() * 0.001;
     for (const ground of groundItems.values()) {
@@ -212,8 +243,8 @@ export function ensureWorldShopSystem(
 
     const pending = pendingGroundId ? groundItems.get(pendingGroundId) ?? null : null;
     if (pending && !pending.awaitingPickup) {
-      const localHero = registry.values().find(entity => entity.kind === 'hero' && entity.team === localTeam);
-      if (!localHero?.alive || !localHero.root.parent) {
+      const localHero = getLocalHero();
+      if (!localHero?.alive || !localHero.root.parent || pending.ownerEntityId !== localHero.id) {
         pendingGroundId = null;
       } else {
         localHero.root.getWorldPosition(heroPosition);
@@ -237,6 +268,7 @@ export function ensureWorldShopSystem(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    setLocalShopProximity(false);
     window.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener(ITEM_DROP_EVENT, onItemDrop as EventListener);
     window.removeEventListener(ITEM_PICKUP_RESULT_EVENT, onPickupResult as EventListener);
