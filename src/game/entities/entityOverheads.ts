@@ -146,9 +146,9 @@ function drawHealthOnlyFrame(
   // actual gameplay importance. Keep only a slim dark track, a flat team fill and very
   // subtle segment ticks. The hero overhead remains untouched above.
   const x = 5;
-  const y = entity.kind === 'creep' ? 10 : 8;
+  const y = entity.kind === 'creep' ? 9 : 8;
   const width = canvas.width - 10;
-  const height = entity.kind === 'creep' ? 8 : 10;
+  const height = entity.kind === 'creep' ? 10 : 10;
 
   ctx.fillStyle = 'rgba(3, 7, 8, 0.82)';
   ctx.fillRect(x, y, width, height);
@@ -213,11 +213,6 @@ function heroIconPath(entity: GameEntity) {
  */
 export function attachEntityOverhead(entity: GameEntity) {
   if (!entity.showHealthBar || entity.maxHp <= 0) return;
-
-  // The old base-presentation layer can still author a legacy throne shell with the same
-  // semantic name as the current throne. It is visual compatibility geometry, not a second
-  // gameplay entity, so it must never receive a second HP bar.
-  if (entity.root.userData.structureKind === 'throne') return;
 
   if (entity.kind === 'hero' && entity.root.getObjectByName('hero-status-overlay')) return;
 
