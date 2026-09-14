@@ -23,6 +23,21 @@ export type AuthoredEntityStatusView = EntityStatusView & Readonly<{
 
 const EXTERNAL_STATUS_KEY = 'dawnreachExternalStatusViews';
 
+type TowerProtectionAuraEffects = {
+  statusName: string;
+  eligibleKinds: string[];
+  armorBonus: number;
+  healthRegenPerSecond: number;
+  lingerDurationSeconds: number;
+};
+
+type ReinforcedEffects = {
+  bonusDamageVsReinforcedPercent: number;
+  heroAttackDamageReductionPercent: number;
+  nonHeroAttackDamageReductionPercent: number;
+  aura: TowerProtectionAuraEffects;
+};
+
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
@@ -147,42 +162,56 @@ function towerAuraViews(entity: GameEntity): EntityStatusView[] {
   const views: EntityStatusView[] = [];
   const reinforced = getTowerAbility('reinforced');
   const backdoor = getTowerAbility('backdoor-protection');
+  const reinforcedEffects = reinforced?.effects as ReinforcedEffects | undefined;
 
-  if (aura.reinforced && reinforced) {
-    const sourceCount = aura.sourceTowerIds.length;
+  // Reforzado is now correctly a structural state of the tower itself.
+  if (entity.kind === 'tower' && aura.reinforced && reinforced) {
     views.push({
-      id: 'tower-aura:reinforced',
+      id: 'tower:reinforced',
       name: reinforced.name,
       description: reinforced.description,
       tone: 'positive',
       icon: 'reinforced',
       rank: reinforced.level,
-      sourceLabel: sourceCount > 0
-        ? `${sourceCount} torre${sourceCount === 1 ? '' : 's'} aliada${sourceCount === 1 ? '' : 's'}`
-        : 'Aura de torre',
+      sourceLabel: 'Estado estructural de la torre',
     });
   }
 
-  if (aura.backdoorProtection && backdoor) {
-    const sourceCount = aura.backdoorSourceTowerIds.length;
+  // Backdoor Protection never propagates to nearby allies. Only the tower owns it.
+  if (entity.kind === 'tower' && aura.backdoorProtection && backdoor) {
     views.push(aura.backdoorActive ? {
-      id: 'tower-aura:backdoor-protection',
+      id: 'tower:backdoor-protection',
       name: backdoor.name,
       description: backdoor.description,
       tone: 'positive',
       icon: 'backdoor-protection',
       rank: backdoor.level,
-      sourceLabel: sourceCount > 0
-        ? `${sourceCount} torre${sourceCount === 1 ? '' : 's'} aliada${sourceCount === 1 ? '' : 's'}`
-        : 'Aura de torre',
+      sourceLabel: 'Protección propia de la torre',
     } : {
-      id: 'tower-aura:backdoor-suppressed',
+      id: 'tower:backdoor-suppressed',
       name: 'Protección de retaguardia anulada',
-      description: 'Hay creeps enemigos dentro del radio de supresión. La reducción de daño y la regeneración de la protección de retaguardia están desactivadas.',
+      description: 'Hay creeps enemigos dentro del radio de supresión. La reducción de daño y la regeneración de la torre están desactivadas.',
       tone: 'negative',
       icon: 'backdoor-suppressed',
       rank: backdoor.level,
       sourceLabel: 'Supresión por creeps enemigos',
+    });
+  }
+
+  // Nearby allied heroes/creeps receive Tower Protection, not Backdoor Protection and
+  // not the tower's Reinforced structural modifier.
+  if (aura.towerProtection && reinforced && reinforcedEffects?.aura) {
+    const protection = reinforcedEffects.aura;
+    const sourceCount = aura.towerProtectionSourceTowerIds.length;
+    const duration = protection.lingerDurationSeconds;
+    views.push({
+      id: 'tower-aura:tower-protection',
+      name: protection.statusName,
+      description: `Armadura aumentada en ${protection.armorBonus} y regeneración de vida aumentada en ${protection.healthRegenPerSecond}.`,
+      tone: 'positive',
+      icon: 'reinforced',
+      rank: reinforced.level,
+      sourceLabel: `Duración ${duration.toFixed(1)} s · ${sourceCount || 1} torre${sourceCount === 1 ? '' : 's'} aliada${sourceCount === 1 ? '' : 's'}`,
     });
   }
 
