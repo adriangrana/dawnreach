@@ -1,23 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { Coins, Search, ShoppingBag, X } from 'lucide-react';
 import { ITEM_BY_ID, ITEMS, type ItemDefinition, type ItemTier } from '../game/items/itemDatabase';
+import { readInventoryDragPayload } from '../game/items/itemDrag';
+import { getItemIconDataUrl } from '../game/items/itemVisuals';
 
 const TIERS: readonly ItemTier[] = ['Básico', 'Intermedio', 'Avanzado'];
 
 const STAT_LABELS: Record<string, string> = {
-  strength: 'Fuerza',
-  agility: 'Agilidad',
-  intelligence: 'Inteligencia',
-  damage: 'Daño físico',
-  magic_power: 'Poder mágico',
-  armor: 'Armadura',
-  attack_speed_pct: 'Velocidad de ataque',
-  move_speed_flat: 'Velocidad de movimiento',
-  hp: 'Vida',
-  hp_regen: 'Regeneración de vida',
-  mana: 'Maná',
-  mana_regen: 'Regeneración de maná',
-  magic_resist_pct: 'Resistencia mágica',
+  strength: 'Fuerza', agility: 'Agilidad', intelligence: 'Inteligencia', damage: 'Daño físico',
+  magic_power: 'Poder mágico', armor: 'Armadura', attack_speed_pct: 'Velocidad de ataque',
+  move_speed_flat: 'Velocidad de movimiento', hp: 'Vida', hp_regen: 'Regeneración de vida',
+  mana: 'Maná', mana_regen: 'Regeneración de maná', magic_resist_pct: 'Resistencia mágica',
 };
 
 function formatStat(stat: string, value: number) {
@@ -25,16 +18,14 @@ function formatStat(stat: string, value: number) {
   return `+${Number.isInteger(value) ? value : value.toFixed(1)}${percent ? '%' : ''} ${STAT_LABELS[stat] ?? stat}`;
 }
 
-function itemMonogram(name: string) {
-  const words = name.split(/\s+/).filter(Boolean);
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
-}
-
 function itemTierClass(tier: ItemTier) {
   if (tier === 'Avanzado') return 'shop-item-icon--advanced';
   if (tier === 'Intermedio') return 'shop-item-icon--intermediate';
   return 'shop-item-icon--basic';
+}
+
+function ItemArt({ id, className }: { id: string; className: string }) {
+  return <img className={className} src={getItemIconDataUrl(id)} alt="" draggable={false} />;
 }
 
 function EffectBlock({ label, effect }: {
@@ -45,10 +36,7 @@ function EffectBlock({ label, effect }: {
   const activeEffect = 'cooldown' in effect ? effect : null;
   return (
     <div className="shop-effect-block">
-      <div className="shop-effect-title">
-        <span>{label}</span>
-        <strong>{effect.name}</strong>
-      </div>
+      <div className="shop-effect-title"><span>{label}</span><strong>{effect.name}</strong></div>
       <p>{effect.description}</p>
       {activeEffect && (
         <div className="shop-effect-meta">
@@ -66,16 +54,19 @@ export default function ShopOverlay({
   inventoryFull,
   onClose,
   onBuy,
+  onSell,
 }: {
   open: boolean;
   gold: number;
   inventoryFull: boolean;
   onClose: () => void;
   onBuy: (itemId: string) => void;
+  onSell: (instanceId: string) => void;
 }) {
   const [tier, setTier] = useState<ItemTier>('Básico');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('item_001');
+  const [sellHot, setSellHot] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -115,14 +106,40 @@ export default function ShopOverlay({
   });
   const affordable = gold >= selected.cost;
 
+  const onSellDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes('application/x-dawnreach-inventory-item')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    setSellHot(true);
+  };
+  const onSellDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSellHot(false);
+    const payload = readInventoryDragPayload(event.dataTransfer);
+    if (payload) onSell(payload.instanceId);
+  };
+
   return (
     <div className="shop-overlay" role="dialog" aria-modal="true" aria-label="Tienda de la base">
-      <div className="shop-window" onPointerDown={event => event.stopPropagation()}>
+      <div className="shop-window" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
         <header className="shop-header">
           <div className="shop-title-mark"><ShoppingBag /></div>
           <div>
             <span className="shop-eyebrow">MERCADO DE LA CIUDADELA</span>
             <h2>Mercado del Alba</h2>
+          </div>
+          <div
+            className={`shop-sell-dropzone${sellHot ? ' is-hot' : ''}`}
+            onDragOver={onSellDragOver}
+            onDragEnter={onSellDragOver}
+            onDragLeave={() => setSellHot(false)}
+            onDrop={onSellDrop}
+            title="Arrastra un objeto del inventario para venderlo por la mitad de su precio"
+          >
+            <Coins />
+            <span><b>VENDER</b><small>arrastra aquí · 50%</small></span>
           </div>
           <div className="shop-gold"><Coins /><strong>{Math.floor(gold)}</strong><span>oro</span></div>
           <button className="shop-close" type="button" onClick={onClose} aria-label="Cerrar tienda"><X /></button>
@@ -132,25 +149,14 @@ export default function ShopOverlay({
           <aside className="shop-categories">
             <div className="shop-search">
               <Search />
-              <input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Buscar objeto"
-                aria-label="Buscar objeto"
-              />
+              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar objeto" aria-label="Buscar objeto" />
             </div>
             <nav>
               {TIERS.map(candidate => {
                 const count = ITEMS.filter(item => item.tier === candidate).length;
                 return (
-                  <button
-                    type="button"
-                    key={candidate}
-                    className={candidate === tier ? 'is-active' : ''}
-                    onClick={() => { setTier(candidate); setQuery(''); }}
-                  >
-                    <span>{candidate}</span>
-                    <b>{count}</b>
+                  <button type="button" key={candidate} className={candidate === tier ? 'is-active' : ''} onClick={() => { setTier(candidate); setQuery(''); }}>
+                    <span>{candidate}</span><b>{count}</b>
                   </button>
                 );
               })}
@@ -167,23 +173,15 @@ export default function ShopOverlay({
 
           <section className="shop-catalog">
             <div className="shop-catalog-heading">
-              <div>
-                <span>{tier}</span>
-                <strong>{items.length} objetos disponibles</strong>
-              </div>
+              <div><span>{tier}</span><strong>{items.length} objetos disponibles</strong></div>
               {inventoryFull && <em>Inventario lleno: las compras caerán junto al héroe.</em>}
             </div>
             <div className="shop-item-grid">
               {items.map(item => {
                 const canAfford = gold >= item.cost;
                 return (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={`shop-item-card ${item.id === selected.id ? 'is-selected' : ''}`}
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <span className={`shop-item-icon ${itemTierClass(item.tier)}`}>{itemMonogram(item.name)}</span>
+                  <button type="button" key={item.id} className={`shop-item-card ${item.id === selected.id ? 'is-selected' : ''}`} onClick={() => setSelectedId(item.id)}>
+                    <span className={`shop-item-icon ${itemTierClass(item.tier)}`}><ItemArt id={item.id} className="shop-item-icon-art" /></span>
                     <span className="shop-item-copy">
                       <strong>{item.name}</strong>
                       <small>{Object.entries(item.stats).slice(0, 2).map(([stat, value]) => formatStat(stat, Number(value))).join(' · ') || 'Efecto utilitario'}</small>
@@ -196,16 +194,14 @@ export default function ShopOverlay({
           </section>
 
           <aside className="shop-details">
-            <div className={`shop-detail-icon ${itemTierClass(selected.tier)}`}>{itemMonogram(selected.name)}</div>
+            <div className={`shop-detail-icon ${itemTierClass(selected.tier)}`}><ItemArt id={selected.id} className="shop-detail-icon-art" /></div>
             <span className="shop-detail-tier">{selected.tier} · {selected.phase}</span>
             <h3>{selected.name}</h3>
             <p className="shop-flavor">“{selected.flavor_text}”</p>
 
             {Object.keys(selected.stats).length > 0 && (
               <div className="shop-stat-list">
-                {Object.entries(selected.stats).map(([stat, value]) => (
-                  <span key={stat}>{formatStat(stat, Number(value))}</span>
-                ))}
+                {Object.entries(selected.stats).map(([stat, value]) => <span key={stat}>{formatStat(stat, Number(value))}</span>)}
               </div>
             )}
 
@@ -218,7 +214,7 @@ export default function ShopOverlay({
                 <div>
                   {components.map(({ definition, quantity }) => (
                     <button key={definition.id} type="button" onClick={() => { setTier(definition.tier); setSelectedId(definition.id); }}>
-                      <b>{itemMonogram(definition.name)}</b>
+                      <b><ItemArt id={definition.id} className="shop-recipe-icon-art" /></b>
                       <span>{definition.name}{quantity > 1 ? ` ×${quantity}` : ''}</span>
                     </button>
                   ))}
@@ -227,14 +223,8 @@ export default function ShopOverlay({
               </div>
             )}
 
-            <button
-              type="button"
-              className="shop-buy-button"
-              disabled={!affordable}
-              onClick={() => onBuy(selected.id)}
-            >
-              <Coins />
-              <span>{affordable ? `Comprar por ${selected.cost}` : `Faltan ${selected.cost - gold} de oro`}</span>
+            <button type="button" className="shop-buy-button" disabled={!affordable} onClick={() => onBuy(selected.id)}>
+              <Coins /><span>{affordable ? `Comprar por ${selected.cost}` : `Faltan ${selected.cost - gold} de oro`}</span>
             </button>
             {inventoryFull && affordable && <small className="shop-drop-warning">Se comprará igualmente y caerá al suelo junto a tu héroe.</small>}
           </aside>
