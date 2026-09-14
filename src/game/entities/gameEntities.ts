@@ -87,6 +87,143 @@ export type GameEntity = {
 };
 
 const ENTITY_KEY = 'dawnreachEntity';
+const ITEM_WARD_RANGE_NAME = 'item-ward-vision-range';
+const ITEM_WARD_HITBOX_NAME = 'item-ward-selection-hitbox';
+
+function isItemVisionWard(root: THREE.Object3D) {
+  return root.userData.itemWard === true;
+}
+
+function wardRangeMaterial(color: number) {
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0,
+    depthTest: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -1;
+  material.polygonOffsetUnits = -2;
+  return material;
+}
+
+function attachItemWardVisionIndicator(entity: GameEntity) {
+  if (!isItemVisionWard(entity.root) || entity.visionRadius <= 0) return;
+
+  // Ojo del Vigía is an inspectable world unit. The item system used to register it as
+  // non-selectable; force the world representation to follow normal selection semantics.
+  entity.selectable = true;
+  entity.selectionRadius = Math.max(0.42, entity.selectionRadius);
+  entity.root.userData.selectable = true;
+
+  if (entity.root.getObjectByName(ITEM_WARD_RANGE_NAME)) return;
+
+  const color = entity.team === 'red' ? 0xff7168 : 0x69dcff;
+  const bright = entity.team === 'red' ? 0xffd4cf : 0xd9f8ff;
+  const range = entity.visionRadius;
+  const rangeRoot = new THREE.Group();
+  rangeRoot.name = ITEM_WARD_RANGE_NAME;
+  rangeRoot.renderOrder = 66;
+
+  // A small invisible picking proxy makes the tiny ward practical to select without
+  // making its large vision halo itself raycastable.
+  const hitboxMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    colorWrite: false,
+  });
+  const hitboxRadius = Math.max(0.42, entity.selectionRadius);
+  const hitbox = new THREE.Mesh(
+    new THREE.CylinderGeometry(hitboxRadius, hitboxRadius, 1.12, 16),
+    hitboxMaterial,
+  );
+  hitbox.name = ITEM_WARD_HITBOX_NAME;
+  hitbox.position.y = 0.52;
+  hitbox.castShadow = false;
+  hitbox.receiveShadow = false;
+  rangeRoot.add(hitbox);
+
+  const fillMaterial = wardRangeMaterial(color);
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(range * 0.992, 128), fillMaterial);
+  fill.rotation.x = -Math.PI / 2;
+  fill.position.y = 0.012;
+  fill.renderOrder = 66;
+  fill.castShadow = false;
+  fill.receiveShadow = false;
+  fill.raycast = () => {};
+  rangeRoot.add(fill);
+
+  const glowMaterial = wardRangeMaterial(color);
+  const glow = new THREE.Mesh(
+    new THREE.RingGeometry(Math.max(0.05, range - 0.16), range, 128),
+    glowMaterial,
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.018;
+  glow.renderOrder = 67;
+  glow.castShadow = false;
+  glow.receiveShadow = false;
+  glow.raycast = () => {};
+  rangeRoot.add(glow);
+
+  const edgeMaterial = wardRangeMaterial(bright);
+  const edge = new THREE.Mesh(
+    new THREE.RingGeometry(Math.max(0.05, range - 0.045), range, 128),
+    edgeMaterial,
+  );
+  edge.rotation.x = -Math.PI / 2;
+  edge.position.y = 0.023;
+  edge.renderOrder = 68;
+  edge.castShadow = false;
+  edge.receiveShadow = false;
+  edge.raycast = () => {};
+  rangeRoot.add(edge);
+
+  const syncVisibility = () => {
+    const selected = entity.alive && entity.root.userData.selected === true;
+    if (!selected) {
+      fillMaterial.opacity = 0;
+      glowMaterial.opacity = 0;
+      edgeMaterial.opacity = 0;
+      return;
+    }
+    const pulse = (Math.sin(performance.now() * 0.0024) + 1) * 0.5;
+    fillMaterial.opacity = 0.025 + pulse * 0.014;
+    glowMaterial.opacity = 0.10 + pulse * 0.055;
+    edgeMaterial.opacity = 0.48 + pulse * 0.12;
+  };
+
+  hitbox.onBeforeRender = syncVisibility;
+  fill.onBeforeRender = syncVisibility;
+  glow.onBeforeRender = syncVisibility;
+  edge.onBeforeRender = syncVisibility;
+  entity.root.add(rangeRoot);
+}
+
+function detachItemWardVisionIndicator(entity: GameEntity) {
+  const rangeRoot = entity.root.getObjectByName(ITEM_WARD_RANGE_NAME);
+  if (!rangeRoot) return;
+  rangeRoot.removeFromParent();
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  rangeRoot.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    if (!geometries.has(object.geometry)) {
+      geometries.add(object.geometry);
+      object.geometry.dispose();
+    }
+    const materialList = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materialList) {
+      if (materials.has(material)) continue;
+      materials.add(material);
+      material.dispose();
+    }
+  });
+}
 
 function defaultVisionRadius(kind: GameEntityKind) {
   switch (kind) {
@@ -162,18 +299,21 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   if (existing) {
     registerFloatingCombatEntity(existing);
     attachHeroAttackRangeIndicator(existing);
+    attachItemWardVisionIndicator(existing);
     return existing;
   }
 
+  const itemVisionWard = isItemVisionWard(root);
   const maxHp = Math.max(0, definition.maxHp ?? defaultMaxHp(definition.kind));
   const currentHp = THREE.MathUtils.clamp(definition.currentHp ?? maxHp, 0, maxHp);
+  const requestedSelectionRadius = Math.max(0.2, definition.selectionRadius ?? defaultSelectionRadius(definition.kind));
   const entity: GameEntity = {
     id: definition.id ?? `${definition.kind}:${root.name || 'entity'}:${root.uuid}`,
     root,
     displayName: definition.displayName,
     kind: definition.kind,
     team: definition.team,
-    selectable: definition.selectable ?? true,
+    selectable: itemVisionWard ? true : (definition.selectable ?? true),
     targetable: definition.targetable ?? definition.team !== 'neutral',
     grantsVision: definition.grantsVision ?? definition.team !== 'neutral',
     visionRadius: Math.max(0, definition.visionRadius ?? defaultVisionRadius(definition.kind)),
@@ -181,7 +321,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
     attackRange: Math.max(0, definition.attackRange ?? defaultAttackRange(definition.kind)),
     visibilityPolicy: definition.visibilityPolicy ?? defaultVisibilityPolicy(definition.kind),
     interaction: definition.interaction ?? defaultInteraction(definition.kind),
-    selectionRadius: Math.max(0.2, definition.selectionRadius ?? defaultSelectionRadius(definition.kind)),
+    selectionRadius: itemVisionWard ? Math.max(0.42, requestedSelectionRadius) : requestedSelectionRadius,
     maxHp,
     currentHp,
     showHealthBar: definition.showHealthBar ?? defaultShowHealthBar(definition.kind),
@@ -202,6 +342,7 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
   attachEntityOverhead(entity);
   registerFloatingCombatEntity(entity);
   attachHeroAttackRangeIndicator(entity);
+  attachItemWardVisionIndicator(entity);
   return entity;
 }
 
@@ -244,6 +385,7 @@ export class GameEntityRegistry {
     this.byRoot.set(entity.root, entity);
     registerFloatingCombatEntity(entity);
     attachHeroAttackRangeIndicator(entity);
+    attachItemWardVisionIndicator(entity);
     return entity;
   }
 
@@ -253,6 +395,7 @@ export class GameEntityRegistry {
     this.byRoot.delete(root);
     unregisterFloatingCombatEntity(entity);
     detachHeroAttackRangeIndicator(entity);
+    detachItemWardVisionIndicator(entity);
     delete root.userData[ENTITY_KEY];
     return true;
   }
