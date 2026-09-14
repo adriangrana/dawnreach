@@ -3,6 +3,18 @@ import { createLoft, membranePanel, scaleGeometry, taperedCurve, v, type Section
 import { createDrakeMaterials } from './materials';
 import { createDrakeAnimator, type DrakeAttachment } from './animateRadiantDrake';
 
+const DRAKE_SHADOW_CASTER_NAMES = new Set([
+  'continuous-scaled-neck-body-tail',
+  'angular-cranial-surface',
+  'mandible',
+  'muscular-limb',
+  'taloned-paw',
+  'wing-upper-arm',
+  'wing-forearm',
+  'wing-wrist',
+  'veined-wing-membrane',
+]);
+
 export function buildRadiantDrake() {
   const root = new THREE.Group();
   root.name = 'radiant-drake';
@@ -188,5 +200,16 @@ export function buildRadiantDrake() {
     scales, scaleTimes, attachments, head, jaw, wings);
   root.userData.drakeAnimator = animator;
   root.userData.animate = animator.update;
+
+  // Resolve static culling bounds during construction, while the loading splash owns the
+  // frame budget. The first reveal must never spend its frame computing hundreds of bounds.
+  // Only the silhouette-bearing pieces participate in the directional-light shadow pass;
+  // tiny scales, teeth and trim remain fully visible in the beauty pass.
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    if (!object.geometry.boundingSphere) object.geometry.computeBoundingSphere();
+    object.castShadow = DRAKE_SHADOW_CASTER_NAMES.has(object.name);
+  });
+
   return root;
 }
