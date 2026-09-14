@@ -32,7 +32,9 @@ const CHANNEL_PENALTY_MS = 2_000;
 const DOUBLE_HOTKEY_WINDOW_MS = 420;
 const PENDING_CAST_LIFETIME_MS = 1_500;
 const TOWER_TELEPORT_RANGE = TOWER_GAMEPLAY.attack.range;
+const TOWER_PREVIEW_REVEAL_PADDING = 2.5;
 const HARD_CC_PATTERN = /(?:^|:|\b)(stun|root|silence|fear)(?:$|:|\b)/i;
+const TELEPORT_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%237adfff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23dffaff' stroke='%23173d55' stroke-width='1'/%3E%3Cpath d='M16 2v7M16 23v7M2 16h7M23 16h7' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair`;
 
 let disposeTeleportSystem: (() => void) | null = null;
 
@@ -75,8 +77,18 @@ type PickedDestination = Readonly<{
   destinationWorld: THREE.Vector3 | null;
 }>;
 
+type TargetPreviewVisuals = {
+  team: TeamId;
+  rangeRoot: THREE.Group;
+  landingRoot: THREE.Group;
+};
+
 function matchTeamToWorld(team: HeroItemRuntimeContext['team']): TeamId {
   return team === 'dawn' ? 'blue' : 'red';
+}
+
+function teamTeleportColor(team: TeamId) {
+  return team === 'red' ? 0xff867c : 0x7adfff;
 }
 
 function disposeObject3D(root: THREE.Object3D) {
@@ -97,28 +109,98 @@ function disposeObject3D(root: THREE.Object3D) {
   });
 }
 
-function buildChannelVisual(color: number) {
-  const root = new THREE.Group();
-  const ringMaterial = new THREE.MeshBasicMaterial({
+function makeBasicMaterial(color: number, opacity: number) {
+  return new THREE.MeshBasicMaterial({
     color,
     transparent: true,
-    opacity: 0.82,
+    opacity,
     depthWrite: false,
+    depthTest: false,
     side: THREE.DoubleSide,
     toneMapped: false,
   });
-  const glowMaterial = ringMaterial.clone();
-  glowMaterial.opacity = 0.18;
+}
+
+function buildChannelVisual(color: number) {
+  const root = new THREE.Group();
+  const ringMaterial = makeBasicMaterial(color, 0.82);
+  const glowMaterial = makeBasicMaterial(color, 0.18);
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.82, 64), ringMaterial);
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.04;
+  ring.renderOrder = 50;
   root.add(ring);
   const glow = new THREE.Mesh(new THREE.CircleGeometry(0.78, 64), glowMaterial);
   glow.rotation.x = -Math.PI / 2;
   glow.position.y = 0.025;
+  glow.renderOrder = 49;
   root.add(glow);
   root.userData.ringMaterial = ringMaterial;
   root.userData.glowMaterial = glowMaterial;
+  return root;
+}
+
+function buildTowerRangePreview(color: number) {
+  const root = new THREE.Group();
+  root.visible = false;
+
+  const fillMaterial = makeBasicMaterial(color, 0.075);
+  const ringMaterial = makeBasicMaterial(color, 0.64);
+  const innerMaterial = makeBasicMaterial(color, 0.20);
+
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 96), fillMaterial);
+  fill.rotation.x = -Math.PI / 2;
+  fill.position.y = 0.018;
+  fill.renderOrder = 40;
+  root.add(fill);
+
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.965, 1, 96), ringMaterial);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.032;
+  ring.renderOrder = 42;
+  root.add(ring);
+
+  const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.89, 0.905, 96), innerMaterial);
+  innerRing.rotation.x = -Math.PI / 2;
+  innerRing.position.y = 0.026;
+  innerRing.renderOrder = 41;
+  root.add(innerRing);
+
+  root.userData.fillMaterial = fillMaterial;
+  root.userData.ringMaterial = ringMaterial;
+  root.userData.innerMaterial = innerMaterial;
+  return root;
+}
+
+function buildLandingPreview(color: number) {
+  const root = new THREE.Group();
+  root.visible = false;
+
+  const fillMaterial = makeBasicMaterial(color, 0.22);
+  const ringMaterial = makeBasicMaterial(0xffffff, 0.92);
+  const outerMaterial = makeBasicMaterial(color, 0.86);
+
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(0.48, 48), fillMaterial);
+  fill.rotation.x = -Math.PI / 2;
+  fill.position.y = 0.02;
+  fill.renderOrder = 55;
+  root.add(fill);
+
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.46, 0.53, 48), ringMaterial);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.035;
+  ring.renderOrder = 57;
+  root.add(ring);
+
+  const outer = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.68, 48), outerMaterial);
+  outer.rotation.x = -Math.PI / 2;
+  outer.position.y = 0.03;
+  outer.renderOrder = 56;
+  root.add(outer);
+
+  root.userData.fillMaterial = fillMaterial;
+  root.userData.ringMaterial = ringMaterial;
+  root.userData.outerMaterial = outerMaterial;
   return root;
 }
 
@@ -237,15 +319,68 @@ export function ensureTeleportScrollSystem(
   let minimapCamera: THREE.Camera | null = null;
   let targeting: TargetingState | null = null;
   let channel: ChannelState | null = null;
+  let previewVisuals: TargetPreviewVisuals | null = null;
   let disposed = false;
 
   const pendingCasts = new Map<string, PendingCast>();
   const trafficByTarget = new Map<string, TrafficEntry[]>();
+  const cursorRestore = new Map<HTMLElement, string>();
 
   const sampleSurfaceHeight = (x: number, z: number, fallback = 0) => {
     surfaceRay.ray.origin.set(x, 64, z);
     const hit = surfaceRay.intersectObjects(commandSurfaces, false)[0];
     return hit?.point.y ?? fallback;
+  };
+
+  const setTargetingCursor = (active: boolean) => {
+    if (typeof document === 'undefined') return;
+    if (!active) {
+      for (const [element, cursor] of cursorRestore) element.style.cursor = cursor;
+      cursorRestore.clear();
+      return;
+    }
+
+    const elements: HTMLElement[] = [];
+    if (document.body) elements.push(document.body);
+    document.querySelectorAll<HTMLElement>('.game-canvas, .minimap-live').forEach(element => elements.push(element));
+    for (const element of elements) {
+      if (!cursorRestore.has(element)) cursorRestore.set(element, element.style.cursor);
+      element.style.cursor = TELEPORT_CURSOR;
+    }
+  };
+
+  const ensurePreviewVisuals = (team: TeamId) => {
+    if (previewVisuals?.team === team) return previewVisuals;
+    if (previewVisuals) {
+      previewVisuals.rangeRoot.removeFromParent();
+      previewVisuals.landingRoot.removeFromParent();
+      disposeObject3D(previewVisuals.rangeRoot);
+      disposeObject3D(previewVisuals.landingRoot);
+    }
+
+    const color = teamTeleportColor(team);
+    previewVisuals = {
+      team,
+      rangeRoot: buildTowerRangePreview(color),
+      landingRoot: buildLandingPreview(color),
+    };
+    scene.add(previewVisuals.rangeRoot, previewVisuals.landingRoot);
+    return previewVisuals;
+  };
+
+  const hideTargetPreview = () => {
+    if (!previewVisuals) return;
+    previewVisuals.rangeRoot.visible = false;
+    previewVisuals.landingRoot.visible = false;
+  };
+
+  const disposeTargetPreview = () => {
+    if (!previewVisuals) return;
+    previewVisuals.rangeRoot.removeFromParent();
+    previewVisuals.landingRoot.removeFromParent();
+    disposeObject3D(previewVisuals.rangeRoot);
+    disposeObject3D(previewVisuals.landingRoot);
+    previewVisuals = null;
   };
 
   const emitTargetingState = (instanceId: string, active: boolean, targetEntityId?: string) => {
@@ -257,6 +392,8 @@ export function ensureTeleportScrollSystem(
     if (!targeting) return;
     emitTargetingState(targeting.instanceId, false, targetEntityId);
     targeting = null;
+    hideTargetPreview();
+    setTargetingCursor(false);
   };
 
   const requestCast = (
@@ -435,7 +572,7 @@ export function ensureTeleportScrollSystem(
     };
     trafficByTarget.set(target.id, [...(trafficByTarget.get(target.id) ?? []), traffic]);
 
-    const color = actor.team === 'red' ? 0xff867c : 0x7adfff;
+    const color = teamTeleportColor(actor.team);
     const originVisual = buildChannelVisual(color);
     const destinationVisual = buildChannelVisual(color);
     setVisualWorldPosition(originVisual, actorWorld.clone().setY(sampleSurfaceHeight(actorWorld.x, actorWorld.z, actorWorld.y) + 0.02));
@@ -479,6 +616,9 @@ export function ensureTeleportScrollSystem(
       actor,
       lastHotkeyAtMs: detail.source === 'hotkey' ? detail.requestedAtMs : Number.NEGATIVE_INFINITY,
     };
+    hideTargetPreview();
+    ensurePreviewVisuals(actor.team);
+    setTargetingCursor(true);
     emitTargetingState(detail.instanceId, true);
   };
 
@@ -492,7 +632,7 @@ export function ensureTeleportScrollSystem(
     if (channel) cancelChannel('player-command', detail.activatedAtMs);
   };
 
-  const pickDestination = (event: PointerEvent): PickedDestination | null => {
+  const setPointerRay = (event: PointerEvent) => {
     if (!targeting) return null;
     const surface = isGameSurface(event.target);
     if (!surface) return null;
@@ -504,37 +644,44 @@ export function ensureTeleportScrollSystem(
     pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
+    return { surface, camera };
+  };
 
-    const destinations = registry.values().filter(entity => isValidTeleportDestination(targeting!.actor, entity));
-    if (destinations.length === 0) return null;
+  const findNearestTowerForPoint = (
+    actor: GameEntity,
+    point: THREE.Vector3,
+    revealPadding: number,
+  ) => {
+    let nearestTower: GameEntity | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
 
-    // A tower enables its complete gameplay range as a teleport zone. The player targets
-    // the ground inside that range; the tower is only the structure that owns the zone.
+    for (const destination of registry.values()) {
+      if (destination.kind !== 'tower' || !isValidTeleportDestination(actor, destination)) continue;
+      destination.root.getWorldPosition(towerWorld);
+      const distance = Math.hypot(point.x - towerWorld.x, point.z - towerWorld.z);
+      if (distance > towerTeleportRange(destination) + revealPadding || distance >= nearestDistance) continue;
+      nearestTower = destination;
+      nearestDistance = distance;
+    }
+
+    return nearestTower ? { tower: nearestTower, distance: nearestDistance } : null;
+  };
+
+  const pickDestination = (event: PointerEvent): PickedDestination | null => {
+    if (!targeting || !setPointerRay(event)) return null;
+
     const groundHit = raycaster.intersectObjects(commandSurfaces, false)[0];
     if (groundHit) {
-      const point = groundHit.point;
-      let nearestTower: GameEntity | null = null;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-
-      for (const destination of destinations) {
-        if (destination.kind !== 'tower') continue;
-        destination.root.getWorldPosition(towerWorld);
-        const distance = Math.hypot(point.x - towerWorld.x, point.z - towerWorld.z);
-        if (distance > towerTeleportRange(destination) || distance >= nearestDistance) continue;
-        nearestTower = destination;
-        nearestDistance = distance;
-      }
-
-      if (nearestTower) {
+      const nearby = findNearestTowerForPoint(targeting.actor, groundHit.point, 0);
+      if (nearby && nearby.distance <= towerTeleportRange(nearby.tower)) {
         return {
-          target: nearestTower,
-          destinationWorld: point.clone(),
+          target: nearby.tower,
+          destinationWorld: groundHit.point.clone(),
         };
       }
     }
 
-    // Buildings that are explicit teleport destinations (base/throne/outpost-type entities)
-    // keep their authored structure targeting behavior.
+    const destinations = registry.values().filter(entity => isValidTeleportDestination(targeting!.actor, entity));
     const hits = raycaster.intersectObjects(destinations.map(entity => entity.root), true);
     for (const hit of hits) {
       const entity = getGameEntity(hit.object);
@@ -543,6 +690,62 @@ export function ensureTeleportScrollSystem(
       }
     }
     return null;
+  };
+
+  const updateTargetPreviewFromPointer = (event: PointerEvent) => {
+    if (!targeting || !setPointerRay(event)) {
+      hideTargetPreview();
+      return;
+    }
+
+    const preview = ensurePreviewVisuals(targeting.actor.team);
+    const groundHit = raycaster.intersectObjects(commandSurfaces, false)[0];
+    if (groundHit) {
+      const nearby = findNearestTowerForPoint(
+        targeting.actor,
+        groundHit.point,
+        TOWER_PREVIEW_REVEAL_PADDING,
+      );
+      if (nearby) {
+        nearby.tower.root.getWorldPosition(towerWorld);
+        const range = towerTeleportRange(nearby.tower);
+        const towerGroundY = sampleSurfaceHeight(towerWorld.x, towerWorld.z, towerWorld.y) + 0.025;
+        preview.rangeRoot.position.set(towerWorld.x, towerGroundY, towerWorld.z);
+        preview.rangeRoot.scale.set(range, 1, range);
+        preview.rangeRoot.visible = true;
+
+        if (nearby.distance <= range) {
+          const landing = resolveDestinationPoint(targeting.actor, nearby.tower, groundHit.point);
+          preview.landingRoot.position.copy(landing).setY(landing.y + 0.025);
+          preview.landingRoot.visible = true;
+        } else {
+          preview.landingRoot.visible = false;
+        }
+        return;
+      }
+    }
+
+    preview.rangeRoot.visible = false;
+
+    const buildings = registry.values().filter(entity => (
+      entity.kind === 'building' && isValidTeleportDestination(targeting!.actor, entity)
+    ));
+    const hits = raycaster.intersectObjects(buildings.map(entity => entity.root), true);
+    for (const hit of hits) {
+      const entity = getGameEntity(hit.object);
+      if (!isValidTeleportDestination(targeting.actor, entity)) continue;
+      const landing = resolveDestinationPoint(targeting.actor, entity, null);
+      preview.landingRoot.position.copy(landing).setY(landing.y + 0.025);
+      preview.landingRoot.visible = true;
+      return;
+    }
+
+    preview.landingRoot.visible = false;
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!targeting) return;
+    updateTargetPreviewFromPointer(event);
   };
 
   const onPointerDown = (event: PointerEvent) => {
@@ -559,12 +762,22 @@ export function ensureTeleportScrollSystem(
       return;
     }
 
+    if (targeting && event.button === 2 && isGameSurface(event.target)) {
+      clearTargeting();
+      return;
+    }
+
     if (channel && event.button === 2 && isGameSurface(event.target)) {
       cancelChannel('player-command');
     }
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (targeting && !event.repeat && !isTypingTarget(event.target) && event.code === 'Escape') {
+      clearTargeting();
+      return;
+    }
+
     if (!channel || event.repeat || isTypingTarget(event.target)) return;
     if (
       event.code === 'KeyA'
@@ -604,11 +817,33 @@ export function ensureTeleportScrollSystem(
     }
   };
 
+  const updateTargetPreviewAnimation = (nowMs: number) => {
+    if (!targeting || !previewVisuals) return;
+    const pulse = (Math.sin(nowMs * 0.009) + 1) * 0.5;
+    if (previewVisuals.rangeRoot.visible) {
+      const fill = previewVisuals.rangeRoot.userData.fillMaterial as THREE.MeshBasicMaterial | undefined;
+      const ring = previewVisuals.rangeRoot.userData.ringMaterial as THREE.MeshBasicMaterial | undefined;
+      if (fill) fill.opacity = 0.055 + pulse * 0.035;
+      if (ring) ring.opacity = 0.52 + pulse * 0.22;
+    }
+    if (previewVisuals.landingRoot.visible) {
+      const fill = previewVisuals.landingRoot.userData.fillMaterial as THREE.MeshBasicMaterial | undefined;
+      const outer = previewVisuals.landingRoot.userData.outerMaterial as THREE.MeshBasicMaterial | undefined;
+      if (fill) fill.opacity = 0.16 + pulse * 0.14;
+      if (outer) outer.opacity = 0.68 + pulse * 0.28;
+      previewVisuals.landingRoot.rotation.y = nowMs * 0.0016;
+      const scale = 0.96 + pulse * 0.08;
+      previewVisuals.landingRoot.scale.setScalar(scale);
+    }
+  };
+
   const update = (nowMs: number) => {
     cleanupTraffic(nowMs);
     for (const [instanceId, pending] of pendingCasts) {
       if (nowMs - pending.requestedAtMs > PENDING_CAST_LIFETIME_MS) pendingCasts.delete(instanceId);
     }
+
+    updateTargetPreviewAnimation(nowMs);
 
     const active = channel;
     if (!active) return;
@@ -626,8 +861,6 @@ export function ensureTeleportScrollSystem(
       return;
     }
 
-    // Keep the world representation exactly at the channel origin. The shared respawn-hold
-    // flag also makes the local command controller clear its pre-existing route/order once.
     active.actor.root.getWorldPosition(actorWorld);
     if (actorWorld.distanceToSquared(active.anchorWorld) > 0.0001) {
       setActorWorldPosition(active.actor, active.anchorWorld, nowMs);
@@ -638,6 +871,7 @@ export function ensureTeleportScrollSystem(
 
   window.addEventListener(TELEPORT_TARGET_REQUEST_EVENT, onTargetRequest as EventListener);
   window.addEventListener(ITEM_USE_EVENT, onItemUse as EventListener);
+  window.addEventListener('pointermove', onPointerMove, true);
   window.addEventListener('pointerdown', onPointerDown, true);
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('click', onClick, true);
@@ -663,11 +897,14 @@ export function ensureTeleportScrollSystem(
     if (disposed) return;
     disposed = true;
     clearTargeting();
+    setTargetingCursor(false);
+    disposeTargetPreview();
     if (channel) cancelChannel('replaced');
     pendingCasts.clear();
     trafficByTarget.clear();
     window.removeEventListener(TELEPORT_TARGET_REQUEST_EVENT, onTargetRequest as EventListener);
     window.removeEventListener(ITEM_USE_EVENT, onItemUse as EventListener);
+    window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('click', onClick, true);
