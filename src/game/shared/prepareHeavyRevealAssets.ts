@@ -6,6 +6,11 @@ const REVEAL_WARMUP_TARGET_SIZE = 64;
  * Uploads and compiles heavyweight fog-hidden assets on the main WebGL context while the
  * loading splash is still active. This is deliberately explicit and one-shot: no renderer
  * prototype patches, no repeated hidden renders, and no second-context warmup.
+ *
+ * Important: do not use compileAsync here. Some browser/driver combinations can leave the
+ * parallel shader compilation promise pending indefinitely, which would keep the boot splash
+ * on screen forever. The synchronous compile + real offscreen draw below has a bounded call
+ * path and moves its cost into loading without making readiness depend on a driver promise.
  */
 export async function prepareHeavyRevealAssets(
   renderer: THREE.WebGLRenderer,
@@ -47,18 +52,22 @@ export async function prepareHeavyRevealAssets(
     sunlight.target.updateMatrixWorld(true);
     sunlight.updateMatrixWorld(true);
 
-    // compileAsync waits for KHR_parallel_shader_compile when the browser/driver exposes it.
-    // The following real offscreen draw then creates/uploads every geometry buffer and the
-    // shadow variants using the same renderer/context that gameplay will use.
-    await renderer.compileAsync(scene, warmCamera);
     renderer.autoClear = true;
     renderer.setRenderTarget(target);
+
+    // Compile using the actual gameplay scene/context, then issue one real draw. This covers
+    // shader programs, geometry buffers, textures and shadow variants without depending on
+    // KHR_parallel_shader_compile ever resolving.
+    renderer.compile(scene, warmCamera);
     renderer.render(scene, warmCamera);
 
-    // WebGL command submission can otherwise remain queued until the first on-screen use.
-    // Finishing here intentionally moves that synchronization cost into the loading phase.
-    renderer.getContext().finish();
+    // Reading one pixel is an explicit, finite synchronization point for this render target.
+    // It ensures the warmup draw has really reached the GPU before gameplay starts without
+    // relying on gl.finish(), which can stall much more aggressively on some drivers.
+    const probe = new Uint8Array(4);
+    renderer.readRenderTargetPixels(target, 0, 0, 1, 1, probe);
   } catch (error) {
+    // Warmup is optional. Failure must never prevent the match from becoming playable.
     console.warn('[Dawnreach] Heavy reveal asset preparation skipped:', error);
   } finally {
     renderer.setRenderTarget(previousRenderTarget);
