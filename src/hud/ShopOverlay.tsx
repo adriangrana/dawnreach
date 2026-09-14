@@ -42,7 +42,7 @@ function EffectBlock({ label, effect }: {
   effect: ItemDefinition['passive_effect'] | ItemDefinition['active_effect'];
 }) {
   if (!effect) return null;
-  const active = 'cooldown' in effect;
+  const activeEffect = 'cooldown' in effect ? effect : null;
   return (
     <div className="shop-effect-block">
       <div className="shop-effect-title">
@@ -50,10 +50,10 @@ function EffectBlock({ label, effect }: {
         <strong>{effect.name}</strong>
       </div>
       <p>{effect.description}</p>
-      {active && (
+      {activeEffect && (
         <div className="shop-effect-meta">
-          <span>CD {effect.cooldown}s</span>
-          <span>{effect.mana_cost > 0 ? `${effect.mana_cost} maná` : 'Sin coste de maná'}</span>
+          <span>CD {activeEffect.cooldown}s</span>
+          <span>{activeEffect.mana_cost > 0 ? `${activeEffect.mana_cost} maná` : 'Sin coste de maná'}</span>
         </div>
       )}
     </div>
