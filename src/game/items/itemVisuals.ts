@@ -73,6 +73,7 @@ const ITEM_VISUALS: Record<string, ItemVisualSpec> = {
   item_056:{motif:'immortal',primary:'#4f5754',secondary:'#d3b672',glow:'#6dd3db',seed:56},
   item_057:{motif:'rift',primary:'#343b55',secondary:'#bda86b',glow:'#756dff',seed:57},
   item_058:{motif:'heart',primary:'#524a61',secondary:'#dfbd70',glow:'#7adcf0',seed:58},
+  item_059:{motif:'eye',primary:'#4056a0',secondary:'#d7ddff',glow:'#7d8cff',seed:59},
 };
 
 const FALLBACK: ItemVisualSpec = { motif: 'relic', primary: '#46545a', secondary: '#c6a766', glow: '#78c7d9', seed: 0 };
