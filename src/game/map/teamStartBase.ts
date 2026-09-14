@@ -36,6 +36,7 @@ type StartBaseMaterials = {
   cloth: THREE.MeshStandardMaterial;
   foliage: THREE.MeshStandardMaterial;
   trunk: THREE.MeshStandardMaterial;
+  soil: THREE.MeshStandardMaterial;
 };
 
 const SYSTEM_KEY = 'dawnreachTeamStartBaseGameplay';
@@ -43,6 +44,8 @@ const DAMAGE_ASSOCIATION_MS = 260;
 const REGEN_LOCK_MS = 3_000;
 const DEFENSE_TICK_SECONDS = 0.10;
 const INSIDE_MARGIN = 0.34;
+const TRIANGLE_BUDGET = 18_000;
+const FOUNTAIN_BEAM_ORIGIN_Y = 2.02;
 const TEMP_A = new THREE.Vector3();
 const TEMP_B = new THREE.Vector3();
 
@@ -72,11 +75,17 @@ function buildTeamStartBase(team: CombatTeam) {
   const rampAngle = Math.atan2(basis.inwardZ, basis.inwardX);
   const rampHalfAngle = Math.asin(Math.min(
     0.98,
-    (TEAM_START_BASE_LAYOUT.rampWidth * 0.5 + 0.24) / (TEAM_START_BASE_LAYOUT.radius - 0.15),
+    (TEAM_START_BASE_LAYOUT.rampWidth * 0.5 + 0.30) / (TEAM_START_BASE_LAYOUT.radius - 0.12),
   ));
+  const fountainOffset = basisOffset(
+    basis,
+    TEAM_START_BASE_LAYOUT.fountainForward,
+    TEAM_START_BASE_LAYOUT.fountainSide,
+  );
+  const waterY = TEAM_START_BASE_LAYOUT.elevation + 0.018 + TEAM_START_BASE_LAYOUT.waterDepth;
 
   const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(TEAM_START_BASE_LAYOUT.radius - 0.24, 64),
+    new THREE.CircleGeometry(TEAM_START_BASE_LAYOUT.radius - 0.22, 64),
     materials.stone,
   );
   floor.name = `${team}-team-start-platform`;
@@ -86,29 +95,28 @@ function buildTeamStartBase(team: CombatTeam) {
   floor.receiveShadow = true;
   root.add(floor);
 
-  addRuneFloor(root, materials);
+  addShopApron(root, materials, waterY);
+  addRuneFloor(root, materials, fountainOffset, waterY);
   addRetainingWall(root, materials, rampAngle, rampHalfAngle);
   addCliffVisionRing(root);
   addRamp(root, materials, rampAngle);
-  addLanterns(root, materials, basis);
-  addBanners(root, materials, basis);
-  addPines(root, materials, basis);
+  addSpillways(root, materials, rampAngle);
+  addLanterns(root, materials, basis, rampAngle);
+  const bannerCloths = addBanners(root, materials, basis);
+  addPlanters(root, materials, basis);
 
-  const waterGeometry = new THREE.CircleGeometry(TEAM_START_BASE_LAYOUT.radius - 0.36, 64);
+  const waterGeometry = new THREE.CircleGeometry(TEAM_START_BASE_LAYOUT.radius - 0.72, 64);
   waterGeometry.rotateX(-Math.PI / 2);
   const water = new THREE.Mesh(waterGeometry, materials.water);
   water.name = `${team}-team-start-healing-water`;
-  // Floor plane is at elevation + 0.018, so this leaves exactly 10 cm of visible water.
-  water.position.y = TEAM_START_BASE_LAYOUT.elevation + 0.018 + TEAM_START_BASE_LAYOUT.waterDepth;
-  water.userData.waterSurface = true;
+  water.position.y = waterY;
+  // Keep the healing pool out of createDawnreachGame's river-only geometry deformation.
+  // waterEffects.ts consumes this dedicated semantic flag for footsteps/ripples instead.
+  water.userData.waterSurfaceType = 'healing-pool';
+  water.userData.waterEffectsSurface = true;
   water.userData.teamHealingWater = true;
-  water.renderOrder = 5;
+  water.renderOrder = 2;
   water.receiveShadow = true;
-  water.userData.animate = (elapsed: number) => {
-    const bump = materials.water.bumpMap;
-    if (!bump) return;
-    bump.offset.set(elapsed * 0.010, elapsed * 0.014);
-  };
   root.add(water);
 
   // The authored octagonal shop stays untouched. This proxy only gives its existing footprint
@@ -119,11 +127,6 @@ function buildTeamStartBase(team: CombatTeam) {
   shopProxy.userData.structureKind = 'shop-proxy';
   root.add(shopProxy);
 
-  const fountainOffset = basisOffset(
-    basis,
-    TEAM_START_BASE_LAYOUT.fountainForward,
-    TEAM_START_BASE_LAYOUT.fountainSide,
-  );
   const fountain = buildFountain(team, materials);
   fountain.position.set(fountainOffset.x, TEAM_START_BASE_LAYOUT.elevation, fountainOffset.z);
   root.add(fountain);
@@ -134,24 +137,50 @@ function buildTeamStartBase(team: CombatTeam) {
   spawn.name = team === 'blue' ? 'TeamSpawnPoint' : `${team}-TeamSpawnPoint`;
   spawn.position.set(
     spawnWorld.x - center.x,
-    TEAM_START_BASE_LAYOUT.elevation + 0.018 + TEAM_START_BASE_LAYOUT.waterDepth + 0.03,
+    waterY + 0.03,
     spawnWorld.z - center.z,
   );
   spawn.userData.teamSpawnPoint = true;
   spawn.userData.team = team;
   root.add(spawn);
 
+  const animateFountain = fountain.userData.updateFountain as ((elapsed: number) => void) | undefined;
+  const bannerBasePositions = bannerCloths.map(cloth => (
+    cloth.geometry.getAttribute('position') as THREE.BufferAttribute
+  ).clone());
+  root.userData.animate = (elapsed: number) => {
+    const bump = materials.water.bumpMap;
+    if (bump) bump.offset.set(elapsed * 0.006, elapsed * 0.009);
+    materials.water.opacity = 0.145 + Math.sin(elapsed * 0.72) * 0.012;
+    animateFountain?.(elapsed);
+    bannerCloths.forEach((cloth, clothIndex) => {
+      const positions = cloth.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const base = bannerBasePositions[clothIndex];
+      for (let vertex = 0; vertex < positions.count; vertex++) {
+        const x = base.getX(vertex);
+        const y = base.getY(vertex);
+        const wave = Math.sin(elapsed * 1.35 + y * 2.2 + x * 1.5 + clothIndex) * 0.035
+          + Math.sin(elapsed * 0.72 + y * 4.1) * 0.012;
+        positions.setXYZ(vertex, x, y, base.getZ(vertex) + wave);
+      }
+      positions.needsUpdate = true;
+      cloth.geometry.computeVertexNormals();
+    });
+  };
+
   const triangles = estimateTriangles(root);
   root.userData.triangleCountEstimate = triangles;
-  root.userData.triangleBudget = 18_000;
-  if (triangles > 18_000) console.warn(`[Dawnreach] Team start base triangle budget exceeded: ${triangles}`);
+  root.userData.triangleBudget = TRIANGLE_BUDGET;
+  if (triangles > TRIANGLE_BUDGET) {
+    console.warn(`[Dawnreach] Team start base triangle budget exceeded: ${triangles}/${TRIANGLE_BUDGET}`);
+  }
   return root;
 }
 
 function createMaterials(team: CombatTeam): StartBaseMaterials {
   const blue = team === 'blue';
   const stoneTexture = makeCanvasTexture(2048, (ctx, size) => {
-    ctx.fillStyle = '#9b967f';
+    ctx.fillStyle = '#8f8a78';
     ctx.fillRect(0, 0, size, size);
     const cell = size / 16;
     for (let row = 0; row < 16; row++) {
@@ -159,82 +188,110 @@ function createMaterials(team: CombatTeam): StartBaseMaterials {
       for (let col = -1; col < 17; col++) {
         const px = col * cell + offset;
         const py = row * cell;
-        const shade = 132 + ((col * 17 + row * 31 + 128) % 28);
-        ctx.fillStyle = `rgb(${shade + 18},${shade + 15},${shade + 2})`;
-        ctx.fillRect(px + 4, py + 4, cell - 8, cell - 8);
-        ctx.strokeStyle = 'rgba(50,54,48,0.30)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(px + 4, py + 4, cell - 8, cell - 8);
+        const shade = 126 + ((col * 17 + row * 31 + 128) % 34);
+        ctx.fillStyle = `rgb(${shade + 20},${shade + 17},${shade + 5})`;
+        ctx.fillRect(px + 5, py + 5, cell - 10, cell - 10);
+        ctx.strokeStyle = 'rgba(45,49,45,0.38)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(px + 5, py + 5, cell - 10, cell - 10);
       }
     }
-    for (let i = 0; i < 1400; i++) {
+    for (let i = 0; i < 1200; i++) {
       const x = pseudo(i * 37 + 7) * size;
       const y = pseudo(i * 83 + 13) * size;
-      const alpha = 0.03 + pseudo(i * 19 + 3) * 0.08;
-      ctx.fillStyle = i % 2 ? `rgba(30,34,30,${alpha})` : `rgba(238,226,191,${alpha})`;
+      const alpha = 0.025 + pseudo(i * 19 + 3) * 0.07;
+      ctx.fillStyle = i % 2 ? `rgba(27,31,29,${alpha})` : `rgba(239,229,198,${alpha})`;
       ctx.fillRect(x, y, 2 + pseudo(i * 11) * 5, 2 + pseudo(i * 29) * 5);
     }
   }, 5.4, 5.4);
 
-  const waterBump = makeCanvasTexture(2048, (ctx, size) => {
+  const waterBump = makeCanvasTexture(1024, (ctx, size) => {
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, size, size);
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 96; i++) {
-      const baseY = i / 96 * size;
-      ctx.strokeStyle = `rgba(225,225,225,${0.07 + (i % 5) * 0.012})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 54; i++) {
+      const baseY = i / 54 * size;
+      ctx.strokeStyle = `rgba(218,218,218,${0.045 + (i % 4) * 0.009})`;
       ctx.beginPath();
-      for (let x = 0; x <= size; x += 24) {
-        const wave = Math.sin(x * 0.019 + i * 0.72) * (7 + (i % 8));
+      for (let x = 0; x <= size; x += 20) {
+        const wave = Math.sin(x * 0.023 + i * 0.66) * (4 + (i % 6));
         if (x === 0) ctx.moveTo(x, baseY + wave);
         else ctx.lineTo(x, baseY + wave);
       }
       ctx.stroke();
     }
-  }, 2.2, 2.2);
+  }, 2.4, 2.4);
   waterBump.colorSpace = THREE.NoColorSpace;
 
   return {
     stone: new THREE.MeshStandardMaterial({ map: stoneTexture, bumpMap: stoneTexture, bumpScale: 0.055,
-      color: 0xb9b193, roughness: 0.94, metalness: 0.015 }),
-    stoneLight: new THREE.MeshStandardMaterial({ map: stoneTexture, bumpMap: stoneTexture, bumpScale: 0.035,
-      color: 0xd0c6a4, roughness: 0.90, metalness: 0.02 }),
-    stoneDark: new THREE.MeshStandardMaterial({ map: stoneTexture, bumpMap: stoneTexture, bumpScale: 0.065,
-      color: 0x666b64, roughness: 0.97, metalness: 0.015 }),
-    gold: new THREE.MeshStandardMaterial({ color: 0xc7a85d, roughness: 0.34, metalness: 0.68 }),
-    team: new THREE.MeshStandardMaterial({ color: blue ? 0x2d719d : 0x963f3d, roughness: 0.56, metalness: 0.34 }),
-    glow: new THREE.MeshStandardMaterial({ color: blue ? 0x70d7ff : 0xff7369,
-      emissive: blue ? 0x0d80bd : 0xb4231c, emissiveIntensity: 1.45, roughness: 0.34, metalness: 0.15 }),
-    crystal: new THREE.MeshPhysicalMaterial({ color: blue ? 0x60d8ff : 0xff675b,
-      emissive: blue ? 0x087dc2 : 0xc32b20, emissiveIntensity: 1.6, roughness: 0.10,
-      metalness: 0.04, clearcoat: 1, clearcoatRoughness: 0.06, transparent: true, opacity: 0.96 }),
-    water: new THREE.MeshPhysicalMaterial({ color: blue ? 0x72d8ea : 0xde7b73, roughness: 0.16,
-      metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, ior: 1.333,
-      bumpMap: waterBump, bumpScale: 0.035, transparent: true, opacity: 0.38, depthWrite: false }),
-    waterJet: new THREE.MeshBasicMaterial({ color: blue ? 0xbef6ff : 0xffd0c8,
-      transparent: true, opacity: 0.64, depthWrite: false, toneMapped: false }),
-    cloth: new THREE.MeshStandardMaterial({ color: blue ? 0x245e92 : 0x913b3b,
-      roughness: 0.92, metalness: 0.01, side: THREE.DoubleSide }),
-    foliage: new THREE.MeshStandardMaterial({ color: 0x294a31, roughness: 0.98 }),
-    trunk: new THREE.MeshStandardMaterial({ color: 0x6a5540, roughness: 1 }),
+      color: 0xb7ae92, roughness: 0.94, metalness: 0.015 }),
+    stoneLight: new THREE.MeshStandardMaterial({ map: stoneTexture, bumpMap: stoneTexture, bumpScale: 0.038,
+      color: 0xd1c6a7, roughness: 0.91, metalness: 0.02 }),
+    stoneDark: new THREE.MeshStandardMaterial({ map: stoneTexture, bumpMap: stoneTexture, bumpScale: 0.07,
+      color: 0x626760, roughness: 0.98, metalness: 0.012 }),
+    gold: new THREE.MeshStandardMaterial({ color: 0xc6a45a, roughness: 0.38, metalness: 0.66 }),
+    team: new THREE.MeshStandardMaterial({ color: blue ? 0x285f88 : 0x8d3d3b, roughness: 0.58, metalness: 0.32 }),
+    glow: new THREE.MeshStandardMaterial({ color: blue ? 0x78d4f2 : 0xf17c72,
+      emissive: blue ? 0x0a6f9e : 0x98251f, emissiveIntensity: 0.82, roughness: 0.38, metalness: 0.12 }),
+    crystal: new THREE.MeshPhysicalMaterial({ color: blue ? 0x70dcff : 0xff7065,
+      emissive: blue ? 0x087bb7 : 0xb52b22, emissiveIntensity: 1.85, roughness: 0.08,
+      metalness: 0.03, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.95 }),
+    water: new THREE.MeshPhysicalMaterial({ color: blue ? 0xa6dce1 : 0xe0aaa5, roughness: 0.26,
+      metalness: 0, clearcoat: 0.82, clearcoatRoughness: 0.12, ior: 1.333,
+      bumpMap: waterBump, bumpScale: 0.014, transparent: true, opacity: 0.145, depthWrite: false }),
+    waterJet: new THREE.MeshBasicMaterial({ color: blue ? 0xcdf8ff : 0xffd5cf,
+      transparent: true, opacity: 0.58, depthWrite: false, toneMapped: false }),
+    cloth: new THREE.MeshStandardMaterial({ color: blue ? 0x173f6c : 0x703035,
+      roughness: 0.9, metalness: 0.02, side: THREE.DoubleSide }),
+    foliage: new THREE.MeshStandardMaterial({ color: 0x29452f, roughness: 0.98 }),
+    trunk: new THREE.MeshStandardMaterial({ color: 0x66523e, roughness: 1 }),
+    soil: new THREE.MeshStandardMaterial({ color: 0x333326, roughness: 1 }),
   };
 }
 
-function addRuneFloor(root: THREE.Group, materials: StartBaseMaterials) {
+function addShopApron(root: THREE.Group, materials: StartBaseMaterials, waterY: number) {
+  const apron = new THREE.Mesh(new THREE.CircleGeometry(2.05, 40), materials.stoneLight);
+  apron.name = 'team-start-shop-apron';
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.y = waterY + 0.012;
+  apron.receiveShadow = true;
+  apron.userData.commandSurface = true;
+  root.add(apron);
+
+  const trim = new THREE.Mesh(new THREE.RingGeometry(1.91, 2.05, 40), materials.gold);
+  trim.rotation.x = -Math.PI / 2;
+  trim.position.y = waterY + 0.019;
+  trim.scale.y = 0.94;
+  root.add(trim);
+}
+
+function addRuneFloor(
+  root: THREE.Group,
+  materials: StartBaseMaterials,
+  fountainOffset: Readonly<{ x: number; z: number }>,
+  waterY: number,
+) {
   const glow = materials.glow.clone();
   glow.transparent = true;
-  glow.opacity = 0.78;
-  for (const radius of [2.15, 4.2, 5.8]) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.035, radius + 0.035, 64), glow);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = TEAM_START_BASE_LAYOUT.elevation + 0.055;
-    ring.renderOrder = 3;
-    root.add(ring);
+  glow.opacity = 0.42;
+
+  for (const [start, length] of [[0.18, 1.12], [Math.PI + 0.22, 0.92]] as const) {
+    const arc = new THREE.Mesh(new THREE.RingGeometry(1.62, 1.68, 32, 1, start, length), glow);
+    arc.rotation.x = -Math.PI / 2;
+    arc.position.set(fountainOffset.x, waterY + 0.022, fountainOffset.z);
+    arc.renderOrder = 3;
+    root.add(arc);
   }
-  for (let index = 0; index < 12; index++) {
-    const angle = index / 12 * Math.PI * 2;
-    const rune = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.012, 0.72), glow);
-    rune.position.set(Math.cos(angle) * 5.1, TEAM_START_BASE_LAYOUT.elevation + 0.06, Math.sin(angle) * 5.1);
+
+  for (let index = 0; index < 8; index++) {
+    const angle = index / 8 * Math.PI * 2 + 0.18;
+    const rune = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.018, 0.38), glow);
+    rune.position.set(
+      fountainOffset.x + Math.cos(angle) * 1.94,
+      waterY + 0.026,
+      fountainOffset.z + Math.sin(angle) * 1.94,
+    );
     rune.rotation.y = Math.PI / 2 - angle;
     rune.renderOrder = 3;
     root.add(rune);
@@ -242,28 +299,53 @@ function addRuneFloor(root: THREE.Group, materials: StartBaseMaterials) {
 }
 
 function addRetainingWall(root: THREE.Group, materials: StartBaseMaterials, rampAngle: number, rampHalfAngle: number) {
-  const segments = 48;
-  const radius = TEAM_START_BASE_LAYOUT.radius - 0.06;
+  const segments = 40;
+  const radius = TEAM_START_BASE_LAYOUT.radius - 0.04;
   const step = Math.PI * 2 / segments;
-  const width = 2 * radius * Math.sin(step / 2) * 1.05;
+  const baseWidth = 2 * radius * Math.sin(step / 2) * 1.08;
+  const courseHeight = (TEAM_START_BASE_LAYOUT.elevation - 0.10) / 3;
+
   for (let index = 0; index < segments; index++) {
     const angle = (index + 0.5) * step;
     if (angularDistance(angle, rampAngle) < rampHalfAngle) continue;
     const edge = new THREE.Group();
     edge.name = 'base-ramp-architectural-edge';
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(width, TEAM_START_BASE_LAYOUT.elevation, 0.56),
-      index % 3 === 0 ? materials.stoneDark : materials.stone);
-    wall.position.set(Math.cos(angle) * radius, TEAM_START_BASE_LAYOUT.elevation / 2, Math.sin(angle) * radius);
-    wall.rotation.y = Math.PI / 2 - angle;
-    wall.castShadow = true;
-    wall.receiveShadow = true;
-    edge.add(wall);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(width, 0.15, 0.70), materials.stoneLight);
-    cap.position.set(Math.cos(angle) * radius, TEAM_START_BASE_LAYOUT.elevation + 0.075, Math.sin(angle) * radius);
+
+    for (let course = 0; course < 3; course++) {
+      const radialJitter = (pseudo(index * 17 + course * 23) - 0.5) * 0.075;
+      const tangentialJitter = (pseudo(index * 41 + course * 11) - 0.5) * 0.08;
+      const width = baseWidth * (0.97 + pseudo(index * 29 + course * 7) * 0.055);
+      const material = (index + course) % 5 === 0
+        ? materials.stoneDark
+        : course === 2 && index % 4 === 1
+          ? materials.stoneLight
+          : materials.stone;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(width, courseHeight - 0.025, 0.64), material);
+      const r = radius + radialJitter;
+      wall.position.set(
+        Math.cos(angle) * r - Math.sin(angle) * tangentialJitter,
+        0.05 + courseHeight * (course + 0.5),
+        Math.sin(angle) * r + Math.cos(angle) * tangentialJitter,
+      );
+      wall.rotation.y = Math.PI / 2 - angle;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      edge.add(wall);
+    }
+
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(baseWidth * 1.03, 0.18, 0.78), materials.stoneLight);
+    cap.position.set(Math.cos(angle) * radius, TEAM_START_BASE_LAYOUT.elevation + 0.09, Math.sin(angle) * radius);
     cap.rotation.y = Math.PI / 2 - angle;
     cap.castShadow = true;
     cap.receiveShadow = true;
     edge.add(cap);
+
+    if (index % 8 === 2) {
+      const clasp = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.48, 0.055), materials.gold);
+      clasp.position.set(Math.cos(angle) * (radius + 0.34), 1.93, Math.sin(angle) * (radius + 0.34));
+      clasp.rotation.y = Math.PI / 2 - angle;
+      edge.add(clasp);
+    }
     root.add(edge);
   }
 }
@@ -274,7 +356,7 @@ function addCliffVisionRing(root: THREE.Group) {
   const radius = TEAM_START_BASE_LAYOUT.radius - 0.18;
   const step = Math.PI * 2 / segments;
   const width = 2 * radius * Math.sin(step / 2) * 1.22;
-  const height = 5.15;
+  const height = TEAM_START_BASE_LAYOUT.elevation + 1.42;
   for (let index = 0; index < segments; index++) {
     const angle = (index + 0.5) * step;
     const blocker = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.52), material);
@@ -289,9 +371,9 @@ function addCliffVisionRing(root: THREE.Group) {
 
 function addRamp(root: THREE.Group, materials: StartBaseMaterials, angle: number) {
   const halfWidth = TEAM_START_BASE_LAYOUT.rampWidth / 2;
-  const innerRadius = TEAM_START_BASE_LAYOUT.radius - 0.72;
+  const innerRadius = TEAM_START_BASE_LAYOUT.radius - 0.76;
   const outerRadius = TEAM_START_BASE_LAYOUT.radius + TEAM_START_BASE_LAYOUT.rampLength;
-  const highY = TEAM_START_BASE_LAYOUT.elevation + 0.034;
+  const highY = TEAM_START_BASE_LAYOUT.elevation + 0.038;
   const lowY = 0.045;
 
   const ramp = new THREE.Mesh(quadGeometry(angle, innerRadius, outerRadius, halfWidth, highY, lowY), materials.stoneDark);
@@ -301,16 +383,21 @@ function addRamp(root: THREE.Group, materials: StartBaseMaterials, angle: number
   ramp.receiveShadow = true;
   root.add(ramp);
 
-  const segmentLength = (outerRadius - innerRadius) / 7;
-  for (let index = 0; index < 7; index++) {
+  const segmentCount = 8;
+  const segmentLength = (outerRadius - innerRadius) / segmentCount;
+  for (let index = 0; index < segmentCount; index++) {
     const r0 = innerRadius + index * segmentLength + 0.035;
     const r1 = innerRadius + (index + 1) * segmentLength - 0.035;
     const t0 = (r0 - innerRadius) / (outerRadius - innerRadius);
     const t1 = (r1 - innerRadius) / (outerRadius - innerRadius);
-    const y0 = THREE.MathUtils.lerp(highY + 0.012, lowY + 0.012, t0);
-    const y1 = THREE.MathUtils.lerp(highY + 0.012, lowY + 0.012, t1);
-    const slab = new THREE.Mesh(quadGeometry(angle, r0, r1, halfWidth - 0.24, y0, y1),
-      index % 3 === 1 ? materials.stone : materials.stoneLight);
+    const y0 = THREE.MathUtils.lerp(highY + 0.014, lowY + 0.014, t0);
+    const y1 = THREE.MathUtils.lerp(highY + 0.014, lowY + 0.014, t1);
+    const slabMaterial = index % 4 === 1
+      ? materials.stone
+      : index % 4 === 3
+        ? materials.stoneDark
+        : materials.stoneLight;
+    const slab = new THREE.Mesh(quadGeometry(angle, r0, r1, halfWidth - 0.22, y0, y1), slabMaterial);
     slab.receiveShadow = true;
     root.add(slab);
   }
@@ -320,25 +407,41 @@ function addRamp(root: THREE.Group, materials: StartBaseMaterials, angle: number
   for (const side of [-1, 1]) {
     const edge = new THREE.Group();
     edge.name = 'base-ramp-architectural-edge';
-    const lateral = side * (halfWidth + 0.26);
+    const lateral = side * (halfWidth + 0.30);
     const start = radial.clone().multiplyScalar(innerRadius).addScaledVector(tangent, lateral);
     const end = radial.clone().multiplyScalar(outerRadius).addScaledVector(tangent, lateral);
-    start.y = highY + 0.16;
-    end.y = lowY + 0.16;
-    edge.add(slopeBeam(start, end, 0.32, 0.34, materials.stoneDark));
+    start.y = highY + 0.30;
+    end.y = lowY + 0.30;
+    edge.add(slopeBeam(start, end, 0.54, 0.40, materials.stoneDark));
     const trimStart = start.clone();
     const trimEnd = end.clone();
-    trimStart.y += 0.21;
-    trimEnd.y += 0.21;
-    edge.add(slopeBeam(trimStart, trimEnd, 0.07, 0.18, materials.gold));
+    trimStart.y += 0.31;
+    trimEnd.y += 0.31;
+    edge.add(slopeBeam(trimStart, trimEnd, 0.08, 0.20, materials.gold));
     root.add(edge);
   }
+}
 
-  const centerStart = radial.clone().multiplyScalar(innerRadius + 0.16);
-  const centerEnd = radial.clone().multiplyScalar(outerRadius - 0.16);
-  centerStart.y = highY + 0.035;
-  centerEnd.y = lowY + 0.035;
-  root.add(slopeBeam(centerStart, centerEnd, 0.025, 0.14, materials.glow));
+function addSpillways(root: THREE.Group, materials: StartBaseMaterials, rampAngle: number) {
+  for (const offset of [-1.06, 1.14]) {
+    const angle = rampAngle + offset;
+    const radius = TEAM_START_BASE_LAYOUT.radius + 0.34;
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 1.72), materials.waterJet);
+    fall.name = 'team-start-spillway';
+    fall.position.set(Math.cos(angle) * radius, 1.30, Math.sin(angle) * radius);
+    fall.rotation.y = Math.PI / 2 - angle;
+    fall.renderOrder = 4;
+    root.add(fall);
+
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.44), materials.stoneDark);
+    lip.position.set(
+      Math.cos(angle) * (TEAM_START_BASE_LAYOUT.radius - 0.02),
+      TEAM_START_BASE_LAYOUT.elevation + 0.01,
+      Math.sin(angle) * (TEAM_START_BASE_LAYOUT.radius - 0.02),
+    );
+    lip.rotation.y = Math.PI / 2 - angle;
+    root.add(lip);
+  }
 }
 
 function slopeBeam(start: THREE.Vector3, end: THREE.Vector3, height: number, depth: number, material: THREE.Material) {
@@ -379,138 +482,201 @@ function quadGeometry(angle: number, innerRadius: number, outerRadius: number, h
   return geometry;
 }
 
-function addLanterns(root: THREE.Group, materials: StartBaseMaterials, basis: Basis) {
-  const forward = TEAM_START_BASE_LAYOUT.radius - 0.95;
-  const sideDistance = TEAM_START_BASE_LAYOUT.rampWidth / 2 + 0.62;
+function rampHeightAtRadius(radius: number) {
+  const innerRadius = TEAM_START_BASE_LAYOUT.radius - 0.76;
+  const outerRadius = TEAM_START_BASE_LAYOUT.radius + TEAM_START_BASE_LAYOUT.rampLength;
+  const t = THREE.MathUtils.clamp((radius - innerRadius) / (outerRadius - innerRadius), 0, 1);
+  return THREE.MathUtils.lerp(TEAM_START_BASE_LAYOUT.elevation + 0.038, 0.045, t);
+}
+
+function addLanterns(root: THREE.Group, materials: StartBaseMaterials, basis: Basis, rampAngle: number) {
+  const forward = TEAM_START_BASE_LAYOUT.radius + 0.30;
+  const sideDistance = TEAM_START_BASE_LAYOUT.rampWidth / 2 + 0.66;
+  const baseY = rampHeightAtRadius(forward);
   for (const side of [-1, 1]) {
     const position = basisOffset(basis, forward, side * sideDistance);
     const lantern = new THREE.Group();
     lantern.name = 'team-start-lantern';
-    lantern.position.set(position.x, TEAM_START_BASE_LAYOUT.elevation, position.z);
-    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.52, 0.28, 8), materials.stoneDark);
-    foot.position.y = 0.14;
+    lantern.position.set(position.x, baseY, position.z);
+    lantern.rotation.y = -rampAngle;
+    lantern.userData.collisionRadius = 0.38;
+    lantern.userData.structureKind = 'team-start-lantern';
+
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.50, 0.30, 8), materials.stoneDark);
+    foot.position.y = 0.15;
     lantern.add(foot);
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.28, 1.18, 6), materials.stoneLight);
-    post.position.y = 0.87;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.25, 1.12, 6), materials.stoneLight);
+    post.position.y = 0.86;
     post.castShadow = true;
     lantern.add(post);
-    const crown = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), materials.crystal);
-    crown.position.y = 1.62;
-    crown.scale.set(0.72, 1.25, 0.72);
+    const crown = new THREE.Mesh(new THREE.OctahedronGeometry(0.30, 0), materials.crystal);
+    crown.position.y = 1.56;
+    crown.scale.set(0.72, 1.30, 0.72);
     lantern.add(crown);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.055, 6, 18), materials.gold);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.055, 6, 18), materials.gold);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 1.40;
+    ring.position.y = 1.35;
     lantern.add(ring);
-    const light = new THREE.PointLight(0x62d9ff, 4.4, 5.2, 2);
-    light.position.y = 1.62;
+    const light = new THREE.PointLight(0x62d9ff, 3.2, 4.2, 2);
+    light.position.y = 1.56;
     lantern.add(light);
     root.add(lantern);
   }
 }
 
 function addBanners(root: THREE.Group, materials: StartBaseMaterials, basis: Basis) {
+  const cloths: THREE.Mesh<THREE.PlaneGeometry>[] = [];
   for (const side of [-1, 1]) {
-    const position = basisOffset(basis, -1.05, side * 5.75);
+    const position = basisOffset(basis, 0.05, side * 5.55);
     const banner = new THREE.Group();
     banner.name = 'team-start-banner';
-    banner.position.set(position.x, TEAM_START_BASE_LAYOUT.elevation + 0.12, position.z);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.1, 8), materials.gold);
-    pole.position.y = 1.55;
+    banner.position.set(position.x, TEAM_START_BASE_LAYOUT.elevation + 0.10, position.z);
+
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.09, 3.25, 8), materials.gold);
+    pole.position.y = 1.62;
     pole.castShadow = true;
     banner.add(pole);
-    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.10, 1.70, 5, 7), materials.cloth);
-    cloth.position.set(side * 0.60, 1.93, 0);
-    cloth.rotation.y = Math.PI / 2;
+
+    const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.70, 0.08, 0.08), materials.gold);
+    topBar.position.set(side * 0.77, 2.82, 0);
+    banner.add(topBar);
+
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.50, 1.95, 5, 7), materials.cloth);
+    cloth.position.set(side * 0.78, 1.84, 0.04);
+    cloth.rotation.y = side > 0 ? -0.08 : 0.08;
+    cloth.castShadow = true;
+    cloths.push(cloth);
     banner.add(cloth);
-    const crest = new THREE.Mesh(new THREE.CircleGeometry(0.18, 6), materials.gold);
-    crest.position.set(side * 0.60, 1.98, side > 0 ? 0.008 : -0.008);
-    crest.rotation.y = Math.PI / 2;
+
+    const bottomTrim = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.065, 0.065), materials.gold);
+    bottomTrim.position.set(side * 0.78, 0.87, 0.02);
+    banner.add(bottomTrim);
+
+    const crest = new THREE.Mesh(new THREE.CircleGeometry(0.22, 6), materials.gold);
+    crest.position.set(side * 0.78, 1.85, 0.065);
     banner.add(crest);
     root.add(banner);
   }
+  return cloths;
 }
 
-function addPines(root: THREE.Group, materials: StartBaseMaterials, basis: Basis) {
-  const sites = [[-3.6, -5.45, 0.72], [-4.7, 4.45, 0.86], [0.4, -6.05, 0.66], [1.0, 5.85, 0.70]] as const;
+function addPlanters(root: THREE.Group, materials: StartBaseMaterials, basis: Basis) {
+  const sites = [[-3.8, -5.55, 0.68], [-4.4, 4.65, 0.76], [1.2, 5.55, 0.62]] as const;
   for (const [forward, side, scale] of sites) {
     const position = basisOffset(basis, forward, side);
+    const planter = new THREE.Group();
+    planter.name = 'team-start-planter';
+    planter.position.set(position.x, TEAM_START_BASE_LAYOUT.elevation + 0.08, position.z);
+    planter.userData.collisionRadius = 0.62 * scale;
+    planter.userData.structureKind = 'team-start-planter';
+
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.84, 0.42, 10), materials.stoneDark);
+    bowl.position.y = 0.21;
+    bowl.scale.setScalar(scale);
+    bowl.castShadow = true;
+    planter.add(bowl);
+    const soil = new THREE.Mesh(new THREE.CircleGeometry(0.63, 10), materials.soil);
+    soil.rotation.x = -Math.PI / 2;
+    soil.position.y = 0.43 * scale;
+    soil.scale.setScalar(scale);
+    planter.add(soil);
+
     const pine = new THREE.Group();
-    pine.name = 'team-start-pine';
-    pine.position.set(position.x, TEAM_START_BASE_LAYOUT.elevation + 0.08, position.z);
+    pine.position.y = 0.40 * scale;
     pine.scale.setScalar(scale);
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.19, 1.20, 7), materials.trunk);
-    trunk.position.y = 0.60;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.05, 7), materials.trunk);
+    trunk.position.y = 0.52;
     pine.add(trunk);
     for (let tier = 0; tier < 3; tier++) {
-      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.82 - tier * 0.12, 1.35, 8), materials.foliage);
-      crown.position.y = 1.15 + tier * 0.54;
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.72 - tier * 0.11, 1.18, 8), materials.foliage);
+      crown.position.y = 1.0 + tier * 0.48;
       crown.castShadow = true;
       pine.add(crown);
     }
-    root.add(pine);
+    planter.add(pine);
+    root.add(planter);
   }
 }
 
 function buildFountain(team: CombatTeam, materials: StartBaseMaterials) {
   const fountain = new THREE.Group();
   fountain.name = `${team}-team-start-fountain`;
-  fountain.userData.collisionRadius = 1.14;
+  fountain.userData.collisionRadius = 1.32;
   fountain.userData.structureKind = 'team-start-fountain';
 
-  const lower = new THREE.Mesh(new THREE.CylinderGeometry(1.36, 1.52, 0.28, 24), materials.stoneDark);
-  lower.position.y = 0.14;
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.50, 1.64, 0.22, 24), materials.stoneDark);
+  plinth.position.y = 0.11;
+  plinth.castShadow = true;
+  plinth.receiveShadow = true;
+  fountain.add(plinth);
+
+  const lower = new THREE.Mesh(new THREE.CylinderGeometry(1.40, 1.52, 0.30, 24), materials.stoneLight);
+  lower.position.y = 0.34;
   lower.castShadow = true;
   lower.receiveShadow = true;
   fountain.add(lower);
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.18, 1.32, 0.25, 24), materials.stoneLight);
-  basin.position.y = 0.36;
-  basin.castShadow = true;
-  fountain.add(basin);
-  const basinWater = new THREE.Mesh(new THREE.CircleGeometry(1.06, 32), materials.water);
+  const lowerRim = new THREE.Mesh(new THREE.TorusGeometry(1.39, 0.085, 8, 28), materials.gold);
+  lowerRim.rotation.x = Math.PI / 2;
+  lowerRim.position.y = 0.50;
+  fountain.add(lowerRim);
+  const basinWater = new THREE.Mesh(new THREE.CircleGeometry(1.27, 32), materials.water);
   basinWater.rotation.x = -Math.PI / 2;
-  basinWater.position.y = 0.505;
+  basinWater.position.y = 0.515;
   basinWater.renderOrder = 6;
   fountain.add(basinWater);
-  const second = new THREE.Mesh(new THREE.CylinderGeometry(0.73, 0.88, 0.24, 20), materials.stone);
-  second.position.y = 0.69;
-  fountain.add(second);
-  const secondRim = new THREE.Mesh(new THREE.TorusGeometry(0.80, 0.075, 8, 24), materials.gold);
-  secondRim.rotation.x = Math.PI / 2;
-  secondRim.position.y = 0.82;
-  fountain.add(secondRim);
-  const third = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.52, 0.42, 16), materials.stoneLight);
-  third.position.y = 1.05;
-  fountain.add(third);
-  const rune = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.055, 7, 24), materials.glow);
+
+  const middleStem = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.82, 0.42, 18), materials.stone);
+  middleStem.position.y = 0.78;
+  middleStem.castShadow = true;
+  fountain.add(middleStem);
+  const middleBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.94, 0.72, 0.20, 20), materials.stoneLight);
+  middleBowl.position.y = 1.00;
+  middleBowl.castShadow = true;
+  fountain.add(middleBowl);
+  const middleRim = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.07, 8, 24), materials.gold);
+  middleRim.rotation.x = Math.PI / 2;
+  middleRim.position.y = 1.11;
+  fountain.add(middleRim);
+
+  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.50, 0.58, 16), materials.stoneLight);
+  upper.position.y = 1.42;
+  upper.castShadow = true;
+  fountain.add(upper);
+  const rune = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.05, 7, 24), materials.glow);
   rune.rotation.x = Math.PI / 2;
-  rune.position.y = 1.12;
+  rune.position.y = 1.67;
   fountain.add(rune);
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.50, 0.38, 0.14, 16), materials.gold);
+  crown.position.y = 1.75;
+  fountain.add(crown);
 
   const crystalPivot = new THREE.Group();
   crystalPivot.name = 'team-start-fountain-crystal';
-  crystalPivot.position.y = 1.48;
-  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.36, 0), materials.crystal);
-  crystal.scale.set(0.72, 1.12, 0.72);
+  crystalPivot.position.y = FOUNTAIN_BEAM_ORIGIN_Y;
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.44, 0), materials.crystal);
+  crystal.scale.set(0.78, 1.34, 0.78);
   crystal.castShadow = true;
   crystalPivot.add(crystal);
+  const crystalHalo = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.035, 6, 28), materials.glow);
+  crystalHalo.rotation.x = Math.PI / 2;
+  crystalHalo.position.y = -0.04;
+  crystalPivot.add(crystalHalo);
   fountain.add(crystalPivot);
 
-  const light = new THREE.PointLight(team === 'blue' ? 0x54d6ff : 0xff6657, 8.5, 8, 2);
-  light.position.y = 1.48;
+  const light = new THREE.PointLight(team === 'blue' ? 0x54d6ff : 0xff6657, 5.8, 6.6, 2);
+  light.position.y = 1.95;
   fountain.add(light);
 
-  // A 3 m central jet starts at the floating crystal and rises above the fountain.
-  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.075, 3, 8, 1, true), materials.waterJet);
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.075, 3.0, 8, 1, true), materials.waterJet);
   jet.name = 'team-start-fountain-jet';
-  jet.position.y = 2.98;
+  jet.position.y = 3.88;
   jet.renderOrder = 7;
   fountain.add(jet);
 
-  const falling = buildParticles(materials.waterJet.color.getHex(), 42, 0.055, 0.68);
+  const falling = buildParticles(materials.waterJet.color.getHex(), 42, 0.05, 0.64);
   falling.name = 'team-start-fountain-falling-water';
   fountain.add(falling);
-  const mist = buildParticles(0xc5f7ff, 28, 0.11, 0.42);
+  const mist = buildParticles(0xc9f7ff, 26, 0.105, 0.36);
   mist.name = 'team-start-fountain-mist';
   fountain.add(mist);
 
@@ -528,25 +694,28 @@ function buildFountain(team: CombatTeam, materials: StartBaseMaterials) {
   beam.renderOrder = 20;
   fountain.add(beam);
 
-  fountain.userData.animate = (elapsed: number) => {
-    crystalPivot.rotation.y = elapsed * 0.72;
-    crystalPivot.position.y = 1.48 + Math.sin(elapsed * 1.8) * 0.06;
-    jet.scale.x = jet.scale.z = 0.92 + Math.sin(elapsed * 5.4) * 0.08;
+  fountain.userData.updateFountain = (elapsed: number) => {
+    crystalPivot.rotation.y = elapsed * 0.64;
+    crystalPivot.position.y = FOUNTAIN_BEAM_ORIGIN_Y + Math.sin(elapsed * 1.55) * 0.07;
+    crystalHalo.rotation.z = elapsed * -0.28;
+    jet.scale.x = jet.scale.z = 0.94 + Math.sin(elapsed * 4.9) * 0.06;
+
     const fallPositions = falling.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let index = 0; index < fallPositions.count; index++) {
-      const phase = (index / fallPositions.count + elapsed * (0.34 + (index % 5) * 0.012)) % 1;
+      const phase = (index / fallPositions.count + elapsed * (0.28 + (index % 5) * 0.011)) % 1;
       const angle = index * 2.399963229728653;
-      const radius = 0.18 + phase * 1.05;
-      const height = 3.0 * (1 - phase) + 0.32 - phase * phase * 0.85;
+      const radius = 0.16 + phase * 1.12;
+      const height = 5.28 - phase * 4.65 - phase * phase * 0.18;
       fallPositions.setXYZ(index, Math.cos(angle) * radius, height, Math.sin(angle) * radius);
     }
     fallPositions.needsUpdate = true;
+
     const mistPositions = mist.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let index = 0; index < mistPositions.count; index++) {
-      const phase = (index / mistPositions.count + elapsed * 0.10) % 1;
-      const angle = index * 2.171 + elapsed * 0.16;
-      const radius = 0.32 + phase * 1.22;
-      mistPositions.setXYZ(index, Math.cos(angle) * radius, 0.54 + phase * 0.52, Math.sin(angle) * radius);
+      const phase = (index / mistPositions.count + elapsed * 0.09) % 1;
+      const angle = index * 2.171 + elapsed * 0.14;
+      const radius = 0.34 + phase * 1.12;
+      mistPositions.setXYZ(index, Math.cos(angle) * radius, 0.54 + phase * 0.44, Math.sin(angle) * radius);
     }
     mistPositions.needsUpdate = true;
   };
@@ -620,7 +789,7 @@ export function ensureTeamStartBaseGameplay(
       id: `${team}-team-start-fountain`, displayName: 'Fuente del Alba', kind: 'building', team,
       selectable: false, targetable: false, grantsVision: true, visionRadius: 9, visionHeight: 3.1,
       attackRange: TEAM_START_BASE_LAYOUT.radius, visibilityPolicy: 'structure-in-fog', interaction: 'structure',
-      selectionRadius: 1.15, maxHp: 0, showHealthBar: false,
+      selectionRadius: 1.32, maxHp: 0, showHealthBar: false,
     });
   }
 
@@ -807,7 +976,7 @@ export function ensureTeamStartBaseGameplay(
     const positions = beam.geometry.getAttribute('position') as THREE.BufferAttribute;
     target.root.getWorldPosition(TEMP_B);
     fountainRoot.getWorldPosition(TEMP_A);
-    positions.setXYZ(0, 0, 1.48, 0);
+    positions.setXYZ(0, 0, FOUNTAIN_BEAM_ORIGIN_Y, 0);
     positions.setXYZ(1, TEMP_B.x - TEMP_A.x, TEMP_B.y + 0.85 - TEMP_A.y, TEMP_B.z - TEMP_A.z);
     positions.needsUpdate = true;
     const material = beam.material;

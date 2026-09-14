@@ -5,7 +5,8 @@ export function createWaterEffects(world: THREE.Group) {
   group.name = 'water-footsteps';
   const surfaces: THREE.Mesh[] = [];
   world.traverse(object => {
-    if (object instanceof THREE.Mesh && object.userData.waterSurface) surfaces.push(object);
+    if (!(object instanceof THREE.Mesh)) return;
+    if (object.userData.waterSurface || object.userData.waterEffectsSurface) surfaces.push(object);
   });
   const bridges = world.children.filter(object => object.name.endsWith('-river-bridge'));
   const ray = new THREE.Raycaster();
@@ -40,9 +41,9 @@ export function createWaterEffects(world: THREE.Group) {
       bridge.worldToLocal(bridgePosition);
       if (Math.abs(bridgePosition.x) < 5.2 && Math.abs(bridgePosition.z) < 2.2) return null;
     }
-    // Elevated healing pools sit above y=2. The ray must start above the actor rather than
-    // from a hard-coded world height or footsteps on raised base water can never be hit.
-    ray.ray.origin.set(position.x, position.y + 2, position.z);
+    // Elevated healing pools sit above y=2. The ray starts above the actor so both the river
+    // and raised pools can be hit without making the pool participate in river deformation.
+    ray.ray.origin.set(position.x, position.y + 2.5, position.z);
     const hit = ray.intersectObjects(surfaces, false)[0];
     if (!hit || (hit.object.name === 'river-surface' && hit.uv && (hit.uv.x < 0.06 || hit.uv.x > 0.94))) return null;
     return hit.point.y;
