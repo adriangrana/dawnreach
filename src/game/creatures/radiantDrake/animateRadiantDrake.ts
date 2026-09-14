@@ -79,6 +79,7 @@ export function createDrakeAnimator(
   let attackAt = -Infinity, attackSpeed = 1;
   let headingFrom = model.rotation.y, headingTo = model.rotation.y;
   let nextIdleScaleUpdateAt = 0;
+  let wasVisible = root.visible;
 
   const controller: DrakeAnimationController = {
     beginAttack(nowMs, speed = 1, heading = model.rotation.y) {
@@ -92,12 +93,18 @@ export function createDrakeAnimator(
       if (root.userData.bossState === 'DEAD') return;
       const seconds = (nowMs - attackAt) / 1000 * attackSpeed;
       const attackActive = seconds >= 0 && seconds < DRAKE_ATTACK.duration;
+      const visible = root.visible;
 
       // Fog-of-war can hide the boss for most of a match. Do not keep deforming 1,210
       // instanced scales, 33 bones and every attachment when no player can see the result.
       // Active attacks are the exception so an in-flight combat pose remains deterministic.
-      if (!root.visible && !attackActive) return;
+      if (!visible && !attackActive) {
+        wasVisible = false;
+        return;
+      }
 
+      const justRevealed = visible && !wasVisible;
+      wasVisible = visible;
       const pose = sampleDrakeAttack(seconds);
       const breath = Math.sin(elapsed * 1.65);
       if (Number.isFinite(attackAt)) model.rotation.y = THREE.MathUtils.lerp(headingFrom, headingTo, smooth(seconds, 0, 0.28));
@@ -114,14 +121,16 @@ export function createDrakeAnimator(
         bone.updateMatrix(); matrices[i].multiplyMatrices(bone.matrix, inverseCenters[i]);
       }
 
-      // The scales are decorative surface detail. At idle, updating their full instance
-      // buffer at 30 Hz is visually indistinguishable from 60 Hz while halving the most
-      // expensive CPU-to-GPU animation upload. Attacks retain full-rate deformation.
-      if (attackActive || elapsed >= nextIdleScaleUpdateAt) {
+      // The first reveal frame already has to enter the beauty/shadow pipelines. Keep the
+      // previously prepared scale buffer for that single frame and push its next deformation
+      // to the following update. This avoids stacking a 1,210-instance upload on the reveal.
+      if (attackActive || (!justRevealed && elapsed >= nextIdleScaleUpdateAt)) {
         for (let i = 0; i < scales.count; i++) {
           scales.setMatrixAt(i, result.multiplyMatrices(blend(scaleTimes[i]), restScales[i]));
         }
         scales.instanceMatrix.needsUpdate = true;
+        nextIdleScaleUpdateAt = elapsed + DRAKE_IDLE_SCALE_UPDATE_INTERVAL;
+      } else if (justRevealed) {
         nextIdleScaleUpdateAt = elapsed + DRAKE_IDLE_SCALE_UPDATE_INTERVAL;
       }
 
