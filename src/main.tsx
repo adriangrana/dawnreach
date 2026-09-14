@@ -14,6 +14,7 @@ import './combat-stats.css';
 import './progression-hud.css';
 import './shop.css';
 import './item-ui.css';
+import './shop-panel.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
