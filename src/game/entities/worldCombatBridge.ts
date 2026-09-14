@@ -16,6 +16,10 @@ export type WorldEntityRuntimeSnapshot = Readonly<{
   maxResource: number;
   currentResource: number;
   alive: boolean;
+  physicalArmor?: number;
+  magicResistance?: number;
+  movementSpeed?: number;
+  magicPower?: number;
   statuses?: readonly WorldStatusRuntimeSnapshot[];
 }>;
 
