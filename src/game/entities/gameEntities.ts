@@ -3,6 +3,7 @@ import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
 import { ensureRadiantDrakeGameplay, RADIANT_DRAKE_GAMEPLAY } from '../gameplay/radiantDrakeGameplay';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { ensureItemActiveWorldSystem } from '../items/itemActiveWorldSystem';
+import { ensureItemUnitSlowWorldSystem } from '../items/itemUnitSlowWorldSystem';
 import { ensureItemVisionWorldSystem } from '../items/itemVisionWorldSystem';
 import { ensureWorldShopSystem } from '../items/worldShopSystem';
 import { attachEntityOverhead } from './entityOverheads';
@@ -381,6 +382,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
   if (scene) {
     ensureWorldShopSystem(scene, registry, battlefield, 'blue');
     ensureItemActiveWorldSystem(scene, registry, battlefield);
+    ensureItemUnitSlowWorldSystem(scene, registry);
     ensureItemVisionWorldSystem(scene, registry);
   }
 }
