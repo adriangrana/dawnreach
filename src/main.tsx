@@ -8,6 +8,7 @@ import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInventoryControls } from './hud/inventoryControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
+import { mountSelectionHudNameLayout } from './hud/selectionHudNameLayout';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
 import './styles.css';
 import './hud-overrides.css';
@@ -82,6 +83,7 @@ const disposeInventoryControls = mountInventoryControls();
 const disposeGameCameraControls = mountGameCameraControls();
 const disposeMinimapDragCamera = mountMinimapDragCamera();
 const disposeTowerPortraitAssets = mountTowerPortraitAssets();
+const disposeSelectionHudNameLayout = mountSelectionHudNameLayout();
 
 void waitForDawnreachReady().then(dismissBootSplash);
 
@@ -94,5 +96,6 @@ if (import.meta.hot) {
     disposeGameCameraControls();
     disposeMinimapDragCamera();
     disposeTowerPortraitAssets();
+    disposeSelectionHudNameLayout();
   });
 }
