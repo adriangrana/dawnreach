@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
+import { ensureRadiantDrakeGameplay, RADIANT_DRAKE_GAMEPLAY } from '../gameplay/radiantDrakeGameplay';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { attachEntityOverhead } from './entityOverheads';
 import { registerFloatingCombatEntity, unregisterFloatingCombatEntity } from './floatingCombatText';
@@ -284,11 +285,27 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
     if (!(object instanceof THREE.Group)) return;
     const name = object.name.toLowerCase();
     if (name === 'radiant-drake') {
-      registry.register(object, {
-        id: 'radiant-drake', displayName: 'Radiant Drake', kind: 'jungle-creature', team: 'neutral',
-        selectable: true, targetable: false, grantsVision: false, selectionRadius: 2.8,
-        maxHp: 0, showHealthBar: false, visibilityPolicy: 'vision-only', interaction: 'none',
+      const dragon = registry.register(object, {
+        id: RADIANT_DRAKE_GAMEPLAY.id,
+        displayName: RADIANT_DRAKE_GAMEPLAY.displayName,
+        kind: 'jungle-creature',
+        team: 'neutral',
+        selectable: true,
+        targetable: true,
+        grantsVision: false,
+        visionHeight: RADIANT_DRAKE_GAMEPLAY.visionHeight,
+        attackRange: RADIANT_DRAKE_GAMEPLAY.attackRange,
+        selectionRadius: RADIANT_DRAKE_GAMEPLAY.selectionRadius,
+        maxHp: RADIANT_DRAKE_GAMEPLAY.maxHp,
+        currentHp: RADIANT_DRAKE_GAMEPLAY.maxHp,
+        showHealthBar: true,
+        definitionId: RADIANT_DRAKE_GAMEPLAY.definitionId,
+        level: RADIANT_DRAKE_GAMEPLAY.level,
+        visibilityPolicy: 'vision-only',
+        interaction: 'unit',
       });
+      const scene = findSceneRoot(object);
+      if (scene) ensureRadiantDrakeGameplay(scene, registry, dragon);
       return;
     }
     const team = teamFromName(name);
