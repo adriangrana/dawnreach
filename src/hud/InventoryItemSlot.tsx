@@ -1,4 +1,5 @@
-import { useEffect, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { InventorySlot } from '../game/heroes/types';
 import { getItemDefinition } from '../game/items/itemDatabase';
 import { readInventoryDragPayload } from '../game/items/itemDrag';
@@ -59,6 +60,9 @@ export default function InventoryItemSlot({
   const cooldownSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   const hotkey = INVENTORY_SLOT_HOTKEYS[index]?.label ?? `${index + 1}`;
   const requiresGroundTarget = definition?.active_effect?.id === 'place_vision_ward';
+  const slotRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties | null>(null);
 
   useEffect(() => {
     if (!item || !requiresGroundTarget) return;
@@ -73,6 +77,27 @@ export default function InventoryItemSlot({
     return () => window.removeEventListener(ITEM_TARGET_CONFIRM_EVENT, onTargetConfirm as EventListener);
   }, [item?.instanceId, onUse, requiresGroundTarget, slot.slot]);
 
+  useEffect(() => {
+    const close = () => setTooltipStyle(null);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, []);
+
+  const showTooltip = () => {
+    if (!item || !definition) return;
+    const rect = slotRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(286, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width + 4));
+    const bottom = Math.max(12, window.innerHeight - rect.top + 12);
+    setTooltipStyle({ width, left, bottom, maxHeight: Math.max(120, Math.min(430, rect.top - 24)) });
+  };
+
+  const hideTooltip = () => setTooltipStyle(null);
   const stopPointer = (event: PointerEvent<HTMLDivElement>) => event.stopPropagation();
   const stopMouse = (event: MouseEvent<HTMLDivElement>) => event.stopPropagation();
 
@@ -111,8 +136,13 @@ export default function InventoryItemSlot({
     onMove(payload.slot, slot.slot);
   };
 
+  const tooltipOpen = Boolean(item && definition && tooltipStyle);
+  const quantity = Math.max(1, item?.quantity ?? 1);
+  const saleGold = definition ? Math.floor(definition.cost / 2) * quantity : 0;
+
   return (
     <div
+      ref={slotRef}
       className={`inventory-slot ${item ? 'inventory-slot--filled' : 'inventory-slot--empty'}${active ? ' inventory-slot--active' : ''}`}
       data-slot={slot.slot}
       data-instance-id={item?.instanceId}
@@ -120,43 +150,56 @@ export default function InventoryItemSlot({
       draggable={false}
       onPointerDown={stopPointer}
       onPointerUp={stopPointer}
+      onPointerEnter={showTooltip}
+      onPointerLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
       onContextMenu={stopMouse}
       onClick={handleClick}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       role={item ? 'button' : undefined}
       tabIndex={item ? 0 : -1}
-      aria-label={item ? `${item.displayName}${active ? `, objeto activable con ${hotkey}` : ''}` : `Hueco de inventario ${index + 1}`}
+      aria-describedby={tooltipOpen ? tooltipId : undefined}
+      aria-label={item ? `${item.displayName}${quantity > 1 ? `, ${quantity} unidades` : ''}${active ? `, objeto activable con ${hotkey}` : ''}` : `Hueco de inventario ${index + 1}`}
     >
       {item && definition && (
         <>
           <img className="inventory-item-art" src={getItemIconDataUrl(item.definitionId)} alt="" draggable={false} />
+          {quantity > 1 && <span className="inventory-item-quantity" aria-label={`${quantity} unidades`}>{quantity}</span>}
           {remainingMs > 0 && (
             <span className="inventory-item-cooldown" aria-label={`${cooldownSeconds} segundos de enfriamiento`}>
               <b>{cooldownSeconds}</b>
             </span>
           )}
           {active && remainingMs <= 0 && <span className="inventory-item-active-pip" aria-hidden="true" />}
-          <div className="inventory-item-tooltip" role="tooltip">
-            <div className="inventory-tooltip-head">
-              <img src={getItemIconDataUrl(item.definitionId)} alt="" />
-              <div><strong>{definition.name}</strong><span>{definition.tier} · {definition.cost} oro · venta {Math.floor(definition.cost / 2)}</span></div>
-            </div>
-            {Object.keys(definition.stats).length > 0 && (
-              <div className="inventory-tooltip-stats">
-                {Object.entries(definition.stats).map(([stat, amount]) => <span key={stat}>{formatStat(stat, Number(amount))}</span>)}
-              </div>
-            )}
-            {definition.passive_effect && <p><b>Pasiva — {definition.passive_effect.name}:</b> {definition.passive_effect.description}</p>}
-            {definition.active_effect && (
-              <p><b>Activa — {definition.active_effect.name}:</b> {definition.active_effect.description}<em>CD {definition.active_effect.cooldown}s{definition.active_effect.mana_cost ? ` · ${definition.active_effect.mana_cost} maná` : ''}</em></p>
-            )}
-            <small>{definition.flavor_text}</small>
-            {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : `Click o ${hotkey} para activar`}</i>}
-          </div>
         </>
       )}
       <span className="item-key">{hotkey}</span>
+
+      {tooltipOpen && item && definition && createPortal(
+        <div id={tooltipId} className="inventory-item-tooltip inventory-item-tooltip--portal" role="tooltip" style={tooltipStyle}>
+          <div className="inventory-tooltip-head">
+            <img src={getItemIconDataUrl(item.definitionId)} alt="" />
+            <div>
+              <strong>{definition.name}{quantity > 1 ? ` ×${quantity}` : ''}</strong>
+              <span>{definition.tier} · {definition.cost} oro c/u · venta {saleGold}</span>
+            </div>
+          </div>
+          {Object.keys(definition.stats).length > 0 && (
+            <div className="inventory-tooltip-stats">
+              {Object.entries(definition.stats).map(([stat, amount]) => <span key={stat}>{formatStat(stat, Number(amount))}</span>)}
+            </div>
+          )}
+          {definition.passive_effect && <p><b>Pasiva — {definition.passive_effect.name}:</b> {definition.passive_effect.description}</p>}
+          {definition.active_effect && (
+            <p><b>Activa — {definition.active_effect.name}:</b> {definition.active_effect.description}<em>CD {definition.active_effect.cooldown}s{definition.active_effect.mana_cost ? ` · ${definition.active_effect.mana_cost} maná` : ''}</em></p>
+          )}
+          <small>{definition.flavor_text}</small>
+          {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : `Click o ${hotkey} para activar`}</i>}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
