@@ -1,11 +1,21 @@
 import * as THREE from 'three';
-import { TOWER_GAMEPLAY, getTowerAbility } from '../gameplay/towerConfig';
-import type { GameEntity, GameEntityKind, GameEntityRegistry } from './gameEntities';
-import { emitWorldCombatEvent } from './worldCombatBridge';
+import { TOWER_GAMEPLAY, getTowerAbility, getTowerTierConfig, rollTowerAttackDamage } from '../gameplay/towerConfig';
+import {
+  configureTowerTiers,
+  getTowerEffectiveArmor,
+  getTowerTier,
+  isTowerTierVulnerable,
+  updateTowerObjectiveProgression,
+} from '../gameplay/towerRules';
+import type { GameEntity, GameEntityKind, GameEntityRegistry, TeamId } from './gameEntities';
+import { emitWorldCombatEvent, getWorldEntityRuntime } from './worldCombatBridge';
 
 const AURA_STATE_KEY = 'dawnreachTowerAuraState';
 const LAST_AURA_UPDATE_KEY = 'dawnreachTowerAuraUpdateAt';
+const LAST_DAMAGE_AT_KEY = 'dawnreachTowerLastDamageAtMs';
 const AURA_UPDATE_INTERVAL_SECONDS = 0.1;
+const TRUE_SIGHT_BLUE_KEY = 'dawnreachTrueSightBlue';
+const TRUE_SIGHT_RED_KEY = 'dawnreachTrueSightRed';
 
 const towerPosition = new THREE.Vector3();
 const entityPosition = new THREE.Vector3();
@@ -44,18 +54,21 @@ type TowerAbilityWithEffects<T> = {
 };
 
 const BACKDOOR = getTowerAbility('backdoor-protection') as TowerAbilityWithEffects<BackdoorEffects>;
-const REINFORCED = getTowerAbility('reinforced') as TowerAbilityWithEffects<ReinforcedEffects>;
+const TOWER_PROTECTION = getTowerAbility('reinforced') as TowerAbilityWithEffects<ReinforcedEffects>;
 
 export type TowerAuraState = Readonly<{
-  /** Structural Reinforced passive. This belongs to the tower itself. */
+  /** Structural marker retained for compatibility with existing HUD/status views. */
   reinforced: boolean;
-  /** Short allied-unit aura granted by a nearby tower. */
+  /** Allied-unit aura granted by a nearby tower. */
   towerProtection: boolean;
   towerProtectionExpiresAtMs: number | null;
   towerProtectionSourceTowerIds: readonly string[];
-  /** Backdoor Protection belongs to the tower itself and is never shared. */
+  /** Backdoor Protection belongs to Tier 2-4 towers only. */
   backdoorProtection: boolean;
   backdoorActive: boolean;
+  /** Every living tower projects True Sight. */
+  trueSight: boolean;
+  trueSightRadius: number;
   sourceTowerIds: readonly string[];
   backdoorSourceTowerIds: readonly string[];
 }>;
@@ -67,6 +80,8 @@ type MutableTowerAuraState = {
   towerProtectionSourceTowerIds: string[];
   backdoorProtection: boolean;
   backdoorActive: boolean;
+  trueSight: boolean;
+  trueSightRadius: number;
   sourceTowerIds: string[];
   backdoorSourceTowerIds: string[];
 };
@@ -78,6 +93,8 @@ const EMPTY_AURA_STATE: TowerAuraState = Object.freeze({
   towerProtectionSourceTowerIds: Object.freeze([]) as readonly string[],
   backdoorProtection: false,
   backdoorActive: false,
+  trueSight: false,
+  trueSightRadius: 0,
   sourceTowerIds: Object.freeze([]) as readonly string[],
   backdoorSourceTowerIds: Object.freeze([]) as readonly string[],
 });
@@ -99,6 +116,8 @@ function createMutableAuraState(entity: GameEntity, atMs: number): MutableTowerA
     towerProtectionSourceTowerIds: lingeringProtection ? [...previous.towerProtectionSourceTowerIds] : [],
     backdoorProtection: false,
     backdoorActive: false,
+    trueSight: false,
+    trueSightRadius: 0,
     sourceTowerIds: [],
     backdoorSourceTowerIds: [],
   };
@@ -136,9 +155,70 @@ function armorDamageMultiplier(armor: number): number {
   return Math.max(0, 1 - reduction);
 }
 
+function getWorldRoot(object: THREE.Object3D): THREE.Object3D {
+  let current = object;
+  while (current.parent) current = current.parent;
+  return current;
+}
+
+function registryFor(entity: GameEntity): GameEntityRegistry | undefined {
+  return getWorldRoot(entity.root).userData.entityRegistry as GameEntityRegistry | undefined;
+}
+
+function isEthereal(entity: GameEntity): boolean {
+  if (entity.root.userData.ethereal === true) return true;
+  const runtime = getWorldEntityRuntime(entity.id);
+  return runtime?.statuses?.some(status => (
+    status.id.toLowerCase().includes('ethereal')
+    || status.data?.ethereal === true
+    || status.data?.ghostForm === true
+  )) ?? false;
+}
+
+function towerSelfRegenPerSecond(entity: GameEntity, state: TowerAuraState, atMs: number): number {
+  if (entity.kind !== 'tower') return 0;
+  const tierConfig = getTowerTierConfig(getTowerTier(entity));
+  let regen = state.backdoorActive ? BACKDOOR.effects.healthRegenPerSecond : 0;
+  if (tierConfig.outOfCombatRegenPerSecond > 0) {
+    const lastDamageAt = Number(entity.root.userData[LAST_DAMAGE_AT_KEY] ?? Number.NEGATIVE_INFINITY);
+    const outOfCombatMs = TOWER_GAMEPLAY.outOfCombatDelaySeconds * 1000;
+    if (!Number.isFinite(lastDamageAt) || atMs - lastDamageAt >= outOfCombatMs) {
+      regen += tierConfig.outOfCombatRegenPerSecond;
+    }
+  }
+  return regen;
+}
+
+function clearTrueSightFlags(entities: readonly GameEntity[]) {
+  for (const entity of entities) {
+    entity.root.userData[TRUE_SIGHT_BLUE_KEY] = false;
+    entity.root.userData[TRUE_SIGHT_RED_KEY] = false;
+  }
+}
+
+function projectTrueSight(tower: GameEntity, entities: readonly GameEntity[]) {
+  const radius = TOWER_GAMEPLAY.vision.trueSightRadius;
+  const radiusSquared = radius * radius;
+  tower.root.getWorldPosition(towerPosition);
+  const key = tower.team === 'blue' ? TRUE_SIGHT_BLUE_KEY : TRUE_SIGHT_RED_KEY;
+  for (const candidate of entities) {
+    if (!candidate.alive || candidate.team === tower.team || candidate.team === 'neutral') continue;
+    candidate.root.getWorldPosition(entityPosition);
+    if (planarDistanceSquared(towerPosition, entityPosition) <= radiusSquared) {
+      candidate.root.userData[key] = true;
+    }
+  }
+}
+
 export function getTowerAuraState(entity: GameEntity | null): TowerAuraState {
   if (!entity) return EMPTY_AURA_STATE;
   return (entity.root.userData[AURA_STATE_KEY] as TowerAuraState | undefined) ?? EMPTY_AURA_STATE;
+}
+
+export function isEntityRevealedByTowerTrueSight(entity: GameEntity, team: TeamId): boolean {
+  if (team === 'blue') return entity.root.userData[TRUE_SIGHT_BLUE_KEY] === true;
+  if (team === 'red') return entity.root.userData[TRUE_SIGHT_RED_KEY] === true;
+  return false;
 }
 
 export function updateTowerGameplayAuras(
@@ -146,6 +226,9 @@ export function updateTowerGameplayAuras(
   registry: GameEntityRegistry,
   elapsed: number,
 ): void {
+  configureTowerTiers(registry);
+  updateTowerObjectiveProgression(worldRoot, registry);
+
   const previousUpdate = Number(worldRoot.userData[LAST_AURA_UPDATE_KEY] ?? Number.NEGATIVE_INFINITY);
   if (Number.isFinite(previousUpdate) && elapsed >= previousUpdate && elapsed - previousUpdate < AURA_UPDATE_INTERVAL_SECONDS) {
     return;
@@ -160,9 +243,10 @@ export function updateTowerGameplayAuras(
   const entities = registry.values();
   const states = new Map<GameEntity, MutableTowerAuraState>();
   for (const entity of entities) states.set(entity, createMutableAuraState(entity, atMs));
+  clearTrueSightFlags(entities);
 
   const auraRadiusSquared = TOWER_GAMEPLAY.auraRadius * TOWER_GAMEPLAY.auraRadius;
-  const protectionLingerMs = Math.max(0, REINFORCED.effects.aura.lingerDurationSeconds * 1000);
+  const protectionLingerMs = Math.max(0, TOWER_PROTECTION.effects.aura.lingerDurationSeconds * 1000);
 
   for (const tower of entities) {
     if (tower.kind !== 'tower' || !tower.alive || tower.currentHp <= 0) continue;
@@ -170,17 +254,16 @@ export function updateTowerGameplayAuras(
 
     tower.root.getWorldPosition(towerPosition);
     const towerState = states.get(tower)!;
+    const tierConfig = getTowerTierConfig(getTowerTier(tower));
 
-    // Reinforced is a structural passive of the tower itself. It is not copied to
-    // nearby heroes or creeps; those units receive the distinct Tower Protection aura.
-    if (isEligible(tower.kind, REINFORCED.eligibleKinds)) {
-      towerState.reinforced = true;
-      towerState.sourceTowerIds.push(tower.id);
-    }
+    towerState.reinforced = true;
+    towerState.sourceTowerIds.push(tower.id);
+    towerState.trueSight = true;
+    towerState.trueSightRadius = TOWER_GAMEPLAY.vision.trueSightRadius;
+    tower.root.userData.trueSightRadius = TOWER_GAMEPLAY.vision.trueSightRadius;
+    projectTrueSight(tower, entities);
 
-    // Backdoor Protection is self-only. Enemy creeps suppress this tower's own
-    // reduction/regeneration but never create/remove a buff on nearby allies.
-    if (isEligible(tower.kind, BACKDOOR.eligibleKinds)) {
+    if (tierConfig.backdoorProtection && isEligible(tower.kind, BACKDOOR.eligibleKinds)) {
       towerState.backdoorProtection = true;
       towerState.backdoorSourceTowerIds.push(tower.id);
       towerState.backdoorActive = !hasEnemyCreepNearTower(
@@ -190,11 +273,9 @@ export function updateTowerGameplayAuras(
       );
     }
 
-    // Reforzado projects Protección de Torre to eligible allied units. Refreshing the
-    // modifier every aura tick gives it the authored 0.5 s linger after leaving range.
     for (const ally of entities) {
       if (!ally.alive || ally.currentHp <= 0 || ally.team !== tower.team) continue;
-      if (!isEligible(ally.kind, REINFORCED.effects.aura.eligibleKinds)) continue;
+      if (!isEligible(ally.kind, TOWER_PROTECTION.effects.aura.eligibleKinds)) continue;
       ally.root.getWorldPosition(entityPosition);
       if (planarDistanceSquared(towerPosition, entityPosition) > auraRadiusSquared) continue;
 
@@ -215,21 +296,24 @@ export function updateTowerGameplayAuras(
       state.towerProtectionSourceTowerIds.length = 0;
     }
 
-    entity.root.userData[AURA_STATE_KEY] = Object.freeze({
+    const frozenState = Object.freeze({
       reinforced: state.reinforced,
       towerProtection: state.towerProtection,
       towerProtectionExpiresAtMs: state.towerProtectionExpiresAtMs,
       towerProtectionSourceTowerIds: Object.freeze([...state.towerProtectionSourceTowerIds]),
       backdoorProtection: state.backdoorProtection,
       backdoorActive: state.backdoorActive,
+      trueSight: state.trueSight,
+      trueSightRadius: state.trueSightRadius,
       sourceTowerIds: Object.freeze([...state.sourceTowerIds]),
       backdoorSourceTowerIds: Object.freeze([...state.backdoorSourceTowerIds]),
     }) satisfies TowerAuraState;
+    entity.root.userData[AURA_STATE_KEY] = frozenState;
 
     if (dt <= 0 || entity.maxHp <= 0 || entity.currentHp <= 0 || entity.currentHp >= entity.maxHp) continue;
 
-    const regenPerSecond = (state.backdoorActive ? BACKDOOR.effects.healthRegenPerSecond : 0)
-      + (state.towerProtection ? REINFORCED.effects.aura.healthRegenPerSecond : 0);
+    const regenPerSecond = towerSelfRegenPerSecond(entity, frozenState, atMs)
+      + (frozenState.towerProtection ? TOWER_PROTECTION.effects.aura.healthRegenPerSecond : 0);
     if (regenPerSecond <= 0) continue;
 
     const healedHp = Math.min(entity.maxHp, entity.currentHp + regenPerSecond * dt);
@@ -251,44 +335,52 @@ export function calculateTowerAuraAdjustedDamage(
   target: GameEntity,
   baseDamage: number,
 ): number {
-  let damage = Math.max(0, baseDamage);
-  const sourceAura = getTowerAuraState(source);
+  const registry = registryFor(target);
+  if (registry) configureTowerTiers(registry);
+
+  if (target.kind === 'tower' && registry && !isTowerTierVulnerable(target, registry)) {
+    target.root.userData.towerTierVulnerable = false;
+    return 0;
+  }
+
+  let damage = source?.kind === 'tower'
+    ? rollTowerAttackDamage(getTowerTier(source))
+    : Math.max(0, baseDamage);
+
   const targetAura = getTowerAuraState(target);
 
-  // Reforzado remains a tower structural interaction only because only towers receive
-  // the reinforced state now.
-  if (sourceAura.reinforced && targetAura.reinforced) {
-    damage *= 1 + REINFORCED.effects.bonusDamageVsReinforcedPercent / 100;
+  // Tower shots are physical and pierce debuff/magic immunity. Ethereal targets are the
+  // intentional exception and take no physical tower damage.
+  if (source?.kind === 'tower') {
+    if (isEthereal(target)) return 0;
+    const authoredArmor = Number(target.root.userData.physicalArmor ?? 0);
+    const auraArmor = targetAura.towerProtection ? TOWER_PROTECTION.effects.aura.armorBonus : 0;
+    damage *= armorDamageMultiplier(authoredArmor + auraArmor);
+  } else if (targetAura.towerProtection) {
+    damage *= armorDamageMultiplier(TOWER_PROTECTION.effects.aura.armorBonus);
   }
 
-  if (targetAura.reinforced) {
-    const reductionPercent = source?.kind === 'hero'
-      ? REINFORCED.effects.heroAttackDamageReductionPercent
-      : REINFORCED.effects.nonHeroAttackDamageReductionPercent;
-    damage *= Math.max(0, 1 - reductionPercent / 100);
-  }
-
-  if (target.kind === 'tower' && targetAura.backdoorActive) {
-    damage *= Math.max(0, 1 - BACKDOOR.effects.damageReductionPercent / 100);
-  }
-
-  if (targetAura.towerProtection) {
-    damage *= armorDamageMultiplier(REINFORCED.effects.aura.armorBonus);
+  if (target.kind === 'tower') {
+    const effectiveArmor = getTowerEffectiveArmor(target, registry);
+    damage *= armorDamageMultiplier(effectiveArmor);
+    if (targetAura.backdoorActive) {
+      damage *= Math.max(0, 1 - BACKDOOR.effects.damageReductionPercent / 100);
+    }
+    if (damage > 0) target.root.userData[LAST_DAMAGE_AT_KEY] = worldNowMs();
   }
 
   return Math.max(0, damage);
 }
 
 export function getTowerBackdoorRegenPerSecond(entity: GameEntity): number {
-  return entity.kind === 'tower' && getTowerAuraState(entity).backdoorActive
-    ? BACKDOOR.effects.healthRegenPerSecond
-    : 0;
+  if (entity.kind !== 'tower') return 0;
+  return towerSelfRegenPerSecond(entity, getTowerAuraState(entity), worldNowMs());
 }
 
 export function getTowerProtectionArmorBonus(entity: GameEntity): number {
-  return getTowerAuraState(entity).towerProtection ? REINFORCED.effects.aura.armorBonus : 0;
+  return getTowerAuraState(entity).towerProtection ? TOWER_PROTECTION.effects.aura.armorBonus : 0;
 }
 
 export function getTowerProtectionRegenPerSecond(entity: GameEntity): number {
-  return getTowerAuraState(entity).towerProtection ? REINFORCED.effects.aura.healthRegenPerSecond : 0;
+  return getTowerAuraState(entity).towerProtection ? TOWER_PROTECTION.effects.aura.healthRegenPerSecond : 0;
 }
