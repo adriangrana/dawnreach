@@ -16,5 +16,7 @@ export function setLocalShopProximity(nearShop: boolean) {
 export function subscribeLocalShopProximity(listener: ShopProximityListener) {
   listeners.add(listener);
   listener(localHeroNearShop);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
