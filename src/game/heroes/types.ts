@@ -73,6 +73,8 @@ export interface InventoryItem {
   displayName: string;
   quantity: number;
   statModifiers: readonly ItemStatModifier[];
+  /** Absolute performance.now()-based timestamp. Preserved while moving or dropping the item. */
+  cooldownReadyAtMs: number;
 }
 
 export interface InventorySlot {
