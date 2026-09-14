@@ -1,12 +1,29 @@
-import type { InventoryItem, InventorySlot, ItemStatModifier } from '../heroes/types';
+import type { InventoryItem, ItemStatModifier } from '../heroes/types';
+import { getHeroDefinition } from '../heroes/catalog';
 import { getRequiredHero } from '../match/matchState';
-import { calculateHeroStats } from '../match/stats';
-import type { MatchState, TimedStatusState } from '../match/types';
+import { calculateDefinitionStatsAtLevel, calculateHeroStats } from '../match/stats';
+import type { MatchHeroState, MatchState } from '../match/types';
 import { isLocalHeroNearShop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 
 export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | 'out-of-shop-range' | null;
 export type ItemUseReason = 'missing-item' | 'not-active' | 'cooldown' | 'not-enough-resource' | 'dead' | null;
+
+export type HeroItemRuntimeContext = Readonly<{
+  heroEntityId: string;
+  definitionId: string;
+  heroName: string;
+  team: MatchHeroState['team'];
+  movementSpeed: number;
+  baseMovementSpeed: number;
+  maxResource: number;
+  magicPower: number;
+  updatedAtMs: number;
+}>;
+
+export type ItemActivationOwnerContext = HeroItemRuntimeContext & Readonly<{
+  activatedAtMs: number;
+}>;
 
 export type ShopPurchaseResult = Readonly<{
   match: MatchState;
@@ -41,6 +58,54 @@ export type ItemUseResult = Readonly<{
   consumed: boolean;
 }>;
 
+const heroItemRuntimeContexts = new Map<string, HeroItemRuntimeContext>();
+const itemActivationOwners = new Map<string, ItemActivationOwnerContext>();
+
+function runtimeNowMs() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function getInventoryMagicPower(hero: MatchHeroState) {
+  let total = 0;
+  for (const slot of hero.inventory) {
+    const definition = slot.item ? getItemDefinition(slot.item.definitionId) : null;
+    total += numeric(definition?.stats.magic_power, 0);
+  }
+  return total;
+}
+
+export function syncHeroItemRuntime(
+  state: MatchState,
+  heroEntityId: string,
+  nowMs = runtimeNowMs(),
+): HeroItemRuntimeContext {
+  const hero = getRequiredHero(state, heroEntityId);
+  const definition = getHeroDefinition(hero.definitionId);
+  const baseStats = calculateDefinitionStatsAtLevel(definition, hero.level);
+  const stats = calculateHeroStats(state, heroEntityId, { nowMs });
+  const context: HeroItemRuntimeContext = {
+    heroEntityId,
+    definitionId: hero.definitionId,
+    heroName: hero.heroName,
+    team: hero.team,
+    movementSpeed: stats.movementSpeed,
+    baseMovementSpeed: Math.max(1, baseStats.movementSpeed),
+    maxResource: stats.maxResource,
+    magicPower: getInventoryMagicPower(hero),
+    updatedAtMs: nowMs,
+  };
+  heroItemRuntimeContexts.set(heroEntityId, context);
+  return context;
+}
+
+export function getHeroItemRuntimeContexts(): readonly HeroItemRuntimeContext[] {
+  return Array.from(heroItemRuntimeContexts.values());
+}
+
+export function getItemActivationOwnerContext(instanceId: string): ItemActivationOwnerContext | null {
+  return itemActivationOwners.get(instanceId) ?? null;
+}
+
 export function heroHasInventorySpace(state: MatchState, heroEntityId: string) {
   return getRequiredHero(state, heroEntityId).inventory.some(slot => slot.item === null);
 }
@@ -70,9 +135,11 @@ export function purchaseShopItem(
 
   if (nearShop && emptySlot) {
     emptySlot.item = item;
+    syncHeroItemRuntime(next, heroEntityId);
     return { match: next, definition, item, ok: true, dropped: false, reason: null };
   }
 
+  syncHeroItemRuntime(next, heroEntityId);
   return {
     match: next,
     definition,
@@ -100,6 +167,7 @@ export function pickUpGroundItem(
   const emptySlot = hero.inventory.find(slot => slot.item === null);
   if (!emptySlot) return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   emptySlot.item = structuredClone(item);
+  syncHeroItemRuntime(next, heroEntityId);
   return { match: next, definition, item, ok: true, reason: null };
 }
 
@@ -122,6 +190,7 @@ export function moveInventoryItem(
   const moving = nextFrom.item;
   nextFrom.item = nextTo.item;
   nextTo.item = moving;
+  syncHeroItemRuntime(next, heroEntityId);
   return next;
 }
 
@@ -140,6 +209,7 @@ export function dropInventoryItem(
   const hero = getRequiredHero(next, heroEntityId);
   const slot = hero.inventory.find(candidate => candidate.slot === slotIndex)!;
   slot.item = null;
+  syncHeroItemRuntime(next, heroEntityId);
   return { match: next, item, definition, ok: true };
 }
 
@@ -161,7 +231,16 @@ export function sellInventoryItem(
   if (!slot) return { match: state, item: null, definition: null, ok: false, saleGold: 0 };
   slot.item = null;
   hero.gold += saleGold;
+  syncHeroItemRuntime(next, heroEntityId);
   return { match: next, item: structuredClone(item), definition, ok: true, saleGold };
+}
+
+function cleanseSlowStatuses(hero: MatchHeroState, nowMs: number) {
+  for (const [id, status] of Object.entries(hero.runtime.statuses)) {
+    if (status.expiresAtMs <= nowMs) continue;
+    const slowPercent = numeric(status.data?.slowPercent, 0);
+    if (slowPercent > 0 || id.toLowerCase().includes('slow')) delete hero.runtime.statuses[id];
+  }
 }
 
 export function useInventoryItem(
@@ -190,6 +269,10 @@ export function useInventoryItem(
   const values = effect.values;
   hero.currentResource = Math.max(0, hero.currentResource - effect.mana_cost);
   item.cooldownReadyAtMs = nowMs + effect.cooldown * 1000;
+
+  if (values.remove_slow === true || effect.id === 'cleanse_slow_and_haste' || effect.id === 'short_blink_cleanse_slow') {
+    cleanseSlowStatuses(hero, nowMs);
+  }
 
   const durationSeconds = numeric(values.duration, 0);
   const statusDurationMs = Math.max(0, durationSeconds * 1000);
@@ -242,23 +325,35 @@ export function useInventoryItem(
     };
   }
 
+  const ownerContext = syncHeroItemRuntime(next, heroEntityId, nowMs);
+  itemActivationOwners.set(item.instanceId, { ...ownerContext, activatedAtMs: nowMs });
+
   const consumed = values.consumes_item === true;
   const resultItem = structuredClone(item);
-  if (consumed) slot.item = null;
+  if (consumed) {
+    slot.item = null;
+    syncHeroItemRuntime(next, heroEntityId, nowMs);
+  }
   return { match: next, item: resultItem, definition, ok: true, reason: null, consumed };
 }
 
-/** Applies restorative item statuses between HUD simulation ticks. */
+/** Applies restorative item statuses between simulation ticks and republishes item-derived movement. */
 export function advanceItemActiveEffects(
   state: MatchState,
   heroEntityId: string,
   elapsedMs: number,
   nowMs: number,
 ): MatchState {
-  if (elapsedMs <= 0) return state;
+  if (elapsedMs <= 0) {
+    syncHeroItemRuntime(state, heroEntityId, nowMs);
+    return state;
+  }
   const sourceHero = getRequiredHero(state, heroEntityId);
   const statuses = Object.values(sourceHero.runtime.statuses).filter(status => status.id.startsWith('item:active:'));
-  if (statuses.length === 0) return state;
+  if (statuses.length === 0) {
+    syncHeroItemRuntime(state, heroEntityId, nowMs);
+    return state;
+  }
 
   const next = structuredClone(state);
   const hero = getRequiredHero(next, heroEntityId);
@@ -272,12 +367,18 @@ export function advanceItemActiveEffects(
     const activeEnd = Math.min(nowMs, status.expiresAtMs);
     const seconds = Math.max(0, activeEnd - activeStart) / 1000;
     if (seconds > 0) {
-      hero.currentHp = Math.min(stats.maxHp, hero.currentHp + numeric(status.data?.healPerSecond) * seconds);
-      hero.currentResource = Math.min(stats.maxResource, hero.currentResource + numeric(status.data?.manaPerSecond) * seconds);
+      const requiresOutOfCombat = status.data?.requiresOutOfCombat === true;
+      const lastDamageAtMs = numeric(hero.runtime.timestamps['combat:last-damage-at-ms'], Number.NEGATIVE_INFINITY);
+      const canRestore = !requiresOutOfCombat || lastDamageAtMs < startedAtMs;
+      if (canRestore) {
+        hero.currentHp = Math.min(stats.maxHp, hero.currentHp + numeric(status.data?.healPerSecond) * seconds);
+        hero.currentResource = Math.min(stats.maxResource, hero.currentResource + numeric(status.data?.manaPerSecond) * seconds);
+      }
     }
     if (status.expiresAtMs <= nowMs) delete hero.runtime.statuses[status.id];
   }
 
+  syncHeroItemRuntime(next, heroEntityId, nowMs);
   return next;
 }
 
@@ -300,6 +401,8 @@ function numeric(value: unknown, fallback = 0) {
  * Converts the economy-facing item vocabulary to the combat-stat vocabulary already used
  * by MatchHeroState. Primary attributes use deliberately explicit Dawnreach conversion
  * rates so their derived value remains deterministic and can be tuned in one place later.
+ * Magic power deliberately stays in the item vocabulary; active-item spell formulas read
+ * it directly so the item system remains independent from any one hero implementation.
  */
 export function itemStatsToHeroModifiers(stats: ItemStats): ItemStatModifier[] {
   const modifiers: ItemStatModifier[] = [];
