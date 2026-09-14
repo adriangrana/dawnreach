@@ -62,7 +62,14 @@ type RangeVisual = Readonly<{
   edgeMaterial: THREE.MeshBasicMaterial;
 }>;
 
+type AttackIntentVisual = Readonly<{
+  root: THREE.Group;
+  material: THREE.MeshBasicMaterial;
+}>;
+
 const COMMAND_MARKER_GROUND_OFFSET = 0.102;
+const ATTACK_TARGET_CONFIRM_SECONDS = 1.5;
+const ATTACK_TARGET_GROUND_OFFSET = 0.035;
 
 const STYLE_BY_KIND: Record<GameEntityKind, SelectionStyle> = {
   hero: {
@@ -355,6 +362,23 @@ function buildSelectionVisual(entity: GameEntity): SelectionVisual {
   };
 }
 
+function buildAttackIntentVisual(name: string, opacity: number): AttackIntentVisual {
+  const root = new THREE.Group();
+  root.name = name;
+  root.visible = false;
+
+  const material = groundOverlayMaterial(0xff3f38, opacity);
+  material.polygonOffsetFactor = -2;
+  material.polygonOffsetUnits = -3;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.962, 1.0, 96), material);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.004;
+  ring.renderOrder = 85;
+  root.add(ring);
+
+  return { root, material };
+}
+
 function buildTowerRangeVisual(entity: GameEntity): RangeVisual | null {
   if (entity.kind !== 'tower' || entity.attackRange <= 0) return null;
 
@@ -477,18 +501,127 @@ export function createEntitySelectionController(
   marker.renderOrder = 78;
   scene.add(marker);
 
+  const attackHoverVisual = buildAttackIntentVisual('hostile-hover-target-marker', 0.72);
+  const attackTargetVisual = buildAttackIntentVisual('confirmed-attack-target-marker', 0.94);
+  scene.add(attackHoverVisual.root, attackTargetVisual.root);
+
   const localHero = registry.values().find(entity => entity.kind === 'hero' && entity.team === localTeam) ?? null;
   hideLegacyHeroRing(localHero);
   const hudBridge = createSelectionHudBridge(localHero);
 
   const worldPosition = new THREE.Vector3();
+  const attackIntentWorldPosition = new THREE.Vector3();
   const enemyTowerWorldPosition = new THREE.Vector3();
   const enemyTowerRanges = new Map<GameEntity, RangeVisual>();
+  const attackPointer = new THREE.Vector2();
+  const attackPointerRaycaster = new THREE.Raycaster();
+  const legacyAttackCommandMarker = scene.children.find(object =>
+    object instanceof THREE.Group && object.userData.kind === 'attack',
+  ) as THREE.Group | undefined;
   let selected: GameEntity | null = null;
   let visual: SelectionVisual | null = null;
   let rangeVisual: RangeVisual | null = null;
   let selectedAt = 0;
   let altHeld = false;
+  let attackCommandArmed = false;
+  let gameplayCamera: THREE.Camera | null = null;
+  let hoveredAttackTarget: GameEntity | null = null;
+  let confirmedAttackTarget: GameEntity | null = null;
+  let confirmedAttackUntil = 0;
+
+  const canShowAttackIntentFor = (entity: GameEntity | null): entity is GameEntity => {
+    if (!entity || entity === localHero || entity.team === localTeam) return false;
+    if (!entity.targetable || !entity.alive || entity.currentHp <= 0 || entity.maxHp <= 0) return false;
+    if (!canSelect(entity)) return false;
+    if ((entity.kind === 'tower' || entity.kind === 'building') && entity.interaction !== 'attackable-structure') return false;
+    return true;
+  };
+
+  const syncAttackIntentVisual = (
+    attackVisual: AttackIntentVisual,
+    entity: GameEntity | null,
+    visible: boolean,
+  ) => {
+    attackVisual.root.visible = Boolean(visible && entity && entity.root.parent && canShowAttackIntentFor(entity));
+    if (!attackVisual.root.visible || !entity) return;
+    entity.root.getWorldPosition(attackIntentWorldPosition);
+    attackVisual.root.position.set(
+      attackIntentWorldPosition.x,
+      attackIntentWorldPosition.y + ATTACK_TARGET_GROUND_OFFSET,
+      attackIntentWorldPosition.z,
+    );
+    attackVisual.root.scale.setScalar(Math.max(0.24, entity.selectionRadius * 1.06));
+  };
+
+  const syncAttackIntentMarkers = () => {
+    const now = performance.now() * 0.001;
+    if (confirmedAttackTarget && (now >= confirmedAttackUntil || !canShowAttackIntentFor(confirmedAttackTarget))) {
+      confirmedAttackTarget = null;
+      confirmedAttackUntil = 0;
+    }
+    if (hoveredAttackTarget && !canShowAttackIntentFor(hoveredAttackTarget)) hoveredAttackTarget = null;
+
+    syncAttackIntentVisual(
+      attackTargetVisual,
+      confirmedAttackTarget,
+      confirmedAttackTarget !== null && now < confirmedAttackUntil,
+    );
+    syncAttackIntentVisual(
+      attackHoverVisual,
+      hoveredAttackTarget,
+      hoveredAttackTarget !== null && hoveredAttackTarget !== confirmedAttackTarget,
+    );
+  };
+
+  const isGameplayCanvas = (target: EventTarget | null): target is HTMLCanvasElement => (
+    target instanceof HTMLCanvasElement && target.classList.contains('game-canvas')
+  );
+
+  const pickAttackIntentTarget = (event: PointerEvent) => {
+    if (!gameplayCamera || !isGameplayCanvas(event.target)) return null;
+    const rect = event.target.getBoundingClientRect();
+    attackPointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    attackPointer.y = -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+    attackPointerRaycaster.setFromCamera(attackPointer, gameplayCamera);
+
+    const candidates = registry.values().filter(canShowAttackIntentFor);
+    if (candidates.length === 0) return null;
+    const hits = attackPointerRaycaster.intersectObjects(candidates.map(entity => entity.root), true);
+    for (const hit of hits) {
+      const entity = getGameEntity(hit.object);
+      if (canShowAttackIntentFor(entity)) return entity;
+    }
+    return null;
+  };
+
+  const confirmAttackIntent = (entity: GameEntity) => {
+    confirmedAttackTarget = entity;
+    confirmedAttackUntil = performance.now() * 0.001 + ATTACK_TARGET_CONFIRM_SECONDS;
+    // Target attacks use the thin hitbox halo instead of the older ornate ground marker.
+    if (legacyAttackCommandMarker) legacyAttackCommandMarker.visible = false;
+    syncAttackIntentMarkers();
+  };
+
+  const previousSceneBeforeRender = scene.onBeforeRender;
+  const attackIntentBeforeRender: typeof scene.onBeforeRender = function(
+    renderer,
+    renderedScene,
+    camera,
+    geometry,
+    material,
+    group,
+  ) {
+    const minimapCamera = camera.position.y > 60 && camera.up.z < -0.5;
+    if (minimapCamera) {
+      attackHoverVisual.root.visible = false;
+      attackTargetVisual.root.visible = false;
+    } else {
+      gameplayCamera = camera;
+      syncAttackIntentMarkers();
+    }
+    previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
+  };
+  scene.onBeforeRender = attackIntentBeforeRender;
 
   // Selection.update() is called before local hero locomotion in the main game loop.
   // Sync the marker again when Three.js resolves world matrices for rendering so the
@@ -598,8 +731,17 @@ export function createEntitySelectionController(
       altHeld = true;
       return;
     }
+    if (event.code === 'KeyA') {
+      attackCommandArmed = selected === localHero && Boolean(localHero?.alive);
+      return;
+    }
+    if (event.code === 'Escape') {
+      attackCommandArmed = false;
+      return;
+    }
     if (event.code !== 'F1') return;
     event.preventDefault();
+    attackCommandArmed = false;
     if (localHero) setSelected(localHero);
     focusLocalHeroViaGameCamera();
   };
@@ -607,9 +749,48 @@ export function createEntitySelectionController(
   const onKeyUp = (event: KeyboardEvent) => {
     if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') altHeld = false;
   };
-  const onWindowBlur = () => { altHeld = false; };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!isGameplayCanvas(event.target)) {
+      hoveredAttackTarget = null;
+      return;
+    }
+    hoveredAttackTarget = pickAttackIntentTarget(event);
+  };
+
+  const onAttackIntentPointerDown = (event: PointerEvent) => {
+    if (!isGameplayCanvas(event.target) || (event.button !== 0 && event.button !== 2)) return;
+    const target = pickAttackIntentTarget(event);
+    const localHeroCanIssueAttack = selected === localHero && Boolean(localHero?.alive);
+
+    if (event.button === 2) {
+      attackCommandArmed = false;
+      if (localHeroCanIssueAttack && target) confirmAttackIntent(target);
+      else if (localHeroCanIssueAttack) {
+        confirmedAttackTarget = null;
+        confirmedAttackUntil = 0;
+      }
+      return;
+    }
+
+    if (!attackCommandArmed) return;
+    attackCommandArmed = false;
+    if (localHeroCanIssueAttack && target) confirmAttackIntent(target);
+    else {
+      confirmedAttackTarget = null;
+      confirmedAttackUntil = 0;
+    }
+  };
+
+  const onWindowBlur = () => {
+    altHeld = false;
+    attackCommandArmed = false;
+    hoveredAttackTarget = null;
+  };
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerdown', onAttackIntentPointerDown);
   window.addEventListener('blur', onWindowBlur);
 
   const updateEnemyTowerRanges = (now: number) => {
@@ -634,6 +815,7 @@ export function createEntitySelectionController(
   const update = () => {
     const now = performance.now() * 0.001;
     updateEnemyTowerRanges(now);
+    syncAttackIntentMarkers();
     hudBridge.refresh(selected);
 
     if (!selected || !selected.root.parent || !canSelect(selected) || (!selected.alive && selected !== localHero)) {
@@ -694,7 +876,10 @@ export function createEntitySelectionController(
     dispose() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerdown', onAttackIntentPointerDown);
       window.removeEventListener('blur', onWindowBlur);
+      if (scene.onBeforeRender === attackIntentBeforeRender) scene.onBeforeRender = previousSceneBeforeRender;
       if (selected) selected.root.userData.selected = false;
       selected = null;
       clearSelectionVisual();
@@ -704,6 +889,9 @@ export function createEntitySelectionController(
         disposeRangeVisual(enemyRangeVisual);
       }
       enemyTowerRanges.clear();
+      scene.remove(attackHoverVisual.root, attackTargetVisual.root);
+      disposeObjectVisual(attackHoverVisual.root);
+      disposeObjectVisual(attackTargetVisual.root);
       hudBridge.dispose();
       scene.remove(marker);
     },
