@@ -6,6 +6,7 @@ import { mountGameCameraControls } from './hud/gameCameraControls';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
+import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
 import './styles.css';
 import './hud-overrides.css';
 import './command-controls.css';
@@ -80,6 +81,7 @@ const disposeResponsiveHudScale = mountResponsiveHudScale();
 const disposeGameCameraControls = mountGameCameraControls();
 const disposeHeroFunctionKeyControls = mountHeroFunctionKeyControls();
 const disposeMinimapDragCamera = mountMinimapDragCamera();
+const disposeTowerPortraitAssets = mountTowerPortraitAssets();
 
 void waitForDawnreachReady().then(dismissBootSplash);
 
@@ -89,5 +91,6 @@ if (import.meta.hot) {
     disposeGameCameraControls();
     disposeHeroFunctionKeyControls();
     disposeMinimapDragCamera();
+    disposeTowerPortraitAssets();
   });
 }
