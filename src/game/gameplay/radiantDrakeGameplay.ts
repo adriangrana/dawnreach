@@ -16,7 +16,7 @@ export const RADIANT_DRAKE_GAMEPLAY = {
   level: 10,
   maxHp: 6_500,
   attackDamage: 110,
-  attackRange: 7,
+  attackRange: 5.4,
   attackIntervalSeconds: 1.8,
   selectionRadius: 3.2,
   visionHeight: 3.4,
@@ -31,7 +31,6 @@ export const RADIANT_DRAKE_GAMEPLAY = {
 const managerByScene = new WeakMap<THREE.Scene, RadiantDrakeManager>();
 const BOSS_POSITION = new THREE.Vector3();
 const TARGET_POSITION = new THREE.Vector3();
-const ATTACKER_POSITION = new THREE.Vector3();
 const VALID_TEAMS = new Set<TeamId>(['blue', 'red']);
 
 export function ensureRadiantDrakeGameplay(
