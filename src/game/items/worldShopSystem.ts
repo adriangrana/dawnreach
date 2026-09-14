@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { GameEntityRegistry, TeamId } from '../entities/gameEntities';
 import { BASE_LAYOUT, DAWNREACH_LAYOUT } from '../map/mapLayout';
 import { getItemDefinition, type ItemDefinition } from './itemDatabase';
+import { getItemIconDataUrl, getItemVisualSpec } from './itemVisuals';
 import {
   ITEM_DROP_EVENT,
   ITEM_PICKUP_REQUEST_EVENT,
@@ -50,10 +51,6 @@ export function ensureWorldShopSystem(
   for (const team of ['blue', 'red'] as const) {
     const shop = buildBaseShop(team);
     const center = team === 'blue' ? DAWNREACH_LAYOUT.blueBase : DAWNREACH_LAYOUT.redBase;
-
-    // Put the merchant at the true rear of each citadel, just inside the retaining wall.
-    // The base-center vector points away from the battlefield center and keeps both teams
-    // perfectly mirrored even if the base layout changes later.
     const rear = new THREE.Vector2(center.x, center.z).normalize();
     const rearDistance = BASE_LAYOUT.radius - SHOP_WORLD_FOOTPRINT_RADIUS - SHOP_WALL_GAP;
     shop.position.set(
@@ -306,16 +303,8 @@ function buildBaseShop(team: 'blue' | 'red') {
     roughness: 0.96,
     metalness: 0.03,
   });
-  const brass = new THREE.MeshStandardMaterial({
-    color: 0xc39a4d,
-    roughness: 0.3,
-    metalness: 0.7,
-  });
-  const agedBrass = new THREE.MeshStandardMaterial({
-    color: 0x856b3b,
-    roughness: 0.48,
-    metalness: 0.54,
-  });
+  const brass = new THREE.MeshStandardMaterial({ color: 0xc39a4d, roughness: 0.3, metalness: 0.7 });
+  const agedBrass = new THREE.MeshStandardMaterial({ color: 0x856b3b, roughness: 0.48, metalness: 0.54 });
   const roofMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: roofTexture,
@@ -364,14 +353,11 @@ function buildBaseShop(team: 'blue' | 'red') {
     return mesh;
   };
 
-  // Compact two-step plinth. The brass inlay is deliberately thin so it reads as crafted
-  // trim rather than another thick platform from the isometric camera.
   addMesh(new THREE.CylinderGeometry(2.78, 3.0, 0.34, 12), darkStone, [0, 0.17, 0], 'shop-foundation');
   addMesh(new THREE.CylinderGeometry(2.50, 2.70, 0.13, 12), stone, [0, 0.405, 0]);
   const plinthInlay = addMesh(new THREE.RingGeometry(2.18, 2.37, 12), agedBrass, [0, 0.482, 0]);
   plinthInlay.rotation.x = -Math.PI / 2;
 
-  // Rear wall is treated like a small premium market alcove rather than a solid bunker.
   addMesh(new THREE.BoxGeometry(4.28, 2.28, 0.34), stone, [0, 1.62, 1.34], 'shop-rear-wall');
   addMesh(new THREE.BoxGeometry(3.84, 0.11, 0.44), brass, [0, 2.72, 1.30]);
   addMesh(new THREE.BoxGeometry(3.72, 0.08, 0.38), stoneLight, [0, 2.57, 1.29]);
@@ -381,7 +367,6 @@ function buildBaseShop(team: 'blue' | 'red') {
     addMesh(new THREE.CylinderGeometry(0.31, 0.31, 0.12, 10), brass, [x, 2.98, 1.18]);
   }
 
-  // Warm wood counter, thin metal edging, and inset brass pulls make it read as furniture.
   addMesh(new THREE.BoxGeometry(3.72, 0.74, 0.78), wood, [0, 0.92, -0.55], 'shop-counter');
   addMesh(new THREE.BoxGeometry(3.94, 0.085, 0.92), brass, [0, 1.335, -0.55]);
   addMesh(new THREE.BoxGeometry(3.62, 0.08, 0.68), darkStone, [0, 0.56, -0.55]);
@@ -390,7 +375,6 @@ function buildBaseShop(team: 'blue' | 'red') {
     addMesh(new THREE.BoxGeometry(0.18, 0.055, 0.055), brass, [x, 0.91, -0.995]);
   }
 
-  // Recessed shelves use wood instead of gold bars, reducing the chunky look in the screenshot.
   for (const shelfY of [1.43, 2.05]) {
     addMesh(new THREE.BoxGeometry(3.25, 0.09, 0.44), wood, [0, shelfY, 1.12]);
     addMesh(new THREE.BoxGeometry(3.30, 0.035, 0.48), agedBrass, [0, shelfY + 0.055, 1.12]);
@@ -423,8 +407,6 @@ function buildBaseShop(team: 'blue' | 'red') {
     }
   }
 
-  // Layered octagonal slate roof: a much smaller, more detailed silhouette than the old
-  // oversized four-sided pyramid. Brass eaves and finial catch light without dominating it.
   const eave = addMesh(new THREE.CylinderGeometry(2.58, 2.78, 0.15, 8), agedBrass, [0, 3.05, 0.42], 'shop-roof-eave');
   eave.rotation.y = Math.PI / 8;
   const roof = addMesh(new THREE.ConeGeometry(2.60, 0.92, 8), roofMaterial, [0, 3.52, 0.42], 'shop-roof');
@@ -434,13 +416,11 @@ function buildBaseShop(team: 'blue' | 'red') {
   const finial = addMesh(new THREE.OctahedronGeometry(0.22, 0), glow, [0, 4.34, 0.42], 'shop-finial');
   finial.rotation.y = Math.PI / 4;
 
-  // Narrow woven awning with a separate brass hem instead of one thick slab.
   const awning = addMesh(new THREE.BoxGeometry(3.55, 0.055, 1.24), cloth, [0, 2.82, -0.46], 'shop-awning');
   awning.rotation.x = -0.15;
   const awningHem = addMesh(new THREE.BoxGeometry(3.60, 0.055, 0.10), brass, [0, 2.72, -1.08]);
   awningHem.rotation.x = -0.15;
 
-  // Compact hanging guild seal.
   const signFrame = addMesh(new THREE.TorusGeometry(0.47, 0.055, 10, 48), brass, [0, 2.72, -1.26], 'shop-sign-ring');
   signFrame.rotation.x = Math.PI / 2;
   const signDisc = addMesh(new THREE.CylinderGeometry(0.34, 0.34, 0.065, 32), darkStone, [0, 2.72, -1.26]);
@@ -459,7 +439,6 @@ function buildBaseShop(team: 'blue' | 'red') {
     root.add(light);
   }
 
-  // Small merchant props keep the lower silhouette organic without stealing plaza space.
   for (const side of [-1, 1]) {
     const crate = addMesh(new THREE.BoxGeometry(0.62, 0.48, 0.58), wood, [side * 1.96, 0.75, 0.10]);
     crate.rotation.y = side * 0.16;
@@ -479,22 +458,19 @@ function buildGroundItem(definition: ItemDefinition, groundId: string) {
   root.userData.groundItemId = groundId;
   root.userData.itemId = definition.id;
 
-  const tierColor = definition.tier === 'Avanzado'
-    ? 0xd7ad62
-    : definition.tier === 'Intermedio'
-      ? 0x73bcd5
-      : 0x90c98d;
+  const visual = getItemVisualSpec(definition.id);
+  const tierColor = new THREE.Color(visual.glow).getHex();
   const baseMaterial = new THREE.MeshStandardMaterial({
-    color: 0x252c2d,
+    color: 0x20292b,
     roughness: 0.62,
     metalness: 0.38,
   });
   const trimMaterial = new THREE.MeshStandardMaterial({
     color: tierColor,
     emissive: tierColor,
-    emissiveIntensity: 0.24,
-    roughness: 0.34,
-    metalness: 0.48,
+    emissiveIntensity: 0.30,
+    roughness: 0.30,
+    metalness: 0.52,
   });
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.025, 8, 40), trimMaterial);
@@ -509,21 +485,64 @@ function buildGroundItem(definition: ItemDefinition, groundId: string) {
   pedestal.receiveShadow = true;
   root.add(pedestal);
 
-  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.23, 0), trimMaterial);
+  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.20, 0), trimMaterial);
   jewel.name = 'ground-item-jewel';
-  jewel.position.y = 0.48;
+  jewel.position.y = 0.43;
   jewel.rotation.z = Math.PI / 4;
   jewel.castShadow = true;
   root.add(jewel);
 
+  const art = buildItemArtSprite(definition);
+  art.position.y = 0.62;
+  root.add(art);
+
   const sprite = buildItemLabelSprite(definition, tierColor);
-  sprite.position.y = 1.03;
+  sprite.position.y = 1.10;
   root.add(sprite);
 
   root.traverse(object => {
     object.userData.groundItemId = groundId;
   });
   return root;
+}
+
+function buildItemArtSprite(definition: ItemDefinition) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 160;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+
+  if (ctx) {
+    ctx.clearRect(0, 0, 160, 160);
+    ctx.fillStyle = 'rgba(5, 11, 14, .78)';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 144, 144, 22);
+    ctx.fill();
+    const image = new Image();
+    image.onload = () => {
+      ctx.clearRect(0, 0, 160, 160);
+      ctx.drawImage(image, 8, 8, 144, 144);
+      texture.needsUpdate = true;
+    };
+    image.src = getItemIconDataUrl(definition.id);
+  }
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.name = 'ground-item-art';
+  sprite.scale.set(0.76, 0.76, 1);
+  sprite.renderOrder = 24;
+  return sprite;
 }
 
 function buildItemLabelSprite(definition: ItemDefinition, tierColor: number) {
@@ -595,7 +614,6 @@ function buildStoneTexture(dark: string, light: string, grout: string) {
     }
   }
 
-  // Fine mineral flecks keep close shots from reading like flat painted rectangles.
   for (let index = 0; index < 220; index++) {
     const x = hashTexture(index * 31 + 11) * canvas.width;
     const y = hashTexture(index * 47 + 19) * canvas.height;
@@ -623,8 +641,6 @@ function buildFabricTexture(base: string, accent: string) {
 
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, 256, 256);
-
-  // Fine woven thread instead of the old broad diagonal stripes.
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.055;
