@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DRAKE_ATTACK, type DrakeAnimationController } from '../creatures/radiantDrake/animateRadiantDrake';
 import type { GameEntity, GameEntityRegistry, TeamId } from '../entities/gameEntities';
 import {
   emitWorldCombatEvent,
@@ -50,6 +51,8 @@ class RadiantDrakeManager {
   private target: GameEntity | null = null;
   private nextScanAtMs = 0;
   private nextAttackAtMs = 0;
+  private pendingAttack: { target: GameEntity; impactAtMs: number } | null = null;
+  private readonly localTarget = new THREE.Vector3();
   private animationFrame = 0;
   private disposed = false;
   private deathResolved = false;
@@ -90,13 +93,20 @@ class RadiantDrakeManager {
       return;
     }
 
+    if (this.pendingAttack && nowMs >= this.pendingAttack.impactAtMs) {
+      const { target } = this.pendingAttack;
+      this.pendingAttack = null;
+      // A bite can miss if its target leaves the pit or dies during the windup.
+      if (this.isValidTarget(target) && this.inAttackRange(target)) this.applyAttackHit(target, nowMs);
+    }
+
     if (nowMs >= this.nextScanAtMs) {
       this.nextScanAtMs = nowMs + RADIANT_DRAKE_GAMEPLAY.scanIntervalSeconds * 1000;
       this.target = this.chooseTarget(nowMs);
       this.dragon.root.userData.bossState = this.target ? 'COMBAT' : 'IDLE';
     }
 
-    if (this.target && nowMs >= this.nextAttackAtMs) {
+    if (this.target && !this.pendingAttack && nowMs >= this.nextAttackAtMs) {
       if (!this.isValidTarget(this.target)) {
         this.target = null;
       } else {
@@ -170,6 +180,17 @@ class RadiantDrakeManager {
     this.dragon.root.userData.bossState = enraged ? 'ENRAGED' : 'COMBAT';
     this.dragon.root.userData.lastAttackAtMs = nowMs;
 
+    target.root.getWorldPosition(this.localTarget);
+    this.dragon.root.worldToLocal(this.localTarget);
+    const animator = this.dragon.root.userData.drakeAnimator as DrakeAnimationController | undefined;
+    const speed = enraged ? 1 / RADIANT_DRAKE_GAMEPLAY.enrageAttackIntervalMultiplier : 1;
+    // The authored head faces slightly right of local +Z.
+    const heading = Math.atan2(this.localTarget.x, this.localTarget.z) - 0.23;
+    const impactAtMs = animator?.beginAttack(nowMs, speed, heading) ?? nowMs + DRAKE_ATTACK.impact * 1000 / speed;
+    this.pendingAttack = { target, impactAtMs };
+  }
+
+  private applyAttackHit(target: GameEntity, nowMs: number) {
     this.dragon.root.getWorldPosition(BOSS_POSITION);
     target.root.getWorldPosition(TARGET_POSITION);
     publishWorldAttackEvent({
@@ -219,6 +240,8 @@ class RadiantDrakeManager {
     this.dragon.root.userData.currentHp = 0;
     this.dragon.root.userData.bossState = 'DEAD';
     this.target = null;
+    this.pendingAttack = null;
+    (this.dragon.root.userData.drakeAnimator as DrakeAnimationController | undefined)?.cancelAttack();
 
     const lastAttack = getMostRecentAttackOnTarget(this.dragon.id, atMs, 3_000);
     const killer = lastAttack
@@ -245,6 +268,8 @@ class RadiantDrakeManager {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.pendingAttack = null;
+    (this.dragon.root.userData.drakeAnimator as DrakeAnimationController | undefined)?.cancelAttack();
     cancelAnimationFrame(this.animationFrame);
     this.unsubscribeCombat();
     managerByScene.delete(this.scene);

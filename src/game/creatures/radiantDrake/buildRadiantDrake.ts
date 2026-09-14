@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createLoft, membranePanel, scaleGeometry, taperedCurve, v, type Section } from './geometry';
 import { createDrakeMaterials } from './materials';
+import { createDrakeAnimator, type DrakeAttachment } from './animateRadiantDrake';
 
 export function buildRadiantDrake() {
   const root = new THREE.Group();
@@ -36,7 +37,11 @@ export function buildRadiantDrake() {
     [0.25, 0.31, 2.25, 0.065, 0.055], [-0.55, 0.38, 1.95, 0.006, 0.008],
   ].map(([x, y, z, width, height]) => ({ center: v(x, y, z), width, height }));
   const body = createLoft(sections, 220, 36);
-  mesh(model, 'continuous-scaled-neck-body-tail', body.geometry, materials.skin);
+  const skin = new THREE.SkinnedMesh(body.geometry, materials.skin);
+  skin.name = 'continuous-scaled-neck-body-tail';
+  skin.castShadow = skin.receiveShadow = true; model.add(skin);
+  const attachments: DrakeAttachment[] = [];
+  const scaleTimes: number[] = [];
 
   // Hundreds of overlapping keeled scutes catch actual light above the micro-scale texture.
   const count = 110 * 11;
@@ -47,6 +52,7 @@ export function buildRadiantDrake() {
   let instance = 0;
   for (let row = 0; row < 110; row++) for (let col = 0; col < 11; col++) {
     const t = 0.015 + row / 110 * 0.95 + (col % 2) * 0.003;
+    scaleTimes.push(t);
     const s = body.sample(t), angle = 0.11 + col / 10 * (Math.PI - 0.22);
     const normal = s.right.clone().multiplyScalar(Math.cos(angle)).addScaledVector(s.up, Math.sin(angle)).normalize();
     transform.position.copy(s.center).addScaledVector(s.right, Math.cos(angle) * (s.width + 0.005))
@@ -64,13 +70,15 @@ export function buildRadiantDrake() {
     const t = 0.04 + spine / 27 * 0.91, s = body.sample(t);
     const start = s.center.clone().addScaledVector(s.up, s.height - 0.015);
     const height = THREE.MathUtils.lerp(0.46, 0.10, t);
-    horn(model, 'dorsal-ivory-spine', [start, start.clone().addScaledVector(s.up, height * 0.7).addScaledVector(s.tangent, 0.09),
+    const object = horn(model, 'dorsal-ivory-spine', [start, start.clone().addScaledVector(s.up, height * 0.7).addScaledVector(s.tangent, 0.09),
       start.clone().addScaledVector(s.up, height).addScaledVector(s.tangent, 0.28 * (1 - t))], 0.095 * (1 - t) + 0.014);
+    attachments.push({ object, t });
   }
   for (let belly = 0; belly < 22; belly++) {
-    const s = body.sample(0.018 + belly / 22 * 0.44);
-    plate(model, s.center.clone().addScaledVector(s.up, -s.height - 0.007), s.up.clone().negate(), s.tangent,
+    const t = 0.018 + belly / 22 * 0.44, s = body.sample(t);
+    const object = plate(model, s.center.clone().addScaledVector(s.up, -s.height - 0.007), s.up.clone().negate(), s.tangent,
       s.width * 5.1, 0.7, materials.gold);
+    attachments.push({ object, t });
   }
 
   const head = new THREE.Group();head.name = 'sculpted-dragon-head';head.position.set(0.05, 2.38, 1.45);model.add(head);
@@ -172,15 +180,13 @@ export function buildRadiantDrake() {
     }
   }
 
-  root.userData.animate = (elapsed: number) => {
-    // Low-amplitude breathing keeps feet planted and the resting silhouette readable.
-    head.rotation.x = Math.sin(elapsed * 0.9) * 0.022;
-    head.rotation.y = 0.23 + Math.sin(elapsed * 0.37) * 0.035;
-    jaw.rotation.x = 0.025 + (Math.sin(elapsed * 0.9) + 1) * 0.018;
-    for (const { group, side } of wings) {
-      group.rotation.z = side * Math.sin(elapsed * 0.82) * 0.026;
-      group.rotation.x = Math.sin(elapsed * 0.82 + 0.4) * 0.015;
-    }
-  };
+  // Move the jaw pivot to its hinge without moving the authored teeth and mandible.
+  const hinge = v(0, -0.20, -0.05);
+  jaw.position.copy(hinge);
+  for (const child of jaw.children) child.position.sub(hinge);
+  const animator = createDrakeAnimator(root, model, skin, t => body.sample(t).center,
+    scales, scaleTimes, attachments, head, jaw, wings);
+  root.userData.drakeAnimator = animator;
+  root.userData.animate = animator.update;
   return root;
 }
