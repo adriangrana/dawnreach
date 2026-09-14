@@ -71,7 +71,7 @@ export type WorldHeroProgressionEvent = Readonly<{
   goldDelta: number;
   lastHitsDelta: number;
   deniesDelta: number;
-  reason: 'creep-death' | 'objective-kill';
+  reason: 'creep-death' | 'objective-kill' | 'ward-kill';
 }>;
 
 type WorldCombatListener = (event: WorldCombatEvent) => void;
