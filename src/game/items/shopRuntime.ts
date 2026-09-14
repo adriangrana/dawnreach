@@ -6,6 +6,13 @@ import type { MatchHeroState, MatchState } from '../match/types';
 import { isLocalHeroNearShop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 import { canMergeItemStacks, getItemStackLimit } from './itemStacking';
+import {
+  TELEPORT_COMPLETE_EVENT,
+  TELEPORT_SCROLL_EFFECT_ID,
+  TELEPORT_SCROLL_ITEM_ID,
+  TELEPORT_SCROLL_SLOT,
+  type TeleportCompleteDetail,
+} from './teleportScrollEvents';
 
 export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | 'out-of-shop-range' | null;
 export type ItemUseReason = 'missing-item' | 'not-active' | 'cooldown' | 'not-enough-resource' | 'dead' | null;
@@ -59,20 +66,114 @@ export type ItemUseResult = Readonly<{
   consumed: boolean;
 }>;
 
+const TELEPORT_COOLDOWN_TIMESTAMP = 'item:teleport-scroll:cooldown-ready-at-ms';
 const heroItemRuntimeContexts = new Map<string, HeroItemRuntimeContext>();
 const itemActivationOwners = new Map<string, ItemActivationOwnerContext>();
+const heroAliveStates = new Map<string, boolean>();
+const completedTeleportCounts = new Map<string, number>();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(TELEPORT_COMPLETE_EVENT, ((event: Event) => {
+    const detail = (event as CustomEvent<TeleportCompleteDetail>).detail;
+    if (!detail?.instanceId) return;
+    completedTeleportCounts.set(detail.instanceId, (completedTeleportCounts.get(detail.instanceId) ?? 0) + 1);
+  }) as EventListener);
+}
 
 function runtimeNowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+function isTeleportItem(definitionId: string) {
+  return definitionId === TELEPORT_SCROLL_ITEM_ID;
+}
+
+function getTeleportSlot(hero: MatchHeroState) {
+  return hero.inventory.find(slot => slot.slot === TELEPORT_SCROLL_SLOT) ?? null;
+}
+
+function eligibleSlotsForItem(hero: MatchHeroState, definitionId: string) {
+  return hero.inventory.filter(slot => (
+    isTeleportItem(definitionId)
+      ? slot.slot === TELEPORT_SCROLL_SLOT
+      : slot.slot !== TELEPORT_SCROLL_SLOT
+  ));
+}
+
 function findMergeableStack(hero: MatchHeroState, item: Pick<InventoryItem, 'definitionId' | 'quantity'>) {
   const stackLimit = getItemStackLimit(item.definitionId);
   if (stackLimit <= 1) return null;
-  return hero.inventory.find(slot => (
+  return eligibleSlotsForItem(hero, item.definitionId).find(slot => (
     slot.item?.definitionId === item.definitionId
     && slot.item.quantity + Math.max(1, item.quantity) <= stackLimit
   )) ?? null;
+}
+
+function findEmptySlotForItem(hero: MatchHeroState, definitionId: string) {
+  return eligibleSlotsForItem(hero, definitionId).find(slot => slot.item === null) ?? null;
+}
+
+function inheritTeleportCooldown(hero: MatchHeroState, item: InventoryItem) {
+  if (!isTeleportItem(item.definitionId)) return;
+  item.cooldownReadyAtMs = Math.max(
+    item.cooldownReadyAtMs,
+    numeric(hero.runtime.timestamps[TELEPORT_COOLDOWN_TIMESTAMP], 0),
+  );
+}
+
+function grantFreeTeleportScroll(hero: MatchHeroState, nowMs: number) {
+  const definition = getItemDefinition(TELEPORT_SCROLL_ITEM_ID);
+  const slot = getTeleportSlot(hero);
+  if (!definition || !slot) return;
+  const stackLimit = getItemStackLimit(TELEPORT_SCROLL_ITEM_ID);
+
+  if (slot.item?.definitionId === TELEPORT_SCROLL_ITEM_ID) {
+    slot.item.quantity = Math.min(stackLimit, slot.item.quantity + 1);
+    inheritTeleportCooldown(hero, slot.item);
+    return;
+  }
+  if (slot.item) return;
+
+  const item = createInventoryItem(
+    definition,
+    `${TELEPORT_SCROLL_ITEM_ID}:respawn:${hero.heroEntityId}:${Math.round(nowMs * 1000)}`,
+  );
+  inheritTeleportCooldown(hero, item);
+  slot.item = item;
+}
+
+function applyTeleportMaintenance(
+  state: MatchState,
+  heroEntityId: string,
+  nowMs: number,
+): MatchState {
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const alive = sourceHero.currentHp > 0;
+  const wasAlive = heroAliveStates.get(heroEntityId);
+  heroAliveStates.set(heroEntityId, alive);
+
+  const sourceSlot = getTeleportSlot(sourceHero);
+  const instanceId = sourceSlot?.item?.definitionId === TELEPORT_SCROLL_ITEM_ID
+    ? sourceSlot.item.instanceId
+    : null;
+  const completionCount = instanceId ? (completedTeleportCounts.get(instanceId) ?? 0) : 0;
+  const respawned = wasAlive === false && alive;
+  if (completionCount <= 0 && !respawned) return state;
+
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const slot = getTeleportSlot(hero);
+
+  if (completionCount > 0 && instanceId && slot?.item?.instanceId === instanceId) {
+    if (completionCount <= 1) completedTeleportCounts.delete(instanceId);
+    else completedTeleportCounts.set(instanceId, completionCount - 1);
+    if (slot.item.quantity > 1) slot.item.quantity -= 1;
+    else slot.item = null;
+  }
+
+  if (respawned) grantFreeTeleportScroll(hero, nowMs);
+  syncHeroItemRuntime(next, heroEntityId, nowMs);
+  return next;
 }
 
 export function syncHeroItemRuntime(
@@ -108,7 +209,9 @@ export function getItemActivationOwnerContext(instanceId: string): ItemActivatio
 }
 
 export function heroHasInventorySpace(state: MatchState, heroEntityId: string) {
-  return getRequiredHero(state, heroEntityId).inventory.some(slot => slot.item === null);
+  return getRequiredHero(state, heroEntityId).inventory.some(slot => (
+    slot.slot !== TELEPORT_SCROLL_SLOT && slot.item === null
+  ));
 }
 
 export function purchaseShopItem(
@@ -131,6 +234,7 @@ export function purchaseShopItem(
   const hero = getRequiredHero(next, heroEntityId);
   hero.gold = Math.max(0, hero.gold - definition.cost);
   const item = createInventoryItem(definition, instanceId);
+  inheritTeleportCooldown(hero, item);
   const nearShop = isLocalHeroNearShop();
   const stackSlot = nearShop ? findMergeableStack(hero, item) : null;
 
@@ -142,7 +246,7 @@ export function purchaseShopItem(
     return { match: next, definition, item: stackedItem, ok: true, dropped: false, reason: null };
   }
 
-  const emptySlot = hero.inventory.find(slot => slot.item === null);
+  const emptySlot = findEmptySlotForItem(hero, item.definitionId);
   if (nearShop && emptySlot) {
     emptySlot.item = item;
     syncHeroItemRuntime(next, heroEntityId);
@@ -170,7 +274,8 @@ export function pickUpGroundItem(
 
   const sourceHero = getRequiredHero(state, heroEntityId);
   const sourceStack = findMergeableStack(sourceHero, item);
-  if (!sourceStack && !heroHasInventorySpace(state, heroEntityId)) {
+  const sourceEmpty = findEmptySlotForItem(sourceHero, item.definitionId);
+  if (!sourceStack && !sourceEmpty) {
     return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   }
 
@@ -180,13 +285,15 @@ export function pickUpGroundItem(
   if (stackSlot?.item) {
     stackSlot.item.quantity += Math.max(1, item.quantity);
     stackSlot.item.cooldownReadyAtMs = Math.max(stackSlot.item.cooldownReadyAtMs, item.cooldownReadyAtMs);
+    inheritTeleportCooldown(hero, stackSlot.item);
     syncHeroItemRuntime(next, heroEntityId);
     return { match: next, definition, item: structuredClone(stackSlot.item), ok: true, reason: null };
   }
 
-  const emptySlot = hero.inventory.find(slot => slot.item === null);
+  const emptySlot = findEmptySlotForItem(hero, item.definitionId);
   if (!emptySlot) return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   emptySlot.item = structuredClone(item);
+  inheritTeleportCooldown(hero, emptySlot.item);
   syncHeroItemRuntime(next, heroEntityId);
   return { match: next, definition, item, ok: true, reason: null };
 }
@@ -198,6 +305,7 @@ export function moveInventoryItem(
   toSlotIndex: number,
 ): MatchState {
   if (fromSlotIndex === toSlotIndex) return state;
+  if (fromSlotIndex === TELEPORT_SCROLL_SLOT || toSlotIndex === TELEPORT_SCROLL_SLOT) return state;
   const sourceHero = getRequiredHero(state, heroEntityId);
   const from = sourceHero.inventory.find(slot => slot.slot === fromSlotIndex);
   const to = sourceHero.inventory.find(slot => slot.slot === toSlotIndex);
@@ -234,6 +342,9 @@ export function dropInventoryItem(
   heroEntityId: string,
   slotIndex: number,
 ): InventoryMutationResult {
+  if (slotIndex === TELEPORT_SCROLL_SLOT) {
+    return { match: state, item: null, definition: null, ok: false };
+  }
   const sourceHero = getRequiredHero(state, heroEntityId);
   const sourceSlot = sourceHero.inventory.find(slot => slot.slot === slotIndex);
   if (!sourceSlot?.item) return { match: state, item: null, definition: null, ok: false };
@@ -289,6 +400,12 @@ export function useInventoryItem(
   const sourceItem = sourceSlot?.item ?? null;
   const definition = sourceItem ? getItemDefinition(sourceItem.definitionId) : null;
   if (!sourceItem || !definition) return { match: state, item: null, definition, ok: false, reason: 'missing-item', consumed: false };
+  if (slotIndex === TELEPORT_SCROLL_SLOT && definition.id !== TELEPORT_SCROLL_ITEM_ID) {
+    return { match: state, item: sourceItem, definition, ok: false, reason: 'missing-item', consumed: false };
+  }
+  if (definition.id === TELEPORT_SCROLL_ITEM_ID && slotIndex !== TELEPORT_SCROLL_SLOT) {
+    return { match: state, item: sourceItem, definition, ok: false, reason: 'missing-item', consumed: false };
+  }
   if (!definition.active_effect) return { match: state, item: sourceItem, definition, ok: false, reason: 'not-active', consumed: false };
   if (sourceHero.currentHp <= 0) return { match: state, item: sourceItem, definition, ok: false, reason: 'dead', consumed: false };
   if ((sourceItem.cooldownReadyAtMs ?? 0) > nowMs) return { match: state, item: sourceItem, definition, ok: false, reason: 'cooldown', consumed: false };
@@ -304,6 +421,9 @@ export function useInventoryItem(
   const values = effect.values;
   hero.currentResource = Math.max(0, hero.currentResource - effect.mana_cost);
   item.cooldownReadyAtMs = nowMs + effect.cooldown * 1000;
+  if (effect.id === TELEPORT_SCROLL_EFFECT_ID) {
+    hero.runtime.timestamps[TELEPORT_COOLDOWN_TIMESTAMP] = item.cooldownReadyAtMs;
+  }
 
   if (values.remove_slow === true || effect.id === 'cleanse_slow_and_haste' || effect.id === 'short_blink_cleanse_slow') {
     cleanseSlowStatuses(hero, nowMs);
@@ -383,18 +503,19 @@ export function advanceItemActiveEffects(
   elapsedMs: number,
   nowMs: number,
 ): MatchState {
+  const maintained = applyTeleportMaintenance(state, heroEntityId, nowMs);
   if (elapsedMs <= 0) {
-    syncHeroItemRuntime(state, heroEntityId, nowMs);
-    return state;
+    syncHeroItemRuntime(maintained, heroEntityId, nowMs);
+    return maintained;
   }
-  const sourceHero = getRequiredHero(state, heroEntityId);
+  const sourceHero = getRequiredHero(maintained, heroEntityId);
   const statuses = Object.values(sourceHero.runtime.statuses).filter(status => status.id.startsWith('item:active:'));
   if (statuses.length === 0) {
-    syncHeroItemRuntime(state, heroEntityId, nowMs);
-    return state;
+    syncHeroItemRuntime(maintained, heroEntityId, nowMs);
+    return maintained;
   }
 
-  const next = structuredClone(state);
+  const next = structuredClone(maintained);
   const hero = getRequiredHero(next, heroEntityId);
   const stats = calculateHeroStats(next, heroEntityId, { nowMs });
   const tickStart = nowMs - elapsedMs;
