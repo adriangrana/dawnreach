@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
 import { ensureRadiantDrakeGameplay, RADIANT_DRAKE_GAMEPLAY } from '../gameplay/radiantDrakeGameplay';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
+import { ensureWorldShopSystem } from '../items/worldShopSystem';
 import { attachEntityOverhead } from './entityOverheads';
 import { registerFloatingCombatEntity, unregisterFloatingCombatEntity } from './floatingCombatText';
 import { attachHeroAttackRangeIndicator, detachHeroAttackRangeIndicator } from './heroAttackRangeIndicator';
@@ -373,4 +374,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
       });
     }
   });
+
+  const scene = findSceneRoot(battlefield);
+  if (scene) ensureWorldShopSystem(scene, registry, battlefield, 'blue');
 }
