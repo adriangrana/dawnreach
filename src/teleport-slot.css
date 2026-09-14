@@ -1,15 +1,21 @@
-/* Keep the teleport stack counter tucked into the slot corner instead of covering the icon. */
-.teleport-slot-shell .inventory-item-quantity {
-  left: 1px;
-  bottom: 1px;
+/*
+ * Shared stack counter treatment for every stackable inventory item, including
+ * the dedicated teleport slot. The lower-left slot corner sits exactly at the
+ * center of the badge, so the counter hangs half outside the slot while staying
+ * visually above the item art and cooldown overlay.
+ */
+.inventory-slot .inventory-item-quantity {
+  left: 0;
+  bottom: 0;
   right: auto;
   top: auto;
+  z-index: 20;
   min-width: 12px;
   height: 12px;
-  padding: 0 2px;
+  padding: 0 3px;
   box-sizing: border-box;
-  border-radius: 6px;
+  border-radius: 999px;
   font-size: 7px;
   line-height: 1;
-  transform: none;
+  transform: translate(-50%, 50%);
 }
