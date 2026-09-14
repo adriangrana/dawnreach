@@ -11,6 +11,9 @@ import {
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import { INVENTORY_SLOT_HOTKEYS } from './inventoryControls';
 
+const LOCAL_HERO_ENTITY_ID = 'blue-hero-alden';
+const SELECTION_OVERLAY_SELECTOR = '.selected-entity-hud-overlay';
+
 const STAT_LABELS: Record<string, string> = {
   strength: 'Fuerza', agility: 'Agilidad', intelligence: 'Inteligencia', damage: 'Daño físico',
   magic_power: 'Poder mágico', armor: 'Armadura', attack_speed_pct: 'Vel. ataque',
@@ -21,6 +24,17 @@ const STAT_LABELS: Record<string, string> = {
 function formatStat(stat: string, amount: number) {
   const pct = stat === 'attack_speed_pct' || stat === 'magic_resist_pct';
   return `+${Number.isInteger(amount) ? amount : amount.toFixed(1)}${pct ? '%' : ''} ${STAT_LABELS[stat] ?? stat}`;
+}
+
+function ensureLocalHeroSelectedForTargeting() {
+  const overlay = document.querySelector<HTMLElement>(SELECTION_OVERLAY_SELECTOR);
+  if (overlay?.dataset.selectionKind === 'hero' && overlay.dataset.selectionId === LOCAL_HERO_ENTITY_ID) return;
+  window.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'F1',
+    code: 'F1',
+    bubbles: true,
+    cancelable: true,
+  }));
 }
 
 export default function InventoryItemSlot({
@@ -68,6 +82,7 @@ export default function InventoryItemSlot({
     if (!item || !definition?.active_effect || !active || disabled) return;
 
     if (requiresGroundTarget) {
+      ensureLocalHeroSelectedForTargeting();
       const detail: ItemTargetRequestDetail = {
         itemId: item.definitionId,
         instanceId: item.instanceId,
