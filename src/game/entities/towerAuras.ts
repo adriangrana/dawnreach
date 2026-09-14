@@ -7,6 +7,8 @@ import {
   isTowerTierVulnerable,
   updateTowerObjectiveProgression,
 } from '../gameplay/towerRules';
+import { getHeroDefinition } from '../heroes/catalog';
+import { calculateDefinitionStatsAtLevel } from '../match/stats';
 import type { GameEntity, GameEntityKind, GameEntityRegistry, TeamId } from './gameEntities';
 import { emitWorldCombatEvent, getWorldEntityRuntime } from './worldCombatBridge';
 
@@ -173,6 +175,22 @@ function isEthereal(entity: GameEntity): boolean {
     || status.data?.ethereal === true
     || status.data?.ghostForm === true
   )) ?? false;
+}
+
+function getEntityPhysicalArmor(entity: GameEntity): number {
+  const runtimeArmor = Number(entity.root.userData.physicalArmor);
+  if (Number.isFinite(runtimeArmor)) return runtimeArmor;
+  if (entity.kind !== 'hero') return 0;
+
+  // Hero entities can be authored before their match-state definition id is copied into
+  // the world entity. Alden's rig root is already named H001, so use it as the fallback.
+  const definitionId = entity.definitionId ?? entity.root.name;
+  if (!definitionId) return 0;
+  try {
+    return calculateDefinitionStatsAtLevel(getHeroDefinition(definitionId), entity.level).physicalArmor;
+  } catch {
+    return 0;
+  }
 }
 
 function towerSelfRegenPerSecond(entity: GameEntity, state: TowerAuraState, atMs: number): number {
@@ -353,9 +371,9 @@ export function calculateTowerAuraAdjustedDamage(
   // intentional exception and take no physical tower damage.
   if (source?.kind === 'tower') {
     if (isEthereal(target)) return 0;
-    const authoredArmor = Number(target.root.userData.physicalArmor ?? 0);
+    const physicalArmor = getEntityPhysicalArmor(target);
     const auraArmor = targetAura.towerProtection ? TOWER_PROTECTION.effects.aura.armorBonus : 0;
-    damage *= armorDamageMultiplier(authoredArmor + auraArmor);
+    damage *= armorDamageMultiplier(physicalArmor + auraArmor);
   } else if (targetAura.towerProtection) {
     damage *= armorDamageMultiplier(TOWER_PROTECTION.effects.aura.armorBonus);
   }
