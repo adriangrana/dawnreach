@@ -29,6 +29,7 @@ const VISION_EPSILON = 0.06;
 const TREE_VISION_RADIUS = 0.34;
 const WALL_RADIUS = 0.48;
 const ELEVATION_RADIUS = 0.42;
+const OCCLUDER_SPATIAL_CELL_SIZE = 6;
 
 type WorldPoint3 = Readonly<{ x: number; y: number; z: number }>;
 
@@ -364,6 +365,92 @@ function distancePointToSegment(
   return Math.hypot(x - (ax + vx * t), z - (az + vz * t));
 }
 
+function occluderBounds(occluder: VisionOccluder) {
+  if (occluder.kind === 'circle') {
+    return {
+      minX: occluder.x - occluder.radius,
+      maxX: occluder.x + occluder.radius,
+      minZ: occluder.z - occluder.radius,
+      maxZ: occluder.z + occluder.radius,
+    };
+  }
+  if (occluder.kind === 'ellipse') {
+    // A max-radius square is conservative for every rotation and only affects the
+    // broad phase; the exact ellipse test still decides visibility.
+    const radius = Math.max(occluder.radiusX, occluder.radiusZ);
+    return {
+      minX: occluder.x - radius,
+      maxX: occluder.x + radius,
+      minZ: occluder.z - radius,
+      maxZ: occluder.z + radius,
+    };
+  }
+  return {
+    minX: Math.min(occluder.ax, occluder.bx) - occluder.radius,
+    maxX: Math.max(occluder.ax, occluder.bx) + occluder.radius,
+    minZ: Math.min(occluder.az, occluder.bz) - occluder.radius,
+    maxZ: Math.max(occluder.az, occluder.bz) + occluder.radius,
+  };
+}
+
+function createOccluderSpatialIndex(occluders: readonly VisionOccluder[]) {
+  const cells = new Map<string, number[]>();
+  const marks = new Uint32Array(occluders.length);
+  let queryRevision = 0;
+  const cellCoordinate = (value: number) => Math.floor(value / OCCLUDER_SPATIAL_CELL_SIZE);
+  const cellKey = (x: number, z: number) => `${x}:${z}`;
+
+  occluders.forEach((occluder, index) => {
+    const bounds = occluderBounds(occluder);
+    const minCellX = cellCoordinate(bounds.minX);
+    const maxCellX = cellCoordinate(bounds.maxX);
+    const minCellZ = cellCoordinate(bounds.minZ);
+    const maxCellZ = cellCoordinate(bounds.maxZ);
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+        const key = cellKey(cellX, cellZ);
+        const bucket = cells.get(key) ?? [];
+        bucket.push(index);
+        cells.set(key, bucket);
+      }
+    }
+  });
+
+  const forEachCandidate = (
+    minX: number,
+    minZ: number,
+    maxX: number,
+    maxZ: number,
+    visit: (occluder: VisionOccluder) => boolean,
+  ) => {
+    queryRevision = (queryRevision + 1) >>> 0;
+    if (queryRevision === 0) {
+      marks.fill(0);
+      queryRevision = 1;
+    }
+
+    const minCellX = cellCoordinate(Math.min(minX, maxX));
+    const maxCellX = cellCoordinate(Math.max(minX, maxX));
+    const minCellZ = cellCoordinate(Math.min(minZ, maxZ));
+    const maxCellZ = cellCoordinate(Math.max(minZ, maxZ));
+
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+        const bucket = cells.get(cellKey(cellX, cellZ));
+        if (!bucket) continue;
+        for (const index of bucket) {
+          if (marks[index] === queryRevision) continue;
+          marks[index] = queryRevision;
+          if (visit(occluders[index])) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  return { forEachCandidate };
+}
+
 function collectVisionOccluders(scene: THREE.Scene) {
   const occluders: VisionOccluder[] = [];
   const instanceMatrix = new THREE.Matrix4();
@@ -558,19 +645,25 @@ function angularDistance(a: number, b: number) {
 
 function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
   const occluders = collectVisionOccluders(scene);
+  const spatialIndex = createOccluderSpatialIndex(occluders);
 
   const traceDistance = (source: WorldPoint3, angle: number, maxDistance: number) => {
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
+    const endX = source.x + dx * maxDistance;
+    const endZ = source.z + dz * maxDistance;
     let nearestEntry = maxDistance;
     let nearestOccluder: VisionOccluder | null = null;
-    for (const occluder of occluders) {
+
+    spatialIndex.forEachCandidate(source.x, source.z, endX, endZ, (occluder) => {
       const entry = rayOccluderEntry(occluder, source, dx, dz, nearestEntry);
       if (entry < nearestEntry) {
         nearestEntry = entry;
         nearestOccluder = occluder;
       }
-    }
+      return false;
+    });
+
     if (!nearestOccluder) return maxDistance;
 
     // Gameplay LOS still stops at the source-facing surface. The fog mask alone is
@@ -590,21 +683,25 @@ function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
     if (horizontalDistance <= VISION_EPSILON) return true;
     const nx = dx / horizontalDistance;
     const nz = dz / horizontalDistance;
-    for (const occluder of occluders) {
-      if (pointInsideOccluder(occluder, source.x, source.z)) continue;
+    let blocked = false;
+
+    spatialIndex.forEachCandidate(source.x, source.z, target.x, target.z, (occluder) => {
+      if (pointInsideOccluder(occluder, source.x, source.z)) return false;
       // An occluder must not block visibility of a target that lies inside that same
       // volume. This is essential for towers/structures: the tower blocks what is behind
       // it, but its own front-facing body is still a valid visible target.
       if (pointInsideOccluder(occluder, target.x, target.z)
         && target.y >= occluder.minY - VISION_EPSILON
-        && target.y <= occluder.maxY + VISION_EPSILON) continue;
+        && target.y <= occluder.maxY + VISION_EPSILON) return false;
       const entry = rayOccluderEntry(occluder, source, nx, nz, horizontalDistance);
-      if (!Number.isFinite(entry) || entry >= horizontalDistance - VISION_EPSILON) continue;
+      if (!Number.isFinite(entry) || entry >= horizontalDistance - VISION_EPSILON) return false;
       const progress = entry / horizontalDistance;
       const sightY = THREE.MathUtils.lerp(source.y, target.y, progress);
-      if (sightY >= occluder.minY - VISION_EPSILON && sightY <= occluder.maxY + VISION_EPSILON) return false;
-    }
-    return true;
+      if (sightY < occluder.minY - VISION_EPSILON || sightY > occluder.maxY + VISION_EPSILON) return false;
+      blocked = true;
+      return true;
+    });
+    return !blocked;
   };
 
   return { lineOfSight, traceDistance };
