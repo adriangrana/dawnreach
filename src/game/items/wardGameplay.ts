@@ -71,6 +71,38 @@ function revealCreditKey(team: TeamId) {
   return '';
 }
 
+function legacyWardIdFromAuthoritativeId(entityId: string) {
+  const parts = entityId.split(':');
+  if (parts.length < 5 || parts[0] !== 'item-ward') return null;
+  if (parts[1] !== 'observer' && parts[1] !== 'sentry') return null;
+
+  const activatedAt = parts[parts.length - 1];
+  const instanceId = parts[parts.length - 2];
+  const ownerEntityId = parts.slice(2, -2).join(':');
+  if (!activatedAt || !instanceId || !ownerEntityId) return null;
+  return `item-ward:${ownerEntityId}:${instanceId}:${activatedAt}`;
+}
+
+function removeLegacyWardDuplicate(entity: GameEntity, registry: GameEntityRegistry) {
+  const legacyId = legacyWardIdFromAuthoritativeId(entity.id);
+  if (!legacyId) return;
+
+  // The old generic item-active system may process the same ITEM_USE event after the
+  // authoritative ward system. Run after the event dispatch completes so any legacy
+  // 1-HP "structure" spawned for this exact activation is removed before rendering.
+  queueMicrotask(() => {
+    const duplicate = registry.values().find(candidate => candidate.id === legacyId);
+    if (!duplicate || duplicate === entity) return;
+
+    duplicate.alive = false;
+    duplicate.targetable = false;
+    duplicate.selectable = false;
+    duplicate.root.visible = false;
+    registry.unregister(duplicate.root);
+    duplicate.root.removeFromParent();
+  });
+}
+
 function publishWardRuntime(entity: GameEntity) {
   entity.root.userData.maxHp = entity.maxHp;
   entity.root.userData.currentHp = entity.currentHp;
@@ -269,6 +301,7 @@ export function configureWardEntity(
     wardType: options.wardType,
     resolvingDeath: false,
   });
+  removeLegacyWardDuplicate(entity, registry);
   ensureCombatSubscription();
 }
 
