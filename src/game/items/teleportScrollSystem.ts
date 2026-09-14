@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getGameEntity, type GameEntity, type GameEntityRegistry, type TeamId } from '../entities/gameEntities';
 import { getWorldEntityRuntime } from '../entities/worldCombatBridge';
+import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { DAWNREACH_LAYOUT } from '../map/mapLayout';
 import { ITEM_USE_EVENT, type ItemUseDetail } from './shopEvents';
 import { getItemActivationOwnerContext, type HeroItemRuntimeContext } from './shopRuntime';
@@ -30,6 +31,7 @@ const BASE_CHANNEL_MS = 3_000;
 const CHANNEL_PENALTY_MS = 2_000;
 const DOUBLE_HOTKEY_WINDOW_MS = 420;
 const PENDING_CAST_LIFETIME_MS = 1_500;
+const TOWER_TELEPORT_RANGE = TOWER_GAMEPLAY.attack.range;
 const HARD_CC_PATTERN = /(?:^|:|\b)(stun|root|silence|fear)(?:$|:|\b)/i;
 
 let disposeTeleportSystem: (() => void) | null = null;
@@ -43,6 +45,7 @@ type TargetingState = {
 type PendingCast = {
   target: GameEntity;
   requestedAtMs: number;
+  destinationWorld: THREE.Vector3 | null;
 };
 
 type TrafficEntry = {
@@ -66,6 +69,11 @@ type ChannelState = {
   originVisual: THREE.Group;
   destinationVisual: THREE.Group;
 };
+
+type PickedDestination = Readonly<{
+  target: GameEntity;
+  destinationWorld: THREE.Vector3 | null;
+}>;
 
 function matchTeamToWorld(team: HeroItemRuntimeContext['team']): TeamId {
   return team === 'dawn' ? 'blue' : 'red';
@@ -146,6 +154,12 @@ function isValidTeleportDestination(actor: GameEntity, target: GameEntity | null
   return target.kind === 'tower' || target.kind === 'building';
 }
 
+function towerTeleportRange(entity: GameEntity) {
+  return entity.kind === 'tower'
+    ? Math.max(0.5, entity.attackRange || TOWER_TELEPORT_RANGE)
+    : 0;
+}
+
 function findMainBase(actor: GameEntity, registry: GameEntityRegistry) {
   return registry.values().find(entity => entity.id === `${actor.team}-base` && isValidTeleportDestination(actor, entity))
     ?? registry.values().find(entity => entity.id === `${actor.team}-throne` && isValidTeleportDestination(actor, entity))
@@ -217,6 +231,7 @@ export function ensureTeleportScrollSystem(
   const pointer = new THREE.Vector2();
   const actorWorld = new THREE.Vector3();
   const targetWorld = new THREE.Vector3();
+  const towerWorld = new THREE.Vector3();
   const localPoint = new THREE.Vector3();
   let gameplayCamera: THREE.Camera | null = null;
   let minimapCamera: THREE.Camera | null = null;
@@ -244,8 +259,17 @@ export function ensureTeleportScrollSystem(
     targeting = null;
   };
 
-  const requestCast = (instanceId: string, target: GameEntity, requestedAtMs: number) => {
-    pendingCasts.set(instanceId, { target, requestedAtMs });
+  const requestCast = (
+    instanceId: string,
+    target: GameEntity,
+    requestedAtMs: number,
+    destinationWorld: THREE.Vector3 | null = null,
+  ) => {
+    pendingCasts.set(instanceId, {
+      target,
+      requestedAtMs,
+      destinationWorld: destinationWorld?.clone() ?? null,
+    });
     clearTargeting(target.id);
     const detail: TeleportCastRequestDetail = {
       instanceId,
@@ -281,7 +305,11 @@ export function ensureTeleportScrollSystem(
     else trafficByTarget.delete(entry.targetEntityId);
   };
 
-  const resolveDestinationPoint = (actor: GameEntity, target: GameEntity) => {
+  const resolveDestinationPoint = (
+    actor: GameEntity,
+    target: GameEntity,
+    requestedWorld: THREE.Vector3 | null,
+  ) => {
     if (isMainBaseTarget(target)) {
       const spawn = actor.team === 'red' ? DAWNREACH_LAYOUT.redSpawn : DAWNREACH_LAYOUT.blueSpawn;
       return new THREE.Vector3(
@@ -291,8 +319,35 @@ export function ensureTeleportScrollSystem(
       );
     }
 
-    actor.root.getWorldPosition(actorWorld);
     target.root.getWorldPosition(targetWorld);
+
+    if (target.kind === 'tower' && requestedWorld) {
+      const maxRange = towerTeleportRange(target);
+      const minRange = Math.max(0.9, target.selectionRadius + 0.35);
+      let dx = requestedWorld.x - targetWorld.x;
+      let dz = requestedWorld.z - targetWorld.z;
+      let distance = Math.hypot(dx, dz);
+
+      if (distance <= 0.001) {
+        actor.root.getWorldPosition(actorWorld);
+        dx = actorWorld.x - targetWorld.x;
+        dz = actorWorld.z - targetWorld.z;
+        distance = Math.hypot(dx, dz);
+      }
+
+      if (distance <= 0.001) {
+        dx = actor.team === 'red' ? -1 : 1;
+        dz = 0;
+        distance = 1;
+      }
+
+      const safeDistance = THREE.MathUtils.clamp(distance, Math.min(minRange, maxRange), maxRange);
+      const x = targetWorld.x + (dx / distance) * safeDistance;
+      const z = targetWorld.z + (dz / distance) * safeDistance;
+      return new THREE.Vector3(x, sampleSurfaceHeight(x, z, requestedWorld.y) + 0.03, z);
+    }
+
+    actor.root.getWorldPosition(actorWorld);
     const dx = actorWorld.x - targetWorld.x;
     const dz = actorWorld.z - targetWorld.z;
     const length = Math.hypot(dx, dz);
@@ -368,7 +423,7 @@ export function ensureTeleportScrollSystem(
     if (channel) cancelChannel('replaced', detail.activatedAtMs);
 
     actor.root.getWorldPosition(actorWorld);
-    const destinationWorld = resolveDestinationPoint(actor, target);
+    const destinationWorld = resolveDestinationPoint(actor, target, pending.destinationWorld);
     const durationMs = channelDurationMs(actor, target, detail.activatedAtMs);
     const traffic: TrafficEntry = {
       instanceId: detail.instanceId,
@@ -437,7 +492,7 @@ export function ensureTeleportScrollSystem(
     if (channel) cancelChannel('player-command', detail.activatedAtMs);
   };
 
-  const pickDestination = (event: PointerEvent) => {
+  const pickDestination = (event: PointerEvent): PickedDestination | null => {
     if (!targeting) return null;
     const surface = isGameSurface(event.target);
     if (!surface) return null;
@@ -452,18 +507,55 @@ export function ensureTeleportScrollSystem(
 
     const destinations = registry.values().filter(entity => isValidTeleportDestination(targeting!.actor, entity));
     if (destinations.length === 0) return null;
+
+    // A tower enables its complete gameplay range as a teleport zone. The player targets
+    // the ground inside that range; the tower is only the structure that owns the zone.
+    const groundHit = raycaster.intersectObjects(commandSurfaces, false)[0];
+    if (groundHit) {
+      const point = groundHit.point;
+      let nearestTower: GameEntity | null = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+
+      for (const destination of destinations) {
+        if (destination.kind !== 'tower') continue;
+        destination.root.getWorldPosition(towerWorld);
+        const distance = Math.hypot(point.x - towerWorld.x, point.z - towerWorld.z);
+        if (distance > towerTeleportRange(destination) || distance >= nearestDistance) continue;
+        nearestTower = destination;
+        nearestDistance = distance;
+      }
+
+      if (nearestTower) {
+        return {
+          target: nearestTower,
+          destinationWorld: point.clone(),
+        };
+      }
+    }
+
+    // Buildings that are explicit teleport destinations (base/throne/outpost-type entities)
+    // keep their authored structure targeting behavior.
     const hits = raycaster.intersectObjects(destinations.map(entity => entity.root), true);
     for (const hit of hits) {
       const entity = getGameEntity(hit.object);
-      if (isValidTeleportDestination(targeting.actor, entity)) return entity;
+      if (isValidTeleportDestination(targeting.actor, entity)) {
+        return { target: entity, destinationWorld: null };
+      }
     }
     return null;
   };
 
   const onPointerDown = (event: PointerEvent) => {
     if (targeting && event.button === 0) {
-      const target = pickDestination(event);
-      if (target) requestCast(targeting.instanceId, target, performance.now());
+      const picked = pickDestination(event);
+      if (picked) {
+        requestCast(
+          targeting.instanceId,
+          picked.target,
+          performance.now(),
+          picked.destinationWorld,
+        );
+      }
       return;
     }
 
