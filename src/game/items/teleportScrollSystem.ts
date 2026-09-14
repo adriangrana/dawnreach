@@ -170,8 +170,8 @@ function addSelectionRing(
 
 function buildChannelVisual(color: number) {
   const root = new THREE.Group();
-  const ringMaterial = makeBasicMaterial(color, 0.82);
-  const glowMaterial = makeBasicMaterial(color, 0.18);
+  const ringMaterial = makeSelectionMaterial(color, 0.82);
+  const glowMaterial = makeSelectionMaterial(color, 0.18, true);
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.82, 64), ringMaterial);
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.04;
@@ -225,7 +225,6 @@ function buildLandingPreview(team: TeamId) {
   root.name = 'teleport-landing-selection-marker';
   root.visible = false;
 
-  // Exact hero-selection visual language from entitySelection.ts.
   const glowMaterial = makeSelectionMaterial(palette.glow, 0.13, true);
   const shadowMaterial = makeSelectionMaterial(palette.shadow, 0.50);
   const mainMaterial = makeSelectionMaterial(palette.primary, 0.95);
@@ -279,6 +278,21 @@ function buildLandingPreview(team: TeamId) {
   root.userData.glowMaterial = glowMaterial;
   root.userData.glowBaseOpacity = 0.13;
   return root;
+}
+
+function animateLandingSelectionVisual(root: THREE.Group, nowMs: number) {
+  if (!root.visible) return;
+  const seconds = nowMs * 0.001;
+  const outerRotor = root.userData.outerRotor as THREE.Group | undefined;
+  const innerRotor = root.userData.innerRotor as THREE.Group | undefined;
+  const glowMaterial = root.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
+  const glowBaseOpacity = Number(root.userData.glowBaseOpacity ?? 0.13);
+  if (outerRotor) outerRotor.rotation.y = seconds * 0.18;
+  if (innerRotor) innerRotor.rotation.y = seconds * -0.08;
+  if (glowMaterial) {
+    const pulse = Math.sin(seconds * 2.2);
+    glowMaterial.opacity = glowBaseOpacity * (1 + pulse * 0.025);
+  }
 }
 
 function setVisualWorldPosition(root: THREE.Object3D, point: THREE.Vector3) {
@@ -558,8 +572,6 @@ export function ensureTeleportScrollSystem(
       const safeDistance = THREE.MathUtils.clamp(distance, Math.min(minRange, maxRange), maxRange);
       const x = targetWorld.x + (dx / distance) * safeDistance;
       const z = targetWorld.z + (dz / distance) * safeDistance;
-      // Never retain a pointer/decoration Y value here: the final destination is always
-      // projected back to the gameplay command surface beneath the requested X/Z.
       return new THREE.Vector3(x, sampleSurfaceHeight(x, z, targetWorld.y) + 0.03, z);
     }
 
@@ -653,9 +665,19 @@ export function ensureTeleportScrollSystem(
 
     const color = teamTeleportColor(actor.team);
     const originVisual = buildChannelVisual(color);
-    const destinationVisual = buildChannelVisual(color);
-    setVisualWorldPosition(originVisual, actorWorld.clone().setY(sampleSurfaceHeight(actorWorld.x, actorWorld.z, actorWorld.y) + 0.02));
-    setVisualWorldPosition(destinationVisual, destinationWorld.clone().setY(destinationWorld.y + 0.01));
+    const destinationVisual = buildLandingPreview(actor.team);
+    destinationVisual.name = 'teleport-channel-destination-selection-marker';
+    destinationVisual.visible = true;
+    setVisualWorldPosition(
+      originVisual,
+      actorWorld.clone().setY(sampleSurfaceHeight(actorWorld.x, actorWorld.z, actorWorld.y) + 0.02),
+    );
+    destinationVisual.position.set(
+      destinationWorld.x,
+      sampleSurfaceHeight(destinationWorld.x, destinationWorld.z, destinationWorld.y) + LANDING_SELECTION_Y_OFFSET,
+      destinationWorld.z,
+    );
+    destinationVisual.scale.setScalar(Math.max(0.24, actor.selectionRadius));
     scene.add(originVisual, destinationVisual);
 
     actor.root.userData[RESPAWN_HOLD_KEY] = true;
@@ -805,7 +827,11 @@ export function ensureTeleportScrollSystem(
 
         if (nearby.distance <= range) {
           const landing = resolveDestinationPoint(targeting.actor, nearby.tower, groundedPoint);
-          preview.landingRoot.position.copy(landing).setY(landing.y + LANDING_SELECTION_Y_OFFSET);
+          preview.landingRoot.position.set(
+            landing.x,
+            sampleSurfaceHeight(landing.x, landing.z, landing.y) + LANDING_SELECTION_Y_OFFSET,
+            landing.z,
+          );
           preview.landingRoot.scale.setScalar(Math.max(0.24, targeting.actor.selectionRadius));
           preview.landingRoot.visible = true;
         } else {
@@ -825,7 +851,11 @@ export function ensureTeleportScrollSystem(
       const entity = getGameEntity(hit.object);
       if (!isValidTeleportDestination(targeting.actor, entity)) continue;
       const landing = resolveDestinationPoint(targeting.actor, entity, null);
-      preview.landingRoot.position.copy(landing).setY(landing.y + LANDING_SELECTION_Y_OFFSET);
+      preview.landingRoot.position.set(
+        landing.x,
+        sampleSurfaceHeight(landing.x, landing.z, landing.y) + LANDING_SELECTION_Y_OFFSET,
+        landing.z,
+      );
       preview.landingRoot.scale.setScalar(Math.max(0.24, targeting.actor.selectionRadius));
       preview.landingRoot.visible = true;
       return;
@@ -898,14 +928,13 @@ export function ensureTeleportScrollSystem(
     const duration = Math.max(1, active.completesAtMs - active.startedAtMs);
     const progress = THREE.MathUtils.clamp((nowMs - active.startedAtMs) / duration, 0, 1);
     const pulse = (Math.sin(nowMs * 0.012) + 1) * 0.5;
-    for (const visual of [active.originVisual, active.destinationVisual]) {
-      const ring = visual.userData.ringMaterial as THREE.MeshBasicMaterial | undefined;
-      const glow = visual.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
-      if (ring) ring.opacity = 0.58 + pulse * 0.28;
-      if (glow) glow.opacity = 0.10 + progress * 0.18 + pulse * 0.04;
-      visual.rotation.y = nowMs * 0.0018;
-      visual.scale.setScalar(0.92 + progress * 0.18 + pulse * 0.035);
-    }
+    const ring = active.originVisual.userData.ringMaterial as THREE.MeshBasicMaterial | undefined;
+    const glow = active.originVisual.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
+    if (ring) ring.opacity = 0.58 + pulse * 0.28;
+    if (glow) glow.opacity = 0.10 + progress * 0.18 + pulse * 0.04;
+    active.originVisual.rotation.y = nowMs * 0.0018;
+    active.originVisual.scale.setScalar(0.92 + progress * 0.18 + pulse * 0.035);
+    animateLandingSelectionVisual(active.destinationVisual, nowMs);
   };
 
   const updateTargetPreviewAnimation = (nowMs: number) => {
@@ -917,19 +946,7 @@ export function ensureTeleportScrollSystem(
       if (fill) fill.opacity = 0.055 + rangePulse * 0.035;
       if (ring) ring.opacity = 0.52 + rangePulse * 0.22;
     }
-    if (previewVisuals.landingRoot.visible) {
-      const seconds = nowMs * 0.001;
-      const outerRotor = previewVisuals.landingRoot.userData.outerRotor as THREE.Group | undefined;
-      const innerRotor = previewVisuals.landingRoot.userData.innerRotor as THREE.Group | undefined;
-      const glowMaterial = previewVisuals.landingRoot.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
-      const glowBaseOpacity = Number(previewVisuals.landingRoot.userData.glowBaseOpacity ?? 0.13);
-      if (outerRotor) outerRotor.rotation.y = seconds * 0.18;
-      if (innerRotor) innerRotor.rotation.y = seconds * -0.08;
-      if (glowMaterial) {
-        const pulse = Math.sin(seconds * 2.2);
-        glowMaterial.opacity = glowBaseOpacity * (1 + pulse * 0.025);
-      }
-    }
+    animateLandingSelectionVisual(previewVisuals.landingRoot, nowMs);
   };
 
   const update = (nowMs: number) => {
