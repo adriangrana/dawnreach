@@ -78,8 +78,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 mountCombatStatsOverlay();
 const disposeResponsiveHudScale = mountResponsiveHudScale();
-const disposeGameCameraControls = mountGameCameraControls();
+// F1 must see synthetic Space before the camera controller. On the first F1 press
+// it suppresses recentering while Alden is only being selected; subsequent F1 presses
+// are allowed through and use the same one-shot hero centering as a normal Space press.
 const disposeHeroFunctionKeyControls = mountHeroFunctionKeyControls();
+const disposeGameCameraControls = mountGameCameraControls();
 const disposeMinimapDragCamera = mountMinimapDragCamera();
 const disposeTowerPortraitAssets = mountTowerPortraitAssets();
 
@@ -88,8 +91,8 @@ void waitForDawnreachReady().then(dismissBootSplash);
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeResponsiveHudScale();
-    disposeGameCameraControls();
     disposeHeroFunctionKeyControls();
+    disposeGameCameraControls();
     disposeMinimapDragCamera();
     disposeTowerPortraitAssets();
   });
