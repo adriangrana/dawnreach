@@ -28,7 +28,11 @@ type WorldShopSystem = {
 
 const SYSTEM_KEY = 'dawnreachWorldShopSystem';
 const PICKUP_DISTANCE = 1.2;
-const SHOP_SELECTION_RADIUS = 2.55;
+const SHOP_WORLD_SCALE = 0.52;
+const SHOP_LOCAL_FOOTPRINT_RADIUS = 3.0;
+const SHOP_WORLD_FOOTPRINT_RADIUS = SHOP_LOCAL_FOOTPRINT_RADIUS * SHOP_WORLD_SCALE;
+const SHOP_SELECTION_RADIUS = 1.72;
+const SHOP_WALL_GAP = 0.28;
 let disposeActiveWorldShopSystem: (() => void) | null = null;
 
 export function ensureWorldShopSystem(
@@ -40,21 +44,25 @@ export function ensureWorldShopSystem(
   const existing = scene.userData[SYSTEM_KEY] as WorldShopSystem | undefined;
   if (existing) return existing;
 
-  // React StrictMode can recreate the Three.js scene in development. Keep only one set of
-  // global input listeners alive at a time even when the previous scene has just been torn down.
   disposeActiveWorldShopSystem?.();
 
   const shopRoots = new Map<TeamId, THREE.Group>();
   for (const team of ['blue', 'red'] as const) {
     const shop = buildBaseShop(team);
     const center = team === 'blue' ? DAWNREACH_LAYOUT.blueBase : DAWNREACH_LAYOUT.redBase;
-    const direction = team === 'blue' ? 1 : -1;
+
+    // Put the merchant at the true rear of each citadel, just inside the retaining wall.
+    // The base-center vector points away from the battlefield center and keeps both teams
+    // perfectly mirrored even if the base layout changes later.
+    const rear = new THREE.Vector2(center.x, center.z).normalize();
+    const rearDistance = BASE_LAYOUT.radius - SHOP_WORLD_FOOTPRINT_RADIUS - SHOP_WALL_GAP;
     shop.position.set(
-      center.x + direction * 5.6,
-      BASE_LAYOUT.elevation + 0.04,
-      center.z - direction * 4.8,
+      center.x + rear.x * rearDistance,
+      BASE_LAYOUT.elevation + 0.045,
+      center.z + rear.y * rearDistance,
     );
-    shop.rotation.y = team === 'blue' ? -0.64 : Math.PI - 0.64;
+    shop.rotation.y = Math.atan2(rear.x, rear.y);
+    shop.scale.setScalar(SHOP_WORLD_SCALE);
     battlefield.add(shop);
     shopRoots.set(team, shop);
 
@@ -66,8 +74,8 @@ export function ensureWorldShopSystem(
       selectable: true,
       targetable: false,
       grantsVision: true,
-      visionRadius: 9,
-      visionHeight: 4.4,
+      visionRadius: 8,
+      visionHeight: 2.7,
       attackRange: 0,
       visibilityPolicy: 'structure-in-fog',
       interaction: 'shop',
@@ -237,7 +245,11 @@ export function ensureWorldShopSystem(
     window.removeEventListener(ITEM_PICKUP_RESULT_EVENT, onPickupResult as EventListener);
     if (scene.onBeforeRender === beforeRender) scene.onBeforeRender = previousSceneBeforeRender;
     for (const ground of [...groundItems.values()]) removeGroundItem(ground);
-    for (const shop of shopRoots.values()) registry.unregister(shop);
+    for (const shop of shopRoots.values()) {
+      registry.unregister(shop);
+      shop.removeFromParent();
+      disposeObject3D(shop);
+    }
     delete scene.userData[SYSTEM_KEY];
     if (disposeActiveWorldShopSystem === dispose) disposeActiveWorldShopSystem = null;
   };
@@ -253,49 +265,88 @@ function buildBaseShop(team: 'blue' | 'red') {
   const root = new THREE.Group();
   root.name = `${team}-shop`;
   root.userData.structureKind = 'shop';
+  root.userData.collisionRadius = SHOP_WORLD_FOOTPRINT_RADIUS;
 
-  const stoneTexture = buildStoneTexture(blue ? '#74766d' : '#766663', blue ? '#a09d88' : '#9f8880');
-  const fabricTexture = buildFabricTexture(blue ? '#315f76' : '#793d3b', blue ? '#80c8dc' : '#cf776d');
+  const stoneTexture = buildStoneTexture(
+    blue ? '#73776f' : '#756762',
+    blue ? '#b9b59d' : '#b69b90',
+    blue ? '#505955' : '#594a48',
+  );
+  const fabricTexture = buildFabricTexture(
+    blue ? '#23495b' : '#672f32',
+    blue ? '#8bcddd' : '#d8887d',
+  );
+  const roofTexture = buildRoofTexture(
+    blue ? '#1f343d' : '#412b2e',
+    blue ? '#496a73' : '#745052',
+  );
+  const woodTexture = buildWoodTexture(blue ? '#4a3c2f' : '#4b342f', blue ? '#836f54' : '#79544b');
 
   const stone = new THREE.MeshStandardMaterial({
-    color: blue ? 0x777a70 : 0x756765,
+    color: blue ? 0x95978a : 0x95817b,
     map: stoneTexture,
-    roughness: 0.91,
-    metalness: 0.03,
+    bumpMap: stoneTexture,
+    bumpScale: 0.045,
+    roughness: 0.93,
+    metalness: 0.02,
   });
   const stoneLight = new THREE.MeshStandardMaterial({
-    color: blue ? 0xb6af99 : 0xb29d91,
-    roughness: 0.86,
-    metalness: 0.03,
+    color: blue ? 0xc0baa2 : 0xbfa69a,
+    map: stoneTexture,
+    bumpMap: stoneTexture,
+    bumpScale: 0.028,
+    roughness: 0.88,
+    metalness: 0.025,
   });
   const darkStone = new THREE.MeshStandardMaterial({
-    color: blue ? 0x30383b : 0x3b3032,
-    roughness: 0.94,
-    metalness: 0.04,
+    color: blue ? 0x454e4d : 0x524344,
+    map: stoneTexture,
+    bumpMap: stoneTexture,
+    bumpScale: 0.055,
+    roughness: 0.96,
+    metalness: 0.03,
   });
   const brass = new THREE.MeshStandardMaterial({
-    color: 0xb89755,
-    roughness: 0.38,
-    metalness: 0.62,
+    color: 0xc39a4d,
+    roughness: 0.3,
+    metalness: 0.7,
   });
-  const metal = new THREE.MeshStandardMaterial({
-    color: blue ? 0x35484e : 0x493a3b,
-    roughness: 0.5,
-    metalness: 0.5,
+  const agedBrass = new THREE.MeshStandardMaterial({
+    color: 0x856b3b,
+    roughness: 0.48,
+    metalness: 0.54,
+  });
+  const roofMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: roofTexture,
+    bumpMap: roofTexture,
+    bumpScale: 0.025,
+    roughness: 0.68,
+    metalness: 0.16,
+  });
+  const wood = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: woodTexture,
+    bumpMap: woodTexture,
+    bumpScale: 0.025,
+    roughness: 0.72,
+    metalness: 0.02,
   });
   const cloth = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: fabricTexture,
-    roughness: 0.78,
+    bumpMap: fabricTexture,
+    bumpScale: 0.012,
+    roughness: 0.82,
     metalness: 0,
     side: THREE.DoubleSide,
   });
   const glow = new THREE.MeshStandardMaterial({
-    color: blue ? 0x89dcef : 0xef8d7f,
-    emissive: blue ? 0x1d718f : 0x8b2928,
-    emissiveIntensity: 1.15,
-    roughness: 0.28,
-    metalness: 0.18,
+    color: blue ? 0x96e6f5 : 0xf29c8f,
+    emissive: blue ? 0x17617a : 0x7b2828,
+    emissiveIntensity: 0.82,
+    roughness: 0.3,
+    metalness: 0.16,
   });
 
   const addMesh = (
@@ -313,82 +364,107 @@ function buildBaseShop(team: 'blue' | 'red') {
     return mesh;
   };
 
-  addMesh(new THREE.CylinderGeometry(3.05, 3.38, 0.42, 8), darkStone, [0, 0.21, 0], 'shop-foundation');
-  addMesh(new THREE.CylinderGeometry(2.74, 2.92, 0.16, 8), stone, [0, 0.5, 0]);
-  addMesh(new THREE.RingGeometry(2.24, 2.62, 8), brass, [0, 0.595, 0]).rotation.x = -Math.PI / 2;
+  // Compact two-step plinth. The brass inlay is deliberately thin so it reads as crafted
+  // trim rather than another thick platform from the isometric camera.
+  addMesh(new THREE.CylinderGeometry(2.78, 3.0, 0.34, 12), darkStone, [0, 0.17, 0], 'shop-foundation');
+  addMesh(new THREE.CylinderGeometry(2.50, 2.70, 0.13, 12), stone, [0, 0.405, 0]);
+  const plinthInlay = addMesh(new THREE.RingGeometry(2.18, 2.37, 12), agedBrass, [0, 0.482, 0]);
+  plinthInlay.rotation.x = -Math.PI / 2;
 
-  // Rear masonry and display alcove.
-  addMesh(new THREE.BoxGeometry(4.7, 2.55, 0.46), stone, [0, 1.78, 1.6]);
-  addMesh(new THREE.BoxGeometry(4.15, 0.16, 0.58), stoneLight, [0, 3.02, 1.57]);
-  for (const x of [-2.18, 2.18]) {
-    addMesh(new THREE.CylinderGeometry(0.28, 0.34, 3.25, 8), stoneLight, [x, 1.77, 1.35]);
-    addMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.16, 8), brass, [x, 3.38, 1.35]);
+  // Rear wall is treated like a small premium market alcove rather than a solid bunker.
+  addMesh(new THREE.BoxGeometry(4.28, 2.28, 0.34), stone, [0, 1.62, 1.34], 'shop-rear-wall');
+  addMesh(new THREE.BoxGeometry(3.84, 0.11, 0.44), brass, [0, 2.72, 1.30]);
+  addMesh(new THREE.BoxGeometry(3.72, 0.08, 0.38), stoneLight, [0, 2.57, 1.29]);
+
+  for (const x of [-1.94, 1.94]) {
+    addMesh(new THREE.CylinderGeometry(0.19, 0.25, 2.82, 10), stoneLight, [x, 1.57, 1.18]);
+    addMesh(new THREE.CylinderGeometry(0.31, 0.31, 0.12, 10), brass, [x, 2.98, 1.18]);
   }
 
-  // Merchant counter with brass edge and inset drawers.
-  addMesh(new THREE.BoxGeometry(4.35, 0.92, 0.86), darkStone, [0, 1.02, -0.56], 'shop-counter');
-  addMesh(new THREE.BoxGeometry(4.55, 0.12, 1.02), brass, [0, 1.53, -0.56]);
-  for (const x of [-1.42, 0, 1.42]) {
-    addMesh(new THREE.BoxGeometry(1.08, 0.42, 0.06), metal, [x, 1.0, -1.01]);
-    addMesh(new THREE.BoxGeometry(0.18, 0.08, 0.08), brass, [x, 1.0, -1.06]);
+  // Warm wood counter, thin metal edging, and inset brass pulls make it read as furniture.
+  addMesh(new THREE.BoxGeometry(3.72, 0.74, 0.78), wood, [0, 0.92, -0.55], 'shop-counter');
+  addMesh(new THREE.BoxGeometry(3.94, 0.085, 0.92), brass, [0, 1.335, -0.55]);
+  addMesh(new THREE.BoxGeometry(3.62, 0.08, 0.68), darkStone, [0, 0.56, -0.55]);
+  for (const x of [-1.18, 0, 1.18]) {
+    addMesh(new THREE.BoxGeometry(0.92, 0.31, 0.045), darkStone, [x, 0.91, -0.955]);
+    addMesh(new THREE.BoxGeometry(0.18, 0.055, 0.055), brass, [x, 0.91, -0.995]);
   }
 
-  // Shelf stock gives the building the readable silhouette of an actual store.
-  for (const shelfY of [1.52, 2.22]) {
-    addMesh(new THREE.BoxGeometry(3.72, 0.1, 0.52), brass, [0, shelfY, 1.27]);
+  // Recessed shelves use wood instead of gold bars, reducing the chunky look in the screenshot.
+  for (const shelfY of [1.43, 2.05]) {
+    addMesh(new THREE.BoxGeometry(3.25, 0.09, 0.44), wood, [0, shelfY, 1.12]);
+    addMesh(new THREE.BoxGeometry(3.30, 0.035, 0.48), agedBrass, [0, shelfY + 0.055, 1.12]);
   }
+
   const stockColors = blue
-    ? [0x83cfdf, 0xd8b76b, 0x79b98d, 0xc58bd5]
-    : [0xd47870, 0xd7ad62, 0x8eaa77, 0xb984c2];
+    ? [0x8bd9e7, 0xd8b66f, 0x86bc96, 0xb99ad2]
+    : [0xdd8a80, 0xd8b66f, 0x94ae82, 0xb994c4];
   for (let row = 0; row < 2; row++) {
-    for (let column = 0; column < 6; column++) {
+    for (let column = 0; column < 5; column++) {
+      const stockColor = stockColors[(row * 2 + column) % stockColors.length];
       const stockMaterial = new THREE.MeshStandardMaterial({
-        color: stockColors[(row * 2 + column) % stockColors.length],
-        emissive: stockColors[(row * 2 + column) % stockColors.length],
-        emissiveIntensity: 0.12,
-        roughness: 0.42,
-        metalness: 0.14,
+        color: stockColor,
+        emissive: stockColor,
+        emissiveIntensity: 0.08,
+        roughness: 0.38,
+        metalness: 0.12,
       });
       const vial = addMesh(
-        new THREE.CylinderGeometry(0.11, 0.15, 0.38 + (column % 2) * 0.08, 6),
+        new THREE.CylinderGeometry(0.095, 0.13, 0.31 + (column % 2) * 0.07, 8),
         stockMaterial,
-        [-1.58 + column * 0.63, 1.82 + row * 0.7, 1.05],
+        [-1.28 + column * 0.64, 1.69 + row * 0.62, 0.96],
       );
-      vial.rotation.y = column * 0.21;
+      vial.rotation.y = column * 0.17;
+      addMesh(new THREE.CylinderGeometry(0.105, 0.105, 0.055, 8), brass, [
+        -1.28 + column * 0.64,
+        1.87 + row * 0.62 + (column % 2) * 0.035,
+        0.96,
+      ]);
     }
   }
 
-  // Four-sided pavilion roof and woven faction awning.
-  const roof = addMesh(new THREE.ConeGeometry(3.42, 1.26, 4), metal, [0, 4.05, 0.68], 'shop-roof');
-  roof.rotation.y = Math.PI / 4;
-  roof.scale.z = 0.86;
-  const awning = addMesh(new THREE.BoxGeometry(4.35, 0.08, 1.62), cloth, [0, 3.34, -0.44], 'shop-awning');
-  awning.rotation.x = -0.16;
+  // Layered octagonal slate roof: a much smaller, more detailed silhouette than the old
+  // oversized four-sided pyramid. Brass eaves and finial catch light without dominating it.
+  const eave = addMesh(new THREE.CylinderGeometry(2.58, 2.78, 0.15, 8), agedBrass, [0, 3.05, 0.42], 'shop-roof-eave');
+  eave.rotation.y = Math.PI / 8;
+  const roof = addMesh(new THREE.ConeGeometry(2.60, 0.92, 8), roofMaterial, [0, 3.52, 0.42], 'shop-roof');
+  roof.rotation.y = Math.PI / 8;
+  const roofCap = addMesh(new THREE.CylinderGeometry(0.46, 0.60, 0.16, 8), brass, [0, 4.02, 0.42]);
+  roofCap.rotation.y = Math.PI / 8;
+  const finial = addMesh(new THREE.OctahedronGeometry(0.22, 0), glow, [0, 4.34, 0.42], 'shop-finial');
+  finial.rotation.y = Math.PI / 4;
 
-  // Hanging market sign: a brass coin surrounded by a faction-lit halo.
-  const signFrame = addMesh(new THREE.TorusGeometry(0.58, 0.08, 10, 48), brass, [0, 3.25, -1.42], 'shop-sign-ring');
+  // Narrow woven awning with a separate brass hem instead of one thick slab.
+  const awning = addMesh(new THREE.BoxGeometry(3.55, 0.055, 1.24), cloth, [0, 2.82, -0.46], 'shop-awning');
+  awning.rotation.x = -0.15;
+  const awningHem = addMesh(new THREE.BoxGeometry(3.60, 0.055, 0.10), brass, [0, 2.72, -1.08]);
+  awningHem.rotation.x = -0.15;
+
+  // Compact hanging guild seal.
+  const signFrame = addMesh(new THREE.TorusGeometry(0.47, 0.055, 10, 48), brass, [0, 2.72, -1.26], 'shop-sign-ring');
   signFrame.rotation.x = Math.PI / 2;
-  const signDisc = addMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.09, 32), darkStone, [0, 3.25, -1.42]);
+  const signDisc = addMesh(new THREE.CylinderGeometry(0.34, 0.34, 0.065, 32), darkStone, [0, 2.72, -1.26]);
   signDisc.rotation.x = Math.PI / 2;
-  const coin = addMesh(new THREE.CylinderGeometry(0.21, 0.21, 0.12, 24), brass, [0, 3.25, -1.49]);
+  const coin = addMesh(new THREE.CylinderGeometry(0.17, 0.17, 0.09, 24), brass, [0, 2.72, -1.31]);
   coin.rotation.x = Math.PI / 2;
-  const rune = addMesh(new THREE.OctahedronGeometry(0.105, 0), glow, [0, 3.25, -1.57]);
+  const rune = addMesh(new THREE.OctahedronGeometry(0.085, 0), glow, [0, 2.72, -1.37]);
   rune.rotation.z = Math.PI / 4;
 
-  for (const x of [-2.0, 2.0]) {
-    addMesh(new THREE.CylinderGeometry(0.11, 0.14, 1.02, 8), brass, [x, 2.85, -0.84]);
-    const lantern = addMesh(new THREE.OctahedronGeometry(0.27, 0), glow, [x, 2.28, -0.84], 'shop-lantern');
+  for (const x of [-1.58, 1.58]) {
+    addMesh(new THREE.CylinderGeometry(0.075, 0.10, 0.74, 8), agedBrass, [x, 2.50, -0.76]);
+    const lantern = addMesh(new THREE.OctahedronGeometry(0.20, 0), glow, [x, 2.08, -0.76], 'shop-lantern');
     lantern.rotation.y = Math.PI / 4;
-    const light = new THREE.PointLight(blue ? 0x7acfe9 : 0xe88074, 1.05, 5.8, 2);
-    light.position.set(x, 2.3, -0.84);
+    const light = new THREE.PointLight(blue ? 0x79cfe6 : 0xe98579, 0.56, 3.4, 2);
+    light.position.set(x, 2.08, -0.76);
     root.add(light);
   }
 
-  // Small side crates and bound scrolls break up the footprint without visual clutter.
+  // Small merchant props keep the lower silhouette organic without stealing plaza space.
   for (const side of [-1, 1]) {
-    const crate = addMesh(new THREE.BoxGeometry(0.84, 0.68, 0.78), stone, [side * 2.32, 0.9, 0.22]);
-    crate.rotation.y = side * 0.13;
-    addMesh(new THREE.BoxGeometry(0.92, 0.08, 0.84), brass, [side * 2.32, 1.26, 0.22]);
+    const crate = addMesh(new THREE.BoxGeometry(0.62, 0.48, 0.58), wood, [side * 1.96, 0.75, 0.10]);
+    crate.rotation.y = side * 0.16;
+    const strap = addMesh(new THREE.BoxGeometry(0.68, 0.05, 0.63), agedBrass, [side * 1.96, 1.01, 0.10]);
+    strap.rotation.y = side * 0.16;
   }
 
   root.traverse((object) => {
@@ -483,29 +559,58 @@ function buildItemLabelSprite(definition: ItemDefinition, tierColor: number) {
   return sprite;
 }
 
-function buildStoneTexture(dark: string, light: string) {
+function buildStoneTexture(dark: string, light: string, grout: string) {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 384;
+  canvas.height = 384;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  ctx.fillStyle = dark;
-  ctx.fillRect(0, 0, 256, 256);
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const offset = y % 2 === 0 ? 0 : 16;
-      const shade = (x * 17 + y * 31) % 5;
-      ctx.globalAlpha = 0.11 + shade * 0.018;
-      ctx.fillStyle = light;
-      ctx.fillRect(x * 36 - offset + 2, y * 32 + 2, 31, 27);
+  ctx.fillStyle = grout;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const rowHeight = 48;
+  const blockWidth = 72;
+  for (let row = 0; row < 9; row++) {
+    const y = row * rowHeight - 4;
+    const offset = row % 2 === 0 ? -18 : -54;
+    for (let column = -1; column < 7; column++) {
+      const x = offset + column * blockWidth;
+      const seed = hashTexture(row * 13 + column * 29 + 17);
+      const inset = 3 + seed * 2;
+      const gradient = ctx.createLinearGradient(x, y, x + blockWidth, y + rowHeight);
+      gradient.addColorStop(0, dark);
+      gradient.addColorStop(0.52, light);
+      gradient.addColorStop(1, dark);
+      ctx.globalAlpha = 0.76 + seed * 0.17;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x + inset, y + inset, blockWidth - inset * 2, rowHeight - inset * 2);
+
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + inset + 2, y + inset + 2, blockWidth - inset * 2 - 4, 2);
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x + inset + 2, y + rowHeight - inset - 4, blockWidth - inset * 2 - 4, 2);
     }
   }
+
+  // Fine mineral flecks keep close shots from reading like flat painted rectangles.
+  for (let index = 0; index < 220; index++) {
+    const x = hashTexture(index * 31 + 11) * canvas.width;
+    const y = hashTexture(index * 47 + 19) * canvas.height;
+    const size = 0.6 + hashTexture(index * 59 + 7) * 1.5;
+    ctx.globalAlpha = 0.05 + hashTexture(index * 71 + 5) * 0.08;
+    ctx.fillStyle = index % 2 === 0 ? '#ffffff' : '#000000';
+    ctx.fillRect(x, y, size, size);
+  }
+
   ctx.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1.6, 1.6);
+  texture.repeat.set(1.75, 1.75);
+  texture.anisotropy = 4;
   return texture;
 }
 
@@ -518,29 +623,126 @@ function buildFabricTexture(base: string, accent: string) {
 
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, 256, 256);
-  ctx.globalAlpha = 0.28;
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 5;
-  for (let x = -256; x < 512; x += 34) {
+
+  // Fine woven thread instead of the old broad diagonal stripes.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.055;
+  for (let x = 0; x < 256; x += 5) {
     ctx.beginPath();
-    ctx.moveTo(x, 256);
-    ctx.lineTo(x + 256, 0);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 256);
     ctx.stroke();
   }
-  ctx.globalAlpha = 0.12;
-  ctx.lineWidth = 1;
-  for (let y = 0; y < 256; y += 7) {
+  ctx.globalAlpha = 0.045;
+  for (let y = 0; y < 256; y += 4) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(256, y);
     ctx.stroke();
   }
+
+  ctx.globalAlpha = 0.32;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 7;
+  for (const x of [28, 128, 228]) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 256);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = 2;
+  for (const x of [18, 38, 118, 138, 218, 238]) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 256);
+    ctx.stroke();
+  }
+
   ctx.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1.2, 0.8);
+  texture.repeat.set(1.1, 0.8);
+  texture.anisotropy = 4;
   return texture;
+}
+
+function buildRoofTexture(base: string, edge: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 320;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 320, 320);
+  const tileWidth = 48;
+  const tileHeight = 34;
+  for (let row = 0; row < 11; row++) {
+    const offset = row % 2 === 0 ? -24 : 0;
+    for (let column = -1; column < 8; column++) {
+      const x = offset + column * tileWidth;
+      const y = row * tileHeight - 8;
+      const shade = hashTexture(row * 37 + column * 23 + 9);
+      ctx.globalAlpha = 0.08 + shade * 0.10;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 2, y + 2, tileWidth - 5, tileHeight - 5);
+      ctx.globalAlpha = 0.24;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, tileWidth - 3, tileHeight - 3);
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x + 3, y + tileHeight - 5, tileWidth - 7, 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2.1, 2.1);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function buildWoodTexture(base: string, grain: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, 256, 256);
+  for (let line = 0; line < 34; line++) {
+    const y = line * 8 + (line % 3) * 1.5;
+    ctx.globalAlpha = 0.08 + hashTexture(line * 41 + 3) * 0.10;
+    ctx.strokeStyle = grain;
+    ctx.lineWidth = 1 + hashTexture(line * 17 + 5) * 1.4;
+    ctx.beginPath();
+    for (let x = 0; x <= 256; x += 16) {
+      const wave = Math.sin(x * 0.045 + line * 0.7) * 2.2;
+      if (x === 0) ctx.moveTo(x, y + wave);
+      else ctx.lineTo(x, y + wave);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1.4, 1.4);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function hashTexture(seed: number) {
+  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 function disposeObject3D(root: THREE.Object3D) {
