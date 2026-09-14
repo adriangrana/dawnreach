@@ -15,9 +15,15 @@ import './progression-hud.css';
 import './shop.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
+const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
+const BOOT_FONT_WAIT_MS = 2_000;
 
 function nextAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
 function mountedImagesAreSettled() {
@@ -25,7 +31,15 @@ function mountedImagesAreSettled() {
 }
 
 async function waitForDawnreachReady() {
-  if ('fonts' in document) await document.fonts.ready;
+  const startedAt = performance.now();
+
+  // Fonts are presentation-only and must never be allowed to hold the game boot hostage.
+  if ('fonts' in document) {
+    await Promise.race([
+      document.fonts.ready.then(() => undefined),
+      delay(BOOT_FONT_WAIT_MS),
+    ]);
+  }
 
   while (true) {
     await nextAnimationFrame();
@@ -54,13 +68,20 @@ async function waitForDawnreachReady() {
       && minimapBounds.height > 0,
     );
 
-    if (!gameSurfaceReady || !minimapReady || !gameHud || !mountedImagesAreSettled()) continue;
+    if (gameSurfaceReady && minimapReady && gameHud && mountedImagesAreSettled()) {
+      // Give Three.js and the browser two complete paint opportunities after all
+      // visible assets have settled. This prevents exposing a partially composed frame.
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+      return;
+    }
 
-    // Give Three.js and the browser two complete paint opportunities after all
-    // visible assets have settled. This prevents exposing a partially composed frame.
-    await nextAnimationFrame();
-    await nextAnimationFrame();
-    return;
+    // Loading optimisations are optional. A shader driver, image, font or future preload
+    // regression must never leave the player trapped behind the splash indefinitely.
+    if (performance.now() - startedAt >= BOOT_SPLASH_MAX_WAIT_MS) {
+      console.warn('[Dawnreach] Boot readiness watchdog expired; continuing without full warmup.');
+      return;
+    }
   }
 }
 
