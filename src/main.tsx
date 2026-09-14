@@ -7,7 +7,6 @@ import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
-import './performance/webglWarmup';
 import './styles.css';
 import './hud-overrides.css';
 import './command-controls.css';
@@ -39,6 +38,7 @@ async function waitForDawnreachReady() {
 
     const gameSurfaceReady = Boolean(
       gameCanvas
+      && gameCanvas.dataset.dawnreachReady === 'true'
       && gameBounds
       && gameCanvas.width > 0
       && gameCanvas.height > 0
