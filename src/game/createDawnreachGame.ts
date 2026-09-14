@@ -50,6 +50,7 @@ type Point3 = { x: number; z: number };
 type AttackOrder =
   | { kind: 'ground'; point: Point3 }
   | { kind: 'target'; target: GameEntity };
+type AttackMovePriorityMode = 'nearest-hero' | 'nearest-cursor';
 type CommandMarkerKind = 'move' | 'attack';
 
 const VIEW_HEIGHT = 18;
@@ -67,6 +68,11 @@ const HERO_COLLISION_RADIUS = 0.48;
 const HERO_GROUND_OFFSET = 0.03;
 const SURFACE_RAY_HEIGHT = 64;
 const ATTACK_RANGE = 1.35;
+// Kept deliberately separate from attack range. At Dawnreach's current world scale this
+// mirrors the classic ~800 acquisition / ~150 melee attack-range relationship from Dota.
+const ATTACK_MOVE_ACQUISITION_RANGE = 7.2;
+const ATTACK_MOVE_SCAN_INTERVAL = 0.08;
+const ATTACK_MOVE_PRIORITY_STORAGE_KEY = 'dawnreach.attackMovePriority';
 const FALLBACK_ATTACK_COOLDOWN = 0.72;
 const ATTACK_IMPACT_SWING_PROGRESS = 0.38;
 const COMMAND_MARKER_Y = 0.12;
@@ -80,6 +86,17 @@ const TARGET_REPATH_COOLDOWN = 0.35;
 const VISION_UPDATE_INTERVAL = 0.1;
 const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
 const ATTACK_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23ff625b' stroke-width='2'/%3E%3Cpath d='M16 2v6M16 24v6M2 16h6M24 16h6' stroke='%23ffd2a4' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M10 22L22 10M19 8l5 5M9 23l-1 3 3-1' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 16 16, crosshair`;
+
+function readAttackMovePriorityMode(): AttackMovePriorityMode {
+  try {
+    const stored = window.localStorage.getItem(ATTACK_MOVE_PRIORITY_STORAGE_KEY);
+    return stored === 'nearest-cursor' || stored === 'smart'
+      ? 'nearest-cursor'
+      : 'nearest-hero';
+  } catch {
+    return 'nearest-hero';
+  }
+}
 
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload());
@@ -243,6 +260,7 @@ export async function createDawnreachGame(
   const hitPoint = new THREE.Vector3();
   const minimapHeroPosition = new THREE.Vector3();
   const attackTargetPosition = new THREE.Vector3();
+  const attackMoveCandidatePosition = new THREE.Vector3();
   const basicAttackSourcePosition = new THREE.Vector3();
   const basicAttackTargetPosition = new THREE.Vector3();
   const minimapViewportRaycaster = new THREE.Raycaster();
@@ -256,6 +274,7 @@ export async function createDawnreachGame(
     new THREE.Vector2(-1, -1),
   ] as const;
   const swordRestRotation = alden ? alden.sword.rotation.clone() : null;
+  const attackMovePriorityMode = readAttackMovePriorityMode();
 
   const sampleSurfaceHeight = (x: number, z: number, fallback = 0) => {
     surfaceRay.ray.origin.set(x, SURFACE_RAY_HEIGHT, z);
@@ -282,6 +301,8 @@ export async function createDawnreachGame(
   let lastAttackPathTarget: Point3 | null = null;
   let lastTargetRepathAt = -Infinity;
   let attackOrder: AttackOrder | null = null;
+  let attackMoveTarget: GameEntity | null = null;
+  let lastAttackMoveScanAt = -Infinity;
   let attackArmed = false;
   let attackCooldown = 0;
   let attackSwing = 0;
@@ -359,6 +380,7 @@ export async function createDawnreachGame(
   const clearHeroOrdersForLock = () => {
     clearMovementRoute();
     attackOrder = null;
+    attackMoveTarget = null;
     lastAttackPathTarget = null;
     attackSwing = 0;
     pendingAttackTarget = null;
@@ -421,6 +443,10 @@ export async function createDawnreachGame(
     return true;
   };
 
+  const isAutomaticAttackMoveTarget = (entity: GameEntity | null): entity is GameEntity => (
+    Boolean(entity && entity.team !== localHeroEntity.team && isHostileAttackTarget(entity))
+  );
+
   const pickAttackable = () => {
     const candidates = entityRegistry.values().filter(isHostileAttackTarget);
     if (candidates.length === 0) return null;
@@ -460,6 +486,7 @@ export async function createDawnreachGame(
 
   const issueMoveCommand = (point: Point3) => {
     attackOrder = null;
+    attackMoveTarget = null;
     lastAttackPathTarget = null;
     pendingAttackTarget = null;
     attackImpactApplied = false;
@@ -471,6 +498,8 @@ export async function createDawnreachGame(
 
   const issueGroundAttack = (point: Point3) => {
     attackOrder = { kind: 'ground', point };
+    attackMoveTarget = null;
+    lastAttackMoveScanAt = -Infinity;
     lastAttackPathTarget = null;
     pendingAttackTarget = null;
     attackImpactApplied = false;
@@ -482,6 +511,7 @@ export async function createDawnreachGame(
 
   const issueTargetAttack = (target: GameEntity) => {
     attackOrder = { kind: 'target', target };
+    attackMoveTarget = null;
     pendingAttackTarget = null;
     attackImpactApplied = false;
     disarmAttack();
@@ -498,6 +528,40 @@ export async function createDawnreachGame(
     ATTACK_RANGE + Math.max(0, target.selectionRadius) * 0.45
   );
 
+  const findAttackMoveTarget = (commandPoint: Point3) => {
+    let best: GameEntity | null = null;
+    let bestPrimaryDistance = Infinity;
+    let bestSecondaryDistance = Infinity;
+
+    for (const entity of entityRegistry.values()) {
+      if (!isAutomaticAttackMoveTarget(entity)) continue;
+      entity.root.getWorldPosition(attackMoveCandidatePosition);
+
+      const heroDistance = Math.hypot(
+        attackMoveCandidatePosition.x - hero.root.position.x,
+        attackMoveCandidatePosition.z - hero.root.position.z,
+      );
+      const acquisitionRange = Math.max(ATTACK_MOVE_ACQUISITION_RANGE, getTargetAttackReach(entity));
+      if (heroDistance > acquisitionRange) continue;
+
+      const cursorDistance = Math.hypot(
+        attackMoveCandidatePosition.x - commandPoint.x,
+        attackMoveCandidatePosition.z - commandPoint.z,
+      );
+      const primaryDistance = attackMovePriorityMode === 'nearest-cursor' ? cursorDistance : heroDistance;
+      const secondaryDistance = attackMovePriorityMode === 'nearest-cursor' ? heroDistance : cursorDistance;
+
+      if (primaryDistance < bestPrimaryDistance - 1e-4
+        || (Math.abs(primaryDistance - bestPrimaryDistance) <= 1e-4 && secondaryDistance < bestSecondaryDistance)) {
+        best = entity;
+        bestPrimaryDistance = primaryDistance;
+        bestSecondaryDistance = secondaryDistance;
+      }
+    }
+
+    return best;
+  };
+
   const getAttackCooldownSeconds = () => {
     const speed = getHeroState?.()?.stats.attackSpeed;
     if (!Number.isFinite(speed) || !speed || speed <= 0) return FALLBACK_ATTACK_COOLDOWN;
@@ -509,6 +573,43 @@ export async function createDawnreachGame(
     attackSwing = 0.0001;
     pendingAttackTarget = target;
     attackImpactApplied = false;
+  };
+
+  const pursueAttackTarget = (target: GameEntity, followCommandMarker: boolean) => {
+    target.root.getWorldPosition(attackTargetPosition);
+    if (followCommandMarker
+      && (attackMarker.position.x !== attackTargetPosition.x || attackMarker.position.z !== attackTargetPosition.z)) {
+      attackMarker.position.x = attackTargetPosition.x;
+      attackMarker.position.z = attackTargetPosition.z;
+      attackMarker.userData.surfaceHeight = sampleSurfaceHeight(attackTargetPosition.x, attackTargetPosition.z, 0);
+    }
+
+    const dx = attackTargetPosition.x - hero.root.position.x;
+    const dz = attackTargetPosition.z - hero.root.position.z;
+    const distance = Math.hypot(dx, dz);
+    const attackReach = getTargetAttackReach(target);
+    if (distance > attackReach) {
+      const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
+      const targetMoved = !lastAttackPathTarget
+        || Math.hypot(targetPoint.x - lastAttackPathTarget.x, targetPoint.z - lastAttackPathTarget.z) >= TARGET_REPATH_DISTANCE;
+      const retryPartial = currentPathPartial && elapsed - lastRoutePlanAt >= PARTIAL_ROUTE_REPATH_INTERVAL;
+      if ((targetMoved || !destination || retryPartial) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
+        planMovementRoute(targetPoint, true, true);
+        lastAttackPathTarget = targetPoint;
+        lastTargetRepathAt = elapsed;
+      }
+    } else {
+      clearMovementRoute();
+      targetYaw = Math.atan2(dx, dz);
+      if (attackCooldown <= 0 && attackSwing <= 0) triggerAttack(target);
+    }
+  };
+
+  const resumeGroundAttackMove = (point: Point3) => {
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    clearMovementRoute();
+    planMovementRoute(point, true);
   };
 
   const applyBasicAttackImpact = (target: GameEntity) => {
@@ -860,6 +961,29 @@ export async function createDawnreachGame(
     }
     movementWasLocked = movementLocked;
 
+    if (!movementLocked && attackOrder?.kind === 'ground') {
+      const groundOrder = attackOrder;
+
+      if (attackMoveTarget && (!attackMoveTarget.root.parent || !isAutomaticAttackMoveTarget(attackMoveTarget))) {
+        if (pendingAttackTarget === attackMoveTarget) pendingAttackTarget = null;
+        attackMoveTarget = null;
+        resumeGroundAttackMove(groundOrder.point);
+      }
+
+      if (!attackMoveTarget && elapsed - lastAttackMoveScanAt >= ATTACK_MOVE_SCAN_INTERVAL) {
+        lastAttackMoveScanAt = elapsed;
+        const acquired = findAttackMoveTarget(groundOrder.point);
+        if (acquired) {
+          attackMoveTarget = acquired;
+          lastAttackPathTarget = null;
+          lastTargetRepathAt = -Infinity;
+          clearMovementRoute();
+        }
+      }
+
+      if (attackMoveTarget) pursueAttackTarget(attackMoveTarget, false);
+    }
+
     if (!movementLocked && attackOrder?.kind === 'target') {
       const target = attackOrder.target;
       if (!target.root.parent || !isHostileAttackTarget(target)) {
@@ -868,35 +992,11 @@ export async function createDawnreachGame(
         clearMovementRoute();
         attackMarker.visible = false;
       } else {
-        target.root.getWorldPosition(attackTargetPosition);
-        if (attackMarker.position.x !== attackTargetPosition.x || attackMarker.position.z !== attackTargetPosition.z) {
-          attackMarker.position.x = attackTargetPosition.x;
-          attackMarker.position.z = attackTargetPosition.z;
-          attackMarker.userData.surfaceHeight = sampleSurfaceHeight(attackTargetPosition.x, attackTargetPosition.z, 0);
-        }
-        const dx = attackTargetPosition.x - hero.root.position.x;
-        const dz = attackTargetPosition.z - hero.root.position.z;
-        const distance = Math.hypot(dx, dz);
-        const attackReach = getTargetAttackReach(target);
-        if (distance > attackReach) {
-          const targetPoint = { x: attackTargetPosition.x, z: attackTargetPosition.z };
-          const targetMoved = !lastAttackPathTarget
-            || Math.hypot(targetPoint.x - lastAttackPathTarget.x, targetPoint.z - lastAttackPathTarget.z) >= TARGET_REPATH_DISTANCE;
-          const retryPartial = currentPathPartial && elapsed - lastRoutePlanAt >= PARTIAL_ROUTE_REPATH_INTERVAL;
-          if ((targetMoved || !destination || retryPartial) && elapsed - lastTargetRepathAt >= TARGET_REPATH_COOLDOWN) {
-            planMovementRoute(targetPoint, true, true);
-            lastAttackPathTarget = targetPoint;
-            lastTargetRepathAt = elapsed;
-          }
-        } else {
-          clearMovementRoute();
-          targetYaw = Math.atan2(dx, dz);
-          if (attackCooldown <= 0 && attackSwing <= 0) triggerAttack(target);
-        }
+        pursueAttackTarget(target, true);
       }
     }
 
-    if (!movementLocked && routeRequest && attackOrder?.kind !== 'target') {
+    if (!movementLocked && routeRequest && attackOrder?.kind !== 'target' && !attackMoveTarget) {
       const nextWaypoint = destination && currentWaypointIndex < currentPath.length
         ? currentPath[currentWaypointIndex]
         : null;
@@ -986,8 +1086,7 @@ export async function createDawnreachGame(
       }
     }
 
-    if (!movementLocked && reachedDestination && attackOrder?.kind === 'ground') {
-      triggerAttack();
+    if (!movementLocked && reachedDestination && attackOrder?.kind === 'ground' && !attackMoveTarget) {
       attackOrder = null;
       attackMarker.visible = false;
     }
