@@ -1,7 +1,13 @@
-import type { DragEvent, MouseEvent, PointerEvent } from 'react';
+import { useEffect, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
 import type { InventorySlot } from '../game/heroes/types';
 import { getItemDefinition } from '../game/items/itemDatabase';
 import { readInventoryDragPayload } from '../game/items/itemDrag';
+import {
+  ITEM_TARGET_CONFIRM_EVENT,
+  ITEM_TARGET_REQUEST_EVENT,
+  type ItemTargetConfirmDetail,
+  type ItemTargetRequestDetail,
+} from '../game/items/shopEvents';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import { INVENTORY_SLOT_HOTKEYS } from './inventoryControls';
 
@@ -38,6 +44,20 @@ export default function InventoryItemSlot({
   const disabled = remainingMs > 0;
   const cooldownSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   const hotkey = INVENTORY_SLOT_HOTKEYS[index]?.label ?? `${index + 1}`;
+  const requiresGroundTarget = definition?.active_effect?.id === 'place_vision_ward';
+
+  useEffect(() => {
+    if (!item || !requiresGroundTarget) return;
+
+    const onTargetConfirm = (event: Event) => {
+      const detail = (event as CustomEvent<ItemTargetConfirmDetail>).detail;
+      if (!detail || detail.instanceId !== item.instanceId) return;
+      onUse(slot.slot);
+    };
+
+    window.addEventListener(ITEM_TARGET_CONFIRM_EVENT, onTargetConfirm as EventListener);
+    return () => window.removeEventListener(ITEM_TARGET_CONFIRM_EVENT, onTargetConfirm as EventListener);
+  }, [item?.instanceId, onUse, requiresGroundTarget, slot.slot]);
 
   const stopPointer = (event: PointerEvent<HTMLDivElement>) => event.stopPropagation();
   const stopMouse = (event: MouseEvent<HTMLDivElement>) => event.stopPropagation();
@@ -45,7 +65,19 @@ export default function InventoryItemSlot({
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!item || !active || disabled) return;
+    if (!item || !definition?.active_effect || !active || disabled) return;
+
+    if (requiresGroundTarget) {
+      const detail: ItemTargetRequestDetail = {
+        itemId: item.definitionId,
+        instanceId: item.instanceId,
+        effectId: definition.active_effect.id,
+        values: definition.active_effect.values,
+      };
+      window.dispatchEvent(new CustomEvent<ItemTargetRequestDetail>(ITEM_TARGET_REQUEST_EVENT, { detail }));
+      return;
+    }
+
     onUse(slot.slot);
   };
 
