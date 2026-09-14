@@ -29,6 +29,16 @@ export const RADIANT_DRAKE_GAMEPLAY = {
   experienceReward: 500,
 } as const;
 
+const RADIANT_DRAKE_HUD_ABILITIES = [
+  {
+    id: 'radiant-fury',
+    name: 'Furia Radiante',
+    description: 'Al caer por debajo del 35% de vida, Aurelios entra en furia y reduce su intervalo entre ataques un 30%.',
+    level: 1,
+    type: 'Pasiva',
+  },
+] as const;
+
 const managerByScene = new WeakMap<THREE.Scene, RadiantDrakeManager>();
 const BOSS_POSITION = new THREE.Vector3();
 const TARGET_POSITION = new THREE.Vector3();
@@ -72,7 +82,9 @@ class RadiantDrakeManager {
   start() {
     const { dragon } = this;
     dragon.root.userData.bossGameplay = RADIANT_DRAKE_GAMEPLAY;
+    dragon.root.userData.hudAbilities = RADIANT_DRAKE_HUD_ABILITIES;
     dragon.root.userData.attackDamage = RADIANT_DRAKE_GAMEPLAY.attackDamage;
+    dragon.root.userData.attackIntervalSeconds = RADIANT_DRAKE_GAMEPLAY.attackIntervalSeconds;
     dragon.root.userData.goldReward = RADIANT_DRAKE_GAMEPLAY.goldReward;
     dragon.root.userData.experienceReward = RADIANT_DRAKE_GAMEPLAY.experienceReward;
     dragon.root.userData.bossState = 'IDLE';
