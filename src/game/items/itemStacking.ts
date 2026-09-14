@@ -3,6 +3,7 @@ import type { InventoryItem } from '../heroes/types';
 const ITEM_STACK_LIMITS: Readonly<Record<string, number>> = {
   item_004: 99,
   item_059: 99,
+  item_060: 99,
 };
 
 export function getItemStackLimit(definitionId: string) {
