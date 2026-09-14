@@ -9,6 +9,7 @@ import {
   type ItemTargetConfirmDetail,
   type ItemTargetRequestDetail,
 } from '../game/items/shopEvents';
+import { isWardPlacementEffect } from '../game/items/wardGameplay';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import { INVENTORY_SLOT_HOTKEYS } from './inventoryControls';
 
@@ -59,7 +60,7 @@ export default function InventoryItemSlot({
   const disabled = remainingMs > 0;
   const cooldownSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   const hotkey = INVENTORY_SLOT_HOTKEYS[index]?.label ?? `${index + 1}`;
-  const requiresGroundTarget = definition?.active_effect?.id === 'place_vision_ward';
+  const requiresGroundTarget = Boolean(definition?.active_effect && isWardPlacementEffect(definition.active_effect.id));
   const slotRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties | null>(null);
