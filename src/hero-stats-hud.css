@@ -3,6 +3,10 @@
   gap: 5px;
 }
 
+.hero-identity {
+  min-width: 0;
+}
+
 .hero-combat-stats {
   display: grid;
   grid-template-columns: 1fr;
@@ -25,12 +29,13 @@
   text-shadow: 0 0 7px rgba(77, 201, 104, 0.2);
 }
 
-/* Keep all three primary attributes readable; the passive sigil occupies the far-right corner. */
+/* The three attributes own the full stat-row width; no passive control is allowed to overlap this grid. */
 .hero-core-attributes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(24px, 28px));
-  justify-content: start;
-  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
   margin-top: 1px;
   padding-top: 4px;
   border-top: 1px solid rgba(132, 127, 94, 0.28);
@@ -42,7 +47,7 @@
   grid-template-rows: auto auto;
   place-items: center;
   gap: 0;
-  padding: 2px 1px;
+  padding: 2px 0;
   color: #d1d5c9;
   line-height: 1;
 }
@@ -88,15 +93,166 @@
   text-shadow: 0 1px 2px #000, 0 0 6px rgba(69, 167, 225, 0.3);
 }
 
+/* Compact MOBA status lane sharing the resource-bar height instead of increasing the command deck. */
+.combat-status-layout {
+  display: grid;
+  grid-template-columns: minmax(28px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.combat-status-layout--resources-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.combat-status-layout .resource-bars {
+  min-width: 0;
+  width: 100%;
+}
+
+.hero-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 28px;
+  max-width: 112px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px;
+  pointer-events: auto;
+  scrollbar-width: none;
+}
+
+.hero-status-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.hero-status-persistent,
+.hero-status-icon {
+  position: relative;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+}
+
+.hero-status-persistent {
+  border: 1px solid #9a8250;
+  background: linear-gradient(145deg, #2e2b21, #0a1012 72%);
+  box-shadow: 0 0 0 1px #05090a, inset 0 0 0 1px rgba(224, 196, 126, 0.12);
+}
+
+.hero-status-persistent .ability-control {
+  width: 28px;
+  max-width: 28px;
+  min-width: 28px;
+  height: 28px;
+}
+
+.hero-status-persistent .ability-slot,
+.hero-status-persistent .ability-slot:nth-child(n) {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  aspect-ratio: 1;
+  border: 0;
+  box-shadow: none !important;
+  background: #0c1214;
+}
+
+.hero-status-persistent .ability-control--passive .ability-image,
+.hero-status-persistent .ability-control--passive .hud-art {
+  filter: none;
+  opacity: 0.96;
+}
+
+.hero-status-persistent .ability-passive-mark {
+  top: 1px;
+  right: 1px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  color: #f0d99f;
+  background: rgba(8, 13, 15, 0.82);
+}
+
+.hero-status-icon {
+  display: grid;
+  place-items: center;
+  border: 1px solid #6f725e;
+  background: linear-gradient(145deg, #20292a, #0a1012 72%);
+  box-shadow: 0 0 0 1px #05090a, inset 0 1px rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.hero-status-icon:focus-visible,
+.hero-status-icon:hover {
+  filter: brightness(1.14);
+  outline: 1px solid rgba(236, 218, 160, 0.9);
+  outline-offset: 1px;
+}
+
+.hero-status-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
+}
+
+.hero-status-icon--buff {
+  color: #9ad9df;
+  border-color: #607f79;
+  box-shadow: 0 0 0 1px #05090a, inset 0 0 8px rgba(89, 186, 194, 0.12);
+}
+
+.hero-status-icon--debuff {
+  color: #dc8c73;
+  border-color: #855a49;
+  box-shadow: 0 0 0 1px #05090a, inset 0 0 8px rgba(190, 82, 55, 0.13);
+}
+
+.hero-status-stack {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #8c7b55;
+  background: #080d0f;
+  color: #f1dfad;
+  font-size: 7px;
+  line-height: 1;
+  text-shadow: 0 1px 1px #000;
+}
+
 @media (max-width: 1020px) {
   .hero-combat-stats .hero-combat-stat { gap: 5px; }
   .hero-core-attributes {
-    grid-template-columns: repeat(3, minmax(21px, 24px));
-    gap: 3px;
+    gap: 2px;
     padding-top: 3px;
   }
   .hero-core-attribute small { font-size: 6px; }
   .hero-core-attribute__value { font-size: 9px; }
   .resource b { gap: 5px; }
   .resource-regen { font-size: 8px; }
+
+  .combat-status-layout {
+    grid-template-columns: minmax(24px, max-content) minmax(0, 1fr);
+    gap: 4px;
+  }
+  .combat-status-layout--resources-only { grid-template-columns: minmax(0, 1fr); }
+  .hero-status-bar { min-width: 24px; max-width: 84px; gap: 2px; }
+  .hero-status-persistent,
+  .hero-status-icon,
+  .hero-status-persistent .ability-control,
+  .hero-status-persistent .ability-slot,
+  .hero-status-persistent .ability-slot:nth-child(n) {
+    flex-basis: 24px;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+  }
+  .hero-status-icon svg { width: 13px; height: 13px; }
 }

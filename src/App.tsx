@@ -40,13 +40,14 @@ import {
   type ItemUseDetail,
 } from './game/items/shopEvents';
 import AbilityButton from './hud/AbilityButton';
+import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
 import ShopOverlay from './hud/ShopOverlay';
 import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
-  ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID,
+  ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, applyHeroProgressionReward,
-  calculateAldenInnate, calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats,
+  calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats,
   createPlayableMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
   getRequiredHero, getUnspentHeroAbilityPoints,
   recoverHeroResource, upgradeHeroAbility, useHeroAbility,
@@ -444,7 +445,8 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
   const attributes = calculateHeroAttributes(runtime.match, hero.heroEntityId);
   const damageBreakdown = calculateHeroDamageBreakdown(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
-  const innate = hero.definitionId === ALDEN.id ? calculateAldenInnate(runtime.match, hero.heroEntityId) : null;
+  const activeStatuses = Object.values(hero.runtime.statuses).filter(status => status.expiresAtMs > runtime.nowMs);
+  const hasStatusEntries = Boolean(definition.innate || activeStatuses.length > 0);
   const experience = getHeroExperienceProgress(runtime.match, hero.heroEntityId);
   const unspentAbilityPoints = getUnspentHeroAbilityPoints(runtime.match, hero.heroEntityId);
   const heroDead = hero.currentHp <= 0;
@@ -555,12 +557,6 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
                 ))}
               </div>
             </div>
-            {innate && <div className="hero-sigil">
-              <AbilityButton
-                name={ALDEN.innate.name} kind="passive" art="sun" blockedReason="Pasiva innata"
-                description={`Al recibir impactos frontales acumula hasta ${innate.requiredStacks} cargas. Potencia el siguiente ataque con ${Math.round(innate.bonusDamage)} de dano adicional y hasta ${Math.round(innate.healing)} de curacion. Intervalo entre cargas: ${innate.stackInternalCooldownSeconds} s. Bloqueo tras activarse: ${innate.procLockoutSeconds} s.`}
-              ><HudArt name="sun" /></AbilityButton>
-            </div>}
           </div>
         </div>
 
@@ -585,20 +581,31 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}
           </div>
-          <div className="resource-bars">
-            <div className="resource resource--health">
-              <span style={{ width: `${hero.currentHp / stats.maxHp * 100}%` }} />
-              <b>
-                {Math.floor(hero.currentHp)} / {Math.round(stats.maxHp)}
-                <em className="resource-regen" title="Regeneración de vida por segundo">+{formatHudNumber(stats.hpRegenPerSecond)}</em>
-              </b>
-            </div>
-            <div className="resource resource--mana" data-current={hero.currentResource} data-max={stats.maxResource}>
-              <span style={{ width: `${hero.currentResource / stats.maxResource * 100}%` }} />
-              <b>
-                {Math.floor(hero.currentResource)} / {Math.round(stats.maxResource)}
-                <em className="resource-regen" title="Regeneración de maná por segundo">+{formatHudNumber(stats.resourceRegenPerSecond)}</em>
-              </b>
+          <div className={`combat-status-layout${hasStatusEntries ? '' : ' combat-status-layout--resources-only'}`}>
+            {hasStatusEntries && (
+              <HeroStatusBar
+                heroEntityId={hero.heroEntityId}
+                innate={definition.innate}
+                timedStatuses={activeStatuses}
+                nowMs={runtime.nowMs}
+                renderArt={art => <HudArt name={art} />}
+              />
+            )}
+            <div className="resource-bars">
+              <div className="resource resource--health">
+                <span style={{ width: `${hero.currentHp / stats.maxHp * 100}%` }} />
+                <b>
+                  {Math.floor(hero.currentHp)} / {Math.round(stats.maxHp)}
+                  <em className="resource-regen" title="Regeneración de vida por segundo">+{formatHudNumber(stats.hpRegenPerSecond)}</em>
+                </b>
+              </div>
+              <div className="resource resource--mana" data-current={hero.currentResource} data-max={stats.maxResource}>
+                <span style={{ width: `${hero.currentResource / stats.maxResource * 100}%` }} />
+                <b>
+                  {Math.floor(hero.currentResource)} / {Math.round(stats.maxResource)}
+                  <em className="resource-regen" title="Regeneración de maná por segundo">+{formatHudNumber(stats.resourceRegenPerSecond)}</em>
+                </b>
+              </div>
             </div>
           </div>
         </div>

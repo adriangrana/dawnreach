@@ -4,6 +4,7 @@ import {
   type AbilityKey,
   type HeroAbilityDefinition,
   type HeroDefinition,
+  type HeroInnateDefinition,
   type HeroStats,
 } from '../types';
 
@@ -15,8 +16,7 @@ export const ALDEN_SKILL_SYSTEM = {
   ultimateRankHeroLevels: [6, 12, 18] as const,
 } as const;
 
-export interface AldenInnateDefinition {
-  name: string;
+export interface AldenInnateDefinition extends HeroInnateDefinition {
   maxStacks: number;
   stackInternalCooldownSeconds: number;
   procLockoutSeconds: number;
@@ -212,7 +212,15 @@ export const ALDEN: AldenGameplayDefinition = {
     R: rAbility,
   },
   innate: {
+    id: 'alden:innate:voto-del-muro-vivo',
     name: 'Voto del Muro Vivo',
+    description: 'Alden transforma la presión frontal en una promesa defensiva: cuanto más sostiene la línea, más contundente se vuelve su siguiente respuesta.',
+    technicalDescription: 'Los impactos directos físicos o mágicos recibidos desde el frente acumulan 1 carga, hasta 4, con 0.75 s de intervalo interno. Al completar 4 cargas, el siguiente ataque básico durante 5 s inflige 20 + 1.5 por cada nivel después del primero + 35% del AD total como daño adicional y cura 2% de la vida máxima + 0.02% por cada nivel después del primero (50% contra enemigos normales). Tras consumirse, no puede volver a acumular durante 7 s.',
+    hud: {
+      kind: 'persistent_aura',
+      art: 'sun',
+      tone: 'passive',
+    },
     maxStacks: 4,
     stackInternalCooldownSeconds: 0.75,
     procLockoutSeconds: 7,

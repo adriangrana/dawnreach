@@ -57,6 +57,27 @@ export interface HeroAbilityDefinition {
   unlockLevels: AbilityUnlockLevels;
 }
 
+export type HeroStatusTone = 'passive' | 'buff' | 'debuff';
+
+export interface HeroPersistentAuraPresentation {
+  kind: 'persistent_aura';
+  /** HUD-art symbol used by the compact status row. Falls back to a generic passive glyph. */
+  art?: string;
+  tone?: HeroStatusTone;
+}
+
+/**
+ * Definition-level passive that exists independently from timed runtime statuses.
+ * It stays present through death/respawn and is rendered as a persistent HUD aura.
+ */
+export interface HeroInnateDefinition {
+  id: string;
+  name: string;
+  description: string;
+  technicalDescription: string;
+  hud: HeroPersistentAuraPresentation;
+}
+
 export interface HeroDefinition {
   id: HeroId;
   displayName: string;
@@ -84,6 +105,8 @@ export interface HeroDefinition {
   baseStats: HeroStats;
   statProgression: Record<HeroStatKey, StatProgression>;
   abilities: Record<AbilityKey, HeroAbilityDefinition>;
+  /** Optional permanent innate presented in the HUD as a persistent aura, not a fake timed status. */
+  innate?: HeroInnateDefinition;
 }
 
 export interface ItemStatModifier {
