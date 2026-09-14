@@ -11,6 +11,7 @@ const CRYSTAL_Y = 4.18;
 const STAIR_TOP = 6.05;
 const STAIR_BOTTOM = 12.35;
 const STAIR_HALF = 3.1;
+const STAIR_STEP_COUNT = 8;
 const OUTLINE = [
   [-1.65, -4.4], [-1.65, 4.4], [0.3, 5.8], [3.2, 6.4], [5.7, 5.5],
   [6.45, 3.4], [6.45, -3.4], [5.7, -5.5], [3.2, -6.4], [0.3, -5.8],
@@ -62,7 +63,13 @@ function build(root: THREE.Group, world: THREE.Group, team: Team) {
 }
 
 function retireLegacy(root: THREE.Group, basis: Basis, angle: number) {
-  const invisible = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
+  const invisible = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    colorWrite: false,
+    side: THREE.DoubleSide,
+  });
   root.traverse(o => {
     if (o === root) return;
     if (o instanceof THREE.Light) { o.visible = false; return; }
@@ -75,7 +82,19 @@ function retireLegacy(root: THREE.Group, basis: Basis, angle: number) {
         o.material = invisible; o.visible = true; return;
       }
       if (o.name === 'team-start-citadel-bridge') {
-        o.geometry.dispose(); o.geometry = stairRamp(angle); o.material = invisible; o.visible = true; return;
+        o.geometry.dispose();
+        o.geometry = stairStepSurface(angle);
+        o.material = invisible;
+        o.visible = true;
+        o.userData.stairCollider = true;
+        return;
+      }
+      if (o.name === 'team-start-ramp') {
+        // This was the old forest-facing ramp. Its mesh reference is already present in the
+        // command-surface cache, so replace the geometry as well as hiding it to guarantee
+        // that it can no longer win a height raycast behind the rebuilt staircase.
+        o.geometry.dispose();
+        o.geometry = new THREE.BufferGeometry();
       }
       o.userData.commandSurface = false; o.visible = false; return;
     }
@@ -85,16 +104,59 @@ function retireLegacy(root: THREE.Group, basis: Basis, angle: number) {
   });
 }
 
-function stairRamp(a: number) {
-  const r = new THREE.Vector2(Math.cos(a), Math.sin(a));
-  const t = new THREE.Vector2(-r.y, r.x);
-  const p = (d: number, s: number, y: number) => [r.x * d + t.x * s, y, r.y * d + t.y * s];
+function stairStepTop(index: number) {
+  return THREE.MathUtils.lerp(
+    PLAZA_Y,
+    DECK_Y + .035,
+    (index + 1) / STAIR_STEP_COUNT,
+  );
+}
+
+function stairStepSurface(a: number) {
+  const radial = new THREE.Vector2(Math.cos(a), Math.sin(a));
+  const tangent = new THREE.Vector2(-radial.y, radial.x);
+  const halfWidth = STAIR_HALF - .32;
+  const depth = (STAIR_BOTTOM - STAIR_TOP) / STAIR_STEP_COUNT;
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  const p = (d: number, s: number, y: number) => [
+    radial.x * d + tangent.x * s,
+    y,
+    radial.y * d + tangent.y * s,
+  ] as const;
+
+  for (let index = 0; index < STAIR_STEP_COUNT; index++) {
+    const outer = STAIR_BOTTOM - index * depth;
+    const inner = STAIR_BOTTOM - (index + 1) * depth;
+    const top = stairStepTop(index);
+    const base = vertices.length / 3;
+    vertices.push(
+      ...p(outer, -halfWidth, top),
+      ...p(outer, halfWidth, top),
+      ...p(inner, -halfWidth, top),
+      ...p(inner, halfWidth, top),
+    );
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+
+    // Add the vertical riser to make this a real stepped collision/height surface rather
+    // than an invisible sloped ramp. The hero height ray lands on the horizontal tread.
+    const lower = index === 0 ? PLAZA_Y : stairStepTop(index - 1);
+    const riserBase = vertices.length / 3;
+    vertices.push(
+      ...p(outer, -halfWidth, lower),
+      ...p(outer, halfWidth, lower),
+      ...p(outer, -halfWidth, top),
+      ...p(outer, halfWidth, top),
+    );
+    indices.push(riserBase, riserBase + 2, riserBase + 1, riserBase + 1, riserBase + 2, riserBase + 3);
+  }
+
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute([
-    ...p(STAIR_TOP, STAIR_HALF - .32, DECK_Y + .035), ...p(STAIR_TOP, -STAIR_HALF + .32, DECK_Y + .035),
-    ...p(STAIR_BOTTOM, STAIR_HALF - .32, PLAZA_Y + .055), ...p(STAIR_BOTTOM, -STAIR_HALF + .32, PLAZA_Y + .055),
-  ], 3));
-  g.setIndex([0, 1, 2, 1, 3, 2]); g.computeVertexNormals(); g.computeBoundingBox(); g.computeBoundingSphere();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
   return g;
 }
 
@@ -148,14 +210,17 @@ function addWalls(g: THREE.Group, m: Mats, b: Basis) {
 }
 
 function addStairs(g: THREE.Group, m: Mats, b: Basis, angle: number) {
-  const n = 15, depth = (STAIR_BOTTOM - STAIR_TOP) / n, radial = new THREE.Vector3(b.fx, 0, b.fz), tangent = new THREE.Vector3(b.sx, 0, b.sz);
+  const n = STAIR_STEP_COUNT, depth = (STAIR_BOTTOM - STAIR_TOP) / n, radial = new THREE.Vector3(b.fx, 0, b.fz), tangent = new THREE.Vector3(b.sx, 0, b.sz);
   for (let i = 0; i < n; i++) {
-    const d = STAIR_BOTTOM - (i + .5) * depth, top = THREE.MathUtils.lerp(PLAZA_Y + .08, DECK_Y + .035, (i + 1) / n), h = top - PLAZA_Y;
+    const d = STAIR_BOTTOM - (i + .5) * depth, top = stairStepTop(i), h = top - PLAZA_Y;
     const step = new THREE.Mesh(chamfer(depth + .10, h, STAIR_HALF * 2, .045), i % 5 === 2 ? m.floorDark : i % 3 ? m.floor : m.light);
+    step.name = 'sanctuary-stair-step';
+    step.userData.walkableStep = true;
     step.position.set(b.fx * d, PLAZA_Y + h / 2, b.fz * d); step.rotation.y = -angle; step.castShadow = step.receiveShadow = true; g.add(step);
     for (const side of [-1, 1]) {
       const p = radial.clone().multiplyScalar(d).addScaledVector(tangent, side * (STAIR_HALF + .35));
       const rail = new THREE.Mesh(chamfer(depth + .1, .56, .56, .045), i % 4 ? m.dark : m.light);
+      rail.name = 'sanctuary-stair-side';
       rail.position.set(p.x, top + .28, p.z); rail.rotation.y = -angle; rail.castShadow = rail.receiveShadow = true; g.add(rail);
     }
   }
