@@ -13,6 +13,7 @@ import './hud-overrides.css';
 import './command-controls.css';
 import './combat-stats.css';
 import './progression-hud.css';
+import './shop.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 
