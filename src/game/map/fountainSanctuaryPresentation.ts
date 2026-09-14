@@ -134,7 +134,7 @@ function addWalls(g: THREE.Group, m: Mats, b: Basis) {
     const a = OUTLINE[e], z = OUTLINE[(e + 1) % OUTLINE.length];
     if (a[0] === 6.45 && z[0] === 6.45) continue;
     const A = offset(b, a[0], a[1]), B = offset(b, z[0], z[1]), dx = B.x - A.x, dz = B.z - A.z;
-    const len = Math.hypot(dx, dz), n = Math.max(1, Math.ceil(len / .92)), rot = -Math.atan2(dz, dx);
+    const len = Math.hypot(dx, dz), n = Math.max(1, Math.ceil(len / .72)), rot = -Math.atan2(dz, dx);
     for (let i = 0; i < n; i++) {
       const q = (i + .5) / n, x = THREE.MathUtils.lerp(A.x, B.x, q), zz = THREE.MathUtils.lerp(A.z, B.z, q), w = len / n * 1.06;
       for (let c = 0; c < 6; c++) {
@@ -239,7 +239,7 @@ function liftShop(world:THREE.Group,team:Team){const shop=world.getObjectByName(
 function basisFor(team:Team){const p=getTeamBaseShopPosition(team),l=Math.hypot(p.x,p.z)||1,fx=-p.x/l,fz=-p.z/l;return{fx,fz,sx:-fz,sz:fx};}
 function offset(b:Basis,f:number,s:number){return{x:b.fx*f+b.sx*s,z:b.fz*f+b.sz*s};}
 function outlineShape(b:Basis){const sh=new THREE.Shape();OUTLINE.forEach(([f,s],i)=>{const p=offset(b,f,s);if(i===0)sh.moveTo(p.x,-p.z);else sh.lineTo(p.x,-p.z);});sh.closePath();return sh;}
-function chamfer(w:number,h:number,d:number,b:number){const s=new THREE.Shape(),x=w/2,y=h/2,c=Math.min(b,x*.45,y*.45);s.moveTo(-x+c,-y);s.lineTo(x-c,-y);s.lineTo(x,-y+c);s.lineTo(x,y-c);s.lineTo(x-c,y);s.lineTo(-x+c,y);s.lineTo(-x,y-c);s.lineTo(-x,-y+c);s.closePath();const g=new THREE.ExtrudeGeometry(s,{depth:d,bevelEnabled:true,bevelSegments:2,bevelSize:Math.min(c*.55,d*.13),bevelThickness:Math.min(c*.52,d*.11),curveSegments:1});g.translate(0,0,-d/2);g.computeVertexNormals();return g;}
+function chamfer(w:number,h:number,d:number,b:number){const s=new THREE.Shape(),x=w/2,y=h/2,c=Math.min(b,x*.45,y*.45);s.moveTo(-x+c,-y);s.lineTo(x-c,-y);s.lineTo(x,-y+c);s.lineTo(x,y-c);s.lineTo(x-c,y);s.lineTo(-x+c,y);s.lineTo(-x,y-c);s.lineTo(-x,-y+c);s.closePath();const g=new THREE.ExtrudeGeometry(s,{depth:d,bevelEnabled:true,bevelSegments:6,bevelSize:Math.min(c*.55,d*.13),bevelThickness:Math.min(c*.52,d*.11),curveSegments:1});g.translate(0,0,-d/2);g.computeVertexNormals();return g;}
 function bannerGeo(w:number,h:number,cols:number,rows:number){const v:number[]=[],uv:number[]=[],idx:number[]=[];for(let r=0;r<=rows;r++){const q=r/rows,y=h*(.5-q),tap=q<.76?1:THREE.MathUtils.lerp(1,.05,(q-.76)/.24);for(let c=0;c<=cols;c++){const u=c/cols,x=(u-.5)*w*tap;v.push(x,y,Math.sin(u*Math.PI*5)*.025);uv.push(u,1-q);if(r<rows&&c<cols){const k=r*(cols+1)+c,n=k+cols+1;idx.push(k,k+1,n,k+1,n+1,n);}}}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return g;}
 
 function floorTexture(blue:boolean){const c=document.createElement('canvas');c.width=c.height=1024;const x=c.getContext('2d');if(!x)return null;x.fillStyle=blue?'#344148':'#483838';x.fillRect(0,0,1024,1024);for(let r=0;r<7;r++){const n=r%2?5:6,w=1024/n,o=r%2?-w*.38:-w*.08;for(let k=-1;k<=n;k++){const q=88+Math.floor(noise(r*71+k*43)*38);x.fillStyle=blue?`rgb(${q},${q+7},${q+12})`:`rgb(${q+10},${q},${q})`;x.fillRect(k*w+o+7,r*146+7,w-14,132);x.strokeStyle='rgba(18,24,28,.6)';x.lineWidth=5;x.strokeRect(k*w+o+7,r*146+7,w-14,132);}}return tex(c,2.2,2.2);}
