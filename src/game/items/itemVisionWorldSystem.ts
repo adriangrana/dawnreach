@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry, TeamId } from '../entities/gameEntities';
+import { ensureWardPlacementSystem } from './wardPlacementSystem';
 
 export type ItemVisionWorldSystem = Readonly<{ dispose(): void }>;
 
@@ -29,6 +30,7 @@ export function ensureItemVisionWorldSystem(
 
   disposeActiveVisionSystem?.();
   let disposed = false;
+  const wardPlacementSystem = ensureWardPlacementSystem(scene, registry);
 
   const previousSceneBeforeRender = scene.onBeforeRender;
   const beforeRender: typeof scene.onBeforeRender = function(
@@ -70,6 +72,7 @@ export function ensureItemVisionWorldSystem(
     if (disposed) return;
     disposed = true;
     if (scene.onBeforeRender === beforeRender) scene.onBeforeRender = previousSceneBeforeRender;
+    wardPlacementSystem.dispose();
     delete scene.userData[SYSTEM_KEY];
     if (disposeActiveVisionSystem === dispose) disposeActiveVisionSystem = null;
   };
