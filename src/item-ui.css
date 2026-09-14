@@ -172,6 +172,93 @@
   text-shadow: 0 1px 3px #000, 0 0 5px #000;
 }
 
+/* Slot 6 is deliberately outside the six-slot inventory grid. It lives beside the gold row,
+   cannot become a normal drag source and visually reads as a separate global-teleport control. */
+.inventory-panel {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-rows: minmax(0, 1fr) 30px;
+  align-content: center;
+  gap: 4px !important;
+}
+.inventory-panel > .inventory-grid {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+}
+.inventory-panel > .gold-row {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 30px;
+}
+.teleport-slot-shell {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 18;
+  width: 34px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+.teleport-slot-shell .teleport-slot-label {
+  position: absolute;
+  z-index: 9;
+  left: 2px;
+  top: 1px;
+  padding: 1px 2px;
+  border-radius: 2px;
+  background: rgba(5, 12, 16, .86);
+  color: #8fddec;
+  font-size: 6px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .05em;
+  pointer-events: none;
+}
+.teleport-slot-shell .inventory-slot--teleport {
+  width: 30px;
+  height: 30px;
+  aspect-ratio: 1;
+  cursor: pointer;
+  isolation: isolate;
+  border-color: rgba(103, 183, 205, .62);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(71, 182, 220, .22), transparent 48%),
+    linear-gradient(145deg, #15272d, #081014);
+  box-shadow: 0 0 0 1px #03090c, inset 0 1px rgba(201, 240, 244, .18), 0 0 9px rgba(67, 177, 207, .1);
+}
+.teleport-slot-shell .inventory-slot--teleport-filled:hover {
+  border-color: rgba(138, 229, 247, .9);
+  box-shadow: 0 0 0 1px #03090c, inset 0 0 0 1px rgba(138, 229, 247, .2), 0 0 13px rgba(67, 198, 229, .24);
+}
+.teleport-slot-shell.is-targeting .inventory-slot--teleport {
+  border-color: #8feaff !important;
+  box-shadow: 0 0 0 1px #071115, inset 0 0 0 1px rgba(143, 234, 255, .42), 0 0 18px rgba(73, 210, 239, .72) !important;
+  animation: teleport-slot-pulse .78s ease-in-out infinite alternate;
+}
+.teleport-slot-shell.is-targeting::after {
+  content: "DESTINO";
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 3px);
+  padding: 2px 4px;
+  border: 1px solid rgba(123, 221, 242, .42);
+  border-radius: 3px;
+  background: rgba(4, 12, 16, .92);
+  color: #9cecff;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@keyframes teleport-slot-pulse {
+  from { filter: brightness(1); transform: scale(1); }
+  to { filter: brightness(1.18); transform: scale(1.035); }
+}
+
 .inventory-drag-ghost {
   position: fixed;
   left: 0;
@@ -292,5 +379,24 @@
   .shop-window {
     height: min(580px, calc(100vh - 214px)) !important;
     min-height: min(430px, calc(100vh - 214px)) !important;
+  }
+  .inventory-panel {
+    grid-template-columns: minmax(0, 1fr) 34px 76px !important;
+    grid-template-rows: auto !important;
+    align-items: center;
+    gap: 6px !important;
+  }
+  .inventory-panel > .inventory-grid {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .teleport-slot-shell {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .inventory-panel > .gold-row {
+    grid-column: 3;
+    grid-row: 1;
+    min-height: 27px;
   }
 }
