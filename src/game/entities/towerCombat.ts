@@ -238,7 +238,6 @@ function synchronizeWorldRuntime(
 
   for (const entity of registry.values()) {
     const snapshot = getWorldEntityRuntime(entity.id);
-    const wasAlive = entity.alive;
 
     if (snapshot) {
       entity.level = Math.max(1, Math.floor(snapshot.level));
@@ -251,8 +250,17 @@ function synchronizeWorldRuntime(
       entity.root.userData.currentHp = entity.currentHp;
     }
 
-    if (wasAlive && !entity.alive && entity.kind === 'hero' && !hasPendingRespawn(entity)) {
-      scheduleHeroRespawn(entity, elapsed);
+    if (!entity.alive && entity.kind === 'hero' && !hasPendingRespawn(entity)) {
+      const respawnSeconds = scheduleHeroRespawn(entity, elapsed);
+      emitWorldCombatEvent({
+        entityId: entity.id,
+        reason: 'death',
+        currentHp: 0,
+        currentResource: entity.currentResource,
+        alive: false,
+        atMs: worldNowMs(),
+        respawnSeconds,
+      });
     }
 
     if (entity.kind === 'hero') {
