@@ -119,6 +119,28 @@
   pointer-events: none;
 }
 
+.inventory-item-quantity {
+  position: absolute;
+  left: 3px;
+  bottom: 2px;
+  z-index: 6;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(233, 213, 153, .72);
+  border-radius: 8px;
+  background: rgba(5, 11, 14, .92);
+  color: #f3e5b9;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 3px #000;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .72);
+  pointer-events: none;
+}
+
 .inventory-item-cooldown {
   position: absolute;
   inset: 2px;
@@ -154,7 +176,7 @@
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 1200;
+  z-index: 12000;
   width: 52px;
   height: 52px;
   overflow: hidden;
@@ -216,6 +238,18 @@
   visibility: visible;
   transform: translateY(0);
 }
+.inventory-item-tooltip--portal {
+  position: fixed;
+  right: auto;
+  top: auto;
+  z-index: 10000;
+  overflow: auto;
+  overscroll-behavior: contain;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: none;
+}
 .inventory-pointer-dragging .inventory-item-tooltip { display: none !important; }
 .inventory-tooltip-head {
   display: grid;
@@ -241,6 +275,10 @@
 .inventory-item-tooltip p em { display: block; margin-top: 3px; color: #77aebb; font-style: normal; }
 .inventory-item-tooltip > small { display: block; margin-top: 8px; color: #7f8986; font-family: Georgia, serif; font-size: 8px; font-style: italic; line-height: 1.35; }
 .inventory-item-tooltip > i { display: block; margin-top: 8px; color: #d1bc76; font-size: 8px; font-style: normal; font-weight: 700; }
+
+/* Ability tooltips already use a body portal. Keep every gameplay tooltip above status trays,
+   selection overlays and transient HUD chrome. */
+.ability-tooltip { z-index: 10000 !important; }
 
 @media (max-width: 980px) {
   .shop-sell-dropzone { min-width: 104px; }
