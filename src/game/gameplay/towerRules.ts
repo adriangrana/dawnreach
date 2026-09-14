@@ -160,10 +160,21 @@ export function isTowerTierVulnerable(tower: GameEntity, registry: GameEntityReg
     || tierThreeTowers.some(candidate => !candidate.alive || candidate.currentHp <= 0);
 }
 
+export function isTowerInvulnerable(tower: GameEntity): boolean {
+  return tower.kind === 'tower'
+    && tower.alive
+    && tower.currentHp > 0
+    && tower.root.userData.towerInvulnerable === true;
+}
+
 export function refreshTowerVulnerabilityFlags(registry: GameEntityRegistry): void {
   for (const tower of registry.values()) {
     if (tower.kind !== 'tower') continue;
-    tower.root.userData.towerTierVulnerable = isTowerTierVulnerable(tower, registry);
+    const vulnerable = isTowerTierVulnerable(tower, registry);
+    tower.root.userData.towerTierVulnerable = vulnerable;
+    // Invulnerability is a first-class structural state. UI/status systems consume this
+    // flag directly, while damage validation still recomputes the progression rule.
+    tower.root.userData.towerInvulnerable = tower.alive && tower.currentHp > 0 && !vulnerable;
   }
 }
 
