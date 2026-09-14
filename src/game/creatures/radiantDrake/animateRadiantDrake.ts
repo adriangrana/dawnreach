@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export const DRAKE_ATTACK = { duration: 1.16, impact: 0.46 } as const;
+const DRAKE_IDLE_SCALE_UPDATE_INTERVAL = 1 / 30;
 const smooth = THREE.MathUtils.smoothstep;
 
 // Seconds on the attack timeline; the same contact time drives combat damage.
@@ -77,6 +78,7 @@ export function createDrakeAnimator(
   const headRest = head.position.clone();
   let attackAt = -Infinity, attackSpeed = 1;
   let headingFrom = model.rotation.y, headingTo = model.rotation.y;
+  let nextIdleScaleUpdateAt = 0;
 
   const controller: DrakeAnimationController = {
     beginAttack(nowMs, speed = 1, heading = model.rotation.y) {
@@ -89,6 +91,13 @@ export function createDrakeAnimator(
     update(elapsed, nowMs = performance.now()) {
       if (root.userData.bossState === 'DEAD') return;
       const seconds = (nowMs - attackAt) / 1000 * attackSpeed;
+      const attackActive = seconds >= 0 && seconds < DRAKE_ATTACK.duration;
+
+      // Fog-of-war can hide the boss for most of a match. Do not keep deforming 1,210
+      // instanced scales, 33 bones and every attachment when no player can see the result.
+      // Active attacks are the exception so an in-flight combat pose remains deterministic.
+      if (!root.visible && !attackActive) return;
+
       const pose = sampleDrakeAttack(seconds);
       const breath = Math.sin(elapsed * 1.65);
       if (Number.isFinite(attackAt)) model.rotation.y = THREE.MathUtils.lerp(headingFrom, headingTo, smooth(seconds, 0, 0.28));
@@ -104,8 +113,18 @@ export function createDrakeAnimator(
         bone.scale.set(1 + chest * breath * 0.022, 1 + chest * breath * 0.025, 1);
         bone.updateMatrix(); matrices[i].multiplyMatrices(bone.matrix, inverseCenters[i]);
       }
-      for (let i = 0; i < scales.count; i++) scales.setMatrixAt(i, result.multiplyMatrices(blend(scaleTimes[i]), restScales[i]));
-      scales.instanceMatrix.needsUpdate = true;
+
+      // The scales are decorative surface detail. At idle, updating their full instance
+      // buffer at 30 Hz is visually indistinguishable from 60 Hz while halving the most
+      // expensive CPU-to-GPU animation upload. Attacks retain full-rate deformation.
+      if (attackActive || elapsed >= nextIdleScaleUpdateAt) {
+        for (let i = 0; i < scales.count; i++) {
+          scales.setMatrixAt(i, result.multiplyMatrices(blend(scaleTimes[i]), restScales[i]));
+        }
+        scales.instanceMatrix.needsUpdate = true;
+        nextIdleScaleUpdateAt = elapsed + DRAKE_IDLE_SCALE_UPDATE_INTERVAL;
+      }
+
       for (const { object, t, rest } of restAttachments) {
         object.matrix.multiplyMatrices(blend(t), rest); object.matrixWorldNeedsUpdate = true;
       }
@@ -118,7 +137,7 @@ export function createDrakeAnimator(
         group.rotation.x = Math.sin(elapsed * 0.825 + 0.4) * 0.028 - pose.brace * 0.09;
         group.rotation.y = side * (Math.sin(elapsed * 0.55 + 0.8) * 0.018 + pose.snap * 0.065);
       });
-      root.userData.animationState = seconds >= 0 && seconds < DRAKE_ATTACK.duration ? 'BASIC_ATTACK' : 'IDLE';
+      root.userData.animationState = attackActive ? 'BASIC_ATTACK' : 'IDLE';
     },
   };
   return controller;
