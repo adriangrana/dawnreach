@@ -32,6 +32,7 @@ import {
   updateNavigationDebugPath,
 } from './navigation/dawnreachNavigation';
 import type { NavigationPath } from './navigation/navigationWorld';
+import { prepareHeavyRevealAssets } from './shared/prepareHeavyRevealAssets';
 import { createProceduralTextures } from './shared/textures';
 import { HERO_PROGRESSION_TUNING, type HeroStats, type MatchHeroState } from './match';
 import { createVisionSystem } from './vision/visionSystem';
@@ -57,6 +58,9 @@ const CAMERA_OFFSET = new THREE.Vector3(0, 34, 16.3);
 const CAMERA_PAN_SPEED = 8.5;
 const MINIMAP_PADDING = 1.0;
 const MINIMAP_CAMERA_HEIGHT = 90;
+const MINIMAP_RENDER_INTERVAL = 0.16;
+const MINIMAP_FORCE_REFRESH_INTERVAL = 0.45;
+const MINIMAP_MAIN_RENDER_BUDGET_MS = 10;
 const GAME_HERO_SCALE = 0.68;
 const GAME_MOVE_SPEED = HUMANOID_DEFAULT_MOVE_SPEED * 0.68;
 const HERO_COLLISION_RADIUS = 0.48;
@@ -91,7 +95,7 @@ export async function createDawnreachGame(
   scene.background = new THREE.Color(0x758994);
   scene.fog = new THREE.Fog(0x758994, 42, 100);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -99,6 +103,7 @@ export async function createDawnreachGame(
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.domElement.className = 'game-canvas';
+  renderer.domElement.dataset.dawnreachReady = 'false';
   renderer.domElement.style.display = 'block';
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
@@ -154,6 +159,7 @@ export async function createDawnreachGame(
 
   const textures = createProceduralTextures();
   const battlefield = buildDawnreachMap(textures);
+  const radiantDrake = battlefield.getObjectByName('radiant-drake');
   upgradeBasePresentation(battlefield, 'blue', DAWNREACH_LAYOUT.blueBase);
   upgradeBasePresentation(battlefield, 'red', DAWNREACH_LAYOUT.redBase);
   polishRiverBridges(battlefield);
@@ -802,17 +808,25 @@ export async function createDawnreachGame(
     const fog = scene.fog;
     const background = scene.background;
     const heroWasVisible = hero.root.visible;
+    const drakeWasVisible = radiantDrake?.visible ?? false;
     scene.fog = null;
     scene.background = minimapBackground;
     hero.root.visible = false;
-    minimapRenderer.render(scene, minimapCamera);
-    hero.root.visible = heroWasVisible;
-    scene.background = background;
-    scene.fog = fog;
+    if (radiantDrake) radiantDrake.visible = false;
+    try {
+      minimapRenderer.render(scene, minimapCamera);
+    } finally {
+      hero.root.visible = heroWasVisible;
+      if (radiantDrake) radiantDrake.visible = drakeWasVisible;
+      scene.background = background;
+      scene.fog = fog;
+    }
     updateMinimapHeroMarker();
   };
 
   updateCamera();
+  await prepareHeavyRevealAssets(renderer, scene, camera, sunlight, CAMERA_OFFSET);
+  renderer.domElement.dataset.dawnreachReady = 'true';
   updateMinimapCameraViewport();
   updateMinimapHeroMarker();
 
@@ -1039,8 +1053,14 @@ export async function createDawnreachGame(
     waterEffects.update(elapsed, [hero.root]);
     for (const animateMapObject of mapAnimations) animateMapObject(elapsed);
     heroOverlay.update(getHeroState?.() ?? null);
+
+    const mainRenderStartedAt = performance.now();
     renderer.render(scene, camera);
-    if (elapsed - lastMinimapRender >= 0.16) {
+    const mainRenderCostMs = performance.now() - mainRenderStartedAt;
+    const minimapAge = elapsed - lastMinimapRender;
+    const minimapDue = minimapAge >= MINIMAP_RENDER_INTERVAL;
+    const minimapOverdue = minimapAge >= MINIMAP_FORCE_REFRESH_INTERVAL;
+    if (minimapDue && (mainRenderCostMs < MINIMAP_MAIN_RENDER_BUDGET_MS || minimapOverdue)) {
       renderMinimap();
       lastMinimapRender = elapsed;
     } else {
