@@ -80,6 +80,8 @@ export type WorldHeroProgressionEvent = Readonly<{
 
 type WorldCombatListener = (event: WorldCombatEvent) => void;
 type WorldAttackListener = (event: WorldAttackEvent) => void;
+type WorldCombatEventGuard = (event: WorldCombatEvent) => boolean;
+type WorldAttackEventGuard = (event: WorldAttackEvent) => boolean;
 type WorldCreepDeathListener = (event: WorldCreepDeathEvent) => void;
 type WorldHeroProgressionListener = (event: WorldHeroProgressionEvent) => void;
 
@@ -93,6 +95,8 @@ const pendingHpChanges = new Map<string, PendingHpChange>();
 const pendingDamageAdjustments = new Map<string, number>();
 const combatListeners = new Set<WorldCombatListener>();
 const attackListeners = new Set<WorldAttackListener>();
+const combatEventGuards = new Map<string, WorldCombatEventGuard>();
+const attackEventGuards = new Map<string, WorldAttackEventGuard>();
 const creepDeathListeners = new Set<WorldCreepDeathListener>();
 const heroProgressionListeners = new Set<WorldHeroProgressionListener>();
 const attackEvents: WorldAttackEvent[] = [];
@@ -168,6 +172,20 @@ export function subscribeWorldAttackEvents(listener: WorldAttackListener): () =>
   return () => attackListeners.delete(listener);
 }
 
+export function registerWorldCombatEventGuard(key: string, guard: WorldCombatEventGuard): () => void {
+  combatEventGuards.set(key, guard);
+  return () => {
+    if (combatEventGuards.get(key) === guard) combatEventGuards.delete(key);
+  };
+}
+
+export function registerWorldAttackEventGuard(key: string, guard: WorldAttackEventGuard): () => void {
+  attackEventGuards.set(key, guard);
+  return () => {
+    if (attackEventGuards.get(key) === guard) attackEventGuards.delete(key);
+  };
+}
+
 export function subscribeWorldCreepDeathEvents(listener: WorldCreepDeathListener): () => void {
   creepDeathListeners.add(listener);
   return () => creepDeathListeners.delete(listener);
@@ -216,6 +234,12 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
     sourceEntityId,
   };
 
+  for (const guard of combatEventGuards.values()) {
+    if (guard(published)) continue;
+    pendingHpChanges.delete(event.entityId);
+    return;
+  }
+
   pendingHpChanges.delete(event.entityId);
 
   if (snapshot) {
@@ -246,7 +270,10 @@ export function publishWorldAttackEvent(
   if (attackEvents.length > MAX_ATTACK_EVENTS) {
     attackEvents.splice(0, attackEvents.length - MAX_ATTACK_EVENTS);
   }
-  for (const listener of attackListeners) listener(published);
+  const accepted = Array.from(attackEventGuards.values()).every(guard => guard(published));
+  if (accepted) {
+    for (const listener of attackListeners) listener(published);
+  }
   return published;
 }
 

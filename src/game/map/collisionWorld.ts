@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT } from './mapLayout';
+import { BASE_LAYOUT, DAWNREACH_LAYOUT, MAP_BOUNDS, OBJECTIVE_LAYOUT, getTeamStartBaseServiceOpening } from './mapLayout';
 import { distanceToMapPath, sampleMapPath } from './buildMapVegetation';
 
 export type CollisionPoint = { x: number; z: number };
@@ -37,8 +37,6 @@ export type CollisionWorld = {
 
 const TREE_RADIUS = 0.31;
 const WALL_RADIUS = 0.48;
-// Retaining-wall masonry is 0.84 units wide at its foundation/coping, so its
-// collision half-width should match the visible 0.42-unit footprint.
 const ELEVATION_RADIUS = 0.42;
 const THRONE_PLATFORM_RADIUS = 3.5;
 const MAX_SUBSTEP = 0.18;
@@ -51,16 +49,8 @@ const CAMP_ENTRANCE_ROCKS = 2;
 
 export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
   battlefield.updateMatrixWorld(true);
-
-  // Camp rings are landmarks, not cages. Remove the two stones closest to the nearest
-  // jungle route so every neutral camp has a clear, readable entrance.
   openCampEntrances(battlefield);
   battlefield.updateMatrixWorld(true);
-
-  // Gameplay routes are authored as guaranteed walkable space. Decorative camp and
-  // jungle rocks are generated independently, so occasionally one can overlap a lane
-  // or jungle trail. Remove only those stone meshes whose visible footprint intrudes
-  // into a route before building colliders, keeping the visual map and navigation in sync.
   pruneRouteBlockingRocks(battlefield);
   battlefield.updateMatrixWorld(true);
 
@@ -241,9 +231,6 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
           continue;
         }
 
-        // Dense rock/tree clusters can leave the iterative solver wedged between two
-        // overlapping colliders. In that case, try axis-separated sliding and only
-        // accept positions that are guaranteed collision-free.
         const slideX = resolvePoint({ x: current.x + stepX, z: current.z }, current, radius);
         const slideZ = resolvePoint({ x: current.x, z: current.z + stepZ }, current, radius);
         const xFree = !isBlocked(slideX, radius);
@@ -268,13 +255,10 @@ function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
   if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return false;
   if (object.userData.collisionRock === true) return true;
   if (!(object.geometry instanceof THREE.DodecahedronGeometry)) return false;
-
   const authoredRadius = Number(object.geometry.parameters.radius ?? 0);
   if (authoredRadius < 0.34) return false;
-
   const materials = Array.isArray(object.material) ? object.material : [object.material];
-  return materials.some(material =>
-    material instanceof THREE.MeshStandardMaterial && material.map !== null);
+  return materials.some(material => material instanceof THREE.MeshStandardMaterial && material.map !== null);
 }
 
 function openCampEntrances(battlefield: THREE.Object3D) {
@@ -333,21 +317,17 @@ function pruneRouteBlockingRocks(battlefield: THREE.Object3D) {
 
   battlefield.traverse((object) => {
     if (!isStoneRock(object)) return;
-
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) return;
     box.getSize(size);
     if (size.y < 0.28 || Math.max(size.x, size.z) < 0.42) return;
     box.getCenter(center);
 
-    // Use the visible horizontal footprint, not only the rock center. This creates
-    // an actual clear corridor instead of allowing a large boulder to overhang it.
     const footprintRadius = Math.max(size.x, size.z) * 0.5;
     const overlapsLane = lanes.some(path =>
       distanceToMapPath(center.x, center.z, path) < LANE_ROCK_CLEARANCE + footprintRadius);
     const overlapsTrail = trails.some(path =>
       distanceToMapPath(center.x, center.z, path) < TRAIL_ROCK_CLEARANCE + footprintRadius);
-
     if (overlapsLane || overlapsTrail) toRemove.push(object);
   });
 
@@ -399,7 +379,6 @@ function collectRockColliders(
 
   battlefield.traverse((object) => {
     if (!isStoneRock(object)) return;
-
     if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
     const box = object.geometry.boundingBox;
     if (!box) return;
@@ -412,16 +391,9 @@ function collectRockColliders(
     object.getWorldQuaternion(worldQuaternion);
     worldEuler.setFromQuaternion(worldQuaternion, 'YXZ');
 
-    const radiusX = Math.max(
-      ROCK_MIN_RADIUS,
-      localSize.x * Math.abs(worldScale.x) * 0.5 * ROCK_FOOTPRINT_SCALE,
-    );
-    const radiusZ = Math.max(
-      ROCK_MIN_RADIUS,
-      localSize.z * Math.abs(worldScale.z) * 0.5 * ROCK_FOOTPRINT_SCALE,
-    );
+    const radiusX = Math.max(ROCK_MIN_RADIUS, localSize.x * Math.abs(worldScale.x) * 0.5 * ROCK_FOOTPRINT_SCALE);
+    const radiusZ = Math.max(ROCK_MIN_RADIUS, localSize.z * Math.abs(worldScale.z) * 0.5 * ROCK_FOOTPRINT_SCALE);
     const rotation = worldEuler.y;
-
     colliders.push({
       x: worldCenter.x,
       z: worldCenter.z,
@@ -447,18 +419,10 @@ function collectStructureColliders(
     const authoredRadius = Number(object.userData.collisionRadius ?? 0);
     if (authoredRadius > 0) {
       object.getWorldPosition(center);
-      // The visible throne is wider than the replacement crystal group: the legacy
-      // ceremonial platform under it reaches radius 3.5. Collision must cover that full
-      // footprint so heroes cannot walk through the outer rings of the structure.
       const radius = object.userData.structureKind === 'throne'
         ? Math.max(authoredRadius, THRONE_PLATFORM_RADIUS)
         : authoredRadius;
-      colliders.push({
-        x: center.x,
-        z: center.z,
-        radius,
-        kind: 'structure',
-      });
+      colliders.push({ x: center.x, z: center.z, radius, kind: 'structure' });
       counts.structures++;
       return;
     }
@@ -491,7 +455,6 @@ function collectRuinColliders(
 
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Group)) return;
-
     const pillars = object.children.filter((child): child is THREE.Mesh<THREE.CylinderGeometry> => {
       if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.CylinderGeometry)) return false;
       const { radiusTop, radiusBottom, height, radialSegments } = child.geometry.parameters;
@@ -511,8 +474,6 @@ function collectRuinColliders(
     });
     if (!fallen) return;
 
-    // These authored jungle ruins are solid scenery. Keep the three narrow columns as
-    // circles and the fallen cross-piece as one oriented capsule so the visible gaps stay usable.
     for (const pillar of pillars) {
       pillar.getWorldPosition(center);
       circles.push({ x: center.x, z: center.z, radius: 0.34, kind: 'structure' });
@@ -545,14 +506,7 @@ function collectPresentationBarrierColliders(
     start.set(-width / 2, 0, 0).applyMatrix4(mesh.matrixWorld);
     end.set(width / 2, 0, 0).applyMatrix4(mesh.matrixWorld);
     if (Math.hypot(end.x - start.x, end.z - start.z) <= 0.08) return;
-    colliders.push({
-      ax: start.x,
-      az: start.z,
-      bx: end.x,
-      bz: end.z,
-      radius,
-      kind: 'barrier',
-    });
+    colliders.push({ ax: start.x, az: start.z, bx: end.x, bz: end.z, radius, kind: 'barrier' });
   };
 
   battlefield.traverse((object) => {
@@ -562,8 +516,6 @@ function collectPresentationBarrierColliders(
       for (const child of object.children) {
         if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.BoxGeometry)) continue;
         const { width, height, depth } = child.geometry.parameters;
-        // One capsule per stone parapet is enough: the coping, posts and metal rails sit on
-        // the same line, so duplicating colliders for every decorative part would over-push.
         if (width < 7 || height < 0.18 || height > 0.28) continue;
         addBoxAxisBarrier(child, Math.max(0.14, depth * 0.5));
       }
@@ -574,9 +526,6 @@ function collectPresentationBarrierColliders(
     for (const child of object.children) {
       if (!(child instanceof THREE.Mesh) || !(child.geometry instanceof THREE.BoxGeometry)) continue;
       const { width, height, depth } = child.geometry.parameters;
-      // The first masonry beam on each ramp-edge module is the physical barrier. It is
-      // authored in three tapered pieces so the collider follows the rail through the gate.
-      // Post feet are only 0.18 high and upper trims are thinner, so they are excluded here.
       if (width < 0.55 || height < 0.2) continue;
       addBoxAxisBarrier(child, Math.max(0.10, depth * 0.5));
     }
@@ -633,12 +582,17 @@ function addBaseWallColliders(
   ] as const) {
     const rotation = team === 'blue' ? 0 : Math.PI;
     const gates = BASE_LAYOUT.gates.map(angle => normalizeAngle(angle + rotation));
+    const serviceOpening = getTeamStartBaseServiceOpening(team);
 
     for (let index = 0; index < segmentCount; index++) {
       const a = index / segmentCount * Math.PI * 2;
       const b = (index + 1) / segmentCount * Math.PI * 2;
       const middle = normalizeAngle((a + b) / 2);
-      if (gates.some(gate => angularDistance(middle, gate) < gateHalfAngle)) continue;
+      const inGate = gates.some(gate => angularDistance(middle, gate) < gateHalfAngle);
+      const inServiceOpening = serviceOpening
+        ? angularDistance(middle, serviceOpening.angle) < serviceOpening.halfAngle
+        : false;
+      if (inGate || inServiceOpening) continue;
 
       colliders.push({
         ax: center.x + Math.cos(a) * BASE_LAYOUT.radius,

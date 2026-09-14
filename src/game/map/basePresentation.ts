@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { BASE_LAYOUT } from './mapLayout';
+import { BASE_LAYOUT, getTeamStartBaseServiceOpening } from './mapLayout';
+import { installTeamStartBase } from './teamStartBase';
 
 type BasePresentationMaterials = {
   stoneDark: THREE.MeshStandardMaterial;
@@ -36,11 +37,17 @@ export function upgradeBasePresentation(
   // architecture together and lift it as a single unit so towers/walls/core remain aligned.
   citadel.position.y = BASE_LAYOUT.elevation;
 
+  const serviceOpening = getTeamStartBaseServiceOpening(team);
+  if (serviceOpening) {
+    carveCitadelServiceOpening(citadel, serviceOpening.angle, serviceOpening.halfAngle);
+  }
+
   const elevation = buildBaseElevation(team, materials);
   elevation.position.set(center.x, 0, center.z);
   battlefield.add(elevation);
 
   replaceLegacyThroneCrystal(citadel, team, materials);
+  if (team === 'blue') installTeamStartBase(battlefield, team);
 }
 
 function createPresentationMaterials(team: 'blue' | 'red'): BasePresentationMaterials {
@@ -110,10 +117,8 @@ function buildBaseElevation(
 
   const rotation = team === 'blue' ? 0 : Math.PI;
   const gateAngles = BASE_LAYOUT.gates.map(angle => angle + rotation);
+  const serviceOpening = getTeamStartBaseServiceOpening(team);
 
-  // Match the retaining-wall opening to the visible ramp width. Decorative ramp masonry
-  // stays outside the command surface, so this clearance can remain tight without creating
-  // invisible movement blockers or exposing a large gap in the citadel wall.
   const wallRadius = BASE_LAYOUT.radius - 0.02;
   const rampRailHalfWidth = BASE_LAYOUT.rampWidth / 2 + 0.14;
   const gateMargin = 0.10;
@@ -121,9 +126,6 @@ function buildBaseElevation(
     Math.min(0.999, (rampRailHalfWidth + gateMargin) / wallRadius),
   );
 
-  // Build the elevated retaining edge as individual sections and leave genuine openings
-  // at every gate. A solid cylinder here intersected the ramps and visually swallowed the
-  // hero's lower body while he crossed the base threshold.
   const wallThickness = 0.66;
   const wallSegments = 144;
   const segmentAngle = Math.PI * 2 / wallSegments;
@@ -132,7 +134,10 @@ function buildBaseElevation(
   for (let index = 0; index < wallSegments; index++) {
     const angle = (index + 0.5) * segmentAngle;
     const blockedByGate = gateAngles.some(gate => angularDistance(angle, gate) < gateHalfAngle);
-    if (blockedByGate) continue;
+    const blockedByService = serviceOpening
+      ? angularDistance(angle, serviceOpening.angle) < serviceOpening.halfAngle
+      : false;
+    if (blockedByGate || blockedByService) continue;
 
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(segmentWidth, BASE_LAYOUT.elevation, wallThickness),
@@ -175,8 +180,6 @@ function buildBaseElevation(
   group.add(plaza);
 
   for (const angle of gateAngles) {
-    // This remains the single continuous, authoritative command/raycast surface. All
-    // ceremonial stonework below is visual-only and deliberately carries no collider data.
     const ramp = new THREE.Mesh(createRampGeometry(angle), materials.rampJoint);
     ramp.name = `${team}-base-ramp`;
     ramp.userData.commandSurface = true;
@@ -194,6 +197,71 @@ function buildBaseElevation(
   }
 
   return group;
+}
+
+function carveCitadelServiceOpening(citadel: THREE.Group, angle: number, halfAngle: number) {
+  for (const child of [...citadel.children]) {
+    if (!(child instanceof THREE.Mesh)) continue;
+    const position = child.geometry.getAttribute('position');
+    if (!position || position.count < 3) continue;
+
+    const source = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+    const sourcePosition = source.getAttribute('position');
+    const sourceUv = source.getAttribute('uv');
+    const keptPositions: number[] = [];
+    const keptUvs: number[] = [];
+    let removed = 0;
+
+    for (let vertex = 0; vertex + 2 < sourcePosition.count; vertex += 3) {
+      const ax = sourcePosition.getX(vertex);
+      const ay = sourcePosition.getY(vertex);
+      const az = sourcePosition.getZ(vertex);
+      const bx = sourcePosition.getX(vertex + 1);
+      const by = sourcePosition.getY(vertex + 1);
+      const bz = sourcePosition.getZ(vertex + 1);
+      const cx = sourcePosition.getX(vertex + 2);
+      const cy = sourcePosition.getY(vertex + 2);
+      const cz = sourcePosition.getZ(vertex + 2);
+      const x = (ax + bx + cx) / 3;
+      const y = (ay + by + cy) / 3;
+      const z = (az + bz + cz) / 3;
+      const radius = Math.hypot(x, z);
+      const triangleAngle = Math.atan2(z, x);
+      const inServiceArc = radius >= BASE_LAYOUT.radius - 1.25
+        && radius <= BASE_LAYOUT.radius + 1.25
+        && y >= -0.6
+        && y <= 4.3
+        && angularDistance(triangleAngle, angle) < halfAngle + 0.035;
+      if (inServiceArc) {
+        removed++;
+        continue;
+      }
+      for (let offset = 0; offset < 3; offset++) {
+        const index = vertex + offset;
+        keptPositions.push(
+          sourcePosition.getX(index),
+          sourcePosition.getY(index),
+          sourcePosition.getZ(index),
+        );
+        if (sourceUv) keptUvs.push(sourceUv.getX(index), sourceUv.getY(index));
+      }
+    }
+
+    if (removed === 0) {
+      source.dispose();
+      continue;
+    }
+
+    const carved = new THREE.BufferGeometry();
+    carved.setAttribute('position', new THREE.Float32BufferAttribute(keptPositions, 3));
+    if (sourceUv && keptUvs.length > 0) carved.setAttribute('uv', new THREE.Float32BufferAttribute(keptUvs, 2));
+    carved.computeVertexNormals();
+    carved.computeBoundingBox();
+    carved.computeBoundingSphere();
+    child.geometry.dispose();
+    source.dispose();
+    child.geometry = carved;
+  }
 }
 
 function angularDistance(a: number, b: number) {
@@ -270,8 +338,6 @@ function createRampSurfaceDetails(angle: number, materials: BasePresentationMate
     materials.rampStoneC, materials.rampStoneB, materials.rampStoneA, materials.rampStoneB];
 
   for (let index = 0; index < segmentCount; index++) {
-    // Keep generous, top-down-readable joints rather than tiny masonry noise. The tiny
-    // per-segment inset exposes the dark foundation as a stable transverse grout line.
     const outerT = (index + 0.055) / segmentCount;
     const innerT = (index + 0.945) / segmentCount;
     const outerRadius = THREE.MathUtils.lerp(RAMP_OUTER_RADIUS, RAMP_BASE_RADIUS, outerT);
@@ -304,8 +370,6 @@ function createRampSurfaceDetails(angle: number, materials: BasePresentationMate
       );
     }
 
-    // The narrow central inlay is intentionally segmented with the slabs. It reads as a
-    // ceremonial guidance line from the isometric camera without becoming a neon runway.
     addRampPanel(
       group,
       createRampPanelGeometry(
@@ -324,8 +388,6 @@ function createRampThreshold(angle: number, materials: BasePresentationMaterials
   const group = new THREE.Group();
   group.name = 'base-ramp-threshold';
 
-  // Keep the landing flush with the existing walkable ramp lip. These are paper-thin visual
-  // overlays, not raised collision bars, so the hero can cross the threshold without a step.
   addRampPanel(
     group,
     createRampPanelGeometry(
@@ -454,9 +516,6 @@ function createRampRail(
   const taperRadius = RAMP_BASE_RADIUS + 1.08;
   const landingInner = RAMP_INNER_RADIUS + 0.12;
 
-  // Keep the ceremonial edge broad on the exposed slope, then step it inward before the
-  // gate. This creates a stronger silhouette without colliding visually with the authored
-  // citadel wall, whose current opening intentionally remains tight around the ramp.
   group.add(createRampBeam(
     angle, slopeOuter, taperRadius, outerLateral, 0.14, 0.42, 0.24, materials.stoneDark,
   ));
@@ -527,9 +586,6 @@ function createRampRail(
 }
 
 function createRampGeometry(angle: number) {
-  // The sloped part reaches the current gameplay-tested plaza lip height exactly at the
-  // base perimeter. Preserve these dimensions: this mesh is the raycast/ground-height
-  // authority, while the redesigned ceremonial pieces remain visual overlays only.
   const halfWidth = RAMP_HALF_WIDTH;
   const radialX = Math.cos(angle);
   const radialZ = Math.sin(angle);
@@ -566,27 +622,15 @@ function createRampGeometry(angle: number) {
   ];
 
   const indices = [
-    // sloped top: ground -> full base elevation
     0, 1, 2, 1, 3, 2,
-    // flat landing: full elevation -> inside plaza
     2, 3, 4, 3, 5, 4,
-
-    // bottom
     6, 8, 7, 7, 8, 9,
     8, 10, 9, 9, 10, 11,
-
-    // left side
     0, 2, 6, 6, 2, 8,
     2, 4, 8, 8, 4, 10,
-
-    // right side
     1, 7, 3, 7, 9, 3,
     3, 9, 5, 9, 11, 5,
-
-    // inner/high end
     4, 5, 10, 5, 11, 10,
-
-    // outer/ground end
     0, 6, 1, 1, 6, 7,
   ];
 
@@ -604,8 +648,6 @@ function replaceLegacyThroneCrystal(
   team: 'blue' | 'red',
   materials: BasePresentationMaterials,
 ) {
-  // The authored throne already owns its pedestal and crystal. Adding the legacy
-  // rotating prism here would put two independent crystals in the same socket.
   const existing = citadel.getObjectByName(`${team}-throne`);
   if (existing) {
     existing.userData.collisionRadius = 2.72;
@@ -712,8 +754,6 @@ function replaceLegacyThroneCrystal(
   floatingPrism.position.y = prismBaseY;
   throne.add(floatingPrism);
 
-  // Give the rotating outer prism a slightly broader footprint so the luminous inner
-  // core stays visually contained at every rotation angle instead of peeking past a facet.
   const spire = new THREE.Mesh(new THREE.ConeGeometry(1.14, 4.45, 6, 1, false), crystal);
   spire.rotation.y = Math.PI / 6;
   spire.castShadow = true;

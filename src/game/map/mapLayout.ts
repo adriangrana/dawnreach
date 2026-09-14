@@ -6,10 +6,31 @@ export const CAMP_LAYOUT = { radius: 3.3, clearingRadius: 4.4, entranceHalfAngle
 
 export const BASE_LAYOUT = {
   radius: 19.6,
-  elevation: 3.2,
+  elevation: 2.5,
   rampLength: 7,
   rampWidth: 5.2,
   gates: [-1.78, -0.616, 0.395],
+} as const;
+
+export const BASE_SHOP_LAYOUT = {
+  localFootprintRadius: 3,
+  worldScale: 0.52,
+  wallGap: 0.55,
+} as const;
+
+export const TEAM_START_BASE_LAYOUT = {
+  radius: 7,
+  elevation: 2.5,
+  waterDepth: 0.10,
+  rampLength: 5.4,
+  rampWidth: 4.4,
+  fountainForward: 2.1,
+  fountainSide: -3.05,
+  spawnForward: 2.2,
+  spawnSide: -1.10,
+  hpRegenFractionPerSecond: 0.10,
+  resourceRegenFractionPerSecond: 0.08,
+  fountainTrueDamagePerSecond: 200,
 } as const;
 
 const layout = {
@@ -74,16 +95,41 @@ const MAP_LAYOUT_SCALE = 1.25;
 const scalePoints = (points: readonly MapPoint[]): MapPoint[] => points.map(([x, z]) => [x * MAP_LAYOUT_SCALE, z * MAP_LAYOUT_SCALE]);
 const scalePosition = (point: { x: number; z: number }) => ({ x: point.x * MAP_LAYOUT_SCALE, z: point.z * MAP_LAYOUT_SCALE });
 
+function shopPositionFromBase(center: Readonly<{ x: number; z: number }>) {
+  const length = Math.hypot(center.x, center.z) || 1;
+  const rearX = center.x / length;
+  const rearZ = center.z / length;
+  const shopFootprint = BASE_SHOP_LAYOUT.localFootprintRadius * BASE_SHOP_LAYOUT.worldScale;
+  const rearDistance = BASE_LAYOUT.radius - shopFootprint - BASE_SHOP_LAYOUT.wallGap;
+  return {
+    x: center.x + rearX * rearDistance,
+    z: center.z + rearZ * rearDistance,
+  };
+}
+
+function startSpawnFromCenter(center: Readonly<{ x: number; z: number }>) {
+  const length = Math.hypot(center.x, center.z) || 1;
+  const inwardX = -center.x / length;
+  const inwardZ = -center.z / length;
+  const tangentX = -inwardZ;
+  const tangentZ = inwardX;
+  return {
+    x: center.x + inwardX * TEAM_START_BASE_LAYOUT.spawnForward + tangentX * TEAM_START_BASE_LAYOUT.spawnSide,
+    z: center.z + inwardZ * TEAM_START_BASE_LAYOUT.spawnForward + tangentZ * TEAM_START_BASE_LAYOUT.spawnSide,
+  };
+}
+
+const scaledBlueBase = scalePosition(layout.blueBase);
+const scaledRedBase = scalePosition(layout.redBase);
+const blueStartBaseCenter = shopPositionFromBase(scaledBlueBase);
+
 export const DAWNREACH_LAYOUT = {
   ...layout,
   width: layout.width * MAP_LAYOUT_SCALE,
   height: layout.height * MAP_LAYOUT_SCALE,
-  blueBase: scalePosition(layout.blueBase),
-  redBase: scalePosition(layout.redBase),
-  blueSpawn: {
-    x: layout.blueBase.x * MAP_LAYOUT_SCALE + layout.blueSpawn.x - layout.blueBase.x,
-    z: layout.blueBase.z * MAP_LAYOUT_SCALE + layout.blueSpawn.z - layout.blueBase.z,
-  },
+  blueBase: scaledBlueBase,
+  redBase: scaledRedBase,
+  blueSpawn: startSpawnFromCenter(blueStartBaseCenter),
   redSpawn: {
     x: layout.redBase.x * MAP_LAYOUT_SCALE + layout.redSpawn.x - layout.redBase.x,
     z: layout.redBase.z * MAP_LAYOUT_SCALE + layout.redSpawn.z - layout.redBase.z,
@@ -100,6 +146,34 @@ export const DAWNREACH_LAYOUT = {
   retainingWalls: layout.retainingWalls.map(scalePoints),
   jungleClusters: layout.jungleClusters.map(([x, z, scale]) => [x * MAP_LAYOUT_SCALE, z * MAP_LAYOUT_SCALE, scale * MAP_LAYOUT_SCALE] as const),
 };
+
+export function getTeamBaseShopPosition(team: 'blue' | 'red') {
+  return shopPositionFromBase(team === 'blue' ? DAWNREACH_LAYOUT.blueBase : DAWNREACH_LAYOUT.redBase);
+}
+
+export function getTeamStartSpawnPosition(team: 'blue' | 'red') {
+  if (team === 'blue') return { ...DAWNREACH_LAYOUT.blueSpawn };
+  return startSpawnFromCenter(getTeamBaseShopPosition(team));
+}
+
+export function getTeamStartBaseServiceOpening(team: 'blue' | 'red') {
+  // Only Dawn currently owns the authored start sanctuary. Do not create a phantom fourth
+  // gate/ramp/tower on the Dusk citadel until the mirrored base is explicitly authored.
+  if (team !== 'blue') return null;
+  const base = DAWNREACH_LAYOUT.blueBase;
+  const sanctuary = getTeamBaseShopPosition('blue');
+  const dx = sanctuary.x - base.x;
+  const dz = sanctuary.z - base.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance <= 1e-6) return null;
+  const cosine = (distance * distance + BASE_LAYOUT.radius * BASE_LAYOUT.radius
+    - TEAM_START_BASE_LAYOUT.radius * TEAM_START_BASE_LAYOUT.radius)
+    / (2 * distance * BASE_LAYOUT.radius);
+  return {
+    angle: Math.atan2(dz, dx),
+    halfAngle: Math.acos(Math.max(-1, Math.min(1, cosine))) + 0.045,
+  } as const;
+}
 
 export const MAP_BOUNDS = {
   minX: -DAWNREACH_LAYOUT.width / 2,
