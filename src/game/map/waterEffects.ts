@@ -6,14 +6,20 @@ export function createWaterEffects(world: THREE.Group) {
   // the pre-existing command-surface mesh references can still be repurposed for the new stair.
   installFountainSanctuaryPresentation(world);
 
-  // The sanctuary presentation has a large dark circular court around the fountain. Its outer
-  // edge protrudes beneath the staircase and reads like an unwanted ring from the gameplay view.
-  // Hide only that decorative court; fountain basins, water circles and gameplay surfaces stay intact.
+  // Hide the large dark circular court that protrudes beneath the staircase, plus the two
+  // segmented golden inlay rings around the fountain. Fountain basins, water circles and
+  // gameplay surfaces remain intact.
   world.traverse(object => {
-    if (!(object instanceof THREE.Mesh) || !(object.geometry instanceof THREE.CircleGeometry)) return;
+    if (!(object instanceof THREE.Mesh)) return;
     if (!object.parent?.name.endsWith('-fountain-sanctuary-presentation')) return;
-    if (Math.abs(object.geometry.parameters.radius - 4.05) > 0.001) return;
-    object.visible = false;
+
+    if (object.geometry instanceof THREE.CircleGeometry
+      && Math.abs(object.geometry.parameters.radius - 4.05) <= 0.001) {
+      object.visible = false;
+      return;
+    }
+
+    if (object.geometry instanceof THREE.TubeGeometry) object.visible = false;
   });
 
   const group = new THREE.Group();
