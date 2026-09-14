@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GameEntity, GameEntityRegistry, TeamId } from '../entities/gameEntities';
+import { calculateTowerAuraAdjustedDamage } from '../entities/towerAuras';
 import {
   emitWorldCombatEvent,
   getWorldAttackEventsAfter,
@@ -655,7 +656,8 @@ class LaneCreepManager {
       atMs: eventNow,
     });
 
-    target.currentHp = Math.max(0, target.currentHp - creep.stats.damage);
+    const damage = calculateTowerAuraAdjustedDamage(creep.entity, target, creep.stats.damage);
+    target.currentHp = Math.max(0, target.currentHp - damage);
     target.root.userData.currentHp = target.currentHp;
     if (target.currentHp <= 0) {
       target.alive = false;
