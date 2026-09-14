@@ -524,9 +524,15 @@ export async function createDawnreachGame(
     showCommandMarker(attackMarker, targetPoint);
   };
 
-  const getTargetAttackReach = (target: GameEntity) => (
-    ATTACK_RANGE + Math.max(0, target.selectionRadius) * 0.45
-  );
+  const getTargetAttackReach = (target: GameEntity) => {
+    // Large jungle creatures use their complete selection halo as their physical combat hull.
+    // This keeps Aurelios attackable from the edge of his visible footprint instead of
+    // forcing melee heroes to path deep into the dragon model before a swing can begin.
+    const combatHullRadius = target.kind === 'jungle-creature'
+      ? Math.max(0, target.selectionRadius)
+      : Math.max(0, target.selectionRadius) * 0.45;
+    return ATTACK_RANGE + combatHullRadius;
+  };
 
   const findAttackMoveTarget = (commandPoint: Point3) => {
     let best: GameEntity | null = null;
