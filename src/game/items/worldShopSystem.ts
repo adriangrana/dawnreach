@@ -32,7 +32,7 @@ const SHOP_WORLD_SCALE = 0.52;
 const SHOP_LOCAL_FOOTPRINT_RADIUS = 3.0;
 const SHOP_WORLD_FOOTPRINT_RADIUS = SHOP_LOCAL_FOOTPRINT_RADIUS * SHOP_WORLD_SCALE;
 const SHOP_SELECTION_RADIUS = 1.72;
-const SHOP_WALL_GAP = 0.28;
+const SHOP_WALL_GAP = 0.55;
 let disposeActiveWorldShopSystem: (() => void) | null = null;
 
 export function ensureWorldShopSystem(
