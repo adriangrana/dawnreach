@@ -1,10 +1,60 @@
 import * as THREE from 'three';
 import { installFountainSanctuaryPresentation } from './fountainSanctuaryPresentation';
 
+const SANCTUARY_SHOP_FORWARD = 4.35;
+const SANCTUARY_SHOP_SIDE = -3.85;
+
+function placeSanctuaryShop(world: THREE.Group, team: 'blue' | 'red') {
+  const base = world.getObjectByName(`${team}-team-start-base`) as THREE.Group | undefined;
+  const shop = world.getObjectByName(`${team}-shop`) as THREE.Group | undefined;
+  if (!base || !shop) return;
+
+  const center = base.getWorldPosition(new THREE.Vector3());
+  const length = Math.hypot(center.x, center.z) || 1;
+  const forwardX = -center.x / length;
+  const forwardZ = -center.z / length;
+  const sideX = -forwardZ;
+  const sideZ = forwardX;
+  const offsetX = forwardX * SANCTUARY_SHOP_FORWARD + sideX * SANCTUARY_SHOP_SIDE;
+  const offsetZ = forwardZ * SANCTUARY_SHOP_FORWARD + sideZ * SANCTUARY_SHOP_SIDE;
+  const elevation = Number(base.userData.elevation ?? 0);
+
+  shop.position.set(
+    center.x + offsetX,
+    center.y + elevation + 0.045,
+    center.z + offsetZ,
+  );
+  shop.updateMatrixWorld(true);
+
+  // Keep the authored shop proxy aligned with the visible shop for systems that inspect the
+  // scene graph after presentation setup. The collision world itself is still authored before
+  // this presentation pass, so this does not alter unrelated base or navigation geometry.
+  const proxy = base.getObjectByName(`${team}-team-start-shop-collision-proxy`);
+  if (proxy) {
+    proxy.position.set(offsetX, 0, offsetZ);
+    proxy.updateMatrixWorld(true);
+  }
+}
+
+function pinSanctuaryShopToTarget(world: THREE.Group) {
+  for (const team of ['blue', 'red'] as const) {
+    placeSanctuaryShop(world, team);
+    const presentation = world.getObjectByName(`${team}-fountain-sanctuary-presentation`);
+    const deck = presentation?.getObjectByName('sanctuary-deck') as THREE.Mesh | undefined;
+    if (!deck) continue;
+
+    // The sanctuary presentation's onBeforeRender callback keeps the shop lifted to deck
+    // height. Re-apply the requested authored position immediately afterwards so the actual
+    // interactive shop remains at the marked back-left spot instead of snapping to the old one.
+    deck.onAfterRender = () => placeSanctuaryShop(world, team);
+  }
+}
+
 export function createWaterEffects(world: THREE.Group) {
   // Presentation-only rebuild. It deliberately runs here before water-surface discovery, while
   // the pre-existing command-surface mesh references can still be repurposed for the new stair.
   installFountainSanctuaryPresentation(world);
+  pinSanctuaryShopToTarget(world);
 
   // Hide the large dark circular court that protrudes beneath the staircase, plus the two
   // segmented golden inlay rings around the fountain. Fountain basins, water circles and
