@@ -1,6 +1,8 @@
-import type { GameEntity, GameEntityKind, GameEntityRegistry, TeamId } from '../entities/gameEntities';
+import type { GameEntity, GameEntityRegistry, TeamId } from '../entities/gameEntities';
 import {
+  emitWorldCombatEvent,
   emitWorldHeroProgressionEvent,
+  publishWorldEntityRuntime,
   subscribeWorldCombatEvents,
 } from '../entities/worldCombatBridge';
 
@@ -38,10 +40,16 @@ export const WARD_RULES = {
   },
 } as const;
 
+// The generic combat layer subtracts ordinary attack damage before publishing its event.
+// Wards intentionally do not use HP damage, so keep a large hidden sentinel HP value and
+// normalize it after each attack event. The visible durability is tracked as hit charges.
+export const WARD_INTERNAL_HP = 1_000_000;
+
 const WARD_TYPE_KEY = 'dawnreachWardType';
 const WARD_OWNER_KEY = 'dawnreachWardOwnerEntityId';
 const WARD_PLACED_AT_KEY = 'dawnreachWardPlacedAtMs';
 const WARD_EXPIRES_AT_KEY = 'dawnreachWardExpiresAtMs';
+const WARD_HITS_REMAINING_KEY = 'dawnreachWardHitsRemaining';
 const REVEAL_CREDIT_BLUE_KEY = 'dawnreachWardRevealCreditBlue';
 const REVEAL_CREDIT_RED_KEY = 'dawnreachWardRevealCreditRed';
 const MATCH_EPOCH_MS = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -51,6 +59,8 @@ type WardRuntime = {
   registry: GameEntityRegistry;
   ownerEntityId: string;
   wardType: WardType;
+  durabilityDamage: number;
+  resolvingDeath: boolean;
 };
 
 const activeWards = new Map<string, WardRuntime>();
@@ -66,10 +76,68 @@ function revealCreditKey(team: TeamId) {
   return '';
 }
 
+function publishWardRuntime(entity: GameEntity) {
+  entity.root.userData.maxHp = entity.maxHp;
+  entity.root.userData.currentHp = entity.currentHp;
+  publishWorldEntityRuntime(entity.id, {
+    level: entity.level,
+    maxHp: entity.maxHp,
+    currentHp: entity.currentHp,
+    maxResource: entity.maxResource,
+    currentResource: entity.currentResource,
+    alive: entity.alive,
+  });
+}
+
+function grantObserverWardReward(runtime: WardRuntime, source: GameEntity | null, atMs: number) {
+  const { entity } = runtime;
+  if (runtime.wardType !== 'observer' || source?.kind !== 'hero' || source.team === entity.team) return;
+
+  const elapsedMinutes = Math.max(0, (atMs - MATCH_EPOCH_MS) / 60_000);
+  const rules = WARD_RULES.observer;
+  const experience = Math.floor(rules.baseExperienceReward + rules.experiencePerMinute * elapsedMinutes);
+  const gold = Math.floor(rules.baseGoldReward + rules.goldPerMinute * elapsedMinutes);
+  const creditKey = revealCreditKey(source.team);
+  const creditedHeroId = creditKey
+    ? String(entity.root.userData[creditKey] ?? source.id)
+    : source.id;
+
+  if (creditedHeroId === source.id) {
+    emitWorldHeroProgressionEvent({
+      heroEntityId: source.id,
+      atMs,
+      experienceDelta: experience,
+      goldDelta: gold,
+      lastHitsDelta: 0,
+      deniesDelta: 0,
+      reason: 'ward-kill',
+    });
+    return;
+  }
+
+  emitWorldHeroProgressionEvent({
+    heroEntityId: source.id,
+    atMs,
+    experienceDelta: experience,
+    goldDelta: 0,
+    lastHitsDelta: 0,
+    deniesDelta: 0,
+    reason: 'ward-kill',
+  });
+  emitWorldHeroProgressionEvent({
+    heroEntityId: creditedHeroId,
+    atMs,
+    experienceDelta: 0,
+    goldDelta: gold,
+    lastHitsDelta: 0,
+    deniesDelta: 0,
+    reason: 'ward-kill',
+  });
+}
+
 function ensureCombatSubscription() {
   if (unsubscribeCombat) return;
   unsubscribeCombat = subscribeWorldCombatEvents(event => {
-    if (event.reason !== 'death') return;
     const runtime = activeWards.get(event.entityId);
     if (!runtime) return;
 
@@ -78,49 +146,53 @@ function ensureCombatSubscription() {
       ? registry.values().find(candidate => candidate.id === event.sourceEntityId) ?? null
       : null;
 
-    if (wardType === 'observer' && source?.kind === 'hero' && source.team !== entity.team) {
-      const elapsedMinutes = Math.max(0, (event.atMs - MATCH_EPOCH_MS) / 60_000);
-      const rules = WARD_RULES.observer;
-      const experience = Math.floor(rules.baseExperienceReward + rules.experiencePerMinute * elapsedMinutes);
-      const gold = Math.floor(rules.baseGoldReward + rules.goldPerMinute * elapsedMinutes);
-      const creditKey = revealCreditKey(source.team);
-      const creditedHeroId = creditKey
-        ? String(entity.root.userData[creditKey] ?? source.id)
-        : source.id;
-
-      if (creditedHeroId === source.id) {
-        emitWorldHeroProgressionEvent({
-          heroEntityId: source.id,
-          atMs: event.atMs,
-          experienceDelta: experience,
-          goldDelta: gold,
-          lastHitsDelta: 0,
-          deniesDelta: 0,
-          reason: 'ward-kill',
-        });
-      } else {
-        emitWorldHeroProgressionEvent({
-          heroEntityId: source.id,
-          atMs: event.atMs,
-          experienceDelta: experience,
-          goldDelta: 0,
-          lastHitsDelta: 0,
-          deniesDelta: 0,
-          reason: 'ward-kill',
-        });
-        emitWorldHeroProgressionEvent({
-          heroEntityId: creditedHeroId,
-          atMs: event.atMs,
-          experienceDelta: 0,
-          goldDelta: gold,
-          lastHitsDelta: 0,
-          deniesDelta: 0,
-          reason: 'ward-kill',
-        });
+    if (event.reason === 'damage' && entity.alive && !runtime.resolvingDeath) {
+      if (source?.team === entity.team && !isWardDeniable(entity, source.team, event.atMs)) {
+        // Defensive guard for future allied-damage paths. Ordinary command targeting already
+        // refuses this attack, but the ward rules remain authoritative if another system hits it.
+        entity.currentHp = WARD_INTERNAL_HP;
+        entity.maxHp = WARD_INTERNAL_HP;
+        publishWardRuntime(entity);
+        return;
       }
+
+      const rules = WARD_RULES[wardType];
+      const hitWeight = source?.kind === 'hero'
+        ? rules.nonHeroHitsToDestroy / rules.heroHitsToDestroy
+        : 1;
+      runtime.durabilityDamage += hitWeight;
+      const remaining = Math.max(0, rules.nonHeroHitsToDestroy - runtime.durabilityDamage);
+      entity.root.userData[WARD_HITS_REMAINING_KEY] = remaining;
+
+      if (remaining > 0) {
+        // Undo ordinary HP damage: wards die by hit count, not by attack damage magnitude.
+        entity.maxHp = WARD_INTERNAL_HP;
+        entity.currentHp = WARD_INTERNAL_HP;
+        entity.alive = true;
+        publishWardRuntime(entity);
+        return;
+      }
+
+      runtime.resolvingDeath = true;
+      entity.currentHp = 0;
+      entity.alive = false;
+      publishWardRuntime(entity);
+      emitWorldCombatEvent({
+        entityId: entity.id,
+        reason: 'death',
+        currentHp: 0,
+        currentResource: entity.currentResource,
+        alive: false,
+        atMs: event.atMs,
+        sourceEntityId: source?.id,
+      });
+      return;
     }
 
-    activeWards.delete(event.entityId);
+    if (event.reason === 'death') {
+      grantObserverWardReward(runtime, source, event.atMs);
+      activeWards.delete(event.entityId);
+    }
   });
 }
 
@@ -148,15 +220,6 @@ export function getWardDurability(wardType: WardType) {
   return WARD_RULES[wardType].nonHeroHitsToDestroy;
 }
 
-export function getWardAttackDamage(attackerKind: GameEntityKind | null | undefined, target: GameEntity) {
-  const rules = getWardRules(target);
-  if (!rules) return null;
-  if (attackerKind === 'hero') {
-    return rules.nonHeroHitsToDestroy / rules.heroHitsToDestroy;
-  }
-  return 1;
-}
-
 export function configureWardEntity(
   entity: GameEntity,
   registry: GameEntityRegistry,
@@ -173,12 +236,18 @@ export function configureWardEntity(
   entity.root.userData[WARD_OWNER_KEY] = options.ownerEntityId;
   entity.root.userData[WARD_PLACED_AT_KEY] = options.placedAtMs;
   entity.root.userData[WARD_EXPIRES_AT_KEY] = options.expiresAtMs;
+  entity.root.userData[WARD_HITS_REMAINING_KEY] = rules.nonHeroHitsToDestroy;
   entity.root.userData.wardTrueSight = rules.trueSight;
+  entity.maxHp = WARD_INTERNAL_HP;
+  entity.currentHp = WARD_INTERNAL_HP;
+  publishWardRuntime(entity);
   activeWards.set(entity.id, {
     entity,
     registry,
     ownerEntityId: options.ownerEntityId,
     wardType: options.wardType,
+    durabilityDamage: 0,
+    resolvingDeath: false,
   });
   ensureCombatSubscription();
 }
@@ -190,6 +259,11 @@ export function unregisterWardEntity(entityId: string) {
 export function getWardOwnerEntityId(entity: GameEntity) {
   const value = entity.root.userData[WARD_OWNER_KEY];
   return typeof value === 'string' ? value : null;
+}
+
+export function getWardHitsRemaining(entity: GameEntity) {
+  const value = Number(entity.root.userData[WARD_HITS_REMAINING_KEY]);
+  return Number.isFinite(value) ? Math.max(0, value) : null;
 }
 
 export function isWardDeniable(entity: GameEntity, byTeam: TeamId, atMs = nowMs()) {
