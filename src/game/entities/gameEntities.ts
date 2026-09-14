@@ -361,8 +361,10 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         displayName: titleCaseName(name),
         kind: 'building',
         team,
-        selectable: true,
-        targetable: team === 'red',
+        // The base group is the decorative/collision floor and retaining structure. It is
+        // not a gameplay objective; authored towers/throne remain registered separately.
+        selectable: false,
+        targetable: false,
         grantsVision: true,
         visionRadius: VISION_RANGES.building,
         visionHeight: 5,
