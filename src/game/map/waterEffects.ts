@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import { installFountainSanctuaryPresentation } from './fountainSanctuaryPresentation';
 
 export function createWaterEffects(world: THREE.Group) {
+  // Presentation-only rebuild. It deliberately runs here before water-surface discovery, while
+  // the pre-existing command-surface mesh references can still be repurposed for the new stair.
+  installFountainSanctuaryPresentation(world);
+
   const group = new THREE.Group();
   group.name = 'water-footsteps';
   const surfaces: THREE.Mesh[] = [];

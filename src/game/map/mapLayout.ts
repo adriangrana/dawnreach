@@ -20,12 +20,14 @@ export const BASE_SHOP_LAYOUT = {
 
 export const TEAM_START_BASE_LAYOUT = {
   radius: 7,
-  elevation: 2.5,
+  // The fountain sanctuary is intentionally a second architectural tier above the citadel
+  // plaza. Gameplay continues to use this same value for spawn/regen height validation.
+  elevation: 5.25,
   waterDepth: 0.10,
   rampLength: 5.4,
   rampWidth: 4.4,
-  fountainForward: 2.1,
-  fountainSide: -3.05,
+  fountainForward: 2.05,
+  fountainSide: 0,
   spawnForward: 2.2,
   spawnSide: -1.10,
   hpRegenFractionPerSecond: 0.10,
@@ -156,23 +158,13 @@ export function getTeamStartSpawnPosition(team: 'blue' | 'red') {
   return startSpawnFromCenter(getTeamBaseShopPosition(team));
 }
 
-export function getTeamStartBaseServiceOpening(team: 'blue' | 'red') {
-  // Only Dawn currently owns the authored start sanctuary. Do not create a phantom fourth
-  // gate/ramp/tower on the Dusk citadel until the mirrored base is explicitly authored.
-  if (team !== 'blue') return null;
-  const base = DAWNREACH_LAYOUT.blueBase;
-  const sanctuary = getTeamBaseShopPosition('blue');
-  const dx = sanctuary.x - base.x;
-  const dz = sanctuary.z - base.z;
-  const distance = Math.hypot(dx, dz);
-  if (distance <= 1e-6) return null;
-  const cosine = (distance * distance + BASE_LAYOUT.radius * BASE_LAYOUT.radius
-    - TEAM_START_BASE_LAYOUT.radius * TEAM_START_BASE_LAYOUT.radius)
-    / (2 * distance * BASE_LAYOUT.radius);
-  return {
-    angle: Math.atan2(dz, dx),
-    halfAngle: Math.acos(Math.max(-1, Math.min(1, cosine))) + 0.045,
-  } as const;
+export function getTeamStartBaseServiceOpening(
+  team: 'blue' | 'red',
+): { angle: number; halfAngle: number } | null {
+  // The sanctuary no longer has a forest-facing service breach. The citadel wall remains closed
+  // behind Mercado del Alba; access is exclusively from the base plaza via the monumental stair.
+  void team;
+  return null;
 }
 
 export const MAP_BOUNDS = {
