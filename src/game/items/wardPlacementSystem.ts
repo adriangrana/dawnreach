@@ -8,15 +8,24 @@ import {
   type ItemTargetRequestDetail,
   type ItemUseDetail,
 } from './shopEvents';
+import {
+  WARD_RULES,
+  configureWardEntity,
+  getWardDurability,
+  isWardPlacementEffect,
+  unregisterWardEntity,
+  wardTypeFromEffect,
+  type WardType,
+} from './wardGameplay';
 
 export type WardPlacementSystem = Readonly<{ dispose(): void }>;
 
 const SYSTEM_KEY = 'dawnreachWardPlacementSystem';
-const WARD_EFFECT_ID = 'place_vision_ward';
 const PLACEMENT_GROUND_OFFSET = 0.035;
 const HERO_VISION_EDGE_MARGIN = 0.12;
 const CONFIRMED_TARGET_TTL_MS = 2_000;
-const WARD_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%2358cfff' stroke-width='2'/%3E%3Cpath d='M16 3v5M16 24v5M3 16h5M24 16h5' stroke='%23bcefff' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M16 10l4 6-4 6-4-6z' fill='%2358cfff' fill-opacity='.28' stroke='%23ffffff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair`;
+const OBSERVER_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%2358cfff' stroke-width='2'/%3E%3Cpath d='M16 3v5M16 24v5M3 16h5M24 16h5' stroke='%23bcefff' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M16 10l4 6-4 6-4-6z' fill='%2358cfff' fill-opacity='.28' stroke='%23ffffff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair`;
+const SENTRY_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%237a8cff' stroke-width='2'/%3E%3Cpath d='M16 2v6M16 24v6M2 16h6M24 16h6' stroke='%23d8deff' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M8 16c4-5 12-5 16 0-4 5-12 5-16 0z' fill='%237a8cff' fill-opacity='.28' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23ffffff'/%3E%3C/svg%3E") 16 16, crosshair`;
 
 let disposeActiveWardPlacementSystem: (() => void) | null = null;
 
@@ -25,12 +34,14 @@ type PlacementPhase = 'aiming' | 'moving';
 type PendingWardPlacement = {
   request: ItemTargetRequestDetail;
   actor: GameEntity;
+  wardType: WardType;
   phase: PlacementPhase;
   targetPoint: THREE.Vector3 | null;
 };
 
 type ConfirmedWardPlacement = {
   actor: GameEntity;
+  wardType: WardType;
   point: THREE.Vector3;
   expiresAtMs: number;
 };
@@ -46,15 +57,18 @@ function numeric(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function buildWard(team: TeamId) {
-  const color = team === 'red' ? 0xe26b68 : 0x78d8ec;
+function buildWard(team: TeamId, wardType: WardType) {
+  const teamColor = team === 'red' ? 0xe26b68 : 0x78d8ec;
+  const color = wardType === 'sentry'
+    ? (team === 'red' ? 0xc77cff : 0x7d8cff)
+    : teamColor;
   const root = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: 0x5f5848, roughness: 0.45, metalness: 0.65 });
   const stone = new THREE.MeshStandardMaterial({ color: 0x273235, roughness: 0.82, metalness: 0.08 });
   const glow = new THREE.MeshStandardMaterial({
     color,
     emissive: color,
-    emissiveIntensity: 1.25,
+    emissiveIntensity: wardType === 'sentry' ? 1.55 : 1.25,
     roughness: 0.25,
     metalness: 0.12,
   });
@@ -67,15 +81,25 @@ function buildWard(team: TeamId) {
   stem.position.y = 0.41;
   root.add(stem);
 
-  const eye = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), glow);
+  const eye = new THREE.Mesh(
+    wardType === 'sentry' ? new THREE.SphereGeometry(0.145, 12, 8) : new THREE.OctahedronGeometry(0.16, 0),
+    glow,
+  );
   eye.position.y = 0.78;
-  eye.rotation.z = Math.PI / 4;
+  if (wardType === 'observer') eye.rotation.z = Math.PI / 4;
   root.add(eye);
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.018, 6, 32), glow);
   ring.position.y = 0.77;
   ring.rotation.x = Math.PI / 2;
   root.add(ring);
+
+  if (wardType === 'sentry') {
+    const verticalRing = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.014, 6, 32), glow);
+    verticalRing.position.y = 0.77;
+    verticalRing.rotation.y = Math.PI / 2;
+    root.add(verticalRing);
+  }
 
   root.traverse(object => {
     if (object instanceof THREE.Mesh) object.castShadow = true;
@@ -190,18 +214,27 @@ export function ensureWardPlacementSystem(
     return point;
   };
 
-  const setPlacementCursor = (active: boolean) => {
+  const setPlacementCursor = (active: boolean, wardType: WardType = 'observer') => {
     const canvas = getCanvas();
-    if (canvas) canvas.style.cursor = active ? WARD_CURSOR : '';
+    if (canvas) canvas.style.cursor = active
+      ? (wardType === 'sentry' ? SENTRY_CURSOR : OBSERVER_CURSOR)
+      : '';
   };
 
   const hidePreview = () => {
     preview.root.visible = false;
   };
 
-  const setPreviewPoint = (point: THREE.Vector3, visionRadius: number) => {
+  const applyPreviewTone = (wardType: WardType) => {
+    const color = wardType === 'sentry' ? 0x7d8cff : 0x58cfff;
+    preview.targetMaterial.color.setHex(color);
+    preview.visionMaterial.color.setHex(color);
+  };
+
+  const setPreviewPoint = (point: THREE.Vector3, radius: number, wardType: WardType) => {
+    applyPreviewTone(wardType);
     preview.root.position.copy(point);
-    preview.visionRing.scale.setScalar(Math.max(0.5, visionRadius));
+    preview.visionRing.scale.setScalar(Math.max(0.5, radius));
     preview.root.visible = true;
   };
 
@@ -211,9 +244,7 @@ export function ensureWardPlacementSystem(
     hidePreview();
   };
 
-  const cancelPending = () => {
-    clearPending();
-  };
+  const cancelPending = () => clearPending();
 
   const resolveLocalActor = () => (
     registry.values().find(entity => entity.id === 'blue-hero-alden' && entity.kind === 'hero' && entity.alive)
@@ -275,6 +306,7 @@ export function ensureWardPlacementSystem(
     issueStopAtCurrentPosition(placement.actor);
     confirmedPlacements.set(placement.request.instanceId, {
       actor: placement.actor,
+      wardType: placement.wardType,
       point: point.clone(),
       expiresAtMs: performance.now() + CONFIRMED_TARGET_TTL_MS,
     });
@@ -285,53 +317,62 @@ export function ensureWardPlacementSystem(
 
   const removeWard = (ward: TimedWard) => {
     timedWards.delete(ward.id);
+    unregisterWardEntity(ward.id);
     registry.unregister(ward.root);
     ward.root.removeFromParent();
     disposeObject3D(ward.root);
   };
 
-  const spawnConfirmedWard = (
-    placement: ConfirmedWardPlacement,
-    detail: ItemUseDetail,
-  ) => {
-    const duration = Math.max(0.1, numeric(detail.values.duration, 90));
+  const spawnConfirmedWard = (placement: ConfirmedWardPlacement, detail: ItemUseDetail) => {
+    const wardType = placement.wardType;
+    const rules = WARD_RULES[wardType];
+    const duration = Math.max(0.1, numeric(detail.values.duration, rules.durationSeconds));
     const radius = Math.max(0.5, numeric(detail.values.radius, 8));
-    const root = buildWard(placement.actor.team);
+    const placedAtMs = detail.activatedAtMs;
+    const expiresAtMs = placedAtMs + duration * 1000;
+    const root = buildWard(placement.actor.team, wardType);
     root.position.copy(placement.point);
     root.userData.invisible = true;
     root.userData.itemWard = true;
+    root.userData.itemWardType = wardType;
+    root.userData.trueSightRadius = wardType === 'sentry' ? radius : 0;
     scene.add(root);
 
-    const id = `item-ward:${placement.actor.id}:${detail.instanceId}:${Math.round(detail.activatedAtMs)}`;
+    const id = `item-ward:${wardType}:${placement.actor.id}:${detail.instanceId}:${Math.round(placedAtMs)}`;
+    const durability = getWardDurability(wardType);
     const entity = registry.register(root, {
       id,
-      displayName: 'Ojo del Vigía',
+      displayName: rules.displayName,
       kind: 'building',
       team: placement.actor.team,
       selectable: true,
       targetable: true,
-      grantsVision: true,
+      grantsVision: rules.grantsVision,
+      // Keep the radius on the entity even for sentries so selection can display the
+      // True Sight halo; grantsVision=false prevents it from becoming ordinary sight.
       visionRadius: radius,
       visionHeight: 1.2,
       attackRange: 0,
       selectionRadius: 0.38,
-      maxHp: 1,
-      currentHp: 1,
+      maxHp: durability,
+      currentHp: durability,
       showHealthBar: false,
       visibilityPolicy: 'vision-only',
-      interaction: 'structure',
+      interaction: 'attackable-structure',
     });
-    timedWards.set(id, {
-      id,
-      root,
-      entity,
-      expiresAtMs: detail.activatedAtMs + duration * 1000,
+    configureWardEntity(entity, registry, {
+      wardType,
+      ownerEntityId: placement.actor.id,
+      placedAtMs,
+      expiresAtMs,
     });
+    timedWards.set(id, { id, root, entity, expiresAtMs });
   };
 
   const onTargetRequest = (event: Event) => {
     const detail = (event as CustomEvent<ItemTargetRequestDetail>).detail;
-    if (!detail || detail.effectId !== WARD_EFFECT_ID || !detail.instanceId) return;
+    const wardType = detail ? wardTypeFromEffect(detail.effectId) : null;
+    if (!detail || !wardType || !detail.instanceId) return;
 
     if (pending?.request.instanceId === detail.instanceId && pending.phase === 'aiming') {
       cancelPending();
@@ -343,10 +384,11 @@ export function ensureWardPlacementSystem(
     pending = {
       request: detail,
       actor,
+      wardType,
       phase: 'aiming',
       targetPoint: null,
     };
-    setPlacementCursor(true);
+    setPlacementCursor(true, wardType);
     hidePreview();
   };
 
@@ -359,7 +401,7 @@ export function ensureWardPlacementSystem(
       hidePreview();
       return;
     }
-    setPreviewPoint(point, numeric(pending.request.values.radius, 8));
+    setPreviewPoint(point, numeric(pending.request.values.radius, 8), pending.wardType);
   };
 
   const onPointerDown = (event: PointerEvent) => {
@@ -379,7 +421,7 @@ export function ensureWardPlacementSystem(
     event.stopImmediatePropagation();
 
     pending.targetPoint = point;
-    setPreviewPoint(point, numeric(pending.request.values.radius, 8));
+    setPreviewPoint(point, numeric(pending.request.values.radius, 8), pending.wardType);
 
     if (pointIsInsideHeroVision(pending.actor, point)) {
       confirmPlacement(pending);
@@ -399,16 +441,12 @@ export function ensureWardPlacementSystem(
       cancelPending();
       return;
     }
-    if (event.code === 'KeyA' && !event.altKey && !event.ctrlKey && !event.metaKey) {
-      cancelPending();
-    }
+    if (event.code === 'KeyA' && !event.altKey && !event.ctrlKey && !event.metaKey) cancelPending();
   };
 
-  // Capturing here is deliberate: itemActiveWorldSystem owns the legacy immediate ward cast.
-  // A confirmed ground target is handled here first so that implementation never sees the ward event.
   const onItemUseCapture = (event: Event) => {
     const detail = (event as CustomEvent<ItemUseDetail>).detail;
-    if (!detail || detail.effectId !== WARD_EFFECT_ID) return;
+    if (!detail || !isWardPlacementEffect(detail.effectId)) return;
     event.stopImmediatePropagation();
 
     const placement = confirmedPlacements.get(detail.instanceId);
@@ -448,13 +486,13 @@ export function ensureWardPlacementSystem(
       gameplayCamera = camera;
       if (pending?.phase === 'aiming' && pointerValid) {
         const point = pickPlacementPoint();
-        if (point) setPreviewPoint(point, numeric(pending.request.values.radius, 8));
+        if (point) setPreviewPoint(point, numeric(pending.request.values.radius, 8), pending.wardType);
       }
-      const nowMs = performance.now();
-      const pulse = (Math.sin(nowMs * 0.0045) + 1) * 0.5;
+      const now = performance.now();
+      const pulse = (Math.sin(now * 0.0045) + 1) * 0.5;
       preview.targetMaterial.opacity = 0.78 + pulse * 0.18;
       preview.visionMaterial.opacity = 0.16 + pulse * 0.12;
-      update(nowMs);
+      update(now);
     }
     previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
   };
