@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
@@ -86,7 +87,10 @@ const disposeMinimapDragCamera = mountMinimapDragCamera();
 const disposeTowerPortraitAssets = mountTowerPortraitAssets();
 const disposeSelectionHudNameLayout = mountSelectionHudNameLayout();
 
-void waitForDawnreachReady().then(dismissBootSplash);
+const portalWarmup = warmTeleportPortalGeometry().catch((error) => {
+  console.warn('[Dawnreach] Teleport portal warmup failed; continuing without it.', error);
+});
+void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash);
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
