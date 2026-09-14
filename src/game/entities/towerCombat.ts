@@ -19,6 +19,7 @@ export const TOWER_COMBAT_TUNING = {
   projectileSpeed: TOWER_GAMEPLAY.attack.projectileSpeed,
   projectileArcHeight: TOWER_GAMEPLAY.attack.projectileArcHeight,
   aggroEventLifetimeMs: 1600,
+  deaggroIgnoreMs: 1600,
   heroRespawnBaseSeconds: 6,
   heroRespawnSecondsPerLevel: 2,
   worldSyncHz: 30,
@@ -35,13 +36,15 @@ const PREWARMED_PROJECTILES_PER_TEAM = 4;
 const PREWARMED_EFFECTS_PER_TEAM = 10;
 
 type CombatTeam = 'blue' | 'red';
+type TowerTargetPriority = 1 | 2 | 3 | 4;
 
 interface TowerCombatState {
   currentTarget: GameEntity | null;
-  pendingPriorityTargetIds: string[];
   nextShotAt: number;
   lastElapsed: number;
   lastAggroSequence: number;
+  recentAttackByAttacker: Map<string, WorldAttackEvent>;
+  deaggroIgnoreUntilByAttacker: Map<string, number>;
   projectiles: TowerProjectile[];
   effects: TowerPulseEffect[];
 }
@@ -179,22 +182,35 @@ export function updateDefenseTowerCombat(
   const team = towerEntity.team === 'blue' || towerEntity.team === 'red'
     ? towerEntity.team
     : authoredTeam;
+  const nowMs = worldNowMs();
 
-  processAggroEvents(towerEntity, registry, state, team);
+  processAggroEvents(towerEntity, state, team, nowMs);
 
   if (state.currentTarget && !isValidTowerTarget(towerEntity, state.currentTarget)) {
     state.currentTarget = null;
   }
 
-  if (!state.currentTarget) {
-    state.currentTarget = takePriorityTarget(towerEntity, registry, state)
-      ?? findNearestTowerTarget(towerEntity, registry);
-    if (state.currentTarget) {
-      state.nextShotAt = Math.max(
-        state.nextShotAt,
-        elapsed + TOWER_COMBAT_TUNING.acquireWindupSeconds,
-      );
+  const bestTarget = findBestTowerTarget(towerEntity, registry, state, nowMs);
+  if (bestTarget) {
+    const currentPriority = state.currentTarget
+      ? getTowerTargetPriority(towerEntity, state.currentTarget, state, nowMs)
+      : null;
+    if (
+      !state.currentTarget
+      || currentPriority === null
+      || bestTarget.priority < currentPriority
+    ) {
+      const changedTarget = state.currentTarget?.id !== bestTarget.entity.id;
+      state.currentTarget = bestTarget.entity;
+      if (changedTarget) {
+        state.nextShotAt = Math.max(
+          state.nextShotAt,
+          elapsed + TOWER_COMBAT_TUNING.acquireWindupSeconds,
+        );
+      }
     }
+  } else if (!state.currentTarget) {
+    state.currentTarget = null;
   }
 
   if (!state.currentTarget || elapsed < state.nextShotAt) return;
@@ -208,10 +224,11 @@ function getTowerState(tower: THREE.Object3D, elapsed: number): TowerCombatState
   if (!state) {
     state = {
       currentTarget: null,
-      pendingPriorityTargetIds: [],
       nextShotAt: elapsed + TOWER_COMBAT_TUNING.acquireWindupSeconds,
       lastElapsed: elapsed,
       lastAggroSequence: 0,
+      recentAttackByAttacker: new Map(),
+      deaggroIgnoreUntilByAttacker: new Map(),
       projectiles: [],
       effects: [],
     };
@@ -412,19 +429,17 @@ function hasPendingRespawn(entity: GameEntity): boolean {
 
 function processAggroEvents(
   tower: GameEntity,
-  registry: GameEntityRegistry,
   state: TowerCombatState,
   team: CombatTeam,
+  nowMs: number,
 ): void {
   const events = getWorldAttackEventsAfter(state.lastAggroSequence);
-  if (events.length === 0) return;
-
   tower.root.getWorldPosition(towerPosition);
-  const nowMs = worldNowMs();
 
   for (const event of events) {
     state.lastAggroSequence = Math.max(state.lastAggroSequence, event.sequence);
     if (nowMs - event.atMs > TOWER_COMBAT_TUNING.aggroEventLifetimeMs) continue;
+    if (event.attackerTeam === team || event.attackerTeam === 'neutral') continue;
 
     const attackerWasInRange = planarDistanceSquared(
       towerPosition.x,
@@ -434,73 +449,65 @@ function processAggroEvents(
     ) <= tower.attackRange * tower.attackRange;
     if (!attackerWasInRange) continue;
 
-    const hostileHeroAttackedAlliedHero = event.attackerKind === 'hero'
-      && event.targetKind === 'hero'
-      && event.attackerTeam !== team
-      && event.attackerTeam !== 'neutral'
-      && event.targetTeam === team
-      && planarDistanceSquared(
-        towerPosition.x,
-        towerPosition.z,
-        event.targetPosition.x,
-        event.targetPosition.z,
-      ) <= tower.attackRange * tower.attackRange;
+    state.recentAttackByAttacker.set(event.attackerId, event);
 
-    if (hostileHeroAttackedAlliedHero && state.currentTarget?.id !== event.attackerId) {
-      if (!state.pendingPriorityTargetIds.includes(event.attackerId)) {
-        state.pendingPriorityTargetIds.push(event.attackerId);
-      }
-    }
-
-    const currentHeroRequestedDeaggro = state.currentTarget?.id === event.attackerId
-      && event.attackerKind === 'hero'
-      && event.attackerTeam !== team
-      && event.attackerTeam !== 'neutral'
+    // A hero that issues A + click on an allied unit requests de-aggro. The command
+    // itself is enough; it does not need to deal damage to the ally.
+    const requestedDeaggro = event.attackerKind === 'hero'
       && event.targetTeam === event.attackerTeam;
+    if (requestedDeaggro) {
+      state.deaggroIgnoreUntilByAttacker.set(
+        event.attackerId,
+        nowMs + TOWER_COMBAT_TUNING.deaggroIgnoreMs,
+      );
+      if (state.currentTarget?.id === event.attackerId) state.currentTarget = null;
+    }
+  }
 
-    if (!currentHeroRequestedDeaggro) continue;
-
-    state.pendingPriorityTargetIds = state.pendingPriorityTargetIds.filter(id => id !== event.attackerId);
-    const replacement = takePriorityTarget(tower, registry, state, event.attackerId)
-      ?? findNearestTowerTarget(tower, registry, event.attackerId);
-    if (replacement) state.currentTarget = replacement;
+  for (const [attackerId, event] of state.recentAttackByAttacker) {
+    if (nowMs - event.atMs > TOWER_COMBAT_TUNING.aggroEventLifetimeMs) {
+      state.recentAttackByAttacker.delete(attackerId);
+    }
+  }
+  for (const [attackerId, ignoreUntil] of state.deaggroIgnoreUntilByAttacker) {
+    if (nowMs >= ignoreUntil) state.deaggroIgnoreUntilByAttacker.delete(attackerId);
   }
 }
 
-function takePriorityTarget(
+function getTowerTargetPriority(
+  tower: GameEntity,
+  candidate: GameEntity,
+  state: TowerCombatState,
+  nowMs: number,
+): TowerTargetPriority | null {
+  if (!isValidTowerTarget(tower, candidate)) return null;
+  if ((state.deaggroIgnoreUntilByAttacker.get(candidate.id) ?? 0) > nowMs) return null;
+
+  const attack = state.recentAttackByAttacker.get(candidate.id);
+  if (!attack || nowMs - attack.atMs > TOWER_COMBAT_TUNING.aggroEventLifetimeMs) return 4;
+
+  // Priority 1: enemy actively attacking an allied hero.
+  if (attack.targetTeam === tower.team && attack.targetKind === 'hero') return 1;
+  // Priority 2: enemy actively attacking this tower.
+  if (attack.targetId === tower.id) return 2;
+  // Priority 3: enemy actively attacking any other allied unit.
+  if (attack.targetTeam === tower.team) return 3;
+  // Priority 4: nearest hostile unit in general.
+  return 4;
+}
+
+function findBestTowerTarget(
   tower: GameEntity,
   registry: GameEntityRegistry,
   state: TowerCombatState,
-  excludedId?: string,
-): GameEntity | null {
-  while (state.pendingPriorityTargetIds.length > 0) {
-    const id = state.pendingPriorityTargetIds.shift()!;
-    if (id === excludedId) continue;
-    const entity = getEntityById(registry, id);
-    if (entity && isValidTowerTarget(tower, entity)) return entity;
-  }
-  return null;
-}
-
-function getEntityById(registry: GameEntityRegistry, id: string): GameEntity | null {
-  for (const entity of registry.values()) {
-    if (entity.id === id) return entity;
-  }
-  return null;
-}
-
-function findNearestTowerTarget(
-  tower: GameEntity,
-  registry: GameEntityRegistry,
-  excludedId?: string,
-): GameEntity | null {
+  nowMs: number,
+): { entity: GameEntity; priority: TowerTargetPriority; distanceSquared: number } | null {
   tower.root.getWorldPosition(towerPosition);
-  let nearest: GameEntity | null = null;
-  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
-  const rangeSquared = tower.attackRange * tower.attackRange;
+  let best: { entity: GameEntity; priority: TowerTargetPriority; distanceSquared: number } | null = null;
 
   for (const candidate of registry.values()) {
-    if (candidate.id === excludedId || !isHostileUnitTarget(tower, candidate)) continue;
+    const priority = getTowerTargetPriority(tower, candidate, state, nowMs);
+    if (priority === null) continue;
     candidate.root.getWorldPosition(entityPosition);
     const distanceSquared = planarDistanceSquared(
       towerPosition.x,
@@ -508,11 +515,14 @@ function findNearestTowerTarget(
       entityPosition.x,
       entityPosition.z,
     );
-    if (distanceSquared > rangeSquared || distanceSquared >= nearestDistanceSquared) continue;
-    nearest = candidate;
-    nearestDistanceSquared = distanceSquared;
+    if (
+      best
+      && (priority > best.priority || (priority === best.priority && distanceSquared >= best.distanceSquared))
+    ) continue;
+    best = { entity: candidate, priority, distanceSquared };
   }
-  return nearest;
+
+  return best;
 }
 
 function isHostileUnitTarget(tower: GameEntity, target: GameEntity): boolean {
@@ -733,6 +743,8 @@ function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntit
       currentHp: target.currentHp,
       alive: true,
       atMs: worldNowMs(),
+      amount: damage,
+      sourceEntityId: source?.id,
     });
     return;
   }
@@ -754,6 +766,8 @@ function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntit
     alive: false,
     atMs: worldNowMs(),
     respawnSeconds,
+    amount: damage,
+    sourceEntityId: source?.id,
   });
 }
 
