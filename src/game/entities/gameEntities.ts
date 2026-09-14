@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ensureLaneCreepSystem } from '../gameplay/laneCreeps';
 import { ensureRadiantDrakeGameplay, RADIANT_DRAKE_GAMEPLAY } from '../gameplay/radiantDrakeGameplay';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
+import { ensureItemActiveWorldSystem } from '../items/itemActiveWorldSystem';
 import { ensureWorldShopSystem } from '../items/worldShopSystem';
 import { attachEntityOverhead } from './entityOverheads';
 import { registerFloatingCombatEntity, unregisterFloatingCombatEntity } from './floatingCombatText';
@@ -361,8 +362,6 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         displayName: titleCaseName(name),
         kind: 'building',
         team,
-        // The base group is the decorative/collision floor and retaining structure. It is
-        // not a gameplay objective; authored towers/throne remain registered separately.
         selectable: false,
         targetable: false,
         grantsVision: true,
@@ -378,5 +377,8 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
   });
 
   const scene = findSceneRoot(battlefield);
-  if (scene) ensureWorldShopSystem(scene, registry, battlefield, 'blue');
+  if (scene) {
+    ensureWorldShopSystem(scene, registry, battlefield, 'blue');
+    ensureItemActiveWorldSystem(scene, registry, battlefield);
+  }
 }
