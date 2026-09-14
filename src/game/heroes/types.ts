@@ -91,7 +91,8 @@ export interface InventoryItem {
 }
 
 export interface InventorySlot {
-  slot: 0 | 1 | 2 | 3 | 4 | 5;
+  /** Slots 0-5 are normal inventory. Slot 6 is the dedicated teleport-scroll slot. */
+  slot: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   item: InventoryItem | null;
 }
 
@@ -107,7 +108,7 @@ export function createEmptyAbilityRanks(): AbilityRanks {
 }
 
 export function createEmptyInventory(): InventorySlot[] {
-  return Array.from({ length: 6 }, (_, slot) => ({
+  return Array.from({ length: 7 }, (_, slot) => ({
     slot: slot as InventorySlot['slot'],
     item: null,
   }));
