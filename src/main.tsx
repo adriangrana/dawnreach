@@ -11,6 +11,7 @@ import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
 import './styles.css';
 import './hud-overrides.css';
+import './hero-stats-hud.css';
 import './command-controls.css';
 import './combat-stats.css';
 import './progression-hud.css';

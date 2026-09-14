@@ -4,6 +4,13 @@ export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 export type DamageType = 'physical' | 'magic' | 'true';
 export type HeroResourceType = 'mana' | 'rage' | 'energy';
 export type HeroId = string;
+export type HeroPrimaryAttribute = 'strength' | 'agility' | 'intelligence';
+
+export interface HeroAttributes {
+  strength: number;
+  agility: number;
+  intelligence: number;
+}
 
 export interface HeroStats {
   maxHp: number;
@@ -51,6 +58,12 @@ export interface HeroDefinition {
   weaponConfiguration: string;
   weaponDesignReason: string;
   lore: string;
+  primaryAttribute: HeroPrimaryAttribute;
+  /** Damage inherent to the hero/weapon before the primary attribute and item damage are added. */
+  baseAttackDamage: number;
+  baseAttributes: HeroAttributes;
+  /** Attribute points gained per hero level after level 1. */
+  attributeProgression: HeroAttributes;
   resource: {
     type: HeroResourceType;
     displayName: string;

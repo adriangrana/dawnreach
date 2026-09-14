@@ -46,7 +46,7 @@ import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
   ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, applyHeroProgressionReward,
-  calculateAldenInnate, calculateHeroStats,
+  calculateAldenInnate, calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats,
   createPlayableMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
   getRequiredHero, getUnspentHeroAbilityPoints,
   recoverHeroResource, upgradeHeroAbility, useHeroAbility,
@@ -99,6 +99,11 @@ const duskTeam: TeamHero[] = [
 ];
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
 const heroImageCodes: Record<string, string> = { H001: 'H001' };
+const heroAttributeDisplay = [
+  { key: 'strength' as const, shortLabel: 'FUE', label: 'Fuerza' },
+  { key: 'agility' as const, shortLabel: 'AGI', label: 'Agilidad' },
+  { key: 'intelligence' as const, shortLabel: 'INT', label: 'Inteligencia' },
+];
 
 type HudRuntime = {
   match: MatchState;
@@ -371,6 +376,12 @@ function hideMissingImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = 'none';
 }
 
+function formatHudNumber(value: number) {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+}
+
 function RespawnCooldownOverlay({ presentation, compact = false }: { presentation: RespawnPresentation; compact?: boolean }) {
   if (!presentation.dead) return null;
   const safeTotal = Math.max(1, presentation.totalMs);
@@ -431,6 +442,8 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
   const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const definition = getHeroDefinition(hero.definitionId);
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
+  const attributes = calculateHeroAttributes(runtime.match, hero.heroEntityId);
+  const damageBreakdown = calculateHeroDamageBreakdown(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
   const innate = hero.definitionId === ALDEN.id ? calculateAldenInnate(runtime.match, hero.heroEntityId) : null;
   const experience = getHeroExperienceProgress(runtime.match, hero.heroEntityId);
   const unspentAbilityPoints = getUnspentHeroAbilityPoints(runtime.match, hero.heroEntityId);
@@ -518,9 +531,29 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
             <strong>{definition.displayName}</strong>
             <span>{definition.className}</span>
             <div className="hero-attributes">
-              <b><Sword />{Math.round(stats.attackDamage)}</b>
-              <b><Sparkles />{Math.round(stats.magicResistance)}</b>
-              <b><Shield />{Math.round(stats.physicalArmor)}</b>
+              <div className="hero-combat-stats">
+                <b className="hero-combat-stat hero-combat-stat--damage" title="Daño base + daño directo de objetos">
+                  <Sword />
+                  {formatHudNumber(damageBreakdown.baseDamage)}
+                  {damageBreakdown.itemBonusDamage > 0.001 && (
+                    <em className="hero-damage-bonus">+ {formatHudNumber(damageBreakdown.itemBonusDamage)}</em>
+                  )}
+                </b>
+                <b className="hero-combat-stat" title="Resistencia mágica"><Sparkles />{Math.round(stats.magicResistance)}</b>
+                <b className="hero-combat-stat" title="Armadura"><Shield />{Math.round(stats.physicalArmor)}</b>
+              </div>
+              <div className="hero-core-attributes" aria-label="Atributos del héroe">
+                {heroAttributeDisplay.map(attribute => (
+                  <b
+                    key={attribute.key}
+                    className={`hero-core-attribute${definition.primaryAttribute === attribute.key ? ' is-primary' : ''}`}
+                    title={`${attribute.label}${definition.primaryAttribute === attribute.key ? ' · atributo principal' : ''}`}
+                  >
+                    <small>{attribute.shortLabel}</small>
+                    <span className="hero-core-attribute__value">{formatHudNumber(attributes[attribute.key])}</span>
+                  </b>
+                ))}
+              </div>
             </div>
             {innate && <div className="hero-sigil">
               <AbilityButton
@@ -555,11 +588,17 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
           <div className="resource-bars">
             <div className="resource resource--health">
               <span style={{ width: `${hero.currentHp / stats.maxHp * 100}%` }} />
-              <b>{Math.floor(hero.currentHp)} / {Math.round(stats.maxHp)}</b>
+              <b>
+                {Math.floor(hero.currentHp)} / {Math.round(stats.maxHp)}
+                <em className="resource-regen" title="Regeneración de vida por segundo">+{formatHudNumber(stats.hpRegenPerSecond)}</em>
+              </b>
             </div>
             <div className="resource resource--mana" data-current={hero.currentResource} data-max={stats.maxResource}>
               <span style={{ width: `${hero.currentResource / stats.maxResource * 100}%` }} />
-              <b>{Math.floor(hero.currentResource)} / {Math.round(stats.maxResource)}</b>
+              <b>
+                {Math.floor(hero.currentResource)} / {Math.round(stats.maxResource)}
+                <em className="resource-regen" title="Regeneración de maná por segundo">+{formatHudNumber(stats.resourceRegenPerSecond)}</em>
+              </b>
             </div>
           </div>
         </div>

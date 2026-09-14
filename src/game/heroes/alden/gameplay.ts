@@ -154,6 +154,18 @@ export const ALDEN: AldenGameplayDefinition = {
   weaponConfiguration: 'Espada larga de caballero, sin escudo',
   weaponDesignReason: 'Alden concentra toda su identidad de combate en una sola espada: inicia con ella, mantiene presión sostenida y convierte una guardia técnica de hoja en su principal herramienta defensiva.',
   lore: 'Alden fue el último caballero en abandonar las puertas de Valebrant cuando el reino cayó. Desde entonces lleva su espada no como símbolo de nobleza, sino como juramento: mientras él permanezca en pie, ningún enemigo cruzará la línea que protege.',
+  primaryAttribute: 'strength',
+  baseAttackDamage: 44,
+  baseAttributes: {
+    strength: 22,
+    agility: 14,
+    intelligence: 12,
+  },
+  attributeProgression: {
+    strength: 3.4,
+    agility: 0,
+    intelligence: 0,
+  },
   resource: {
     type: 'mana',
     displayName: 'Maná',

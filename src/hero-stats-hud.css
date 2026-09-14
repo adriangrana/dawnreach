@@ -1,0 +1,96 @@
+/* Hero stat details layered after the base HUD skin. */
+.hero-attributes {
+  gap: 5px;
+}
+
+.hero-combat-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+}
+
+.hero-combat-stats .hero-combat-stat {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.hero-combat-stat--damage .hero-damage-bonus {
+  margin-left: -3px;
+  color: #72d987;
+  font-style: normal;
+  font-weight: 700;
+  text-shadow: 0 0 7px rgba(77, 201, 104, 0.2);
+}
+
+.hero-core-attributes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 1px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(132, 127, 94, 0.28);
+}
+
+.hero-attributes .hero-core-attribute {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto;
+  place-items: center;
+  gap: 0;
+  padding: 2px 1px;
+  color: #d1d5c9;
+  line-height: 1;
+}
+
+.hero-core-attribute small {
+  color: #8f9a96;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.hero-core-attribute__value {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ddd9ca;
+}
+
+.hero-core-attribute.is-primary .hero-core-attribute__value {
+  color: #72d987;
+  text-shadow: 0 0 8px rgba(77, 201, 104, 0.28);
+}
+
+.resource b {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.resource-regen {
+  font-style: normal;
+  font-weight: 800;
+  font-size: 9px;
+  line-height: inherit;
+  color: #8fe39a;
+  text-shadow: 0 1px 2px #000, 0 0 6px rgba(71, 196, 94, 0.24);
+}
+
+.resource--mana .resource-regen {
+  color: #82d1ff;
+  text-shadow: 0 1px 2px #000, 0 0 6px rgba(69, 167, 225, 0.3);
+}
+
+@media (max-width: 1020px) {
+  .hero-combat-stats .hero-combat-stat { gap: 5px; }
+  .hero-core-attributes { gap: 2px; padding-top: 3px; }
+  .hero-core-attribute small { font-size: 6px; }
+  .hero-core-attribute__value { font-size: 9px; }
+  .resource b { gap: 5px; }
+  .resource-regen { font-size: 8px; }
+}
