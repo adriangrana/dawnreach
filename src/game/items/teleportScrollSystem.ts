@@ -42,6 +42,8 @@ const HARD_CC_PATTERN = /(?:^|:|\b)(stun|root|silence|fear)(?:$|:|\b)/i;
 const TELEPORT_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%237adfff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23dffaff' stroke='%23173d55' stroke-width='1'/%3E%3Cpath d='M16 2v7M16 23v7M2 16h7M23 16h7' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair`;
 
 let disposeTeleportSystem: (() => void) | null = null;
+let portalParticleTexture: THREE.DataTexture | null = null;
+let portalBeamTexture: THREE.DataTexture | null = null;
 
 type TargetingState = {
   instanceId: string;
@@ -103,18 +105,18 @@ type SelectionPalette = Readonly<{
 }>;
 
 type PortalMaterialEntry = Readonly<{
-  material: THREE.MeshBasicMaterial;
+  material: THREE.Material;
   baseOpacity: number;
 }>;
 
-type PortalParticleEntry = Readonly<{
-  mesh: THREE.Mesh;
-  phase: number;
-  speed: number;
-  radius: number;
-  angle: number;
-  angularSpeed: number;
-  size: number;
+type PortalParticleSystem = Readonly<{
+  points: THREE.Points;
+  positions: Float32Array;
+  phases: Float32Array;
+  speeds: Float32Array;
+  radii: Float32Array;
+  angles: Float32Array;
+  angularSpeeds: Float32Array;
 }>;
 
 function matchTeamToWorld(team: HeroItemRuntimeContext['team']): TeamId {
@@ -145,7 +147,7 @@ function disposeObject3D(root: THREE.Object3D) {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   root.traverse(object => {
-    if (!(object instanceof THREE.Mesh)) return;
+    if (!(object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line)) return;
     if (!geometries.has(object.geometry)) {
       geometries.add(object.geometry);
       object.geometry.dispose();
@@ -199,186 +201,195 @@ function addSelectionRing(
   parent.add(mesh);
 }
 
-function buildPortalHelix(
-  radius: number,
-  turns: number,
-  phase: number,
-  material: THREE.MeshBasicMaterial,
-  tubeRadius: number,
-) {
-  const points: THREE.Vector3[] = [];
-  const samples = 56;
-  for (let index = 0; index <= samples; index++) {
-    const t = index / samples;
-    const angle = phase + t * Math.PI * 2 * turns;
-    const breathing = 1 + Math.sin(t * Math.PI * 3 + phase) * 0.055;
-    points.push(new THREE.Vector3(
-      Math.cos(angle) * radius * breathing,
-      0.12 + t * (TELEPORT_PORTAL_HEIGHT - 0.24),
-      Math.sin(angle) * radius * breathing,
-    ));
+function getPortalParticleTexture() {
+  if (portalParticleTexture) return portalParticleTexture;
+  const size = 24;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x + 0.5) / size * 2 - 1;
+      const ny = (y + 0.5) / size * 2 - 1;
+      const distance = Math.sqrt(nx * nx + ny * ny);
+      const core = THREE.MathUtils.clamp(1 - distance, 0, 1);
+      const alpha = Math.pow(core, 1.8);
+      const index = (y * size + x) * 4;
+      data[index] = 255;
+      data[index + 1] = 255;
+      data[index + 2] = 255;
+      data[index + 3] = Math.round(alpha * 255);
+    }
   }
-  const curve = new THREE.CatmullRomCurve3(points);
-  const filament = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, 112, tubeRadius, 5, false),
-    material,
-  );
-  filament.renderOrder = 79;
-  filament.frustumCulled = false;
-  return filament;
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  portalParticleTexture = texture;
+  return texture;
 }
 
-function buildPortalWisp(
-  angle: number,
-  radius: number,
-  phase: number,
-  material: THREE.MeshBasicMaterial,
-) {
-  const points: THREE.Vector3[] = [];
-  const samples = 28;
-  for (let index = 0; index <= samples; index++) {
-    const t = index / samples;
-    const drift = Math.sin(t * Math.PI * 2.4 + phase) * 0.08;
-    const twist = angle + Math.sin(t * Math.PI * 1.6 + phase) * 0.16;
-    const r = radius + drift;
-    points.push(new THREE.Vector3(
-      Math.cos(twist) * r,
-      0.18 + t * (TELEPORT_PORTAL_HEIGHT - 0.36),
-      Math.sin(twist) * r,
-    ));
+function getPortalBeamTexture() {
+  if (portalBeamTexture) return portalBeamTexture;
+  const width = 32;
+  const height = 64;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const vertical = y / Math.max(1, height - 1);
+    const verticalFade = Math.pow(Math.sin(vertical * Math.PI), 0.42);
+    for (let x = 0; x < width; x++) {
+      const horizontal = Math.abs((x / Math.max(1, width - 1)) * 2 - 1);
+      const radial = Math.pow(THREE.MathUtils.clamp(1 - horizontal, 0, 1), 1.65);
+      const alpha = radial * verticalFade;
+      const index = (y * width + x) * 4;
+      data[index] = 255;
+      data[index + 1] = 255;
+      data[index + 2] = 255;
+      data[index + 3] = Math.round(alpha * 255);
+    }
   }
-  return new THREE.Mesh(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 56, 0.006, 4, false),
-    material,
-  );
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  portalBeamTexture = texture;
+  return texture;
 }
 
 function buildTeleportPortalColumn(_team: TeamId) {
   const root = new THREE.Group();
   root.name = 'teleport-light-column';
 
-  const gold = 0xffc94d;
-  const warmGold = 0xf4b942;
+  const gold = 0xffc84a;
   const paleGold = 0xffe79a;
-  const whiteGold = 0xfff8dc;
+  const whiteGold = 0xfff8dd;
+  const warmGold = 0xffbf3d;
 
   const materialEntries: PortalMaterialEntry[] = [];
-  const registerMaterial = (material: THREE.MeshBasicMaterial, baseOpacity: number) => {
+  const registerMaterial = <T extends THREE.Material>(material: T, baseOpacity: number) => {
     materialEntries.push({ material, baseOpacity });
     return material;
   };
 
-  const outerVolumeMaterial = registerMaterial(makeSelectionMaterial(gold, 0.022, true), 0.022);
-  const middleVolumeMaterial = registerMaterial(makeSelectionMaterial(paleGold, 0.036, true), 0.036);
-  const coreVolumeMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.058, true), 0.058);
-  const filamentMaterial = registerMaterial(makeSelectionMaterial(gold, 0.32, true), 0.32);
-  const filamentBrightMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.26, true), 0.26);
-  const wispMaterial = registerMaterial(makeSelectionMaterial(paleGold, 0.12, true), 0.12);
-  const ringMaterial = registerMaterial(makeSelectionMaterial(paleGold, 0.40, true), 0.40);
-  const floorGlowMaterial = registerMaterial(makeSelectionMaterial(gold, 0.075, true), 0.075);
-  const floorCoreMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.055, true), 0.055);
-  const particleMaterial = registerMaterial(makeSelectionMaterial(paleGold, 0.62, true), 0.62);
-  const brightParticleMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.78, true), 0.78);
+  const outerVolumeMaterial = registerMaterial(makeSelectionMaterial(gold, 0.052, true), 0.052);
+  const innerVolumeMaterial = registerMaterial(makeSelectionMaterial(paleGold, 0.092, true), 0.092);
+  const coreVolumeMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.13, true), 0.13);
+  const floorMaterial = registerMaterial(makeSelectionMaterial(gold, 0.115, true), 0.115);
+  const ringMaterial = registerMaterial(makeSelectionMaterial(whiteGold, 0.46, true), 0.46);
+  const beamMaterial = registerMaterial(new THREE.MeshBasicMaterial({
+    color: paleGold,
+    map: getPortalBeamTexture(),
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+  }), 0.16);
 
   const outerVolume = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.98, 1.08, TELEPORT_PORTAL_HEIGHT, 64, 1, true),
+    new THREE.CylinderGeometry(0.94, 1.04, TELEPORT_PORTAL_HEIGHT, 24, 1, true),
     outerVolumeMaterial,
   );
   outerVolume.position.y = TELEPORT_PORTAL_HEIGHT * 0.5;
   outerVolume.renderOrder = 72;
+  outerVolume.frustumCulled = false;
   root.add(outerVolume);
 
-  const middleVolume = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.69, 0.82, TELEPORT_PORTAL_HEIGHT * 0.985, 64, 1, true),
-    middleVolumeMaterial,
+  const innerVolume = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.58, 0.72, TELEPORT_PORTAL_HEIGHT * 0.985, 20, 1, true),
+    innerVolumeMaterial,
   );
-  middleVolume.position.y = TELEPORT_PORTAL_HEIGHT * 0.495;
-  middleVolume.renderOrder = 73;
-  root.add(middleVolume);
+  innerVolume.position.y = TELEPORT_PORTAL_HEIGHT * 0.495;
+  innerVolume.renderOrder = 73;
+  innerVolume.frustumCulled = false;
+  root.add(innerVolume);
 
   const coreVolume = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.25, 0.42, TELEPORT_PORTAL_HEIGHT * 0.95, 48, 1, true),
+    new THREE.CylinderGeometry(0.18, 0.34, TELEPORT_PORTAL_HEIGHT * 0.94, 16, 1, true),
     coreVolumeMaterial,
   );
   coreVolume.position.y = TELEPORT_PORTAL_HEIGHT * 0.49;
   coreVolume.renderOrder = 74;
+  coreVolume.frustumCulled = false;
   root.add(coreVolume);
 
-  const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.02, 80), floorGlowMaterial);
+  const beamGroup = new THREE.Group();
+  beamGroup.name = 'teleport-portal-beams';
+  const beamGeometry = new THREE.PlaneGeometry(1.82, TELEPORT_PORTAL_HEIGHT);
+  for (let index = 0; index < 3; index++) {
+    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+    beam.position.y = TELEPORT_PORTAL_HEIGHT * 0.5;
+    beam.rotation.y = index * Math.PI / 3;
+    beam.renderOrder = 75;
+    beam.frustumCulled = false;
+    beamGroup.add(beam);
+  }
+  root.add(beamGroup);
+
+  const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.02, 48), floorMaterial);
   floorGlow.rotation.x = -Math.PI / 2;
   floorGlow.position.y = 0.025;
-  floorGlow.renderOrder = 75;
+  floorGlow.renderOrder = 76;
   root.add(floorGlow);
 
-  const floorCore = new THREE.Mesh(new THREE.CircleGeometry(0.62, 64), floorCoreMaterial);
-  floorCore.rotation.x = -Math.PI / 2;
-  floorCore.position.y = 0.03;
-  floorCore.renderOrder = 76;
-  root.add(floorCore);
-
-  const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.018, 6, 80), ringMaterial);
-  baseRing.rotation.x = Math.PI / 2;
-  baseRing.position.y = 0.075;
+  const baseRing = new THREE.Mesh(new THREE.RingGeometry(0.78, 0.91, 64), ringMaterial);
+  baseRing.rotation.x = -Math.PI / 2;
+  baseRing.position.y = 0.045;
   baseRing.renderOrder = 80;
   root.add(baseRing);
 
-  const crownRing = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.014, 6, 72), ringMaterial);
-  crownRing.rotation.x = Math.PI / 2;
-  crownRing.position.y = TELEPORT_PORTAL_HEIGHT - 0.09;
-  crownRing.renderOrder = 80;
-  root.add(crownRing);
-
-  const filamentA = new THREE.Group();
-  const filamentB = new THREE.Group();
-  filamentA.name = 'teleport-portal-filament-a';
-  filamentB.name = 'teleport-portal-filament-b';
-  filamentA.add(buildPortalHelix(0.76, 1.65, 0.2, filamentMaterial, 0.012));
-  filamentA.add(buildPortalHelix(0.48, 1.18, Math.PI * 0.76, wispMaterial, 0.007));
-  filamentB.add(buildPortalHelix(0.66, -1.42, Math.PI, filamentBrightMaterial, 0.009));
-  filamentB.add(buildPortalHelix(0.37, -1.02, Math.PI * 1.42, wispMaterial, 0.006));
-  root.add(filamentA, filamentB);
-
-  const wisps = new THREE.Group();
-  wisps.name = 'teleport-portal-wisps';
-  for (let index = 0; index < 7; index++) {
-    const angle = index / 7 * Math.PI * 2;
-    const radius = 0.30 + (index % 3) * 0.16;
-    const wisp = buildPortalWisp(angle, radius, index * 0.91, wispMaterial);
-    wisp.renderOrder = 77;
-    wisps.add(wisp);
+  const particleCount = 56;
+  const positions = new Float32Array(particleCount * 3);
+  const phases = new Float32Array(particleCount);
+  const speeds = new Float32Array(particleCount);
+  const radii = new Float32Array(particleCount);
+  const angles = new Float32Array(particleCount);
+  const angularSpeeds = new Float32Array(particleCount);
+  for (let index = 0; index < particleCount; index++) {
+    phases[index] = (index * 0.173 + (index % 7) * 0.031) % 1;
+    speeds[index] = 0.085 + (index % 8) * 0.0085;
+    radii[index] = 0.12 + ((index * 13) % 29) / 28 * 0.72;
+    angles[index] = index * 2.399963229728653;
+    angularSpeeds[index] = (index % 2 === 0 ? 1 : -1) * (0.10 + (index % 6) * 0.018);
   }
-  root.add(wisps);
+  const particleGeometry = new THREE.BufferGeometry();
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particleMaterial = new THREE.PointsMaterial({
+    color: paleGold,
+    map: getPortalParticleTexture(),
+    size: 0.13,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    depthTest: true,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    alphaTest: 0.015,
+  });
+  const points = new THREE.Points(particleGeometry, particleMaterial);
+  points.renderOrder = 82;
+  points.frustumCulled = false;
+  root.add(points);
 
-  const particleGeometry = new THREE.SphereGeometry(0.035, 8, 6);
-  const particles: PortalParticleEntry[] = [];
-  for (let index = 0; index < 30; index++) {
-    const bright = index % 5 === 0;
-    const mesh = new THREE.Mesh(
-      particleGeometry,
-      bright ? brightParticleMaterial : particleMaterial,
-    );
-    mesh.renderOrder = 82;
-    mesh.frustumCulled = false;
-    root.add(mesh);
-    particles.push({
-      mesh,
-      phase: (index * 0.137 + (index % 4) * 0.071) % 1,
-      speed: 0.095 + (index % 7) * 0.011,
-      radius: 0.18 + (index % 9) / 8 * 0.64,
-      angle: index * 2.399963229728653,
-      angularSpeed: (index % 2 === 0 ? 1 : -1) * (0.16 + (index % 5) * 0.035),
-      size: bright ? 1.12 : 0.72 + (index % 4) * 0.11,
-    });
-  }
-
-  const light = new THREE.PointLight(warmGold, 0, 4.8, 2);
+  const light = new THREE.PointLight(warmGold, 0, 5.2, 2);
   light.position.set(0, TELEPORT_PORTAL_HEIGHT * 0.42, 0);
   root.add(light);
 
-  root.userData.portalFilamentA = filamentA;
-  root.userData.portalFilamentB = filamentB;
-  root.userData.portalWisps = wisps;
-  root.userData.portalParticles = particles;
+  const particleSystem: PortalParticleSystem = {
+    points,
+    positions,
+    phases,
+    speeds,
+    radii,
+    angles,
+    angularSpeeds,
+  };
+
+  root.userData.portalBeamGroup = beamGroup;
+  root.userData.portalParticles = particleSystem;
   root.userData.portalMaterials = materialEntries;
   root.userData.portalLight = light;
   return root;
@@ -386,52 +397,49 @@ function buildTeleportPortalColumn(_team: TeamId) {
 
 function animateTeleportPortal(root: THREE.Group, nowMs: number, progress: number, phaseOffset: number) {
   const seconds = nowMs * 0.001;
-  const pulse = (Math.sin(seconds * 2.35 + phaseOffset) + 1) * 0.5;
-  const fadeIn = smootherStep01(progress / 0.10);
-  const fadeOut = smootherStep01((1 - progress) / 0.10);
+  const pulse = (Math.sin(seconds * 2.1 + phaseOffset) + 1) * 0.5;
+  const fadeIn = smootherStep01(progress / 0.055);
+  const fadeOut = smootherStep01((1 - progress) / 0.08);
   const strength = Math.min(fadeIn, fadeOut);
-  const heightIntro = 0.20 + 0.80 * smootherStep01(progress / 0.12);
+  const heightIntro = 0.48 + 0.52 * smootherStep01(progress / 0.075);
 
-  const filamentA = root.userData.portalFilamentA as THREE.Group | undefined;
-  const filamentB = root.userData.portalFilamentB as THREE.Group | undefined;
-  const wisps = root.userData.portalWisps as THREE.Group | undefined;
-  const particles = root.userData.portalParticles as PortalParticleEntry[] | undefined;
+  const beamGroup = root.userData.portalBeamGroup as THREE.Group | undefined;
+  const particles = root.userData.portalParticles as PortalParticleSystem | undefined;
   const materials = root.userData.portalMaterials as PortalMaterialEntry[] | undefined;
   const light = root.userData.portalLight as THREE.PointLight | undefined;
 
-  if (filamentA) filamentA.rotation.y = seconds * 0.30 + phaseOffset;
-  if (filamentB) filamentB.rotation.y = -seconds * 0.22 - phaseOffset * 0.7;
-  if (wisps) wisps.rotation.y = seconds * 0.065 + phaseOffset * 0.18;
+  if (beamGroup) beamGroup.rotation.y = seconds * 0.14 + phaseOffset * 0.25;
 
   if (particles) {
-    for (const particle of particles) {
+    for (let index = 0; index < particles.phases.length; index++) {
       const travel = THREE.MathUtils.euclideanModulo(
-        particle.phase + seconds * particle.speed + phaseOffset * 0.025,
+        particles.phases[index] + seconds * particles.speeds[index] + phaseOffset * 0.018,
         1,
       );
-      const angle = particle.angle
-        + seconds * particle.angularSpeed
-        + Math.sin(travel * Math.PI * 2 + particle.phase * 5) * 0.12;
-      const radialBreath = 0.92 + Math.sin(travel * Math.PI * 2 + particle.phase * 7) * 0.08;
-      particle.mesh.position.set(
-        Math.cos(angle) * particle.radius * radialBreath,
-        0.12 + travel * (TELEPORT_PORTAL_HEIGHT - 0.24),
-        Math.sin(angle) * particle.radius * radialBreath,
-      );
-      const edgeFade = Math.sin(travel * Math.PI);
-      const scale = particle.size * (0.36 + edgeFade * 0.82) * (0.94 + pulse * 0.08);
-      particle.mesh.scale.setScalar(scale);
+      const angle = particles.angles[index]
+        + seconds * particles.angularSpeeds[index]
+        + Math.sin(travel * Math.PI * 2 + index * 0.37) * 0.08;
+      const radialBreath = 0.94 + Math.sin(travel * Math.PI * 2 + index * 0.51) * 0.06;
+      const offset = index * 3;
+      particles.positions[offset] = Math.cos(angle) * particles.radii[index] * radialBreath;
+      particles.positions[offset + 1] = 0.08 + travel * (TELEPORT_PORTAL_HEIGHT - 0.16);
+      particles.positions[offset + 2] = Math.sin(angle) * particles.radii[index] * radialBreath;
     }
+    const positionAttribute = particles.points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    positionAttribute.needsUpdate = true;
+    const particleMaterial = particles.points.material as THREE.PointsMaterial;
+    particleMaterial.opacity = strength * (0.70 + pulse * 0.22);
+    particleMaterial.size = 0.115 + pulse * 0.025;
   }
 
-  const width = 0.985 + pulse * 0.025;
+  const width = 0.99 + pulse * 0.018;
   root.scale.set(width, heightIntro, width);
   if (materials) {
     for (const entry of materials) {
-      entry.material.opacity = entry.baseOpacity * strength * (0.90 + pulse * 0.10);
+      entry.material.opacity = entry.baseOpacity * strength * (0.94 + pulse * 0.12);
     }
   }
-  if (light) light.intensity = strength * (0.72 + pulse * 0.36);
+  if (light) light.intensity = strength * (0.95 + pulse * 0.42);
 }
 
 function shouldSkipProxyObject(object: THREE.Object3D) {
