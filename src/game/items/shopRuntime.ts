@@ -1,9 +1,11 @@
-import type { InventoryItem, ItemStatModifier } from '../heroes/types';
+import type { InventoryItem, InventorySlot, ItemStatModifier } from '../heroes/types';
 import { getRequiredHero } from '../match/matchState';
-import type { MatchState } from '../match/types';
+import { calculateHeroStats } from '../match/stats';
+import type { MatchState, TimedStatusState } from '../match/types';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 
 export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | null;
+export type ItemUseReason = 'missing-item' | 'not-active' | 'cooldown' | 'not-enough-resource' | 'dead' | null;
 
 export type ShopPurchaseResult = Readonly<{
   match: MatchState;
@@ -20,6 +22,22 @@ export type GroundPickupResult = Readonly<{
   item: InventoryItem | null;
   ok: boolean;
   reason: ShopTransactionReason;
+}>;
+
+export type InventoryMutationResult = Readonly<{
+  match: MatchState;
+  item: InventoryItem | null;
+  definition: ItemDefinition | null;
+  ok: boolean;
+}>;
+
+export type ItemUseResult = Readonly<{
+  match: MatchState;
+  item: InventoryItem | null;
+  definition: ItemDefinition | null;
+  ok: boolean;
+  reason: ItemUseReason;
+  consumed: boolean;
 }>;
 
 export function heroHasInventorySpace(state: MatchState, heroEntityId: string) {
@@ -53,32 +71,205 @@ export function purchaseShopItem(
     return { match: next, definition, item, ok: true, dropped: false, reason: null };
   }
 
-  // Buying is still valid with a full inventory: the item is paid for and materializes
-  // on the ground beside the hero, matching the world-pickup rules used by the shop.
   return { match: next, definition, item, ok: true, dropped: true, reason: 'inventory-full' };
 }
 
 export function pickUpGroundItem(
   state: MatchState,
   heroEntityId: string,
-  itemId: string,
-  instanceId: string,
+  item: InventoryItem,
 ): GroundPickupResult {
-  const definition = getItemDefinition(itemId);
+  const definition = getItemDefinition(item.definitionId);
   if (!definition) return { match: state, definition: null, item: null, ok: false, reason: 'unknown-item' };
 
-  const sourceHero = getRequiredHero(state, heroEntityId);
-  const sourceSlot = sourceHero.inventory.find(slot => slot.item === null);
-  if (!sourceSlot) return { match: state, definition, item: null, ok: false, reason: 'inventory-full' };
+  if (!heroHasInventorySpace(state, heroEntityId)) {
+    return { match: state, definition, item, ok: false, reason: 'inventory-full' };
+  }
 
   const next = structuredClone(state);
   const hero = getRequiredHero(next, heroEntityId);
   const emptySlot = hero.inventory.find(slot => slot.item === null);
-  if (!emptySlot) return { match: state, definition, item: null, ok: false, reason: 'inventory-full' };
-
-  const item = createInventoryItem(definition, instanceId);
-  emptySlot.item = item;
+  if (!emptySlot) return { match: state, definition, item, ok: false, reason: 'inventory-full' };
+  emptySlot.item = structuredClone(item);
   return { match: next, definition, item, ok: true, reason: null };
+}
+
+export function moveInventoryItem(
+  state: MatchState,
+  heroEntityId: string,
+  fromSlotIndex: number,
+  toSlotIndex: number,
+): MatchState {
+  if (fromSlotIndex === toSlotIndex) return state;
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const from = sourceHero.inventory.find(slot => slot.slot === fromSlotIndex);
+  const to = sourceHero.inventory.find(slot => slot.slot === toSlotIndex);
+  if (!from || !to || !from.item) return state;
+
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const nextFrom = hero.inventory.find(slot => slot.slot === fromSlotIndex)!;
+  const nextTo = hero.inventory.find(slot => slot.slot === toSlotIndex)!;
+  const moving = nextFrom.item;
+  nextFrom.item = nextTo.item;
+  nextTo.item = moving;
+  return next;
+}
+
+export function dropInventoryItem(
+  state: MatchState,
+  heroEntityId: string,
+  slotIndex: number,
+): InventoryMutationResult {
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const sourceSlot = sourceHero.inventory.find(slot => slot.slot === slotIndex);
+  if (!sourceSlot?.item) return { match: state, item: null, definition: null, ok: false };
+
+  const item = structuredClone(sourceSlot.item);
+  const definition = getItemDefinition(item.definitionId);
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const slot = hero.inventory.find(candidate => candidate.slot === slotIndex)!;
+  slot.item = null;
+  return { match: next, item, definition, ok: true };
+}
+
+export function sellInventoryItem(
+  state: MatchState,
+  heroEntityId: string,
+  instanceId: string,
+): InventoryMutationResult & Readonly<{ saleGold: number }> {
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const sourceSlot = sourceHero.inventory.find(slot => slot.item?.instanceId === instanceId);
+  const item = sourceSlot?.item ?? null;
+  const definition = item ? getItemDefinition(item.definitionId) : null;
+  if (!sourceSlot || !item || !definition) return { match: state, item: null, definition: null, ok: false, saleGold: 0 };
+
+  const saleGold = Math.floor(definition.cost / 2);
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const slot = hero.inventory.find(candidate => candidate.item?.instanceId === instanceId);
+  if (!slot) return { match: state, item: null, definition: null, ok: false, saleGold: 0 };
+  slot.item = null;
+  hero.gold += saleGold;
+  return { match: next, item: structuredClone(item), definition, ok: true, saleGold };
+}
+
+export function useInventoryItem(
+  state: MatchState,
+  heroEntityId: string,
+  slotIndex: number,
+  nowMs: number,
+): ItemUseResult {
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const sourceSlot = sourceHero.inventory.find(slot => slot.slot === slotIndex);
+  const sourceItem = sourceSlot?.item ?? null;
+  const definition = sourceItem ? getItemDefinition(sourceItem.definitionId) : null;
+  if (!sourceItem || !definition) return { match: state, item: null, definition, ok: false, reason: 'missing-item', consumed: false };
+  if (!definition.active_effect) return { match: state, item: sourceItem, definition, ok: false, reason: 'not-active', consumed: false };
+  if (sourceHero.currentHp <= 0) return { match: state, item: sourceItem, definition, ok: false, reason: 'dead', consumed: false };
+  if ((sourceItem.cooldownReadyAtMs ?? 0) > nowMs) return { match: state, item: sourceItem, definition, ok: false, reason: 'cooldown', consumed: false };
+  if (sourceHero.currentResource < definition.active_effect.mana_cost) {
+    return { match: state, item: sourceItem, definition, ok: false, reason: 'not-enough-resource', consumed: false };
+  }
+
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const slot = hero.inventory.find(candidate => candidate.slot === slotIndex)!;
+  const item = slot.item!;
+  const effect = definition.active_effect;
+  const values = effect.values;
+  hero.currentResource = Math.max(0, hero.currentResource - effect.mana_cost);
+  item.cooldownReadyAtMs = nowMs + effect.cooldown * 1000;
+
+  const durationSeconds = numeric(values.duration, 0);
+  const statusDurationMs = Math.max(0, durationSeconds * 1000);
+  const statusData: Record<string, number | string | boolean> = {
+    itemEffect: effect.id,
+    startedAtMs: nowMs,
+  };
+
+  switch (effect.id) {
+    case 'restore_health_over_time':
+      statusData.healPerSecond = numeric(values.heal_total) / Math.max(0.001, durationSeconds);
+      break;
+    case 'restore_mana_over_time':
+      statusData.manaPerSecond = numeric(values.mana_restore) / Math.max(0.001, durationSeconds);
+      break;
+    case 'restore_health_and_mana_ooc':
+      statusData.healPerSecond = numeric(values.heal_total) / Math.max(0.001, durationSeconds);
+      statusData.manaPerSecond = numeric(values.mana_restore) / Math.max(0.001, durationSeconds);
+      statusData.requiresOutOfCombat = true;
+      break;
+    case 'temporary_move_speed_flat':
+      statusData.movementSpeedFlat = numeric(values.move_speed_flat);
+      break;
+    case 'phase_movement':
+    case 'temporary_move_speed_pct':
+    case 'cleanse_slow_and_haste':
+      statusData.movementSpeedPercent = numeric(values.move_speed_pct);
+      if (values.ignore_unit_collision === true) statusData.ignoreUnitCollision = true;
+      break;
+    case 'mana_restore_and_shield': {
+      const stats = calculateHeroStats(next, heroEntityId, { nowMs });
+      hero.currentResource = Math.min(
+        stats.maxResource,
+        hero.currentResource + stats.maxResource * numeric(values.mana_restore_pct_max) / 100,
+      );
+      statusData.shieldAmount = stats.maxResource * numeric(values.shield_pct_max_mana) / 100;
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (statusDurationMs > 0 && Object.keys(statusData).length > 2) {
+    const statusId = `item:active:${item.instanceId}:${effect.id}`;
+    hero.runtime.statuses[statusId] = {
+      id: statusId,
+      sourceHeroEntityId: heroEntityId,
+      expiresAtMs: nowMs + statusDurationMs,
+      data: statusData,
+    };
+  }
+
+  const consumed = values.consumes_item === true;
+  const resultItem = structuredClone(item);
+  if (consumed) slot.item = null;
+  return { match: next, item: resultItem, definition, ok: true, reason: null, consumed };
+}
+
+/** Applies restorative item statuses between HUD simulation ticks. */
+export function advanceItemActiveEffects(
+  state: MatchState,
+  heroEntityId: string,
+  elapsedMs: number,
+  nowMs: number,
+): MatchState {
+  if (elapsedMs <= 0) return state;
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const statuses = Object.values(sourceHero.runtime.statuses).filter(status => status.id.startsWith('item:active:'));
+  if (statuses.length === 0) return state;
+
+  const next = structuredClone(state);
+  const hero = getRequiredHero(next, heroEntityId);
+  const stats = calculateHeroStats(next, heroEntityId, { nowMs });
+  const tickStart = nowMs - elapsedMs;
+
+  for (const status of Object.values(hero.runtime.statuses)) {
+    if (!status.id.startsWith('item:active:')) continue;
+    const startedAtMs = numeric(status.data?.startedAtMs, tickStart);
+    const activeStart = Math.max(tickStart, startedAtMs);
+    const activeEnd = Math.min(nowMs, status.expiresAtMs);
+    const seconds = Math.max(0, activeEnd - activeStart) / 1000;
+    if (seconds > 0) {
+      hero.currentHp = Math.min(stats.maxHp, hero.currentHp + numeric(status.data?.healPerSecond) * seconds);
+      hero.currentResource = Math.min(stats.maxResource, hero.currentResource + numeric(status.data?.manaPerSecond) * seconds);
+    }
+    if (status.expiresAtMs <= nowMs) delete hero.runtime.statuses[status.id];
+  }
+
+  return next;
 }
 
 export function createInventoryItem(definition: ItemDefinition, instanceId: string): InventoryItem {
@@ -88,16 +279,18 @@ export function createInventoryItem(definition: ItemDefinition, instanceId: stri
     displayName: definition.name,
     quantity: 1,
     statModifiers: itemStatsToHeroModifiers(definition.stats),
+    cooldownReadyAtMs: 0,
   };
+}
+
+function numeric(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 /**
  * Converts the economy-facing item vocabulary to the combat-stat vocabulary already used
  * by MatchHeroState. Primary attributes use deliberately explicit Dawnreach conversion
  * rates so their derived value remains deterministic and can be tuned in one place later.
- *
- * magic_power is intentionally retained in the item definition but has no HeroStats field
- * yet; it will be consumed by the spell-damage pipeline when that stat is introduced.
  */
 export function itemStatsToHeroModifiers(stats: ItemStats): ItemStatModifier[] {
   const modifiers: ItemStatModifier[] = [];
