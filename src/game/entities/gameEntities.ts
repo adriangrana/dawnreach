@@ -5,6 +5,7 @@ import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { ensureItemActiveWorldSystem } from '../items/itemActiveWorldSystem';
 import { ensureItemUnitSlowWorldSystem } from '../items/itemUnitSlowWorldSystem';
 import { ensureItemVisionWorldSystem } from '../items/itemVisionWorldSystem';
+import { ensureTeleportScrollSystem } from '../items/teleportScrollSystem';
 import { ensureWorldShopSystem } from '../items/worldShopSystem';
 import { attachEntityOverhead } from './entityOverheads';
 import { registerFloatingCombatEntity, unregisterFloatingCombatEntity } from './floatingCombatText';
@@ -525,6 +526,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
   if (scene) {
     ensureWorldShopSystem(scene, registry, battlefield, 'blue');
     ensureItemActiveWorldSystem(scene, registry, battlefield);
+    ensureTeleportScrollSystem(scene, registry);
     ensureItemUnitSlowWorldSystem(scene, registry);
     ensureItemVisionWorldSystem(scene, registry);
   }
