@@ -5,13 +5,13 @@
  * visually above the item art and cooldown overlay.
  */
 .inventory-slot .inventory-item-quantity {
-  left: 0;
-  bottom: 0;
+  left: 3px;
+  bottom: 3x;
   right: auto;
   top: auto;
   z-index: 20;
-  min-width: 15px;
-  height: 15px;
+  min-width: 13px;
+  height: 13px;
   padding: 0 3px;
   box-sizing: border-box;
   border-radius: 999px;
