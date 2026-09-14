@@ -5,5 +5,6 @@ export * from './combat';
 export * from './abilityControls';
 export * from './progression';
 export * from '../heroes/types';
+export { HeroAttributes, HERO_ATTRIBUTE_RULES, applyHeroAttributeRules, calculateDefinitionBaseStatsAtLevel } from '../heroes/heroAttributes';
 export * from '../heroes/catalog';
 export * from '../heroes/alden/gameplay';

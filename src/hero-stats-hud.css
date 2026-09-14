@@ -25,10 +25,12 @@
   text-shadow: 0 0 7px rgba(77, 201, 104, 0.2);
 }
 
+/* Keep all three primary attributes readable; the passive sigil occupies the far-right corner. */
 .hero-core-attributes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(3, minmax(24px, 28px));
+  justify-content: start;
+  gap: 5px;
   margin-top: 1px;
   padding-top: 4px;
   border-top: 1px solid rgba(132, 127, 94, 0.28);
@@ -49,7 +51,7 @@
   color: #8f9a96;
   font-size: 7px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
 }
 
 .hero-core-attribute__value {
@@ -88,7 +90,11 @@
 
 @media (max-width: 1020px) {
   .hero-combat-stats .hero-combat-stat { gap: 5px; }
-  .hero-core-attributes { gap: 2px; padding-top: 3px; }
+  .hero-core-attributes {
+    grid-template-columns: repeat(3, minmax(21px, 24px));
+    gap: 3px;
+    padding-top: 3px;
+  }
   .hero-core-attribute small { font-size: 6px; }
   .hero-core-attribute__value { font-size: 9px; }
   .resource b { gap: 5px; }

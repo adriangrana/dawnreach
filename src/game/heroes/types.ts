@@ -4,9 +4,14 @@ export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 export type DamageType = 'physical' | 'magic' | 'true';
 export type HeroResourceType = 'mana' | 'rage' | 'energy';
 export type HeroId = string;
-export type HeroPrimaryAttribute = 'strength' | 'agility' | 'intelligence';
 
-export interface HeroAttributes {
+export enum HeroPrimaryAttribute {
+  STR = 'strength',
+  AGI = 'agility',
+  INT = 'intelligence',
+}
+
+export interface HeroAttributeValues {
   strength: number;
   agility: number;
   intelligence: number;
@@ -17,11 +22,17 @@ export interface HeroStats {
   maxResource: number;
   attackDamage: number;
   physicalArmor: number;
+  /** Flat percentage reduction applied to physical damage after armor. */
+  physicalDamageResistancePercent: number;
   magicResistance: number;
   attackSpeed: number;
   movementSpeed: number;
   hpRegenPerSecond: number;
   resourceRegenPerSecond: number;
+  /** Native spell power supplied by hero kits/items. */
+  magicPower: number;
+  /** Percent modifier applied to damage dealt by hero abilities. */
+  abilityPowerPercent: number;
   attackRange: number;
   criticalChancePercent: number;
 }
@@ -59,16 +70,17 @@ export interface HeroDefinition {
   weaponDesignReason: string;
   lore: string;
   primaryAttribute: HeroPrimaryAttribute;
-  /** Damage inherent to the hero/weapon before the primary attribute and item damage are added. */
+  /** Damage inherent to the hero/weapon before the primary attribute and direct item damage. */
   baseAttackDamage: number;
-  baseAttributes: HeroAttributes;
+  baseAttributes: HeroAttributeValues;
   /** Attribute points gained per hero level after level 1. */
-  attributeProgression: HeroAttributes;
+  attributeProgression: HeroAttributeValues;
   resource: {
     type: HeroResourceType;
     displayName: string;
     reason: string;
   };
+  /** Non-attribute baselines. Global attribute rules are applied on top by heroAttributes.ts. */
   baseStats: HeroStats;
   statProgression: Record<HeroStatKey, StatProgression>;
   abilities: Record<AbilityKey, HeroAbilityDefinition>;

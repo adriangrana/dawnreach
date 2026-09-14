@@ -95,15 +95,49 @@ test('match state always exposes 10 fixed 5v5 slots and keeps selection separate
   game.validateMatchState(state);
 });
 
-test('Alden level growth stops at the game cap of level 30', () => {
+test('global HeroAttributes applies the same fixed formulas to every primary-attribute type', () => {
+  const agilityHero = new game.HeroAttributes(game.HeroPrimaryAttribute.AGI, 10, 20, 30);
+  assert.equal(agilityHero.CalculateMaxHealth(), 400);
+  assert.equal(agilityHero.CalculateMaxMana(), 570);
+  assert.ok(Math.abs(agilityHero.CalculateArmor(5) - 8.6) < 1e-9);
+  assert.equal(agilityHero.CalculateAttackDamage(40), 60);
+  assert.equal(agilityHero.CalculateHpRegen(), 1.5);
+  assert.equal(agilityHero.CalculateManaRegen(), 7.5);
+  assert.equal(agilityHero.CalculatePhysicalDamageResistance(), 1);
+  assert.equal(agilityHero.CalculateAbilityPowerPercent(), 24);
+  assert.ok(Math.abs(agilityHero.CalculateAttackSpeed(1) - 1.24) < 1e-9);
+  assert.equal(agilityHero.CalculateMovementSpeed(325), 325);
+  assert.ok(Math.abs(agilityHero.CalculateMovementSpeed(325, true) - 338) < 1e-9);
+
+  const strengthHero = new game.HeroAttributes(game.HeroPrimaryAttribute.STR, 10, 20, 30);
+  const intellectHero = new game.HeroAttributes(game.HeroPrimaryAttribute.INT, 10, 20, 30);
+  assert.equal(strengthHero.CalculateAttackDamage(40), 50);
+  assert.equal(intellectHero.CalculateAttackDamage(40), 70);
+  assert.ok(Math.abs(game.calculateDamageAfterResistance(100, 'physical', 0, 0, 10) - 90) < 1e-9);
+});
+
+test('level growth is driven by STR, AGI and INT formulas and stops at level 30', () => {
   const l1 = game.getAldenStatsAtLevel(1);
   const l30 = game.getAldenStatsAtLevel(30);
-  assert.equal(l1.maxHp, 760);
+  assert.equal(l1.maxHp, 640);
+  assert.equal(l1.maxResource, 318);
   assert.equal(l1.attackDamage, 66);
-  assert.equal(l30.maxHp, 3805);
-  assert.equal(l30.maxResource, 735);
+  assert.equal(l1.physicalArmor, 32);
+  assert.equal(l1.physicalDamageResistancePercent, 2.2);
+  assert.ok(Math.abs(l1.attackSpeed - 0.72416) < 1e-9);
+  assert.equal(l1.hpRegenPerSecond, 3.3);
+  assert.equal(l1.resourceRegenPerSecond, 4.2);
+  assert.equal(l1.abilityPowerPercent, 9.6);
+
+  assert.equal(l30.maxHp, 2612);
+  assert.ok(Math.abs(l30.maxResource - 886.4) < 1e-9);
   assert.ok(Math.abs(l30.attackDamage - 164.6) < 1e-9);
-  assert.ok(Math.abs(l30.attackSpeed - 0.94968) < 1e-9);
+  assert.ok(Math.abs(l30.physicalArmor - 40.352) < 1e-9);
+  assert.ok(Math.abs(l30.physicalDamageResistancePercent - 12.06) < 1e-9);
+  assert.ok(Math.abs(l30.attackSpeed - 1.069376) < 1e-9);
+  assert.ok(Math.abs(l30.hpRegenPerSecond - 18.09) < 1e-9);
+  assert.ok(Math.abs(l30.resourceRegenPerSecond - 14.35) < 1e-9);
+  assert.ok(Math.abs(l30.abilityPowerPercent - 42.08) < 1e-9);
   assert.ok(Math.abs(l30.magicResistance - 61.35) < 1e-9);
   assert.throws(() => game.getAldenStatsAtLevel(31), /1 to 30/);
 });
@@ -164,7 +198,8 @@ test('inventory modifiers feed total stats and ability scaling', () => {
   const qAfter = game.calculateAldenAbilityAtRank(state, 'h1', 'Q', 4);
   assert.equal(after.attackDamage, before.attackDamage + 40);
   assert.ok(Math.abs(after.maxHp - before.maxHp * 1.1) < 1e-9);
-  assert.ok(Math.abs(qAfter.rawDamage - qBefore.rawDamage - 36) < 1e-9);
+  const abilityMultiplier = 1 + before.abilityPowerPercent / 100;
+  assert.ok(Math.abs(qAfter.rawDamage - qBefore.rawDamage - 36 * abilityMultiplier) < 1e-9);
 });
 
 test('Q spends mana, starts cooldown, deals scaled physical damage, slows and starts Cadence', () => {

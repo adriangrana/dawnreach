@@ -1,4 +1,5 @@
 import { getHeroDefinition, hasHeroDefinition } from '../heroes/catalog';
+import { calculateDefinitionStatsAtLevel } from '../heroes/heroAttributes';
 import {
   createEmptyAbilityRanks,
   createEmptyInventory,
@@ -7,7 +8,6 @@ import {
   type HeroId,
   type InventoryItem,
 } from '../heroes/types';
-import { getAldenAvailableAbilityRank, getAldenStatsAtLevel } from '../heroes/alden/gameplay';
 import type {
   MatchHeroState,
   MatchPlayerState,
@@ -109,9 +109,7 @@ export function assignSelectedHeroToPlayer(
   if (sourcePlayer.ownedHeroEntityId) throw new Error(`Player ${playerId} already owns hero ${sourcePlayer.ownedHeroEntityId}.`);
 
   const definition = getHeroDefinition(sourcePlayer.selectedHeroId);
-  const stats = sourcePlayer.selectedHeroId === 'H001'
-    ? getAldenStatsAtLevel(1)
-    : definition.baseStats;
+  const stats = calculateDefinitionStatsAtLevel(definition, 1);
 
   const hero: MatchHeroState = {
     heroEntityId,
@@ -157,8 +155,8 @@ export function setHeroLevel(state: MatchState, heroEntityId: string, level: num
 
   assertAbilityAllocationFitsLevel(hero, definition, level);
 
-  const before = hero.definitionId === 'H001' ? getAldenStatsAtLevel(hero.level) : definition.baseStats;
-  const after = hero.definitionId === 'H001' ? getAldenStatsAtLevel(level) : definition.baseStats;
+  const before = calculateDefinitionStatsAtLevel(definition, hero.level);
+  const after = calculateDefinitionStatsAtLevel(definition, level);
   const hpRatio = before.maxHp > 0 ? hero.currentHp / before.maxHp : 1;
   const resourceRatio = before.maxResource > 0 ? hero.currentResource / before.maxResource : 1;
 
@@ -186,8 +184,7 @@ export function upgradeHeroAbility(state: MatchState, heroEntityId: string, key:
   const maxRank = ability.unlockLevels.length;
   if (currentRank >= maxRank) throw new Error(`${key} is already rank ${maxRank}.`);
 
-  let availableRank = ability.unlockLevels.filter(level => level <= hero.level).length;
-  if (hero.definitionId === 'H001') availableRank = getAldenAvailableAbilityRank(key, hero.level);
+  const availableRank = ability.unlockLevels.filter(level => level <= hero.level).length;
   const desiredRank = currentRank + 1;
   if (desiredRank > availableRank) {
     const requiredLevel = ability.unlockLevels[desiredRank - 1];

@@ -2,7 +2,7 @@ import { ALDEN, type AldenGameplayDefinition } from '../heroes/alden/gameplay';
 import { getHeroDefinition } from '../heroes/catalog';
 import type { AbilityKey, DamageType } from '../heroes/types';
 import { getRequiredHero } from './matchState';
-import { calculateCombatStats, calculateHeroStats, getActiveStatus } from './stats';
+import { applyAbilityPowerToDamage, calculateCombatStats, calculateHeroStats, getActiveStatus } from './stats';
 import type {
   ActionTargetResult,
   DamagePacket,
@@ -84,7 +84,7 @@ export function calculateAldenAbilityAtRank(
       resourceCost: data.manaCost,
       cooldownSeconds: data.cooldownSeconds,
       damageType: 'physical',
-      rawDamage: data.baseDamage + ALDEN.q.totalAdRatio * stats.attackDamage,
+      rawDamage: applyAbilityPowerToDamage(data.baseDamage + ALDEN.q.totalAdRatio * stats.attackDamage, stats),
       healing: 0,
       effects: {
         dashRange: ALDEN.q.dashRange,
@@ -107,7 +107,7 @@ export function calculateAldenAbilityAtRank(
       resourceCost: data.manaCost,
       cooldownSeconds: data.cooldownSeconds,
       damageType: 'physical',
-      rawDamage: data.reprisalBaseDamage + ALDEN.w.reprisalTotalAdRatio * stats.attackDamage,
+      rawDamage: applyAbilityPowerToDamage(data.reprisalBaseDamage + ALDEN.w.reprisalTotalAdRatio * stats.attackDamage, stats),
       healing: 0,
       effects: {
         guardDurationSeconds: ALDEN.w.guardDurationSeconds,
@@ -136,9 +136,12 @@ export function calculateAldenAbilityAtRank(
       resourceCost: data.manaCost,
       cooldownSeconds: data.cooldownSeconds,
       damageType: 'physical',
-      rawDamage: data.activeBaseDamage
-        + ALDEN.e.activeTotalAdRatio * stats.attackDamage
-        + data.bonusDamagePerConsumedStack * stacks,
+      rawDamage: applyAbilityPowerToDamage(
+        data.activeBaseDamage
+          + ALDEN.e.activeTotalAdRatio * stats.attackDamage
+          + data.bonusDamagePerConsumedStack * stacks,
+        stats,
+      ),
       healing: stats.maxHp * (data.healingPercentMaxHpPerStack / 100) * stacks * healingMultiplier,
       effects: {
         radius: ALDEN.e.activeRadius,
@@ -164,7 +167,7 @@ export function calculateAldenAbilityAtRank(
     resourceCost: data.manaCost,
     cooldownSeconds: data.cooldownSeconds,
     damageType: 'physical',
-    rawDamage: data.baseDamage + ALDEN.r.totalAdRatio * stats.attackDamage,
+    rawDamage: applyAbilityPowerToDamage(data.baseDamage + ALDEN.r.totalAdRatio * stats.attackDamage, stats),
     healing: 0,
     effects: {
       radius: ALDEN.r.radius,
@@ -253,7 +256,10 @@ export function performAbilityAction(state: MatchState, input: AbilityActionInpu
       const target = getRequiredHero(next, targetId);
       const rankData = ALDEN.q.ranks[rank - 1];
       const actorStats = calculateHeroStats(next, nextActor.heroEntityId);
-      const rawDamage = rankData.baseDamage + ALDEN.q.totalAdRatio * actorStats.attackDamage;
+      const rawDamage = applyAbilityPowerToDamage(
+        rankData.baseDamage + ALDEN.q.totalAdRatio * actorStats.attackDamage,
+        actorStats,
+      );
       const damage = applyDamageMutable(next, {
         sourceHeroEntityId: nextActor.heroEntityId,
         targetHeroEntityId: targetId,
@@ -276,9 +282,12 @@ export function performAbilityAction(state: MatchState, input: AbilityActionInpu
       const stacks = getCadenceStacks(nextActor, targetId, input.nowMs);
       const rankData = ALDEN.e.ranks[rank - 1];
       const actorStats = calculateHeroStats(next, nextActor.heroEntityId);
-      const rawDamage = rankData.activeBaseDamage
-        + ALDEN.e.activeTotalAdRatio * actorStats.attackDamage
-        + rankData.bonusDamagePerConsumedStack * stacks;
+      const rawDamage = applyAbilityPowerToDamage(
+        rankData.activeBaseDamage
+          + ALDEN.e.activeTotalAdRatio * actorStats.attackDamage
+          + rankData.bonusDamagePerConsumedStack * stacks,
+        actorStats,
+      );
       const damage = applyDamageMutable(next, {
         sourceHeroEntityId: nextActor.heroEntityId,
         targetHeroEntityId: targetId,
@@ -307,7 +316,10 @@ export function performAbilityAction(state: MatchState, input: AbilityActionInpu
 
     for (const targetId of targets) {
       const target = getRequiredHero(next, targetId);
-      const rawDamage = rankData.baseDamage + ALDEN.r.totalAdRatio * actorStats.attackDamage;
+      const rawDamage = applyAbilityPowerToDamage(
+        rankData.baseDamage + ALDEN.r.totalAdRatio * actorStats.attackDamage,
+        actorStats,
+      );
       const damage = applyDamageMutable(next, {
         sourceHeroEntityId: nextActor.heroEntityId,
         targetHeroEntityId: targetId,
@@ -375,7 +387,10 @@ export function performBasicAttackAction(state: MatchState, input: BasicAttackIn
     const reprisal = getActiveStatus(nextActor, 'alden:reprisal', input.nowMs);
     if (reprisal?.rank) {
       const rankData = ALDEN.w.ranks[reprisal.rank - 1];
-      rawDamage += rankData.reprisalBaseDamage + ALDEN.w.reprisalTotalAdRatio * stats.attackDamage;
+      rawDamage += applyAbilityPowerToDamage(
+        rankData.reprisalBaseDamage + ALDEN.w.reprisalTotalAdRatio * stats.attackDamage,
+        stats,
+      );
       const stunDuration = applyTenacityToDuration(next, nextTarget.heroEntityId, rankData.stunDurationSeconds, input.nowMs);
       const statusId = `cc:stun:${nextActor.heroEntityId}`;
       nextTarget.runtime.statuses[statusId] = timedStatus(statusId, nextActor.heroEntityId, input.nowMs, stunDuration);
@@ -443,14 +458,23 @@ export function applyDamagePacket(state: MatchState, packet: DamagePacket, nowMs
   return { state: next, result };
 }
 
-export function calculateDamageAfterResistance(rawDamage: number, damageType: DamageType, physicalArmor: number, magicResistance: number): number {
+export function calculateDamageAfterResistance(
+  rawDamage: number,
+  damageType: DamageType,
+  physicalArmor: number,
+  magicResistance: number,
+  physicalDamageResistancePercent = 0,
+): number {
   if (rawDamage <= 0) return 0;
   if (damageType === 'true') return rawDamage;
   const resistance = damageType === 'physical' ? physicalArmor : magicResistance;
-  const multiplier = resistance >= 0
+  const resistanceMultiplier = resistance >= 0
     ? 100 / (100 + resistance)
     : 2 - 100 / (100 - resistance);
-  return rawDamage * multiplier;
+  const afterResistance = rawDamage * resistanceMultiplier;
+  if (damageType !== 'physical') return afterResistance;
+  const strengthReduction = Math.min(100, Math.max(0, physicalDamageResistancePercent));
+  return afterResistance * (1 - strengthReduction / 100);
 }
 
 function applyDamageMutable(state: MatchState, packet: DamagePacket, nowMs: number): DamageResult {
@@ -462,6 +486,7 @@ function applyDamageMutable(state: MatchState, packet: DamagePacket, nowMs: numb
     packet.damageType,
     snapshot.stats.physicalArmor,
     snapshot.stats.magicResistance,
+    snapshot.stats.physicalDamageResistancePercent,
   );
 
   let remaining = afterResistance;

@@ -1,8 +1,10 @@
-import type {
-  AbilityKey,
-  HeroAbilityDefinition,
-  HeroDefinition,
-  HeroStats,
+import { calculateDefinitionStatsAtLevel } from '../heroAttributes';
+import {
+  HeroPrimaryAttribute,
+  type AbilityKey,
+  type HeroAbilityDefinition,
+  type HeroDefinition,
+  type HeroStats,
 } from '../types';
 
 export const ALDEN_ID = 'H001' as const;
@@ -154,7 +156,7 @@ export const ALDEN: AldenGameplayDefinition = {
   weaponConfiguration: 'Espada larga de caballero, sin escudo',
   weaponDesignReason: 'Alden concentra toda su identidad de combate en una sola espada: inicia con ella, mantiene presión sostenida y convierte una guardia técnica de hoja en su principal herramienta defensiva.',
   lore: 'Alden fue el último caballero en abandonar las puertas de Valebrant cuando el reino cayó. Desde entonces lleva su espada no como símbolo de nobleza, sino como juramento: mientras él permanezca en pie, ningún enemigo cruzará la línea que protege.',
-  primaryAttribute: 'strength',
+  primaryAttribute: HeroPrimaryAttribute.STR,
   baseAttackDamage: 44,
   baseAttributes: {
     strength: 22,
@@ -163,8 +165,8 @@ export const ALDEN: AldenGameplayDefinition = {
   },
   attributeProgression: {
     strength: 3.4,
-    agility: 0,
-    intelligence: 0,
+    agility: 1.6,
+    intelligence: 1.4,
   },
   resource: {
     type: 'mana',
@@ -172,28 +174,34 @@ export const ALDEN: AldenGameplayDefinition = {
     reason: 'Limita la frecuencia con la que puede encadenar iniciación, mitigación y control sin recompensar únicamente recibir daño.',
   },
   baseStats: {
-    maxHp: 760,
-    maxResource: 300,
-    attackDamage: 66,
-    physicalArmor: 32,
+    maxHp: 200,
+    maxResource: 150,
+    attackDamage: 44,
+    physicalArmor: 29.48,
+    physicalDamageResistancePercent: 0,
     magicResistance: 28,
-    attackSpeed: 0.72,
+    attackSpeed: 0.62,
     movementSpeed: 325,
-    hpRegenPerSecond: 2.4,
-    resourceRegenPerSecond: 4.2,
+    hpRegenPerSecond: 0,
+    resourceRegenPerSecond: 1.2,
+    magicPower: 0,
+    abilityPowerPercent: 0,
     attackRange: 175,
     criticalChancePercent: 4,
   },
   statProgression: {
-    maxHp: { kind: 'linear', perLevel: 105 },
-    maxResource: { kind: 'linear', perLevel: 15 },
-    attackDamage: { kind: 'linear', perLevel: 3.4 },
-    physicalArmor: { kind: 'linear', perLevel: 1.9 },
+    maxHp: { kind: 'fixed' },
+    maxResource: { kind: 'fixed' },
+    attackDamage: { kind: 'fixed' },
+    physicalArmor: { kind: 'fixed' },
+    physicalDamageResistancePercent: { kind: 'fixed' },
     magicResistance: { kind: 'linear', perLevel: 1.15 },
-    attackSpeed: { kind: 'percentOfBase', percentPerLevel: 1.1 },
+    attackSpeed: { kind: 'fixed' },
     movementSpeed: { kind: 'fixed' },
-    hpRegenPerSecond: { kind: 'linear', perLevel: 0.14 },
-    resourceRegenPerSecond: { kind: 'linear', perLevel: 0.07 },
+    hpRegenPerSecond: { kind: 'fixed' },
+    resourceRegenPerSecond: { kind: 'fixed' },
+    magicPower: { kind: 'fixed' },
+    abilityPowerPercent: { kind: 'fixed' },
     attackRange: { kind: 'fixed' },
     criticalChancePercent: { kind: 'fixed' },
   },
@@ -285,22 +293,7 @@ export const ALDEN_ABILITY_UNLOCK_LEVELS: Record<AbilityKey, readonly number[]> 
 };
 
 export function getAldenStatsAtLevel(level: number): HeroStats {
-  if (!Number.isInteger(level) || level < 1 || level > ALDEN.maxLevel) {
-    throw new RangeError(`Alden level must be an integer from 1 to ${ALDEN.maxLevel}.`);
-  }
-
-  const levelsGained = level - 1;
-  const result = {} as HeroStats;
-  for (const key of Object.keys(ALDEN.baseStats) as (keyof HeroStats)[]) {
-    const base = ALDEN.baseStats[key];
-    const progression = ALDEN.statProgression[key];
-    if (progression.kind === 'fixed') result[key] = base;
-    if (progression.kind === 'linear') result[key] = base + progression.perLevel * levelsGained;
-    if (progression.kind === 'percentOfBase') {
-      result[key] = base * (1 + progression.percentPerLevel / 100 * levelsGained);
-    }
-  }
-  return result;
+  return calculateDefinitionStatsAtLevel(ALDEN, level);
 }
 
 export function getAldenAvailableAbilityRank(key: AbilityKey, heroLevel: number): number {

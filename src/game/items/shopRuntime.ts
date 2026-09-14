@@ -66,15 +66,6 @@ function runtimeNowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function getInventoryMagicPower(hero: MatchHeroState) {
-  let total = 0;
-  for (const slot of hero.inventory) {
-    const definition = slot.item ? getItemDefinition(slot.item.definitionId) : null;
-    total += numeric(definition?.stats.magic_power, 0);
-  }
-  return total;
-}
-
 function findMergeableStack(hero: MatchHeroState, item: Pick<InventoryItem, 'definitionId' | 'quantity'>) {
   const stackLimit = getItemStackLimit(item.definitionId);
   if (stackLimit <= 1) return null;
@@ -101,7 +92,7 @@ export function syncHeroItemRuntime(
     movementSpeed: stats.movementSpeed,
     baseMovementSpeed: Math.max(1, baseStats.movementSpeed),
     maxResource: stats.maxResource,
-    magicPower: getInventoryMagicPower(hero),
+    magicPower: stats.magicPower,
     updatedAtMs: nowMs,
   };
   heroItemRuntimeContexts.set(heroEntityId, context);
@@ -446,11 +437,8 @@ function numeric(value: unknown, fallback = 0) {
 }
 
 /**
- * Converts the economy-facing item vocabulary to the combat-stat vocabulary already used
- * by MatchHeroState. Primary attributes use deliberately explicit Dawnreach conversion
- * rates so their derived value remains deterministic and can be tuned in one place later.
- * Magic power deliberately stays in the item vocabulary; active-item spell formulas read
- * it directly so the item system remains independent from any one hero implementation.
+ * Converts direct item stats to HeroStats. STR/AGI/INT are deliberately NOT converted here:
+ * match/stats.ts resolves their global derived effects from the total attribute pool exactly once.
  */
 export function itemStatsToHeroModifiers(stats: ItemStats): ItemStatModifier[] {
   const modifiers: ItemStatModifier[] = [];
@@ -463,20 +451,8 @@ export function itemStatsToHeroModifiers(stats: ItemStats): ItemStatModifier[] {
     modifiers.push({ stat, mode: 'percent', value });
   };
 
-  if (stats.strength) {
-    addFlat('maxHp', stats.strength * 20);
-    addFlat('hpRegenPerSecond', stats.strength * 0.1);
-  }
-  if (stats.agility) {
-    addPercent('attackSpeed', stats.agility);
-    addFlat('physicalArmor', stats.agility * 0.15);
-  }
-  if (stats.intelligence) {
-    addFlat('maxResource', stats.intelligence * 12);
-    addFlat('resourceRegenPerSecond', stats.intelligence * 0.05);
-  }
-
   addFlat('attackDamage', stats.damage);
+  addFlat('magicPower', stats.magic_power);
   addFlat('physicalArmor', stats.armor);
   addPercent('attackSpeed', stats.attack_speed_pct);
   addFlat('movementSpeed', stats.move_speed_flat);

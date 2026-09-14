@@ -1,15 +1,18 @@
 import { ALDEN } from '../heroes/alden/gameplay';
-import { getHeroDefinition } from '../heroes/catalog';
-import type {
+import {
   HeroAttributes,
-  HeroDefinition,
-  HeroStatKey,
-  HeroStats,
-  ItemStatModifier,
-} from '../heroes/types';
+  applyHeroAttributeRules,
+  calculateDefinitionAttributesAtLevel,
+  calculateDefinitionBaseStatsAtLevel,
+  calculateDefinitionStatsAtLevel,
+} from '../heroes/heroAttributes';
+import { getHeroDefinition } from '../heroes/catalog';
+import type { HeroStatKey, HeroStats, ItemStatModifier } from '../heroes/types';
 import { getItemDefinition } from '../items/itemDatabase';
 import { getRequiredHero } from './matchState';
 import type { CombatStatsSnapshot, MatchHeroState, MatchState } from './types';
+
+export { calculateDefinitionAttributesAtLevel, calculateDefinitionStatsAtLevel } from '../heroes/heroAttributes';
 
 export interface HeroStatsContext {
   nowMs?: number;
@@ -22,55 +25,23 @@ export interface HeroDamageBreakdown {
   totalDamage: number;
 }
 
-export function calculateDefinitionStatsAtLevel(definition: HeroDefinition, level: number): HeroStats {
-  if (!Number.isInteger(level) || level < 1 || level > definition.maxLevel) {
-    throw new RangeError(`${definition.displayName} level must be an integer from 1 to ${definition.maxLevel}.`);
-  }
-
-  const levelsGained = level - 1;
-  const result = {} as HeroStats;
-  for (const key of Object.keys(definition.baseStats) as HeroStatKey[]) {
-    const base = definition.baseStats[key];
-    const progression = definition.statProgression[key];
-    switch (progression.kind) {
-      case 'fixed': result[key] = base; break;
-      case 'linear': result[key] = base + progression.perLevel * levelsGained; break;
-      case 'percentOfBase': result[key] = base * (1 + progression.percentPerLevel / 100 * levelsGained); break;
-    }
-  }
-  return result;
-}
-
-export function calculateDefinitionAttributesAtLevel(definition: HeroDefinition, level: number): HeroAttributes {
-  if (!Number.isInteger(level) || level < 1 || level > definition.maxLevel) {
-    throw new RangeError(`${definition.displayName} level must be an integer from 1 to ${definition.maxLevel}.`);
-  }
-
-  const levelsGained = level - 1;
-  return {
-    strength: Math.max(0, definition.baseAttributes.strength + definition.attributeProgression.strength * levelsGained),
-    agility: Math.max(0, definition.baseAttributes.agility + definition.attributeProgression.agility * levelsGained),
-    intelligence: Math.max(0, definition.baseAttributes.intelligence + definition.attributeProgression.intelligence * levelsGained),
-  };
-}
-
 export function calculateHeroAttributes(state: MatchState, heroEntityId: string): HeroAttributes {
   const hero = getRequiredHero(state, heroEntityId);
   const definition = getHeroDefinition(hero.definitionId);
-  const result = calculateDefinitionAttributesAtLevel(definition, hero.level);
+  const levelAttributes = calculateDefinitionAttributesAtLevel(definition, hero.level);
+  let strength = levelAttributes.str;
+  let agility = levelAttributes.agi;
+  let intelligence = levelAttributes.int;
 
   for (const slot of hero.inventory) {
     const item = slot.item ? getItemDefinition(slot.item.definitionId) : null;
     if (!item) continue;
-    result.strength += numeric(item.stats.strength);
-    result.agility += numeric(item.stats.agility);
-    result.intelligence += numeric(item.stats.intelligence);
+    strength += numeric(item.stats.strength);
+    agility += numeric(item.stats.agility);
+    intelligence += numeric(item.stats.intelligence);
   }
 
-  result.strength = Math.max(0, result.strength);
-  result.agility = Math.max(0, result.agility);
-  result.intelligence = Math.max(0, result.intelligence);
-  return result;
+  return new HeroAttributes(definition.primaryAttribute, strength, agility, intelligence);
 }
 
 export function calculateHeroStats(
@@ -80,18 +51,17 @@ export function calculateHeroStats(
 ): HeroStats {
   const hero = getRequiredHero(state, heroEntityId);
   const definition = getHeroDefinition(hero.definitionId);
-  const definitionStats = calculateDefinitionStatsAtLevel(definition, hero.level);
-  let stats = applyItemModifiers(definitionStats, hero);
-  stats = applyTimedItemStatEffects(stats, hero, context.nowMs ?? 0);
-  stats = applyPrimaryAttributeAttackDamage(
-    stats,
-    definitionStats,
+  const attributes = calculateHeroAttributes(state, heroEntityId);
+  let stats = applyHeroAttributeRules(
+    calculateDefinitionBaseStatsAtLevel(definition, hero.level),
     definition,
-    calculateHeroAttributes(state, heroEntityId),
+    attributes,
   );
+  stats = applyItemModifiers(stats, hero);
+  stats = applyTimedItemStatEffects(stats, hero, context.nowMs ?? 0);
 
   if (hero.definitionId === ALDEN.id) stats = applyAldenConditionalStatEffects(stats, hero, context);
-  return stats;
+  return sanitizeStats(stats);
 }
 
 export function calculateHeroDamageBreakdown(
@@ -103,12 +73,18 @@ export function calculateHeroDamageBreakdown(
   const definition = getHeroDefinition(hero.definitionId);
   const attributes = calculateHeroAttributes(state, heroEntityId);
   const stats = calculateHeroStats(state, heroEntityId, context);
-  const baseDamage = Math.max(0, definition.baseAttackDamage + attributes[definition.primaryAttribute]);
+  const baseDamage = Math.max(0, attributes.CalculateAttackDamage(definition.baseAttackDamage));
   return {
     baseDamage,
     itemBonusDamage: Math.max(0, stats.attackDamage - baseDamage),
     totalDamage: stats.attackDamage,
   };
+}
+
+/** Applies the global INT ability-damage rule to a resolved ability damage amount. */
+export function applyAbilityPowerToDamage(rawDamage: number, stats: Pick<HeroStats, 'abilityPowerPercent'>): number {
+  if (!Number.isFinite(rawDamage) || rawDamage <= 0) return 0;
+  return rawDamage * (1 + Math.max(0, stats.abilityPowerPercent) / 100);
 }
 
 export function calculateCombatStats(
@@ -176,20 +152,6 @@ function applyTimedItemStatEffects(stats: HeroStats, hero: MatchHeroState, nowMs
   return sanitizeStats(result);
 }
 
-function applyPrimaryAttributeAttackDamage(
-  stats: HeroStats,
-  definitionStats: HeroStats,
-  definition: HeroDefinition,
-  attributes: HeroAttributes,
-) {
-  const result = { ...stats };
-  const damageBeyondDefinition = result.attackDamage - definitionStats.attackDamage;
-  result.attackDamage = definition.baseAttackDamage
-    + attributes[definition.primaryAttribute]
-    + damageBeyondDefinition;
-  return sanitizeStats(result);
-}
-
 function applyAldenConditionalStatEffects(
   stats: HeroStats,
   hero: MatchHeroState,
@@ -218,10 +180,12 @@ function applyAldenConditionalStatEffects(
 function sanitizeStats(stats: HeroStats): HeroStats {
   const result = { ...stats };
   const nonNegative: HeroStatKey[] = [
-    'maxHp', 'maxResource', 'attackDamage', 'attackSpeed', 'movementSpeed', 'hpRegenPerSecond',
-    'resourceRegenPerSecond', 'attackRange', 'criticalChancePercent',
+    'maxHp', 'maxResource', 'attackDamage', 'physicalDamageResistancePercent', 'attackSpeed', 'movementSpeed',
+    'hpRegenPerSecond', 'resourceRegenPerSecond', 'magicPower', 'abilityPowerPercent', 'attackRange',
+    'criticalChancePercent',
   ];
   for (const key of nonNegative) result[key] = Math.max(0, result[key]);
+  result.physicalDamageResistancePercent = Math.min(100, result.physicalDamageResistancePercent);
   result.criticalChancePercent = Math.min(100, result.criticalChancePercent);
   return result;
 }
