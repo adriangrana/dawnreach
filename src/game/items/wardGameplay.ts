@@ -40,16 +40,12 @@ export const WARD_RULES = {
   },
 } as const;
 
-// The generic combat layer subtracts ordinary attack damage before publishing its event.
-// Wards intentionally do not use HP damage, so keep a large hidden sentinel HP value and
-// normalize it after each attack event. The visible durability is tracked as hit charges.
-export const WARD_INTERNAL_HP = 1_000_000;
-
 const WARD_TYPE_KEY = 'dawnreachWardType';
 const WARD_OWNER_KEY = 'dawnreachWardOwnerEntityId';
 const WARD_PLACED_AT_KEY = 'dawnreachWardPlacedAtMs';
 const WARD_EXPIRES_AT_KEY = 'dawnreachWardExpiresAtMs';
 const WARD_HITS_REMAINING_KEY = 'dawnreachWardHitsRemaining';
+const WARD_COUNTER_INSTALLED_KEY = 'dawnreachWardHitCounterInstalled';
 const REVEAL_CREDIT_BLUE_KEY = 'dawnreachWardRevealCreditBlue';
 const REVEAL_CREDIT_RED_KEY = 'dawnreachWardRevealCreditRed';
 const MATCH_EPOCH_MS = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -59,7 +55,6 @@ type WardRuntime = {
   registry: GameEntityRegistry;
   ownerEntityId: string;
   wardType: WardType;
-  durabilityDamage: number;
   resolvingDeath: boolean;
 };
 
@@ -79,6 +74,7 @@ function revealCreditKey(team: TeamId) {
 function publishWardRuntime(entity: GameEntity) {
   entity.root.userData.maxHp = entity.maxHp;
   entity.root.userData.currentHp = entity.currentHp;
+  entity.root.userData[WARD_HITS_REMAINING_KEY] = entity.currentHp;
   publishWorldEntityRuntime(entity.id, {
     level: entity.level,
     maxHp: entity.maxHp,
@@ -87,6 +83,37 @@ function publishWardRuntime(entity: GameEntity) {
     currentResource: entity.currentResource,
     alive: entity.alive,
   });
+}
+
+function installWardHitCounter(entity: GameEntity, charges: number) {
+  if (entity.root.userData[WARD_COUNTER_INSTALLED_KEY] === true) return;
+  const maximum = Math.max(1, Math.round(charges));
+  let remaining = maximum;
+  entity.maxHp = maximum;
+
+  Object.defineProperty(entity, 'currentHp', {
+    configurable: true,
+    enumerable: true,
+    get: () => remaining,
+    set: (requested: number) => {
+      const next = Number.isFinite(requested) ? requested : remaining;
+      if (next < remaining) {
+        // Any ordinary damaging attack consumes exactly one durability charge regardless
+        // of raw damage. Hero attacks consume their extra charge in the combat listener.
+        remaining = Math.max(0, remaining - 1);
+      } else if (next > remaining) {
+        // Used only to undo an illegal allied hit before the deny window opens.
+        remaining = Math.min(maximum, next);
+      }
+      entity.root.userData.currentHp = remaining;
+      entity.root.userData[WARD_HITS_REMAINING_KEY] = remaining;
+    },
+  });
+
+  entity.root.userData[WARD_COUNTER_INSTALLED_KEY] = true;
+  entity.root.userData.maxHp = maximum;
+  entity.root.userData.currentHp = maximum;
+  entity.root.userData[WARD_HITS_REMAINING_KEY] = maximum;
 }
 
 function grantObserverWardReward(runtime: WardRuntime, source: GameEntity | null, atMs: number) {
@@ -148,33 +175,28 @@ function ensureCombatSubscription() {
 
     if (event.reason === 'damage' && entity.alive && !runtime.resolvingDeath) {
       if (source?.team === entity.team && !isWardDeniable(entity, source.team, event.atMs)) {
-        // Defensive guard for future allied-damage paths. Ordinary command targeting already
-        // refuses this attack, but the ward rules remain authoritative if another system hits it.
-        entity.currentHp = WARD_INTERNAL_HP;
-        entity.maxHp = WARD_INTERNAL_HP;
+        entity.currentHp = Math.min(entity.maxHp, entity.currentHp + 1);
         publishWardRuntime(entity);
         return;
       }
 
       const rules = WARD_RULES[wardType];
-      const hitWeight = source?.kind === 'hero'
-        ? rules.nonHeroHitsToDestroy / rules.heroHitsToDestroy
-        : 1;
-      runtime.durabilityDamage += hitWeight;
-      const remaining = Math.max(0, rules.nonHeroHitsToDestroy - runtime.durabilityDamage);
-      entity.root.userData[WARD_HITS_REMAINING_KEY] = remaining;
+      const heroChargeWeight = rules.nonHeroHitsToDestroy / rules.heroHitsToDestroy;
+      const extraHeroCharges = source?.kind === 'hero'
+        ? Math.max(0, Math.round(heroChargeWeight) - 1)
+        : 0;
 
-      if (remaining > 0) {
-        // Undo ordinary HP damage: wards die by hit count, not by attack damage magnitude.
-        entity.maxHp = WARD_INTERNAL_HP;
-        entity.currentHp = WARD_INTERNAL_HP;
-        entity.alive = true;
-        publishWardRuntime(entity);
+      for (let charge = 0; charge < extraHeroCharges && entity.currentHp > 0; charge++) {
+        entity.currentHp = entity.currentHp - 1;
+      }
+      entity.root.userData[WARD_HITS_REMAINING_KEY] = entity.currentHp;
+
+      if (entity.currentHp > 0) {
+        if (extraHeroCharges > 0) publishWardRuntime(entity);
         return;
       }
 
       runtime.resolvingDeath = true;
-      entity.currentHp = 0;
       entity.alive = false;
       publishWardRuntime(entity);
       emitWorldCombatEvent({
@@ -236,17 +258,15 @@ export function configureWardEntity(
   entity.root.userData[WARD_OWNER_KEY] = options.ownerEntityId;
   entity.root.userData[WARD_PLACED_AT_KEY] = options.placedAtMs;
   entity.root.userData[WARD_EXPIRES_AT_KEY] = options.expiresAtMs;
-  entity.root.userData[WARD_HITS_REMAINING_KEY] = rules.nonHeroHitsToDestroy;
   entity.root.userData.wardTrueSight = rules.trueSight;
-  entity.maxHp = WARD_INTERNAL_HP;
-  entity.currentHp = WARD_INTERNAL_HP;
+  installWardHitCounter(entity, rules.nonHeroHitsToDestroy);
+  entity.alive = true;
   publishWardRuntime(entity);
   activeWards.set(entity.id, {
     entity,
     registry,
     ownerEntityId: options.ownerEntityId,
     wardType: options.wardType,
-    durabilityDamage: 0,
     resolvingDeath: false,
   });
   ensureCombatSubscription();
