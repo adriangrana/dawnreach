@@ -22,6 +22,7 @@ export function getTowerTierConfig(tier: number): TowerTierConfig {
     case 2: return TOWER_TIERS['2'];
     case 3: return TOWER_TIERS['3'];
     case 4: return TOWER_TIERS['4'];
+    default: return TOWER_TIERS['1'];
   }
 }
 
