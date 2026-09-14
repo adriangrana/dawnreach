@@ -1,21 +1,27 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "defaultTower": {
-    "level": 3,
+    "level": 1,
     "maxHp": 1800,
+    "baseArmor": 12,
+    "denyHealthFraction": 0.1,
     "attack": {
-      "damage": 165,
-      "intervalSeconds": 1.0,
+      "damage": 90,
+      "intervalSeconds": 0.9,
       "acquireWindupSeconds": 0.18,
       "range": 8.5,
       "projectileSpeed": 13.5,
-      "projectileArcHeight": 0.72
+      "projectileArcHeight": 0.72,
+      "damageType": "physical",
+      "attackType": "siege"
     },
     "vision": {
       "radius": 15.0,
-      "height": 4.5
+      "height": 4.5,
+      "trueSightRadius": 9.0
     },
     "auraRadius": 8.5,
+    "outOfCombatDelaySeconds": 5,
     "abilities": [
       {
         "id": "backdoor-protection",
@@ -23,7 +29,7 @@
         "englishName": "Backdoor Protection",
         "type": "passive",
         "level": 1,
-        "description": "La propia torre recibe menos daño y regenera vida rápidamente mientras no haya creeps enemigos cerca. Esta protección no se comparte con los aliados cercanos.",
+        "description": "Las torres Tier 2, Tier 3 y Tier 4 reciben menos daño y regeneran vida rápidamente mientras no haya creeps enemigos cerca. Las Tier 1 no poseen esta protección.",
         "eligibleKinds": ["tower"],
         "effects": {
           "damageReductionPercent": 50,
@@ -33,16 +39,16 @@
       },
       {
         "id": "reinforced",
-        "name": "Reforzado",
-        "englishName": "Reinforced",
+        "name": "Protección de Torre",
+        "englishName": "Tower Protection",
         "type": "passive",
-        "level": 2,
-        "description": "La torre conserva su estado estructural Reforzado y, además, proyecta Protección de Torre sobre héroes y creeps aliados cercanos.",
+        "level": 1,
+        "description": "Todas las torres proyectan una protección local sobre héroes y creeps aliados, aumentando armadura y regeneración de vida mientras permanezcan bajo la torre.",
         "eligibleKinds": ["tower"],
         "effects": {
-          "bonusDamageVsReinforcedPercent": 150,
-          "heroAttackDamageReductionPercent": 50,
-          "nonHeroAttackDamageReductionPercent": 30,
+          "bonusDamageVsReinforcedPercent": 0,
+          "heroAttackDamageReductionPercent": 0,
+          "nonHeroAttackDamageReductionPercent": 0,
           "aura": {
             "statusName": "Protección de Torre",
             "eligibleKinds": ["hero", "creep"],
@@ -53,5 +59,43 @@
         }
       }
     ]
+  },
+  "tiers": {
+    "1": {
+      "maxHp": 1800,
+      "baseArmor": 12,
+      "damageMin": 88,
+      "damageMax": 92,
+      "backdoorProtection": false,
+      "outOfCombatRegenPerSecond": 0,
+      "barracksArmorPerAliveBarracks": 0
+    },
+    "2": {
+      "maxHp": 2500,
+      "baseArmor": 16,
+      "damageMin": 170,
+      "damageMax": 174,
+      "backdoorProtection": true,
+      "outOfCombatRegenPerSecond": 5,
+      "barracksArmorPerAliveBarracks": 0
+    },
+    "3": {
+      "maxHp": 2500,
+      "baseArmor": 16,
+      "damageMin": 170,
+      "damageMax": 174,
+      "backdoorProtection": true,
+      "outOfCombatRegenPerSecond": 0,
+      "barracksArmorPerAliveBarracks": 0
+    },
+    "4": {
+      "maxHp": 2600,
+      "baseArmor": 21,
+      "damageMin": 170,
+      "damageMax": 174,
+      "backdoorProtection": true,
+      "outOfCombatRegenPerSecond": 0,
+      "barracksArmorPerAliveBarracks": 4
+    }
   }
 }
