@@ -16,6 +16,7 @@ const TOWER_TRUE_SIGHT_BLUE_KEY = 'dawnreachTrueSightBlue';
 const TOWER_TRUE_SIGHT_RED_KEY = 'dawnreachTrueSightRed';
 const ITEM_TRUE_SIGHT_BLUE_KEY = 'dawnreachItemTrueSightBlue';
 const ITEM_TRUE_SIGHT_RED_KEY = 'dawnreachItemTrueSightRed';
+const BASE_TARGETABLE_KEY = 'dawnreachInvisibleBaseTargetable';
 
 let disposeActiveVisionSystem: (() => void) | null = null;
 const sourcePosition = new THREE.Vector3();
@@ -70,6 +71,14 @@ function projectSentryTrueSight(entities: readonly GameEntity[]) {
   }
 }
 
+function syncInvisibleTargetability(entity: GameEntity, visible: boolean) {
+  if (typeof entity.root.userData[BASE_TARGETABLE_KEY] !== 'boolean') {
+    entity.root.userData[BASE_TARGETABLE_KEY] = entity.targetable;
+  }
+  const baseTargetable = entity.root.userData[BASE_TARGETABLE_KEY] === true;
+  entity.targetable = baseTargetable && visible;
+}
+
 export function ensureItemVisionWorldSystem(
   scene: THREE.Scene,
   registry: GameEntityRegistry,
@@ -113,6 +122,7 @@ export function ensureItemVisionWorldSystem(
         const itemTrueSight = entity.root.userData[itemTrueSightKey] === true;
         const visible = inLineOfSight && (detected || towerTrueSight || itemTrueSight);
         entity.revealed = visible;
+        syncInvisibleTargetability(entity, visible);
         if (entity.visibilityPolicy === 'vision-only') entity.root.visible = visible;
       }
     }
@@ -129,9 +139,7 @@ export function ensureItemVisionWorldSystem(
     delete scene.userData[SYSTEM_KEY];
     if (disposeActiveVisionSystem === dispose) disposeActiveVisionSystem = null;
   };
-
-  const system: ItemVisionWorldSystem = { dispose };
-  scene.userData[SYSTEM_KEY] = system;
+  scene.userData[SYSTEM_KEY] = { dispose } satisfies ItemVisionWorldSystem;
   disposeActiveVisionSystem = dispose;
-  return system;
+  return scene.userData[SYSTEM_KEY] as ItemVisionWorldSystem;
 }
