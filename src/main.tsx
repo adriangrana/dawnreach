@@ -7,6 +7,7 @@ import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
+import './performance/webglWarmup';
 import './styles.css';
 import './hud-overrides.css';
 import './command-controls.css';
