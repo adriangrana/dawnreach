@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
@@ -72,6 +73,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /></React.StrictMode>,
 );
 
+const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
 mountCombatStatsOverlay();
 const disposeResponsiveHudScale = mountResponsiveHudScale();
 const disposeHeroFunctionKeyControls = mountHeroFunctionKeyControls();
@@ -84,6 +86,7 @@ void waitForDawnreachReady().then(dismissBootSplash);
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    disposeBrowserInteractionGuards();
     disposeResponsiveHudScale();
     disposeHeroFunctionKeyControls();
     disposeInventoryControls();
