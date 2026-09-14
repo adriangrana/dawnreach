@@ -1,4 +1,5 @@
 import { getTowerAbility } from '../gameplay/towerConfig';
+import { getTowerLane, getTowerTier, isTowerInvulnerable } from '../gameplay/towerRules';
 import type { GameEntity } from './gameEntities';
 import { getTowerAuraState } from './towerAuras';
 import { getWorldEntityRuntime, type WorldStatusRuntimeSnapshot } from './worldCombatBridge';
@@ -157,12 +158,40 @@ function runtimeStatusView(status: WorldStatusRuntimeSnapshot, atMs: number): En
   };
 }
 
+function towerInvulnerabilityView(entity: GameEntity): EntityStatusView | null {
+  if (entity.kind !== 'tower' || !isTowerInvulnerable(entity)) return null;
+
+  const tier = getTowerTier(entity);
+  const lane = getTowerLane(entity);
+  const laneLabel = lane === 'top' ? 'superior' : lane === 'bot' ? 'inferior' : 'central';
+  const description = tier === 4
+    ? 'Esta torre no puede recibir daño hasta que al menos una Torre Tier 3 de su equipo haya sido destruida y una línea quede abierta.'
+    : `Esta torre no puede recibir daño mientras la Torre Tier ${tier - 1} de la línea ${laneLabel} siga en pie.`;
+
+  return {
+    id: 'tower:invulnerable',
+    name: 'Invulnerable',
+    description,
+    tone: 'positive',
+    // Reuse the dedicated shield glyph already present in the status tray so this remains
+    // visually distinct from the gate-shaped Backdoor Protection icon.
+    icon: 'guard',
+    rank: tier,
+    sourceLabel: tier === 4
+      ? 'Protección estructural · Requiere abrir una línea'
+      : `Protección estructural · Tier ${tier - 1} previo`,
+  };
+}
+
 function towerAuraViews(entity: GameEntity): EntityStatusView[] {
   const aura = getTowerAuraState(entity);
   const views: EntityStatusView[] = [];
   const reinforced = getTowerAbility('reinforced');
   const backdoor = getTowerAbility('backdoor-protection');
   const reinforcedEffects = reinforced?.effects as ReinforcedEffects | undefined;
+  const invulnerability = towerInvulnerabilityView(entity);
+
+  if (invulnerability) views.push(invulnerability);
 
   if (entity.kind === 'tower' && aura.reinforced && reinforced) {
     views.push({
