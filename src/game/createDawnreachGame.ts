@@ -568,6 +568,26 @@ export async function createDawnreachGame(
     return best;
   };
 
+  const findNearestAcquisitionTarget = (exclude: GameEntity | null = null) => {
+    let best: GameEntity | null = null;
+    let bestDistance = Infinity;
+
+    for (const entity of entityRegistry.values()) {
+      if (entity === exclude || !isAutomaticAttackMoveTarget(entity)) continue;
+      entity.root.getWorldPosition(attackMoveCandidatePosition);
+      const distance = Math.hypot(
+        attackMoveCandidatePosition.x - hero.root.position.x,
+        attackMoveCandidatePosition.z - hero.root.position.z,
+      );
+      const acquisitionRange = Math.max(ATTACK_MOVE_ACQUISITION_RANGE, getTargetAttackReach(entity));
+      if (distance > acquisitionRange || distance >= bestDistance) continue;
+      best = entity;
+      bestDistance = distance;
+    }
+
+    return best;
+  };
+
   const getAttackCooldownSeconds = () => {
     const speed = getHeroState?.()?.stats.attackSpeed;
     if (!Number.isFinite(speed) || !speed || speed <= 0) return FALLBACK_ATTACK_COOLDOWN;
@@ -618,6 +638,26 @@ export async function createDawnreachGame(
     planMovementRoute(point, true);
   };
 
+  const continueTargetAttackChain = (finishedTarget: GameEntity) => {
+    pendingAttackTarget = null;
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    clearMovementRoute();
+
+    const nextTarget = findNearestAcquisitionTarget(finishedTarget);
+    if (!nextTarget) {
+      attackOrder = null;
+      attackMarker.visible = false;
+      return false;
+    }
+
+    attackOrder = { kind: 'target', target: nextTarget };
+    // This target was acquired automatically, not clicked by the player, so do not create
+    // another command marker. The thin hostile-target indicator is handled independently.
+    attackMarker.visible = false;
+    return true;
+  };
+
   const applyBasicAttackImpact = (target: GameEntity) => {
     if (!isHostileAttackTarget(target)) return;
     const overlay = getHeroState?.() ?? null;
@@ -662,10 +702,7 @@ export async function createDawnreachGame(
     });
 
     if (!aliveAfterHit && attackOrder?.kind === 'target' && attackOrder.target === target) {
-      attackOrder = null;
-      pendingAttackTarget = null;
-      clearMovementRoute();
-      attackMarker.visible = false;
+      continueTargetAttackChain(target);
     }
   };
 
@@ -993,10 +1030,14 @@ export async function createDawnreachGame(
     if (!movementLocked && attackOrder?.kind === 'target') {
       const target = attackOrder.target;
       if (!target.root.parent || !isHostileAttackTarget(target)) {
-        attackOrder = null;
-        pendingAttackTarget = null;
-        clearMovementRoute();
-        attackMarker.visible = false;
+        const targetWasDefeated = target.currentHp <= 0 || target.alive === false;
+        if (targetWasDefeated) continueTargetAttackChain(target);
+        else {
+          attackOrder = null;
+          pendingAttackTarget = null;
+          clearMovementRoute();
+          attackMarker.visible = false;
+        }
       } else {
         pursueAttackTarget(target, true);
       }
