@@ -10,11 +10,11 @@ const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
 function worldBarWidth(kind: GameEntityKind) {
   switch (kind) {
     case 'hero': return 4.8;
-    case 'creep': return 2.15;
-    case 'tower': return 3.35;
-    case 'building': return 4.35;
-    case 'shop': return 3.25;
-    case 'jungle-creature': return 2.45;
+    case 'creep': return 1.82;
+    case 'tower': return 3.15;
+    case 'building': return 4.0;
+    case 'shop': return 3.0;
+    case 'jungle-creature': return 2.18;
   }
 }
 
@@ -159,46 +159,48 @@ function drawHealthOnlyFrame(
   const palette = healthPalette(entity.team);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const frame = ctx.createLinearGradient(0, 4, 0, 44);
-  frame.addColorStop(0, '#dbe2df');
-  frame.addColorStop(0.48, '#879590');
-  frame.addColorStop(1, '#3b4542');
-  ctx.fillStyle = 'rgba(5, 8, 7, 0.82)';
-  roundRect(ctx, 4, 6, 312, 36, 6);
-  ctx.fill();
-  ctx.fillStyle = frame;
-  roundRect(ctx, 7, 9, 306, 30, 4);
-  ctx.fill();
+  // Non-hero bars intentionally stay flat and quiet. The previous metallic shell used
+  // several nested frames, which made creeps and structures visually heavier than their
+  // actual gameplay importance. Keep only a slim dark track, a flat team fill and very
+  // subtle segment ticks. The hero overhead remains untouched above.
+  const x = 5;
+  const y = entity.kind === 'creep' ? 10 : 8;
+  const width = canvas.width - 10;
+  const height = entity.kind === 'creep' ? 8 : 10;
 
+  ctx.fillStyle = 'rgba(3, 7, 8, 0.82)';
+  ctx.fillRect(x, y, width, height);
+
+  const innerX = x + 1;
+  const innerY = y + 1;
+  const innerWidth = width - 2;
+  const innerHeight = height - 2;
   ctx.fillStyle = palette.dark;
-  roundRect(ctx, 11, 13, 298, 22, 2);
-  ctx.fill();
+  ctx.fillRect(innerX, innerY, innerWidth, innerHeight);
 
-  const fillWidth = 294 * fraction;
+  const fillWidth = innerWidth * fraction;
   if (fillWidth > 0) {
-    const health = ctx.createLinearGradient(0, 14, 0, 34);
-    health.addColorStop(0, palette.top);
-    health.addColorStop(1, palette.bottom);
-    ctx.fillStyle = health;
-    ctx.fillRect(13, 15, fillWidth, 18);
+    ctx.fillStyle = entity.team === 'blue'
+      ? '#55c936'
+      : entity.team === 'red'
+        ? '#d7473e'
+        : '#cea83c';
+    ctx.fillRect(innerX, innerY, fillWidth, innerHeight);
+
+    // A one-pixel highlight keeps the fill readable without reintroducing a bevel/frame.
+    ctx.fillStyle = entity.team === 'blue'
+      ? 'rgba(154, 238, 91, 0.42)'
+      : entity.team === 'red'
+        ? 'rgba(255, 119, 106, 0.42)'
+        : 'rgba(247, 214, 95, 0.42)';
+    ctx.fillRect(innerX, innerY, fillWidth, 1);
   }
 
-  ctx.fillStyle = entity.team === 'red'
-    ? 'rgba(56, 5, 5, 0.42)'
-    : entity.team === 'neutral'
-      ? 'rgba(52, 39, 6, 0.42)'
-      : 'rgba(4, 12, 5, 0.38)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
   for (let segment = 1; segment < segments; segment++) {
-    const x = 13 + 294 * segment / segments;
-    ctx.fillRect(x, 15, 1.25, 18);
+    const sx = innerX + innerWidth * segment / segments;
+    ctx.fillRect(sx, innerY, 1, innerHeight);
   }
-
-  ctx.fillStyle = entity.team === 'blue'
-    ? 'rgba(75, 211, 73, 0.95)'
-    : entity.team === 'red'
-      ? 'rgba(255, 91, 78, 0.95)'
-      : 'rgba(233, 195, 89, 0.95)';
-  ctx.fillRect(15, 11, 290, 2);
 }
 
 function entitySignature(entity: GameEntity) {
@@ -243,7 +245,7 @@ export function attachEntityOverhead(entity: GameEntity) {
   const hero = entity.kind === 'hero';
   const canvas = document.createElement('canvas');
   canvas.width = hero ? 440 : 320;
-  canvas.height = hero ? 88 : 48;
+  canvas.height = hero ? 88 : 28;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
@@ -274,7 +276,7 @@ export function attachEntityOverhead(entity: GameEntity) {
   const visibleWorldHeight = bounds.isEmpty()
     ? entity.visionHeight
     : Math.max(entity.visionHeight, bounds.max.y - rootPosition.y);
-  const margin = hero ? 0.48 : 0.58;
+  const margin = hero ? 0.48 : entity.kind === 'creep' ? 0.34 : 0.46;
   const safeScaleX = Math.max(0.001, Math.abs(worldScale.x));
   const safeScaleY = Math.max(0.001, Math.abs(worldScale.y));
   const worldWidth = worldBarWidth(entity.kind);
