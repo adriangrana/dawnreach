@@ -79,6 +79,9 @@ const HEIGHT_CACHE_STEP = 0.18;
 const HEIGHT_STRIDE = 8192;
 const HEIGHT_OFFSET = 2048;
 const HEIGHT_DAMPING = 30;
+const LANE_CREEP_MOVE_SPEED = 3;
+const RANGED_FORMATION_TRAILING_OFFSET = 3.75;
+const SIEGE_FORMATION_TRAILING_OFFSET = 4.8;
 const TEMP_A = new THREE.Vector3();
 const TEMP_B = new THREE.Vector3();
 const SURFACE_RAY = new THREE.Raycaster();
@@ -102,6 +105,7 @@ export const LANE_CREEP_TUNING = {
   maximumLifetimeSeconds: 120,
   visionLeaderRebalanceSeconds: 0.45,
   candidateRefreshSeconds: 1,
+  moveSpeed: LANE_CREEP_MOVE_SPEED,
 } as const;
 
 const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
@@ -110,7 +114,7 @@ const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
     damage: 24,
     attackRange: 1.2,
     attackInterval: 1,
-    moveSpeed: 3,
+    moveSpeed: LANE_CREEP_MOVE_SPEED,
     selectionRadius: 0.56,
     collisionRadius: 0.34,
   },
@@ -119,7 +123,7 @@ const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
     damage: 24,
     attackRange: 1.2,
     attackInterval: 1,
-    moveSpeed: 3,
+    moveSpeed: LANE_CREEP_MOVE_SPEED,
     selectionRadius: 0.58,
     collisionRadius: 0.35,
   },
@@ -128,7 +132,7 @@ const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
     damage: 28,
     attackRange: 4.35,
     attackInterval: 1.2,
-    moveSpeed: 3,
+    moveSpeed: LANE_CREEP_MOVE_SPEED,
     selectionRadius: 0.54,
     collisionRadius: 0.32,
   },
@@ -137,7 +141,7 @@ const CREEP_STATS: Record<LaneCreepType, CreepStats> = {
     damage: 58,
     attackRange: 5,
     attackInterval: 2,
-    moveSpeed: 2.45,
+    moveSpeed: LANE_CREEP_MOVE_SPEED,
     selectionRadius: 0.82,
     collisionRadius: 0.48,
   },
@@ -314,7 +318,14 @@ class LaneCreepManager {
       : formationIndex === 3
         ? 0
         : (formationIndex - (formationSize - 1) / 2) * 0.66;
-    const trailingOffset = formationIndex < 3 ? 0 : formationIndex === 3 ? 1 : 1.8;
+    // The ranged creep has over three world units more attack reach than the melee row.
+    // Giving the rear line a matching lane offset prevents it from entering attack range
+    // before the three frontline creeps reach the same objective.
+    const trailingOffset = formationIndex < 3
+      ? 0
+      : formationIndex === 3
+        ? RANGED_FORMATION_TRAILING_OFFSET
+        : SIEGE_FORMATION_TRAILING_OFFSET;
     const stats = CREEP_STATS[type];
 
     const rawSpawnX = start[0] + sideX * lateralSlot - dirX * trailingOffset;
