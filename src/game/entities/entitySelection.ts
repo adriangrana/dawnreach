@@ -708,10 +708,7 @@ export function createEntitySelectionController(
 
   const pick = (raycaster: THREE.Raycaster) => {
     const selectable = registry.selectable().filter(canSelect);
-    if (selectable.length === 0) {
-      setSelected(null);
-      return null;
-    }
+    if (selectable.length === 0) return null;
 
     const roots = selectable.map(entity => entity.root);
     const hits = raycaster.intersectObjects(roots, true);
@@ -722,7 +719,8 @@ export function createEntitySelectionController(
       return entity;
     }
 
-    setSelected(null);
+    // A normal left-click miss means terrain/empty space: preserve the current selection.
+    // Explicit deselection remains available through select(null) for future UI commands.
     return null;
   };
 
