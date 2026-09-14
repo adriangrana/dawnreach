@@ -5,6 +5,7 @@ import { calculateDefinitionStatsAtLevel, calculateHeroStats } from '../match/st
 import type { MatchHeroState, MatchState } from '../match/types';
 import { isLocalHeroNearShop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
+import { canMergeItemStacks, getItemStackLimit } from './itemStacking';
 
 export type ShopTransactionReason = 'unknown-item' | 'not-enough-gold' | 'inventory-full' | 'out-of-shop-range' | null;
 export type ItemUseReason = 'missing-item' | 'not-active' | 'cooldown' | 'not-enough-resource' | 'dead' | null;
@@ -74,6 +75,15 @@ function getInventoryMagicPower(hero: MatchHeroState) {
   return total;
 }
 
+function findMergeableStack(hero: MatchHeroState, item: Pick<InventoryItem, 'definitionId' | 'quantity'>) {
+  const stackLimit = getItemStackLimit(item.definitionId);
+  if (stackLimit <= 1) return null;
+  return hero.inventory.find(slot => (
+    slot.item?.definitionId === item.definitionId
+    && slot.item.quantity + Math.max(1, item.quantity) <= stackLimit
+  )) ?? null;
+}
+
 export function syncHeroItemRuntime(
   state: MatchState,
   heroEntityId: string,
@@ -130,9 +140,18 @@ export function purchaseShopItem(
   const hero = getRequiredHero(next, heroEntityId);
   hero.gold = Math.max(0, hero.gold - definition.cost);
   const item = createInventoryItem(definition, instanceId);
-  const emptySlot = hero.inventory.find(slot => slot.item === null);
   const nearShop = isLocalHeroNearShop();
+  const stackSlot = nearShop ? findMergeableStack(hero, item) : null;
 
+  if (stackSlot?.item) {
+    stackSlot.item.quantity += item.quantity;
+    stackSlot.item.cooldownReadyAtMs = Math.max(stackSlot.item.cooldownReadyAtMs, item.cooldownReadyAtMs);
+    const stackedItem = structuredClone(stackSlot.item);
+    syncHeroItemRuntime(next, heroEntityId);
+    return { match: next, definition, item: stackedItem, ok: true, dropped: false, reason: null };
+  }
+
+  const emptySlot = hero.inventory.find(slot => slot.item === null);
   if (nearShop && emptySlot) {
     emptySlot.item = item;
     syncHeroItemRuntime(next, heroEntityId);
@@ -158,12 +177,22 @@ export function pickUpGroundItem(
   const definition = getItemDefinition(item.definitionId);
   if (!definition) return { match: state, definition: null, item: null, ok: false, reason: 'unknown-item' };
 
-  if (!heroHasInventorySpace(state, heroEntityId)) {
+  const sourceHero = getRequiredHero(state, heroEntityId);
+  const sourceStack = findMergeableStack(sourceHero, item);
+  if (!sourceStack && !heroHasInventorySpace(state, heroEntityId)) {
     return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   }
 
   const next = structuredClone(state);
   const hero = getRequiredHero(next, heroEntityId);
+  const stackSlot = findMergeableStack(hero, item);
+  if (stackSlot?.item) {
+    stackSlot.item.quantity += Math.max(1, item.quantity);
+    stackSlot.item.cooldownReadyAtMs = Math.max(stackSlot.item.cooldownReadyAtMs, item.cooldownReadyAtMs);
+    syncHeroItemRuntime(next, heroEntityId);
+    return { match: next, definition, item: structuredClone(stackSlot.item), ok: true, reason: null };
+  }
+
   const emptySlot = hero.inventory.find(slot => slot.item === null);
   if (!emptySlot) return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   emptySlot.item = structuredClone(item);
@@ -187,6 +216,21 @@ export function moveInventoryItem(
   const hero = getRequiredHero(next, heroEntityId);
   const nextFrom = hero.inventory.find(slot => slot.slot === fromSlotIndex)!;
   const nextTo = hero.inventory.find(slot => slot.slot === toSlotIndex)!;
+
+  if (canMergeItemStacks(nextFrom.item, nextTo.item) && nextFrom.item && nextTo.item) {
+    const stackLimit = getItemStackLimit(nextFrom.item.definitionId);
+    const room = Math.max(0, stackLimit - nextTo.item.quantity);
+    const movedQuantity = Math.min(room, nextFrom.item.quantity);
+    if (movedQuantity > 0) {
+      nextTo.item.quantity += movedQuantity;
+      nextTo.item.cooldownReadyAtMs = Math.max(nextTo.item.cooldownReadyAtMs, nextFrom.item.cooldownReadyAtMs);
+      nextFrom.item.quantity -= movedQuantity;
+      if (nextFrom.item.quantity <= 0) nextFrom.item = null;
+      syncHeroItemRuntime(next, heroEntityId);
+      return next;
+    }
+  }
+
   const moving = nextFrom.item;
   nextFrom.item = nextTo.item;
   nextTo.item = moving;
@@ -224,7 +268,7 @@ export function sellInventoryItem(
   const definition = item ? getItemDefinition(item.definitionId) : null;
   if (!sourceSlot || !item || !definition) return { match: state, item: null, definition: null, ok: false, saleGold: 0 };
 
-  const saleGold = Math.floor(definition.cost / 2);
+  const saleGold = Math.floor(definition.cost / 2) * Math.max(1, item.quantity);
   const next = structuredClone(state);
   const hero = getRequiredHero(next, heroEntityId);
   const slot = hero.inventory.find(candidate => candidate.item?.instanceId === instanceId);
@@ -331,7 +375,11 @@ export function useInventoryItem(
   const consumed = values.consumes_item === true;
   const resultItem = structuredClone(item);
   if (consumed) {
-    slot.item = null;
+    if (item.quantity > 1) {
+      item.quantity -= 1;
+    } else {
+      slot.item = null;
+    }
     syncHeroItemRuntime(next, heroEntityId, nowMs);
   }
   return { match: next, item: resultItem, definition, ok: true, reason: null, consumed };
