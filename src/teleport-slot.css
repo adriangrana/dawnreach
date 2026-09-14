@@ -1,0 +1,15 @@
+/* Keep the teleport stack counter tucked into the slot corner instead of covering the icon. */
+.teleport-slot-shell .inventory-item-quantity {
+  left: 1px;
+  bottom: 1px;
+  right: auto;
+  top: auto;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  font-size: 7px;
+  line-height: 1;
+  transform: none;
+}

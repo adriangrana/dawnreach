@@ -18,6 +18,7 @@ import './combat-stats.css';
 import './progression-hud.css';
 import './shop.css';
 import './item-ui.css';
+import './teleport-slot.css';
 import './shop-panel.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
