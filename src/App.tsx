@@ -8,7 +8,23 @@ import {
   type WorldCombatEvent,
   type WorldHeroProgressionEvent,
 } from './game/entities/worldCombatBridge';
+import { getItemDefinition } from './game/items/itemDatabase';
+import {
+  heroHasInventorySpace,
+  pickUpGroundItem,
+  purchaseShopItem,
+} from './game/items/shopRuntime';
+import {
+  ITEM_DROP_EVENT,
+  ITEM_PICKUP_REQUEST_EVENT,
+  ITEM_PICKUP_RESULT_EVENT,
+  SHOP_OPEN_EVENT,
+  type ItemDropDetail,
+  type ItemPickupRequestDetail,
+  type ItemPickupResultDetail,
+} from './game/items/shopEvents';
 import AbilityButton from './hud/AbilityButton';
+import ShopOverlay from './hud/ShopOverlay';
 import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
   ABILITY_KEYS, ALDEN, LOCAL_HERO_ENTITY_ID,
@@ -39,6 +55,11 @@ type RespawnPresentation = {
   totalMs: number;
 };
 
+type PendingWorldDrop = {
+  token: string;
+  itemId: string;
+};
+
 const dawnTeam: TeamHero[] = [
   { initial: 'A', portrait: ALDEN_PORTRAIT_SRC },
   { initial: 'S' },
@@ -62,13 +83,21 @@ type HudRuntime = {
   feedback: string;
   respawnReadyAtMs: number | null;
   respawnDurationMs: number;
+  shopOpen: boolean;
+  pendingDrops: readonly PendingWorldDrop[];
 };
 type HudAction =
   | { type: 'tick'; nowMs: number }
   | { type: 'cast'; key: AbilityKey; nowMs: number }
   | { type: 'upgrade'; key: AbilityKey; nowMs: number }
   | { type: 'world-hero-sync'; event: WorldCombatEvent }
-  | { type: 'world-progression'; event: WorldHeroProgressionEvent };
+  | { type: 'world-progression'; event: WorldHeroProgressionEvent }
+  | { type: 'shop-open'; nowMs: number }
+  | { type: 'shop-close'; nowMs: number }
+  | { type: 'shop-buy'; itemId: string; nowMs: number }
+  | { type: 'shop-clear-drop'; token: string; nowMs: number }
+  | { type: 'ground-item-pickup'; itemId: string; groundId: string; nowMs: number }
+  | { type: 'feedback'; message: string; nowMs: number };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   const actionNowMs = action.type === 'world-hero-sync' || action.type === 'world-progression'
@@ -80,6 +109,61 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   match = advanceHeroPassiveGold(match, LOCAL_HERO_ENTITY_ID, elapsedMs);
 
   if (action.type === 'tick') return { ...runtime, match, nowMs };
+
+  if (action.type === 'shop-open') {
+    return { ...runtime, match, nowMs, shopOpen: true, feedback: 'Mercado del Alba abierto.' };
+  }
+
+  if (action.type === 'shop-close') {
+    return { ...runtime, match, nowMs, shopOpen: false };
+  }
+
+  if (action.type === 'shop-clear-drop') {
+    return {
+      ...runtime,
+      match,
+      nowMs,
+      pendingDrops: runtime.pendingDrops.filter(drop => drop.token !== action.token),
+    };
+  }
+
+  if (action.type === 'feedback') {
+    return { ...runtime, match, nowMs, feedback: action.message };
+  }
+
+  if (action.type === 'shop-buy') {
+    const instanceId = `${action.itemId}:shop:${Math.round(nowMs * 1000)}`;
+    const result = purchaseShopItem(match, LOCAL_HERO_ENTITY_ID, action.itemId, instanceId);
+    if (!result.ok || !result.definition) {
+      const feedback = result.reason === 'not-enough-gold'
+        ? `No tienes suficiente oro para ${result.definition?.name ?? 'este objeto'}.`
+        : 'Ese objeto no existe en el catálogo.';
+      return { ...runtime, match: result.match, nowMs, feedback };
+    }
+
+    const pendingDrops = result.dropped
+      ? [...runtime.pendingDrops, { token: instanceId, itemId: action.itemId }]
+      : runtime.pendingDrops;
+    const feedback = result.dropped
+      ? `Compraste ${result.definition.name}. Inventario lleno: el objeto cayó junto a tu héroe.`
+      : `Compraste ${result.definition.name} por ${result.definition.cost} de oro.`;
+    return { ...runtime, match: result.match, nowMs, feedback, pendingDrops };
+  }
+
+  if (action.type === 'ground-item-pickup') {
+    const result = pickUpGroundItem(
+      match,
+      LOCAL_HERO_ENTITY_ID,
+      action.itemId,
+      `${action.itemId}:ground:${action.groundId}`,
+    );
+    const feedback = result.ok && result.definition
+      ? `Recogiste ${result.definition.name}.`
+      : result.reason === 'inventory-full'
+        ? 'No puedes recogerlo: tu inventario está lleno.'
+        : 'No se pudo recoger el objeto.';
+    return { ...runtime, match: result.match, nowMs, feedback };
+  }
 
   if (action.type === 'world-progression') {
     const before = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
@@ -300,6 +384,7 @@ function GameHud({
   useEffect(() => {
     const timer = window.setInterval(() => dispatch({ type: 'tick', nowMs: performance.now() }), 100);
     const onKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector('.shop-overlay')) return;
       if (event.repeat || event.isComposing || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
       const target = event.target;
       if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
@@ -467,6 +552,8 @@ export default function App() {
       feedback: '',
       respawnReadyAtMs: null,
       respawnDurationMs: 0,
+      shopOpen: false,
+      pendingDrops: [],
     };
   });
   const getOverlayState = () => ({
@@ -474,7 +561,11 @@ export default function App() {
     stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
   });
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
-  const localHeroDead = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID).currentHp <= 0;
+  const runtimeStateRef = useRef(runtime);
+  runtimeStateRef.current = runtime;
+  const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
+  const localHeroDead = localHero.currentHp <= 0;
+  const inventoryFull = !localHero.inventory.some(slot => slot.item === null);
 
   useEffect(() => {
     const overlay = getOverlayState();
@@ -508,6 +599,50 @@ export default function App() {
     if (event.heroEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
     dispatch({ type: 'world-progression', event });
   }), []);
+
+  useEffect(() => {
+    const onShopOpen = () => dispatch({ type: 'shop-open', nowMs: performance.now() });
+    window.addEventListener(SHOP_OPEN_EVENT, onShopOpen);
+    return () => window.removeEventListener(SHOP_OPEN_EVENT, onShopOpen);
+  }, []);
+
+  useEffect(() => {
+    const onPickupRequest = (event: Event) => {
+      const detail = (event as CustomEvent<ItemPickupRequestDetail>).detail;
+      if (!detail?.groundId || !detail.itemId) return;
+      const snapshot = runtimeStateRef.current;
+      const accepted = Boolean(getItemDefinition(detail.itemId))
+        && heroHasInventorySpace(snapshot.match, LOCAL_HERO_ENTITY_ID);
+
+      if (accepted) {
+        dispatch({
+          type: 'ground-item-pickup',
+          itemId: detail.itemId,
+          groundId: detail.groundId,
+          nowMs: performance.now(),
+        });
+      } else {
+        dispatch({
+          type: 'feedback',
+          message: 'No puedes recogerlo: tu inventario está lleno.',
+          nowMs: performance.now(),
+        });
+      }
+
+      window.dispatchEvent(new CustomEvent<ItemPickupResultDetail>(ITEM_PICKUP_RESULT_EVENT, {
+        detail: { groundId: detail.groundId, accepted },
+      }));
+    };
+    window.addEventListener(ITEM_PICKUP_REQUEST_EVENT, onPickupRequest as EventListener);
+    return () => window.removeEventListener(ITEM_PICKUP_REQUEST_EVENT, onPickupRequest as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const pending = runtime.pendingDrops[0];
+    if (!pending) return;
+    window.dispatchEvent(new CustomEvent<ItemDropDetail>(ITEM_DROP_EVENT, { detail: pending }));
+    dispatch({ type: 'shop-clear-drop', token: pending.token, nowMs: performance.now() });
+  }, [runtime.pendingDrops]);
 
   useEffect(() => {
     if (!localHeroDead) return;
@@ -568,6 +703,13 @@ export default function App() {
     <main className="app-shell">
       <div ref={hostRef} className="game-host" />
       <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} />
+      <ShopOverlay
+        open={runtime.shopOpen}
+        gold={localHero.gold}
+        inventoryFull={inventoryFull}
+        onClose={() => dispatch({ type: 'shop-close', nowMs: performance.now() })}
+        onBuy={itemId => dispatch({ type: 'shop-buy', itemId, nowMs: performance.now() })}
+      />
     </main>
   );
 }
