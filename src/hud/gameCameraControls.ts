@@ -6,6 +6,7 @@ const CAMERA_PAN_WORLD_UNITS_PER_SECOND = 18;
 const MAP_WORLD_WIDTH = 150;
 const MAP_WORLD_HEIGHT = 125;
 const MINIMAP_SELECTOR = '.minimap-live';
+const MINIMAP_HERO_SELECTOR = '.minimap-hero-icon';
 const MINIMAP_VIEWPORT_SELECTOR = '.minimap-camera-viewport polygon';
 const GAME_CANVAS_SELECTOR = '.game-canvas';
 const SYNTHETIC_POINTER_ID = 7331;
@@ -60,12 +61,27 @@ function parseViewportFootprint(): ViewportFootprint | null {
 
 function fallbackViewportCenter() {
   const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
-  const hero = document.querySelector<HTMLElement>('.minimap-hero-icon');
+  const hero = document.querySelector<HTMLElement>(MINIMAP_HERO_SELECTOR);
   if (!minimap || !hero) return { x: 0.5, y: 0.5 };
 
   const minimapRect = minimap.getBoundingClientRect();
   const heroRect = hero.getBoundingClientRect();
   if (minimapRect.width <= 0 || minimapRect.height <= 0) return { x: 0.5, y: 0.5 };
+
+  return {
+    x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
+    y: (heroRect.top + heroRect.height / 2 - minimapRect.top) / minimapRect.height,
+  };
+}
+
+function heroMinimapPosition() {
+  const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
+  const hero = document.querySelector<HTMLElement>(MINIMAP_HERO_SELECTOR);
+  if (!minimap || !hero) return null;
+
+  const minimapRect = minimap.getBoundingClientRect();
+  const heroRect = hero.getBoundingClientRect();
+  if (minimapRect.width <= 0 || minimapRect.height <= 0 || heroRect.width <= 0 || heroRect.height <= 0) return null;
 
   return {
     x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
@@ -101,6 +117,12 @@ function dispatchMinimapCameraTarget(normalizedX: number, normalizedY: number) {
   return true;
 }
 
+function dispatchHeroCameraTarget() {
+  const hero = heroMinimapPosition();
+  if (!hero) return false;
+  return dispatchMinimapCameraTarget(hero.x, hero.y);
+}
+
 export function mountGameCameraControls() {
   const pressedArrows = new Set<string>();
   let pointerX = window.innerWidth / 2;
@@ -110,6 +132,8 @@ export function mountGameCameraControls() {
   let previousTime = performance.now();
   let lastCameraDispatch = -Infinity;
   let target: { x: number; y: number } | null = null;
+  let initialHeroCenterPending = true;
+  let recenterHeroOnNextFrame = false;
   let disposed = false;
 
   const tauriWindow = isTauri() ? getCurrentWindow() : null;
@@ -128,6 +152,7 @@ export function mountGameCameraControls() {
   const onBlur = () => {
     pressedArrows.clear();
     target = null;
+    recenterHeroOnNextFrame = false;
     void setCursorGrab(false);
   };
 
@@ -139,6 +164,16 @@ export function mountGameCameraControls() {
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (isEditableTarget(event.target)) return;
+
+    // The game itself still receives Space and performs its existing center command.
+    // On the next animation frame we convert that temporary hero-follow state into a
+    // fixed minimap focus at the hero's current position, so the camera immediately
+    // becomes free again instead of continuing to follow Alden as he moves.
+    if (event.code === 'Space' && !event.repeat) {
+      recenterHeroOnNextFrame = true;
+      return;
+    }
+
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.code)) return;
     pressedArrows.add(event.code);
     event.preventDefault();
@@ -179,6 +214,21 @@ export function mountGameCameraControls() {
     if (disposed) return;
     const dt = Math.min(0.05, Math.max(0, (time - previousTime) / 1000));
     previousTime = time;
+
+    // createDawnreachGame initially places the camera on the hero. As soon as the
+    // minimap marker exists, issue one camera focus to that exact point. This leaves
+    // cameraFocus non-null in the game runtime, decoupling the camera from subsequent
+    // hero movement while preserving the same initial composition the player expects.
+    if (initialHeroCenterPending && dispatchHeroCameraTarget()) {
+      initialHeroCenterPending = false;
+      target = null;
+    }
+
+    if (recenterHeroOnNextFrame) {
+      dispatchHeroCameraTarget();
+      recenterHeroOnNextFrame = false;
+      target = null;
+    }
 
     const direction = getDirection();
     const moving = Math.abs(direction.x) > 0.001 || Math.abs(direction.y) > 0.001;
@@ -227,6 +277,7 @@ export function mountGameCameraControls() {
     cancelAnimationFrame(frameId);
     pressedArrows.clear();
     target = null;
+    recenterHeroOnNextFrame = false;
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('pointermove', onPointerMove, true);
