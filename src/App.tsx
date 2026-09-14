@@ -11,8 +11,11 @@ import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn
 import { createDawnreachGame } from './game/createDawnreachGame';
 import {
   publishWorldEntityRuntime,
+  queueWorldDamageAdjustment,
+  subscribeWorldAttackEvents,
   subscribeWorldCombatEvents,
   subscribeWorldHeroProgressionEvents,
+  type WorldAttackEvent,
   type WorldCombatEvent,
   type WorldHeroProgressionEvent,
 } from './game/entities/worldCombatBridge';
@@ -46,12 +49,12 @@ import ShopOverlay from './hud/ShopOverlay';
 import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
-  advanceHeroPassiveGold, applyHeroProgressionReward,
-  calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats,
+  advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
+  calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats, calculateHeroWorldBasicAttackPreview,
   createPlayableMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
   getRequiredHero, getUnspentHeroAbilityPoints,
-  recoverHeroResource, upgradeHeroAbility, useHeroAbility,
-  type AbilityKey, type InventoryItem, type MatchState,
+  recoverHeroResource, resolveHeroWorldBasicAttackEffects, upgradeHeroAbility, useHeroAbility,
+  type AbilityKey, type CombatTargetClass, type InventoryItem, type MatchState,
 } from './game/match';
 
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', import.meta.url).href;
@@ -106,6 +109,13 @@ const heroAttributeDisplay = [
   { key: 'intelligence' as const, shortLabel: 'INT', label: 'Inteligencia' },
 ];
 
+function worldTargetClass(kind: WorldAttackEvent['targetKind']): CombatTargetClass {
+  if (kind === 'hero') return 'player';
+  if (kind === 'creep') return 'normal';
+  if (kind === 'jungle-creature') return 'boss';
+  return 'elite';
+}
+
 type HudRuntime = {
   match: MatchState;
   nowMs: number;
@@ -123,6 +133,7 @@ type HudAction =
   | { type: 'cast'; key: AbilityKey; nowMs: number }
   | { type: 'upgrade'; key: AbilityKey; nowMs: number }
   | { type: 'world-hero-sync'; event: WorldCombatEvent }
+  | { type: 'world-hero-attack'; event: WorldAttackEvent }
   | { type: 'world-progression'; event: WorldHeroProgressionEvent }
   | { type: 'shop-open'; nowMs: number }
   | { type: 'shop-close'; nowMs: number }
@@ -137,7 +148,9 @@ type HudAction =
   | { type: 'feedback'; message: string; nowMs: number };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
-  const actionNowMs = action.type === 'world-hero-sync' || action.type === 'world-progression'
+  const actionNowMs = action.type === 'world-hero-sync'
+    || action.type === 'world-hero-attack'
+    || action.type === 'world-progression'
     ? action.event.atMs
     : action.nowMs;
   const nowMs = Math.max(runtime.nowMs, actionNowMs);
@@ -145,6 +158,7 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   let match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, elapsedMs, nowMs);
   match = advanceItemActiveEffects(match, LOCAL_HERO_ENTITY_ID, elapsedMs, nowMs);
   match = advanceHeroPassiveGold(match, LOCAL_HERO_ENTITY_ID, elapsedMs);
+  match = advanceHeroWorldEffects(match, nowMs);
 
   if (action.type === 'tick') return { ...runtime, match, nowMs };
 
@@ -309,6 +323,16 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   }
 
   if (action.type === 'world-hero-sync') {
+    if ((action.event.reason === 'damage' || action.event.reason === 'death') && action.event.sourceEntityId) {
+      match = applyHeroWorldDamageReaction(match, LOCAL_HERO_ENTITY_ID, {
+        sourceEntityId: action.event.sourceEntityId,
+        hostile: action.event.sourceEntityId !== LOCAL_WORLD_HERO_ENTITY_ID,
+        isDirect: true,
+        isFromFront: true,
+        damageType: 'physical',
+      }, nowMs);
+    }
+
     const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
     const stats = calculateHeroStats(match, hero.heroEntityId, { nowMs });
     const currentHp = Math.max(0, Math.min(stats.maxHp, action.event.currentHp));
@@ -339,6 +363,19 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
       respawnReadyAtMs,
       respawnDurationMs,
     };
+  }
+
+  if (action.type === 'world-hero-attack') {
+    const resolution = resolveHeroWorldBasicAttackEffects(
+      match,
+      LOCAL_HERO_ENTITY_ID,
+      nowMs,
+      worldTargetClass(action.event.targetKind),
+    );
+    const feedback = resolution.consumesInnate
+      ? `Voto del Muro Vivo · +${formatHudNumber(resolution.bonusDamage)} daño · +${formatHudNumber(resolution.healing)} vida`
+      : runtime.feedback;
+    return { ...runtime, match: resolution.state, nowMs, feedback };
   }
 
   if (action.type === 'upgrade') {
@@ -587,6 +624,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
                 heroEntityId={hero.heroEntityId}
                 innate={definition.innate}
                 timedStatuses={activeStatuses}
+                runtimeCounters={hero.runtime.counters}
                 nowMs={runtime.nowMs}
                 renderArt={art => <HudArt name={art} />}
               />
@@ -688,6 +726,24 @@ export default function App() {
   useEffect(() => subscribeWorldCombatEvents((event) => {
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
     dispatch({ type: 'world-hero-sync', event });
+  }), []);
+
+  useEffect(() => subscribeWorldAttackEvents((event) => {
+    if (event.attackerId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
+    if (event.targetTeam === event.attackerTeam) return;
+
+    const snapshot = runtimeStateRef.current;
+    const targetClass = worldTargetClass(event.targetKind);
+    const preview = calculateHeroWorldBasicAttackPreview(
+      snapshot.match,
+      LOCAL_HERO_ENTITY_ID,
+      event.atMs,
+      targetClass,
+    );
+    if (preview.consumesInnate && preview.bonusDamage > 0) {
+      queueWorldDamageAdjustment(event.targetId, preview.bonusDamage);
+    }
+    dispatch({ type: 'world-hero-attack', event });
   }), []);
 
   useEffect(() => subscribeWorldHeroProgressionEvents((event) => {

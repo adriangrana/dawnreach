@@ -8,6 +8,7 @@ type HeroStatusBarProps = {
   heroEntityId: string;
   innate?: HeroInnateDefinition;
   timedStatuses: readonly TimedStatusState[];
+  runtimeCounters: Readonly<Record<string, number>>;
   nowMs: number;
   renderArt: (art: string) => ReactNode;
 };
@@ -67,30 +68,59 @@ function TimedStatusIcon({ status, tone, nowMs }: PresentedTimedStatus & { nowMs
   );
 }
 
-export default function HeroStatusBar({ heroEntityId, innate, timedStatuses, nowMs, renderArt }: HeroStatusBarProps) {
+export default function HeroStatusBar({
+  heroEntityId,
+  innate,
+  timedStatuses,
+  runtimeCounters,
+  nowMs,
+  renderArt,
+}: HeroStatusBarProps) {
   const activeStatuses = timedStatuses
     .filter(status => status.expiresAtMs > nowMs)
     .map(status => ({ status, tone: classifyTimedStatus(status, heroEntityId) }))
     .sort((left, right) => Number(left.tone === 'debuff') - Number(right.tone === 'debuff'));
+  const innateCounter = innate?.hud.counter;
+  const rawInnateStacks = innateCounter ? runtimeCounters[innateCounter.runtimeCounterKey] ?? 0 : 0;
+  const innateStacks = innateCounter
+    ? Math.max(0, Math.min(innateCounter.maxStacks, Math.floor(rawInnateStacks)))
+    : 0;
+  const innateReady = Boolean(
+    innateCounter?.readyStatusId
+    && activeStatuses.some(({ status }) => status.id === innateCounter.readyStatusId),
+  );
+  const innateDescription = innateCounter
+    ? `${innate?.technicalDescription ?? ''} Cargas actuales: ${innateStacks}/${innateCounter.maxStacks}.`
+    : innate?.technicalDescription ?? '';
 
   return (
     <div className="hero-status-bar" aria-label="Estados, auras y efectos del héroe">
       {innate?.hud.kind === 'persistent_aura' && (
         <div
-          className={`hero-status-persistent hero-status-persistent--${innate.hud.tone ?? 'passive'}`}
+          className={`hero-status-persistent hero-status-persistent--${innate.hud.tone ?? 'passive'}${innateReady ? ' is-ready' : ''}`}
           data-status-id={innate.id}
           data-status-kind="persistent-aura"
+          data-status-stacks={innateCounter ? innateStacks : undefined}
+          data-status-ready={innateReady ? 'true' : undefined}
         >
           <AbilityButton
             name={innate.name}
             kind="passive"
             art={innate.hud.art ?? 'passive'}
             blockedReason="Aura pasiva permanente"
-            description={innate.technicalDescription}
+            description={innateDescription}
             lore={innate.description}
           >
             {innate.hud.art ? renderArt(innate.hud.art) : <Sparkles aria-hidden="true" />}
           </AbilityButton>
+          {innateCounter && (
+            <b
+              className="hero-status-persistent-counter"
+              aria-label={`${innateStacks} de ${innateCounter.maxStacks} cargas`}
+            >
+              {innateStacks}/{innateCounter.maxStacks}
+            </b>
+          )}
         </div>
       )}
       {activeStatuses.map(({ status, tone }) => (

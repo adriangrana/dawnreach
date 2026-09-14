@@ -36,6 +36,10 @@ export type WorldCombatEvent = Readonly<{
   amount?: number;
   sourceEntityId?: string;
   critical?: boolean;
+  /** Optional metadata for hero reactions. Existing direct world attacks default to physical/front. */
+  damageType?: 'physical' | 'magic' | 'true';
+  isDirect?: boolean;
+  isFromFront?: boolean;
 }>;
 
 export type WorldAttackEvent = Readonly<{
@@ -75,6 +79,7 @@ export type WorldHeroProgressionEvent = Readonly<{
 }>;
 
 type WorldCombatListener = (event: WorldCombatEvent) => void;
+type WorldAttackListener = (event: WorldAttackEvent) => void;
 type WorldCreepDeathListener = (event: WorldCreepDeathEvent) => void;
 type WorldHeroProgressionListener = (event: WorldHeroProgressionEvent) => void;
 
@@ -85,7 +90,9 @@ type PendingHpChange = Readonly<{
 
 const runtimeSnapshots = new Map<string, WorldEntityRuntimeSnapshot>();
 const pendingHpChanges = new Map<string, PendingHpChange>();
+const pendingDamageAdjustments = new Map<string, number>();
 const combatListeners = new Set<WorldCombatListener>();
+const attackListeners = new Set<WorldAttackListener>();
 const creepDeathListeners = new Set<WorldCreepDeathListener>();
 const heroProgressionListeners = new Set<WorldHeroProgressionListener>();
 const attackEvents: WorldAttackEvent[] = [];
@@ -104,10 +111,23 @@ function cloneRuntimeSnapshot(snapshot: WorldEntityRuntimeSnapshot): WorldEntity
   };
 }
 
+function applyPendingDamageAdjustment(entityId: string, snapshot: WorldEntityRuntimeSnapshot) {
+  const adjustment = pendingDamageAdjustments.get(entityId) ?? 0;
+  if (adjustment <= 0) return snapshot;
+  pendingDamageAdjustments.delete(entityId);
+  const currentHp = Math.max(0, snapshot.currentHp - adjustment);
+  return {
+    ...snapshot,
+    currentHp,
+    alive: snapshot.alive && currentHp > 0,
+  };
+}
+
 export function publishWorldEntityRuntime(entityId: string, snapshot: WorldEntityRuntimeSnapshot): void {
+  const adjustedSnapshot = applyPendingDamageAdjustment(entityId, snapshot);
   const previous = runtimeSnapshots.get(entityId);
   if (previous) {
-    const hpDelta = snapshot.currentHp - previous.currentHp;
+    const hpDelta = adjustedSnapshot.currentHp - previous.currentHp;
     if (Math.abs(hpDelta) > 0.001) {
       pendingHpChanges.set(entityId, {
         amount: Math.abs(hpDelta),
@@ -115,21 +135,37 @@ export function publishWorldEntityRuntime(entityId: string, snapshot: WorldEntit
       });
     }
   }
-  runtimeSnapshots.set(entityId, cloneRuntimeSnapshot(snapshot));
+  runtimeSnapshots.set(entityId, cloneRuntimeSnapshot(adjustedSnapshot));
 }
 
 export function getWorldEntityRuntime(entityId: string): WorldEntityRuntimeSnapshot | undefined {
   return runtimeSnapshots.get(entityId);
 }
 
+/**
+ * Queues extra damage to be folded into the target's next authoritative world-runtime
+ * publication. Used by match-owned passives so the 3D combat path and match formulas stay
+ * in sync without duplicating direct HP mutation in React.
+ */
+export function queueWorldDamageAdjustment(entityId: string, amount: number): void {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  pendingDamageAdjustments.set(entityId, (pendingDamageAdjustments.get(entityId) ?? 0) + amount);
+}
+
 export function removeWorldEntityRuntime(entityId: string): void {
   runtimeSnapshots.delete(entityId);
   pendingHpChanges.delete(entityId);
+  pendingDamageAdjustments.delete(entityId);
 }
 
 export function subscribeWorldCombatEvents(listener: WorldCombatListener): () => void {
   combatListeners.add(listener);
   return () => combatListeners.delete(listener);
+}
+
+export function subscribeWorldAttackEvents(listener: WorldAttackListener): () => void {
+  attackListeners.add(listener);
+  return () => attackListeners.delete(listener);
 }
 
 export function subscribeWorldCreepDeathEvents(listener: WorldCreepDeathListener): () => void {
@@ -153,18 +189,29 @@ export function emitWorldHeroProgressionEvent(event: WorldHeroProgressionEvent):
 export function emitWorldCombatEvent(event: WorldCombatEvent): void {
   const snapshot = runtimeSnapshots.get(event.entityId);
   const pending = pendingHpChanges.get(event.entityId);
-  const expectedKind = event.reason === 'heal' || event.reason === 'respawn' ? 'heal' : 'damage';
+  const damageLike = event.reason === 'damage' || event.reason === 'death';
+  const effectiveCurrentHp = damageLike && snapshot
+    ? Math.min(event.currentHp, snapshot.currentHp)
+    : event.currentHp;
+  const effectiveAlive = event.alive && effectiveCurrentHp > 0;
+  const effectiveReason: WorldCombatEventReason = damageLike && effectiveCurrentHp <= 0
+    ? 'death'
+    : event.reason;
+  const expectedKind = effectiveReason === 'heal' || effectiveReason === 'respawn' ? 'heal' : 'damage';
   const snapshotAmount = snapshot
     ? expectedKind === 'damage'
-      ? Math.max(0, snapshot.currentHp - event.currentHp)
-      : Math.max(0, event.currentHp - snapshot.currentHp)
+      ? Math.max(0, snapshot.currentHp - effectiveCurrentHp)
+      : Math.max(0, effectiveCurrentHp - snapshot.currentHp)
     : 0;
-  const inferredAmount = event.amount
-    ?? (pending?.kind === expectedKind ? pending.amount : undefined)
+  const inferredAmount = (pending?.kind === expectedKind ? pending.amount : undefined)
+    ?? event.amount
     ?? (snapshotAmount > 0.001 ? snapshotAmount : undefined);
   const sourceEntityId = event.sourceEntityId ?? inferRecentAttackSource(event);
   const published: WorldCombatEvent = {
     ...event,
+    reason: effectiveReason,
+    currentHp: effectiveCurrentHp,
+    alive: effectiveAlive,
     amount: inferredAmount,
     sourceEntityId,
   };
@@ -174,9 +221,9 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
   if (snapshot) {
     runtimeSnapshots.set(event.entityId, {
       ...snapshot,
-      currentHp: event.currentHp,
+      currentHp: effectiveCurrentHp,
       currentResource: event.currentResource ?? snapshot.currentResource,
-      alive: event.alive,
+      alive: effectiveAlive,
     });
   }
 
@@ -199,6 +246,7 @@ export function publishWorldAttackEvent(
   if (attackEvents.length > MAX_ATTACK_EVENTS) {
     attackEvents.splice(0, attackEvents.length - MAX_ATTACK_EVENTS);
   }
+  for (const listener of attackListeners) listener(published);
   return published;
 }
 

@@ -59,11 +59,21 @@ export interface HeroAbilityDefinition {
 
 export type HeroStatusTone = 'passive' | 'buff' | 'debuff';
 
+export interface HeroPersistentAuraCounterPresentation {
+  /** Match runtime counter read by the HUD. */
+  runtimeCounterKey: string;
+  maxStacks: number;
+  /** Optional timed status that marks the passive as primed/ready. */
+  readyStatusId?: string;
+}
+
 export interface HeroPersistentAuraPresentation {
   kind: 'persistent_aura';
   /** HUD-art symbol used by the compact status row. Falls back to a generic passive glyph. */
   art?: string;
   tone?: HeroStatusTone;
+  /** Optional real runtime stack counter shown on top of the persistent aura. */
+  counter?: HeroPersistentAuraCounterPresentation;
 }
 
 /**

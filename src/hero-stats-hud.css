@@ -142,6 +142,14 @@
   box-shadow: 0 0 0 1px #05090a, inset 0 0 0 1px rgba(224, 196, 126, 0.12);
 }
 
+.hero-status-persistent.is-ready {
+  border-color: #e6c66e;
+  box-shadow:
+    0 0 0 1px #05090a,
+    0 0 8px rgba(231, 195, 91, 0.5),
+    inset 0 0 8px rgba(241, 206, 104, 0.24);
+}
+
 .hero-status-persistent .ability-control {
   width: 28px;
   max-width: 28px;
@@ -174,6 +182,35 @@
   padding: 0;
   color: #f0d99f;
   background: rgba(8, 13, 15, 0.82);
+}
+
+.hero-status-persistent-counter {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: 0;
+  min-width: 18px;
+  height: 12px;
+  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 1px solid #8c7b55;
+  border-radius: 2px;
+  background: rgba(5, 10, 12, 0.96);
+  color: #f1dfad;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 1px #000;
+}
+
+.hero-status-persistent.is-ready .hero-status-persistent-counter {
+  color: #fff2bd;
+  border-color: #d5ae52;
+  background: rgba(42, 31, 7, 0.96);
+  box-shadow: 0 0 5px rgba(235, 195, 79, 0.45);
 }
 
 .hero-status-icon {
@@ -255,4 +292,5 @@
     height: 24px;
   }
   .hero-status-icon svg { width: 13px; height: 13px; }
+  .hero-status-persistent-counter { min-width: 17px; height: 11px; font-size: 6px; }
 }

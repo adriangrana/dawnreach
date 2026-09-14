@@ -220,6 +220,11 @@ export const ALDEN: AldenGameplayDefinition = {
       kind: 'persistent_aura',
       art: 'sun',
       tone: 'passive',
+      counter: {
+        runtimeCounterKey: 'alden:steel',
+        maxStacks: 4,
+        readyStatusId: 'alden:oath-ready',
+      },
     },
     maxStacks: 4,
     stackInternalCooldownSeconds: 0.75,
