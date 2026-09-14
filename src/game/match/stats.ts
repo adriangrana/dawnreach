@@ -20,15 +20,9 @@ export function calculateDefinitionStatsAtLevel(definition: HeroDefinition, leve
     const base = definition.baseStats[key];
     const progression = definition.statProgression[key];
     switch (progression.kind) {
-      case 'fixed':
-        result[key] = base;
-        break;
-      case 'linear':
-        result[key] = base + progression.perLevel * levelsGained;
-        break;
-      case 'percentOfBase':
-        result[key] = base * (1 + progression.percentPerLevel / 100 * levelsGained);
-        break;
+      case 'fixed': result[key] = base; break;
+      case 'linear': result[key] = base + progression.perLevel * levelsGained; break;
+      case 'percentOfBase': result[key] = base * (1 + progression.percentPerLevel / 100 * levelsGained); break;
     }
   }
   return result;
@@ -43,11 +37,9 @@ export function calculateHeroStats(
   const definition = getHeroDefinition(hero.definitionId);
   let stats = calculateDefinitionStatsAtLevel(definition, hero.level);
   stats = applyItemModifiers(stats, hero);
+  stats = applyTimedItemStatEffects(stats, hero, context.nowMs ?? 0);
 
-  if (hero.definitionId === ALDEN.id) {
-    stats = applyAldenConditionalStatEffects(stats, hero, context);
-  }
-
+  if (hero.definitionId === ALDEN.id) stats = applyAldenConditionalStatEffects(stats, hero, context);
   return stats;
 }
 
@@ -78,12 +70,7 @@ export function calculateCombatStats(
     }
   }
 
-  return {
-    stats,
-    tenacityPercent,
-    globalDamageReductionPercent,
-    frontalDamageReductionPercent,
-  };
+  return { stats, tenacityPercent, globalDamageReductionPercent, frontalDamageReductionPercent };
 }
 
 export function getActiveStatus(hero: MatchHeroState, statusId: string, nowMs: number) {
@@ -97,15 +84,27 @@ function applyItemModifiers(stats: HeroStats, hero: MatchHeroState): HeroStats {
 
   for (const key of Object.keys(result) as HeroStatKey[]) {
     const statModifiers = modifiers.filter(modifier => modifier.stat === key);
-    const flat = statModifiers
-      .filter(modifier => modifier.mode === 'flat')
-      .reduce((sum, modifier) => sum + modifier.value, 0);
-    const percent = statModifiers
-      .filter(modifier => modifier.mode === 'percent')
-      .reduce((sum, modifier) => sum + modifier.value, 0);
+    const flat = statModifiers.filter(modifier => modifier.mode === 'flat').reduce((sum, modifier) => sum + modifier.value, 0);
+    const percent = statModifiers.filter(modifier => modifier.mode === 'percent').reduce((sum, modifier) => sum + modifier.value, 0);
     result[key] = (result[key] + flat) * (1 + percent / 100);
   }
+  return sanitizeStats(result);
+}
 
+function applyTimedItemStatEffects(stats: HeroStats, hero: MatchHeroState, nowMs: number) {
+  const result = { ...stats };
+  let movementFlat = 0;
+  let movementPercent = 0;
+
+  for (const status of Object.values(hero.runtime.statuses)) {
+    if (!status.id.startsWith('item:active:') || status.expiresAtMs <= nowMs) continue;
+    const data = status.data;
+    if (!data) continue;
+    if (typeof data.movementSpeedFlat === 'number') movementFlat += data.movementSpeedFlat;
+    if (typeof data.movementSpeedPercent === 'number') movementPercent += data.movementSpeedPercent;
+  }
+
+  result.movementSpeed = (result.movementSpeed + movementFlat) * (1 + movementPercent / 100);
   return sanitizeStats(result);
 }
 
@@ -137,15 +136,8 @@ function applyAldenConditionalStatEffects(
 function sanitizeStats(stats: HeroStats): HeroStats {
   const result = { ...stats };
   const nonNegative: HeroStatKey[] = [
-    'maxHp',
-    'maxResource',
-    'attackDamage',
-    'attackSpeed',
-    'movementSpeed',
-    'hpRegenPerSecond',
-    'resourceRegenPerSecond',
-    'attackRange',
-    'criticalChancePercent',
+    'maxHp', 'maxResource', 'attackDamage', 'attackSpeed', 'movementSpeed', 'hpRegenPerSecond',
+    'resourceRegenPerSecond', 'attackRange', 'criticalChancePercent',
   ];
   for (const key of nonNegative) result[key] = Math.max(0, result[key]);
   result.criticalChancePercent = Math.min(100, result.criticalChancePercent);
@@ -159,8 +151,6 @@ function combineReductions(firstPercent: number, secondPercent: number): number 
 }
 
 export function applyStatModifiersForPreview(stats: HeroStats, modifiers: readonly ItemStatModifier[]): HeroStats {
-  const fakeHero = {
-    inventory: [{ slot: 0, item: { statModifiers: modifiers } }],
-  } as unknown as MatchHeroState;
+  const fakeHero = { inventory: [{ slot: 0, item: { statModifiers: modifiers } }] } as unknown as MatchHeroState;
   return applyItemModifiers(stats, fakeHero);
 }
