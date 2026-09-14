@@ -28,6 +28,14 @@
 }
 .shop-recipe-icon-art { border-radius: 4px; }
 
+/* Leave the authored command deck visible and interactive so items can be dragged from the
+   real inventory directly into the shop's sale receiver instead of duplicating the inventory. */
+.shop-overlay { bottom: 168px !important; }
+.shop-window {
+  height: min(700px, calc(100vh - 188px)) !important;
+  min-height: min(540px, calc(100vh - 188px)) !important;
+}
+
 .shop-header {
   grid-template-columns: 48px 1fr auto auto 42px !important;
 }
@@ -56,6 +64,11 @@
   background: rgba(126, 91, 27, .25);
   box-shadow: 0 0 22px rgba(219, 172, 73, .2), inset 0 0 18px rgba(238, 197, 105, .08);
   color: #f0d383;
+}
+
+.inventory-grid,
+.inventory-slot {
+  pointer-events: auto;
 }
 
 .inventory-slot {
@@ -176,4 +189,12 @@
   .shop-sell-dropzone { min-width: 104px; }
   .shop-sell-dropzone small { display: none; }
   .inventory-item-tooltip { width: 245px; }
+}
+
+@media (max-width: 700px) {
+  .shop-overlay { bottom: 198px !important; }
+  .shop-window {
+    height: min(580px, calc(100vh - 214px)) !important;
+    min-height: min(430px, calc(100vh - 214px)) !important;
+  }
 }
