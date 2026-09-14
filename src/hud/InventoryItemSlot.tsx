@@ -1,8 +1,9 @@
 import type { DragEvent, MouseEvent, PointerEvent } from 'react';
 import type { InventorySlot } from '../game/heroes/types';
 import { getItemDefinition } from '../game/items/itemDatabase';
-import { readInventoryDragPayload, writeInventoryDragPayload } from '../game/items/itemDrag';
+import { readInventoryDragPayload } from '../game/items/itemDrag';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
+import { INVENTORY_SLOT_HOTKEYS } from './inventoryControls';
 
 const STAT_LABELS: Record<string, string> = {
   strength: 'Fuerza', agility: 'Agilidad', intelligence: 'Inteligencia', damage: 'Daño físico',
@@ -36,6 +37,7 @@ export default function InventoryItemSlot({
   const active = Boolean(definition?.active_effect);
   const disabled = remainingMs > 0;
   const cooldownSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const hotkey = INVENTORY_SLOT_HOTKEYS[index]?.label ?? `${index + 1}`;
 
   const stopPointer = (event: PointerEvent<HTMLDivElement>) => event.stopPropagation();
   const stopMouse = (event: MouseEvent<HTMLDivElement>) => event.stopPropagation();
@@ -45,25 +47,6 @@ export default function InventoryItemSlot({
     event.stopPropagation();
     if (!item || !active || disabled) return;
     onUse(slot.slot);
-  };
-
-  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    if (!item) {
-      event.preventDefault();
-      return;
-    }
-    writeInventoryDragPayload(event.dataTransfer, {
-      slot: slot.slot,
-      instanceId: item.instanceId,
-      itemId: item.definitionId,
-    });
-    event.currentTarget.classList.add('is-dragging');
-  };
-
-  const handleDragEnd = (event: DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    event.currentTarget.classList.remove('is-dragging');
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -85,18 +68,18 @@ export default function InventoryItemSlot({
     <div
       className={`inventory-slot ${item ? 'inventory-slot--filled' : 'inventory-slot--empty'}${active ? ' inventory-slot--active' : ''}`}
       data-slot={slot.slot}
-      draggable={Boolean(item)}
+      data-instance-id={item?.instanceId}
+      data-item-id={item?.definitionId}
+      draggable={false}
       onPointerDown={stopPointer}
       onPointerUp={stopPointer}
       onContextMenu={stopMouse}
       onClick={handleClick}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       role={item ? 'button' : undefined}
       tabIndex={item ? 0 : -1}
-      aria-label={item ? `${item.displayName}${active ? ', objeto activable' : ''}` : `Hueco de inventario ${index + 1}`}
+      aria-label={item ? `${item.displayName}${active ? `, objeto activable con ${hotkey}` : ''}` : `Hueco de inventario ${index + 1}`}
     >
       {item && definition && (
         <>
@@ -122,11 +105,11 @@ export default function InventoryItemSlot({
               <p><b>Activa — {definition.active_effect.name}:</b> {definition.active_effect.description}<em>CD {definition.active_effect.cooldown}s{definition.active_effect.mana_cost ? ` · ${definition.active_effect.mana_cost} maná` : ''}</em></p>
             )}
             <small>{definition.flavor_text}</small>
-            {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : 'Click o tecla del slot para activar'}</i>}
+            {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : `Click o ${hotkey} para activar`}</i>}
           </div>
         </>
       )}
-      <span className="item-key">{index + 1}</span>
+      <span className="item-key">{hotkey}</span>
     </div>
   );
 }
