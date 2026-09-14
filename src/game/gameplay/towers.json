@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "defaultTower": {
     "level": 3,
     "maxHp": 1800,
@@ -23,8 +23,8 @@
         "englishName": "Backdoor Protection",
         "type": "passive",
         "level": 1,
-        "description": "Los aliados dentro del radio de la torre reciben menos daño y regeneran vida rápidamente mientras no haya creeps enemigos cerca de la torre.",
-        "eligibleKinds": ["hero", "creep", "tower", "building", "shop"],
+        "description": "La propia torre recibe menos daño y regenera vida rápidamente mientras no haya creeps enemigos cerca. Esta protección no se comparte con los aliados cercanos.",
+        "eligibleKinds": ["tower"],
         "effects": {
           "damageReductionPercent": 50,
           "healthRegenPerSecond": 24,
@@ -37,12 +37,19 @@
         "englishName": "Reinforced",
         "type": "passive",
         "level": 2,
-        "description": "Las unidades y estructuras aliadas reforzadas infligen daño adicional a otros objetivos reforzados y reciben menos daño de ataques.",
-        "eligibleKinds": ["hero", "creep", "tower", "building", "shop"],
+        "description": "La torre conserva su estado estructural Reforzado y, además, proyecta Protección de Torre sobre héroes y creeps aliados cercanos.",
+        "eligibleKinds": ["tower"],
         "effects": {
           "bonusDamageVsReinforcedPercent": 150,
           "heroAttackDamageReductionPercent": 50,
-          "nonHeroAttackDamageReductionPercent": 30
+          "nonHeroAttackDamageReductionPercent": 30,
+          "aura": {
+            "statusName": "Protección de Torre",
+            "eligibleKinds": ["hero", "creep"],
+            "armorBonus": 5,
+            "healthRegenPerSecond": 3,
+            "lingerDurationSeconds": 0.5
+          }
         }
       }
     ]
