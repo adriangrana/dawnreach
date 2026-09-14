@@ -146,7 +146,7 @@ export function validateItemCatalog(): string[] {
     if (item.active_effect) validateEffect(item.id, item.active_effect, true, errors);
   }
 
-  if (ITEMS.length !== 58) errors.push(`Catálogo esperado: 58 ítems; encontrados: ${ITEMS.length}.`);
+  if (ITEMS.length !== 59) errors.push(`Catálogo esperado: 59 ítems; encontrados: ${ITEMS.length}.`);
   return errors;
 }
 
