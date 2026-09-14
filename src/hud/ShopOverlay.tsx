@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { Coins, Search, ShoppingBag, X } from 'lucide-react';
+import { isLocalHeroNearShop, subscribeLocalShopProximity } from '../game/items/shopAccess';
 import { ITEM_BY_ID, ITEMS, type ItemDefinition, type ItemTier } from '../game/items/itemDatabase';
 import { readInventoryDragPayload } from '../game/items/itemDrag';
+import { SHOP_OPEN_EVENT, type ShopOpenDetail } from '../game/items/shopEvents';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 
 const TIERS: readonly ItemTier[] = ['Básico', 'Intermedio', 'Avanzado'];
@@ -67,13 +69,36 @@ export default function ShopOverlay({
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('item_001');
   const [sellHot, setSellHot] = useState(false);
+  const [nearShop, setNearShop] = useState(isLocalHeroNearShop());
+
+  useEffect(() => subscribeLocalShopProximity(setNearShop), []);
 
   useEffect(() => {
-    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Escape') return;
-      event.preventDefault();
-      onClose();
+      if (event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      const typing = Boolean(
+        target?.isContentEditable
+        || target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement,
+      );
+
+      if (event.code === 'KeyP' && !typing) {
+        event.preventDefault();
+        if (open) {
+          onClose();
+        } else {
+          window.dispatchEvent(new CustomEvent<ShopOpenDetail>(SHOP_OPEN_EVENT, {
+            detail: { shopId: 'blue-shop', team: 'blue' },
+          }));
+        }
+        return;
+      }
+
+      if (event.code === 'Escape' && open) {
+        event.preventDefault();
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -122,7 +147,7 @@ export default function ShopOverlay({
   };
 
   return (
-    <div className="shop-overlay" role="dialog" aria-modal="true" aria-label="Tienda de la base">
+    <div className="shop-overlay" role="complementary" aria-label="Tienda de la base">
       <div className="shop-window" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
         <header className="shop-header">
           <div className="shop-title-mark"><ShoppingBag /></div>
@@ -142,6 +167,7 @@ export default function ShopOverlay({
             <span><b>VENDER</b><small>arrastra aquí · 50%</small></span>
           </div>
           <div className="shop-gold"><Coins /><strong>{Math.floor(gold)}</strong><span>oro</span></div>
+          <kbd className="shop-hotkey" title="Abrir o cerrar tienda">P</kbd>
           <button className="shop-close" type="button" onClick={onClose} aria-label="Cerrar tienda"><X /></button>
         </header>
 
@@ -174,7 +200,11 @@ export default function ShopOverlay({
           <section className="shop-catalog">
             <div className="shop-catalog-heading">
               <div><span>{tier}</span><strong>{items.length} objetos disponibles</strong></div>
-              {inventoryFull && <em>Inventario lleno: las compras caerán junto al héroe.</em>}
+              {!nearShop
+                ? <em>Compra remota: el objeto caerá junto a tu héroe.</em>
+                : inventoryFull
+                  ? <em>Inventario lleno: las compras caerán junto al héroe.</em>
+                  : null}
             </div>
             <div className="shop-item-grid">
               {items.map(item => {
@@ -226,7 +256,13 @@ export default function ShopOverlay({
             <button type="button" className="shop-buy-button" disabled={!affordable} onClick={() => onBuy(selected.id)}>
               <Coins /><span>{affordable ? `Comprar por ${selected.cost}` : `Faltan ${selected.cost - gold} de oro`}</span>
             </button>
-            {inventoryFull && affordable && <small className="shop-drop-warning">Se comprará igualmente y caerá al suelo junto a tu héroe.</small>}
+            {affordable && (!nearShop || inventoryFull) && (
+              <small className="shop-drop-warning">
+                {!nearShop
+                  ? 'Estás fuera del alcance de la tienda: la compra caerá al suelo junto a tu héroe y quedará reservada para ti.'
+                  : 'Se comprará igualmente y caerá al suelo junto a tu héroe.'}
+              </small>
+            )}
           </aside>
         </div>
       </div>
