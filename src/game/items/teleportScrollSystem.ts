@@ -34,6 +34,10 @@ const PENDING_CAST_LIFETIME_MS = 1_500;
 const TOWER_TELEPORT_RANGE = TOWER_GAMEPLAY.attack.range;
 const TOWER_PREVIEW_REVEAL_PADDING = 2.5;
 const LANDING_SELECTION_Y_OFFSET = 0.055;
+const TELEPORT_PORTAL_HEIGHT = 5.8;
+const TELEPORT_RISE_END = 0.44;
+const TELEPORT_TRANSFER_END = 0.52;
+const TELEPORT_DESCENT_END = 0.96;
 const HARD_CC_PATTERN = /(?:^|:|\b)(stun|root|silence|fear)(?:$|:|\b)/i;
 const TELEPORT_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%237adfff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23dffaff' stroke='%23173d55' stroke-width='1'/%3E%3Cpath d='M16 2v7M16 23v7M2 16h7M23 16h7' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, crosshair`;
 
@@ -60,6 +64,11 @@ type TrafficEntry = {
   completedAtMs: number | null;
 };
 
+type RenderVisibilityState = Readonly<{
+  object: THREE.Object3D;
+  visible: boolean;
+}>;
+
 type ChannelState = {
   instanceId: string;
   actor: GameEntity;
@@ -71,6 +80,8 @@ type ChannelState = {
   destinationWorld: THREE.Vector3;
   originVisual: THREE.Group;
   destinationVisual: THREE.Group;
+  heroProxy: THREE.Object3D;
+  actorRenderVisibility: RenderVisibilityState[];
 };
 
 type PickedDestination = Readonly<{
@@ -91,6 +102,11 @@ type SelectionPalette = Readonly<{
   shadow: number;
 }>;
 
+type PortalMaterialEntry = Readonly<{
+  material: THREE.MeshBasicMaterial;
+  baseOpacity: number;
+}>;
+
 function matchTeamToWorld(team: HeroItemRuntimeContext['team']): TeamId {
   return team === 'dawn' ? 'blue' : 'red';
 }
@@ -108,6 +124,11 @@ function selectionPalette(team: TeamId): SelectionPalette {
     case 'neutral':
       return { primary: 0xecc45c, bright: 0xffefb1, glow: 0xd89b2f, shadow: 0x201806 };
   }
+}
+
+function smootherStep01(value: number) {
+  const t = THREE.MathUtils.clamp(value, 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 function disposeObject3D(root: THREE.Object3D) {
@@ -168,23 +189,223 @@ function addSelectionRing(
   parent.add(mesh);
 }
 
-function buildChannelVisual(color: number) {
+function buildTeleportPortalColumn(team: TeamId) {
+  const palette = selectionPalette(team);
   const root = new THREE.Group();
-  const ringMaterial = makeSelectionMaterial(color, 0.82);
-  const glowMaterial = makeSelectionMaterial(color, 0.18, true);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.82, 64), ringMaterial);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.04;
-  ring.renderOrder = 50;
-  root.add(ring);
-  const glow = new THREE.Mesh(new THREE.CircleGeometry(0.78, 64), glowMaterial);
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = 0.025;
-  glow.renderOrder = 49;
-  root.add(glow);
-  root.userData.ringMaterial = ringMaterial;
-  root.userData.glowMaterial = glowMaterial;
+  root.name = 'teleport-light-column';
+
+  const materialEntries: PortalMaterialEntry[] = [];
+  const registerMaterial = (material: THREE.MeshBasicMaterial, baseOpacity: number) => {
+    materialEntries.push({ material, baseOpacity });
+    return material;
+  };
+
+  const shellMaterial = registerMaterial(makeSelectionMaterial(palette.glow, 0.045, true), 0.045);
+  const coreMaterial = registerMaterial(makeSelectionMaterial(palette.bright, 0.07, true), 0.07);
+  const arcMaterial = registerMaterial(makeSelectionMaterial(palette.primary, 0.48, true), 0.48);
+  const brightArcMaterial = registerMaterial(makeSelectionMaterial(palette.bright, 0.52, true), 0.52);
+  const helixMaterial = registerMaterial(makeSelectionMaterial(palette.glow, 0.58, true), 0.58);
+  const helixBrightMaterial = registerMaterial(makeSelectionMaterial(palette.bright, 0.42, true), 0.42);
+  const capMaterial = registerMaterial(makeSelectionMaterial(palette.primary, 0.72, true), 0.72);
+
+  const shell = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.72, 0.88, TELEPORT_PORTAL_HEIGHT, 48, 1, true),
+    shellMaterial,
+  );
+  shell.position.y = TELEPORT_PORTAL_HEIGHT * 0.5;
+  shell.renderOrder = 74;
+  root.add(shell);
+
+  const core = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.20, 0.34, TELEPORT_PORTAL_HEIGHT * 0.96, 32, 1, true),
+    coreMaterial,
+  );
+  core.position.y = TELEPORT_PORTAL_HEIGHT * 0.49;
+  core.renderOrder = 75;
+  root.add(core);
+
+  const rotorA = new THREE.Group();
+  const rotorB = new THREE.Group();
+  rotorA.name = 'teleport-portal-rotor-a';
+  rotorB.name = 'teleport-portal-rotor-b';
+  const levelCount = 9;
+  for (let level = 0; level < levelCount; level++) {
+    const t = level / Math.max(1, levelCount - 1);
+    const y = 0.22 + t * (TELEPORT_PORTAL_HEIGHT - 0.44);
+    const radius = 0.68 + Math.sin(t * Math.PI * 2) * 0.08;
+    const arcLength = Math.PI * 1.18;
+    const startA = t * Math.PI * 3.2;
+    const startB = -t * Math.PI * 2.8 + Math.PI;
+
+    const arcA = new THREE.Mesh(
+      new THREE.RingGeometry(radius - 0.035, radius + 0.035, 40, 1, startA, arcLength),
+      level % 2 === 0 ? brightArcMaterial : arcMaterial,
+    );
+    arcA.rotation.x = -Math.PI / 2;
+    arcA.position.y = y;
+    arcA.renderOrder = 78;
+    rotorA.add(arcA);
+
+    const arcB = new THREE.Mesh(
+      new THREE.RingGeometry(radius - 0.025, radius + 0.025, 36, 1, startB, Math.PI * 0.92),
+      arcMaterial,
+    );
+    arcB.rotation.x = -Math.PI / 2;
+    arcB.position.y = y + 0.08;
+    arcB.renderOrder = 77;
+    rotorB.add(arcB);
+  }
+  root.add(rotorA, rotorB);
+
+  const helixA = new THREE.Group();
+  const helixB = new THREE.Group();
+  helixA.name = 'teleport-portal-helix-a';
+  helixB.name = 'teleport-portal-helix-b';
+  const helixSegments = 26;
+  for (let index = 0; index < helixSegments; index++) {
+    const t = index / Math.max(1, helixSegments - 1);
+    const y = 0.12 + t * (TELEPORT_PORTAL_HEIGHT - 0.24);
+    const angleA = t * Math.PI * 4.8;
+    const angleB = -t * Math.PI * 4.2 + Math.PI;
+    const radiusA = 0.78 + Math.sin(t * Math.PI * 4) * 0.035;
+    const radiusB = 0.62 + Math.cos(t * Math.PI * 3) * 0.04;
+
+    const moteA = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.24, 0.055), helixMaterial);
+    moteA.position.set(Math.sin(angleA) * radiusA, y, Math.cos(angleA) * radiusA);
+    moteA.rotation.y = angleA;
+    moteA.rotation.z = 0.28;
+    moteA.renderOrder = 79;
+    helixA.add(moteA);
+
+    const moteB = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.18, 0.045), helixBrightMaterial);
+    moteB.position.set(Math.sin(angleB) * radiusB, y, Math.cos(angleB) * radiusB);
+    moteB.rotation.y = angleB;
+    moteB.rotation.z = -0.22;
+    moteB.renderOrder = 80;
+    helixB.add(moteB);
+  }
+  root.add(helixA, helixB);
+
+  const bottomRing = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.035, 8, 64), capMaterial);
+  bottomRing.rotation.x = Math.PI / 2;
+  bottomRing.position.y = 0.10;
+  bottomRing.renderOrder = 81;
+  root.add(bottomRing);
+
+  const topRing = new THREE.Mesh(new THREE.TorusGeometry(0.74, 0.03, 8, 64), capMaterial);
+  topRing.rotation.x = Math.PI / 2;
+  topRing.position.y = TELEPORT_PORTAL_HEIGHT - 0.10;
+  topRing.renderOrder = 81;
+  root.add(topRing);
+
+  root.userData.portalRotorA = rotorA;
+  root.userData.portalRotorB = rotorB;
+  root.userData.portalHelixA = helixA;
+  root.userData.portalHelixB = helixB;
+  root.userData.portalMaterials = materialEntries;
   return root;
+}
+
+function animateTeleportPortal(root: THREE.Group, nowMs: number, progress: number, phaseOffset: number) {
+  const seconds = nowMs * 0.001;
+  const pulse = (Math.sin(seconds * 4.2 + phaseOffset) + 1) * 0.5;
+  const fadeIn = smootherStep01(progress / 0.10);
+  const fadeOut = smootherStep01((1 - progress) / 0.10);
+  const strength = Math.min(fadeIn, fadeOut);
+  const heightIntro = 0.22 + 0.78 * smootherStep01(progress / 0.12);
+
+  const rotorA = root.userData.portalRotorA as THREE.Group | undefined;
+  const rotorB = root.userData.portalRotorB as THREE.Group | undefined;
+  const helixA = root.userData.portalHelixA as THREE.Group | undefined;
+  const helixB = root.userData.portalHelixB as THREE.Group | undefined;
+  const materials = root.userData.portalMaterials as PortalMaterialEntry[] | undefined;
+
+  if (rotorA) rotorA.rotation.y = seconds * 1.72 + phaseOffset;
+  if (rotorB) rotorB.rotation.y = -seconds * 1.18 - phaseOffset * 0.7;
+  if (helixA) helixA.rotation.y = seconds * 0.88 + phaseOffset * 0.45;
+  if (helixB) helixB.rotation.y = -seconds * 0.66 - phaseOffset * 0.35;
+
+  const width = 0.96 + pulse * 0.07;
+  root.scale.set(width, heightIntro, width);
+  if (materials) {
+    for (const entry of materials) {
+      entry.material.opacity = entry.baseOpacity * strength * (0.82 + pulse * 0.18);
+    }
+  }
+}
+
+function shouldSkipProxyObject(object: THREE.Object3D) {
+  const name = object.name.toLowerCase();
+  return name.includes('basic-attack-range')
+    || name.includes('overhead')
+    || name.includes('status-overlay')
+    || name.includes('vision-range')
+    || name.includes('selection-hitbox');
+}
+
+function cloneRenderableHierarchy(source: THREE.Object3D): THREE.Object3D | null {
+  if (shouldSkipProxyObject(source)) return null;
+
+  let clone: THREE.Object3D;
+  if (source instanceof THREE.Mesh) {
+    const mesh = new THREE.Mesh(source.geometry, source.material);
+    mesh.castShadow = source.castShadow;
+    mesh.receiveShadow = source.receiveShadow;
+    mesh.frustumCulled = source.frustumCulled;
+    clone = mesh;
+  } else if (source instanceof THREE.Group) {
+    clone = new THREE.Group();
+  } else {
+    return null;
+  }
+
+  clone.name = source.name;
+  clone.position.copy(source.position);
+  clone.quaternion.copy(source.quaternion);
+  clone.scale.copy(source.scale);
+  clone.visible = source.visible;
+  clone.renderOrder = source.renderOrder;
+
+  for (const child of source.children) {
+    const childClone = cloneRenderableHierarchy(child);
+    if (childClone) clone.add(childClone);
+  }
+  return clone;
+}
+
+function buildHeroTransitProxy(actor: GameEntity) {
+  const proxy = cloneRenderableHierarchy(actor.root) ?? new THREE.Group();
+  proxy.name = `teleport-hero-proxy-${actor.id}`;
+  const worldQuaternion = new THREE.Quaternion();
+  const worldScale = new THREE.Vector3();
+  actor.root.getWorldQuaternion(worldQuaternion);
+  actor.root.getWorldScale(worldScale);
+  proxy.position.set(0, 0, 0);
+  proxy.quaternion.copy(worldQuaternion);
+  proxy.scale.copy(worldScale);
+  proxy.visible = true;
+  return proxy;
+}
+
+function hideActorRenderables(actor: GameEntity) {
+  const states: RenderVisibilityState[] = [];
+  actor.root.traverse(object => {
+    if (object === actor.root) return;
+    if (
+      object instanceof THREE.Mesh
+      || object instanceof THREE.Sprite
+      || object instanceof THREE.Line
+      || object instanceof THREE.Points
+    ) {
+      states.push({ object, visible: object.visible });
+      object.visible = false;
+    }
+  });
+  return states;
+}
+
+function restoreActorRenderables(states: readonly RenderVisibilityState[]) {
+  for (const state of states) state.object.visible = state.visible;
 }
 
 function buildTowerRangePreview(color: number) {
@@ -293,10 +514,6 @@ function animateLandingSelectionVisual(root: THREE.Group, nowMs: number) {
     const pulse = Math.sin(seconds * 2.2);
     glowMaterial.opacity = glowBaseOpacity * (1 + pulse * 0.025);
   }
-}
-
-function setVisualWorldPosition(root: THREE.Object3D, point: THREE.Vector3) {
-  root.position.copy(point);
 }
 
 function isTypingTarget(target: EventTarget | null) {
@@ -601,8 +818,10 @@ export function ensureTeleportScrollSystem(
   const clearChannelVisuals = (active: ChannelState) => {
     active.originVisual.removeFromParent();
     active.destinationVisual.removeFromParent();
+    active.heroProxy.removeFromParent();
     disposeObject3D(active.originVisual);
     disposeObject3D(active.destinationVisual);
+    restoreActorRenderables(active.actorRenderVisibility);
   };
 
   const cancelChannel = (reason: TeleportCancelReason, nowMs = performance.now()) => {
@@ -663,22 +882,26 @@ export function ensureTeleportScrollSystem(
     };
     trafficByTarget.set(target.id, [...(trafficByTarget.get(target.id) ?? []), traffic]);
 
-    const color = teamTeleportColor(actor.team);
-    const originVisual = buildChannelVisual(color);
-    const destinationVisual = buildLandingPreview(actor.team);
-    destinationVisual.name = 'teleport-channel-destination-selection-marker';
-    destinationVisual.visible = true;
-    setVisualWorldPosition(
-      originVisual,
-      actorWorld.clone().setY(sampleSurfaceHeight(actorWorld.x, actorWorld.z, actorWorld.y) + 0.02),
+    const originVisual = buildTeleportPortalColumn(actor.team);
+    originVisual.name = 'teleport-origin-light-column';
+    originVisual.position.set(
+      actorWorld.x,
+      sampleSurfaceHeight(actorWorld.x, actorWorld.z, actorWorld.y) + 0.02,
+      actorWorld.z,
     );
+
+    const destinationVisual = buildTeleportPortalColumn(actor.team);
+    destinationVisual.name = 'teleport-destination-light-column';
     destinationVisual.position.set(
       destinationWorld.x,
-      sampleSurfaceHeight(destinationWorld.x, destinationWorld.z, destinationWorld.y) + LANDING_SELECTION_Y_OFFSET,
+      sampleSurfaceHeight(destinationWorld.x, destinationWorld.z, destinationWorld.y) + 0.02,
       destinationWorld.z,
     );
-    destinationVisual.scale.setScalar(Math.max(0.24, actor.selectionRadius));
-    scene.add(originVisual, destinationVisual);
+
+    const heroProxy = buildHeroTransitProxy(actor);
+    heroProxy.position.copy(actorWorld);
+    const actorRenderVisibility = hideActorRenderables(actor);
+    scene.add(originVisual, destinationVisual, heroProxy);
 
     actor.root.userData[RESPAWN_HOLD_KEY] = true;
     channel = {
@@ -692,6 +915,8 @@ export function ensureTeleportScrollSystem(
       destinationWorld,
       originVisual,
       destinationVisual,
+      heroProxy,
+      actorRenderVisibility,
     };
   };
 
@@ -924,17 +1149,47 @@ export function ensureTeleportScrollSystem(
     if (itemSlot && itemSlot.dataset.slot !== '6') cancelChannel('player-command');
   };
 
+  const animateHeroTransit = (active: ChannelState, progress: number) => {
+    const proxy = active.heroProxy;
+    const originGroundY = active.originVisual.position.y;
+    const destinationGroundY = active.destinationVisual.position.y;
+
+    if (progress < TELEPORT_RISE_END) {
+      const rise = smootherStep01(progress / TELEPORT_RISE_END);
+      proxy.visible = true;
+      proxy.position.set(
+        active.anchorWorld.x,
+        originGroundY + TELEPORT_PORTAL_HEIGHT * rise,
+        active.anchorWorld.z,
+      );
+      return;
+    }
+
+    if (progress < TELEPORT_TRANSFER_END) {
+      proxy.visible = false;
+      return;
+    }
+
+    const descent = smootherStep01(
+      (progress - TELEPORT_TRANSFER_END) / (TELEPORT_DESCENT_END - TELEPORT_TRANSFER_END),
+    );
+    proxy.visible = true;
+    proxy.position.set(
+      active.destinationWorld.x,
+      destinationGroundY + TELEPORT_PORTAL_HEIGHT * (1 - descent),
+      active.destinationWorld.z,
+    );
+  };
+
   const updateChannelVisuals = (active: ChannelState, nowMs: number) => {
     const duration = Math.max(1, active.completesAtMs - active.startedAtMs);
     const progress = THREE.MathUtils.clamp((nowMs - active.startedAtMs) / duration, 0, 1);
-    const pulse = (Math.sin(nowMs * 0.012) + 1) * 0.5;
-    const ring = active.originVisual.userData.ringMaterial as THREE.MeshBasicMaterial | undefined;
-    const glow = active.originVisual.userData.glowMaterial as THREE.MeshBasicMaterial | undefined;
-    if (ring) ring.opacity = 0.58 + pulse * 0.28;
-    if (glow) glow.opacity = 0.10 + progress * 0.18 + pulse * 0.04;
-    active.originVisual.rotation.y = nowMs * 0.0018;
-    active.originVisual.scale.setScalar(0.92 + progress * 0.18 + pulse * 0.035);
-    animateLandingSelectionVisual(active.destinationVisual, nowMs);
+    animateTeleportPortal(active.originVisual, nowMs, progress, 0);
+    animateTeleportPortal(active.destinationVisual, nowMs, progress, Math.PI * 0.65);
+    animateHeroTransit(active, progress);
+
+    const selectedMarker = scene.getObjectByName('selected-entity-marker');
+    if (selectedMarker && active.actor.root.userData.selected === true) selectedMarker.visible = false;
   };
 
   const updateTargetPreviewAnimation = (nowMs: number) => {
