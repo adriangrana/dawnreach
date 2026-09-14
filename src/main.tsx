@@ -13,6 +13,7 @@ import './command-controls.css';
 import './combat-stats.css';
 import './progression-hud.css';
 import './shop.css';
+import './item-ui.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
@@ -32,52 +33,25 @@ function mountedImagesAreSettled() {
 
 async function waitForDawnreachReady() {
   const startedAt = performance.now();
-
-  // Fonts are presentation-only and must never be allowed to hold the game boot hostage.
   if ('fonts' in document) {
-    await Promise.race([
-      document.fonts.ready.then(() => undefined),
-      delay(BOOT_FONT_WAIT_MS),
-    ]);
+    await Promise.race([document.fonts.ready.then(() => undefined), delay(BOOT_FONT_WAIT_MS)]);
   }
 
   while (true) {
     await nextAnimationFrame();
-
     const gameCanvas = document.querySelector<HTMLCanvasElement>('.game-canvas');
     const minimapCanvas = document.querySelector<HTMLCanvasElement>('.minimap-canvas');
     const gameHud = document.querySelector<HTMLElement>('.game-hud');
     const gameBounds = gameCanvas?.getBoundingClientRect();
     const minimapBounds = minimapCanvas?.getBoundingClientRect();
-
-    const gameSurfaceReady = Boolean(
-      gameCanvas
-      && gameCanvas.dataset.dawnreachReady === 'true'
-      && gameBounds
-      && gameCanvas.width > 0
-      && gameCanvas.height > 0
-      && gameBounds.width > 0
-      && gameBounds.height > 0,
-    );
-    const minimapReady = Boolean(
-      minimapCanvas
-      && minimapBounds
-      && minimapCanvas.width > 0
-      && minimapCanvas.height > 0
-      && minimapBounds.width > 0
-      && minimapBounds.height > 0,
-    );
+    const gameSurfaceReady = Boolean(gameCanvas && gameCanvas.dataset.dawnreachReady === 'true' && gameBounds && gameCanvas.width > 0 && gameCanvas.height > 0 && gameBounds.width > 0 && gameBounds.height > 0);
+    const minimapReady = Boolean(minimapCanvas && minimapBounds && minimapCanvas.width > 0 && minimapCanvas.height > 0 && minimapBounds.width > 0 && minimapBounds.height > 0);
 
     if (gameSurfaceReady && minimapReady && gameHud && mountedImagesAreSettled()) {
-      // Give Three.js and the browser two complete paint opportunities after all
-      // visible assets have settled. This prevents exposing a partially composed frame.
       await nextAnimationFrame();
       await nextAnimationFrame();
       return;
     }
-
-    // Loading optimisations are optional. A shader driver, image, font or future preload
-    // regression must never leave the player trapped behind the splash indefinitely.
     if (performance.now() - startedAt >= BOOT_SPLASH_MAX_WAIT_MS) {
       console.warn('[Dawnreach] Boot readiness watchdog expired; continuing without full warmup.');
       return;
@@ -88,22 +62,16 @@ async function waitForDawnreachReady() {
 function dismissBootSplash() {
   const splash = document.getElementById(BOOT_SPLASH_ID);
   if (!splash) return;
-
   splash.classList.add('is-ready');
   window.setTimeout(() => splash.remove(), 280);
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <React.StrictMode><App /></React.StrictMode>,
 );
 
 mountCombatStatsOverlay();
 const disposeResponsiveHudScale = mountResponsiveHudScale();
-// F1 must see synthetic Space before the camera controller. On the first F1 press
-// it suppresses recentering while Alden is only being selected; subsequent F1 presses
-// are allowed through and use the same one-shot hero centering as a normal Space press.
 const disposeHeroFunctionKeyControls = mountHeroFunctionKeyControls();
 const disposeGameCameraControls = mountGameCameraControls();
 const disposeMinimapDragCamera = mountMinimapDragCamera();
