@@ -111,7 +111,7 @@ export function mountAldenWorldAbilityRuntime() {
   const previousRender = rendererPrototype.render;
   let disposed = false;
 
-  const wrappedRender: typeof rendererPrototype.render = function render(scene, camera) {
+  const wrappedRender: typeof rendererPrototype.render = function render(this: THREE.WebGLRenderer, scene, camera) {
     if (!disposed && scene instanceof THREE.Scene && this.domElement.classList.contains('game-canvas')) {
       let runtime = installedScenes.get(scene);
       if (!runtime) {
@@ -306,7 +306,7 @@ class AldenWorldRuntime {
     const direction = this.resolveAimDirection();
     const start = this.hero.root.position.clone();
     const end = this.findDashEndpoint(start, direction, Q_DASH_RANGE);
-    const facingYaw = Math.atan2(direction.x, direction.z);
+    const facingYaw = Math.atan2(direction.x, direction.y);
 
     this.dash = {
       startedAtMs: nowMs,
@@ -911,17 +911,17 @@ class AldenWorldRuntime {
   }
 
   private resolveAbilityJoints(): AbilityJoints {
-    const leftShoulder = this.hero.root.getObjectByName('left-shoulder');
-    const rightShoulder = this.hero.root.getObjectByName('right-shoulder');
+    const leftShoulder = this.hero.root.getObjectByName('left-shoulder') ?? null;
+    const rightShoulder = this.hero.root.getObjectByName('right-shoulder') ?? null;
     return {
-      model: this.hero.root.getObjectByName('H001-model'),
-      pelvis: this.hero.root.getObjectByName('pelvis'),
-      torso: this.hero.root.getObjectByName('torso'),
+      model: this.hero.root.getObjectByName('H001-model') ?? null,
+      pelvis: this.hero.root.getObjectByName('pelvis') ?? null,
+      torso: this.hero.root.getObjectByName('torso') ?? null,
       leftShoulder,
       rightShoulder,
       leftElbow: leftShoulder?.getObjectByName('elbow') ?? null,
       rightElbow: rightShoulder?.getObjectByName('elbow') ?? null,
-      wrist: this.hero.root.getObjectByName('right-wrist-attack-pivot'),
+      wrist: this.hero.root.getObjectByName('right-wrist-attack-pivot') ?? null,
     };
   }
 
