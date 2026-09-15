@@ -30,8 +30,10 @@ const TREE_VISION_RADIUS = 0.34;
 const WALL_RADIUS = 0.48;
 const ELEVATION_RADIUS = 0.42;
 const OCCLUDER_SPATIAL_CELL_SIZE = 6;
+const BASE_VISION_CONFINEMENT_RADIUS = BASE_LAYOUT.radius - 0.22;
 
 type WorldPoint3 = Readonly<{ x: number; y: number; z: number }>;
+type BaseVisionConfinement = Readonly<{ x: number; z: number; radius: number }>;
 
 type CircleOccluder = {
   kind: 'circle';
@@ -82,6 +84,32 @@ function findScene(object: THREE.Object3D | undefined) {
   let current = object;
   while (current?.parent) current = current.parent;
   return current instanceof THREE.Scene ? current : null;
+}
+
+function isItemVisionWard(source: GameEntity) {
+  return source.root.userData.itemWard === true;
+}
+
+function getBaseVisionConfinement(
+  source: GameEntity,
+  position: Readonly<{ x: number; z: number }>,
+): BaseVisionConfinement | null {
+  // Wards are the deliberate exception: placing an Ojo inside a base is allowed to scout
+  // across the citadel perimeter. Every ordinary unit/structure inside its own base remains
+  // vision-confined so tall towers cannot reveal terrain by looking over the authored wall.
+  if (isItemVisionWard(source)) return null;
+  if (source.team !== 'blue' && source.team !== 'red') return null;
+  const center = source.team === 'blue' ? DAWNREACH_LAYOUT.blueBase : DAWNREACH_LAYOUT.redBase;
+  const dx = position.x - center.x;
+  const dz = position.z - center.z;
+  if (dx * dx + dz * dz > BASE_VISION_CONFINEMENT_RADIUS * BASE_VISION_CONFINEMENT_RADIUS) return null;
+  return { x: center.x, z: center.z, radius: BASE_VISION_CONFINEMENT_RADIUS };
+}
+
+function pointInsideBaseConfinement(point: VisionPoint, confinement: BaseVisionConfinement) {
+  const dx = point.x - confinement.x;
+  const dz = point.z - confinement.z;
+  return dx * dx + dz * dz <= confinement.radius * confinement.radius;
 }
 
 function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
@@ -769,12 +797,31 @@ function createFogOverlay(
 
     const points: Array<{ x: number; z: number }> = [];
     const eye = { x: sourcePosition.x, y: eyeY, z: sourcePosition.z };
+    const confinement = getBaseVisionConfinement(source, sourcePosition);
     for (let ray = 0; ray < FOG_VISIBILITY_RAYS; ray++) {
       const angle = ray / FOG_VISIBILITY_RAYS * Math.PI * 2;
-      const visibleDistance = traceDistance ? traceDistance(eye, angle, radius) : radius;
+      const rayX = Math.cos(angle);
+      const rayZ = Math.sin(angle);
+      let maxVisibleDistance = radius;
+      if (confinement) {
+        const boundaryDistance = rayCircleExit(
+          sourcePosition.x,
+          sourcePosition.z,
+          rayX,
+          rayZ,
+          radius,
+          confinement.x,
+          confinement.z,
+          confinement.radius,
+        );
+        if (Number.isFinite(boundaryDistance)) {
+          maxVisibleDistance = Math.min(maxVisibleDistance, Math.max(0, boundaryDistance - VISION_EPSILON));
+        }
+      }
+      const visibleDistance = traceDistance ? traceDistance(eye, angle, maxVisibleDistance) : maxVisibleDistance;
       points.push({
-        x: sourcePosition.x + Math.cos(angle) * visibleDistance,
-        z: sourcePosition.z + Math.sin(angle) * visibleDistance,
+        x: sourcePosition.x + rayX * visibleDistance,
+        z: sourcePosition.z + rayZ * visibleDistance,
       });
     }
     visibilityCache.set(source.id, { x: sourcePosition.x, y: eyeY, z: sourcePosition.z, radius, points });
@@ -838,6 +885,8 @@ export function createVisionSystem(
   const isPointVisibleAgainst = (sources: readonly GameEntity[], point: VisionPoint, y = 0) => {
     for (const source of sources) {
       source.root.getWorldPosition(sourcePosition);
+      const confinement = getBaseVisionConfinement(source, sourcePosition);
+      if (confinement && !pointInsideBaseConfinement(point, confinement)) continue;
       const dx = point.x - sourcePosition.x;
       const dz = point.z - sourcePosition.z;
       if (dx * dx + dz * dz > source.visionRadius * source.visionRadius) continue;
