@@ -28,8 +28,10 @@ export const TEAM_START_BASE_LAYOUT = {
   rampWidth: 4.4,
   fountainForward: 2.05,
   fountainSide: 0,
-  spawnForward: 2.2,
-  spawnSide: -1.10,
+  // Keep heroes on the dry sanctuary plaza, clear of the fountain/pool footprint (~3.2u),
+  // while remaining comfortably inside the 7u healing/protection radius.
+  spawnForward: 4.8,
+  spawnSide: -2.8,
   hpRegenFractionPerSecond: 0.10,
   resourceRegenFractionPerSecond: 0.08,
   fountainTrueDamagePerSecond: 200,
