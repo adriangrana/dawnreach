@@ -1,6 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
+import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountFpsOverlay } from './hud/fpsOverlay';
@@ -73,6 +74,9 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
+// Install renderer/lighting scheduling before React mounts the Three.js game world.
+const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
+
 // The Three.js world is intentionally mounted once. React StrictMode's development-only
 // effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
 // doubling startup work and transient GPU/CPU pressure in tauri:dev.
@@ -96,6 +100,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    disposeRuntimePerformanceTuning();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
     disposeResponsiveHudScale();
