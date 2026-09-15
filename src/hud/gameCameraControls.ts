@@ -10,6 +10,7 @@ const MINIMAP_HERO_SELECTOR = '.minimap-hero-icon';
 const MINIMAP_VIEWPORT_SELECTOR = '.minimap-camera-viewport polygon';
 const GAME_CANVAS_SELECTOR = '.game-canvas';
 const SYNTHETIC_POINTER_ID = 7331;
+const LAYOUT_CACHE_MS = 120;
 
 type ViewportFootprint = {
   centerX: number;
@@ -18,13 +19,21 @@ type ViewportFootprint = {
   halfHeight: number;
 };
 
+type CachedLayout = {
+  minimap: HTMLElement | null;
+  minimapRect: DOMRect | null;
+  hero: HTMLElement | null;
+  polygon: SVGPolygonElement | null;
+  footprint: ViewportFootprint | null;
+  refreshedAt: number;
+};
+
 function isEditableTarget(target: EventTarget | null) {
   return target instanceof Element
     && Boolean(target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'));
 }
 
-function parseViewportFootprint(): ViewportFootprint | null {
-  const polygon = document.querySelector<SVGPolygonElement>(MINIMAP_VIEWPORT_SELECTOR);
+function parseViewportFootprint(polygon: SVGPolygonElement | null): ViewportFootprint | null {
   const rawPoints = polygon?.getAttribute('points')?.trim();
   if (!rawPoints) return null;
 
@@ -59,68 +68,8 @@ function parseViewportFootprint(): ViewportFootprint | null {
   };
 }
 
-function fallbackViewportCenter() {
-  const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
-  const hero = document.querySelector<HTMLElement>(MINIMAP_HERO_SELECTOR);
-  if (!minimap || !hero) return { x: 0.5, y: 0.5 };
-
-  const minimapRect = minimap.getBoundingClientRect();
-  const heroRect = hero.getBoundingClientRect();
-  if (minimapRect.width <= 0 || minimapRect.height <= 0) return { x: 0.5, y: 0.5 };
-
-  return {
-    x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
-    y: (heroRect.top + heroRect.height / 2 - minimapRect.top) / minimapRect.height,
-  };
-}
-
-function heroMinimapPosition() {
-  const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
-  const hero = document.querySelector<HTMLElement>(MINIMAP_HERO_SELECTOR);
-  if (!minimap || !hero) return null;
-
-  const minimapRect = minimap.getBoundingClientRect();
-  const heroRect = hero.getBoundingClientRect();
-  if (minimapRect.width <= 0 || minimapRect.height <= 0 || heroRect.width <= 0 || heroRect.height <= 0) return null;
-
-  return {
-    x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
-    y: (heroRect.top + heroRect.height / 2 - minimapRect.top) / minimapRect.height,
-  };
-}
-
-function cameraTargetingModeActive() {
-  const canvas = document.querySelector<HTMLCanvasElement>(GAME_CANVAS_SELECTOR);
+function cameraTargetingModeActive(canvas: HTMLCanvasElement | null) {
   return canvas?.style.cursor === 'crosshair';
-}
-
-function dispatchMinimapCameraTarget(normalizedX: number, normalizedY: number) {
-  const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
-  if (!minimap || cameraTargetingModeActive()) return false;
-
-  const rect = minimap.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
-
-  const clientX = rect.left + normalizedX * rect.width;
-  const clientY = rect.top + normalizedY * rect.height;
-  minimap.dispatchEvent(new PointerEvent('pointerdown', {
-    bubbles: true,
-    cancelable: true,
-    pointerId: SYNTHETIC_POINTER_ID,
-    pointerType: 'mouse',
-    isPrimary: true,
-    button: 0,
-    buttons: 1,
-    clientX,
-    clientY,
-  }));
-  return true;
-}
-
-function dispatchHeroCameraTarget() {
-  const hero = heroMinimapPosition();
-  if (!hero) return false;
-  return dispatchMinimapCameraTarget(hero.x, hero.y);
 }
 
 export function mountGameCameraControls() {
@@ -130,11 +79,19 @@ export function mountGameCameraControls() {
   let pointerSeen = false;
   let frameId = 0;
   let previousTime = performance.now();
-  let lastCameraDispatch = -Infinity;
   let target: { x: number; y: number } | null = null;
   let initialHeroCenterPending = true;
   let recenterHeroOnNextFrame = false;
   let disposed = false;
+  let gameCanvas: HTMLCanvasElement | null = null;
+  let layout: CachedLayout = {
+    minimap: null,
+    minimapRect: null,
+    hero: null,
+    polygon: null,
+    footprint: null,
+    refreshedAt: -Infinity,
+  };
 
   const tauriWindow = isTauri() ? getCurrentWindow() : null;
   const setCursorGrab = async (grab: boolean) => {
@@ -142,10 +99,71 @@ export function mountGameCameraControls() {
     try {
       await tauriWindow.setCursorGrab(grab);
     } catch (error) {
-      // Browser preview and unsupported platforms retain edge scrolling even if
-      // native confinement is unavailable.
       console.warn(`[Dawnreach] Cursor ${grab ? 'grab' : 'release'} unavailable`, error);
     }
+  };
+
+  const refreshLayout = (time: number, force = false) => {
+    if (!force && time - layout.refreshedAt < LAYOUT_CACHE_MS) return;
+    const minimap = document.querySelector<HTMLElement>(MINIMAP_SELECTOR);
+    const hero = document.querySelector<HTMLElement>(MINIMAP_HERO_SELECTOR);
+    const polygon = document.querySelector<SVGPolygonElement>(MINIMAP_VIEWPORT_SELECTOR);
+    layout = {
+      minimap,
+      minimapRect: minimap?.getBoundingClientRect() ?? null,
+      hero,
+      polygon,
+      footprint: parseViewportFootprint(polygon),
+      refreshedAt: time,
+    };
+    gameCanvas = document.querySelector<HTMLCanvasElement>(GAME_CANVAS_SELECTOR);
+  };
+
+  const fallbackViewportCenter = () => {
+    const { minimapRect, hero } = layout;
+    if (!minimapRect || !hero || minimapRect.width <= 0 || minimapRect.height <= 0) {
+      return { x: 0.5, y: 0.5 };
+    }
+    const heroRect = hero.getBoundingClientRect();
+    return {
+      x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
+      y: (heroRect.top + heroRect.height / 2 - minimapRect.top) / minimapRect.height,
+    };
+  };
+
+  const heroMinimapPosition = () => {
+    const { minimapRect, hero } = layout;
+    if (!minimapRect || !hero || minimapRect.width <= 0 || minimapRect.height <= 0) return null;
+    const heroRect = hero.getBoundingClientRect();
+    if (heroRect.width <= 0 || heroRect.height <= 0) return null;
+    return {
+      x: (heroRect.left + heroRect.width / 2 - minimapRect.left) / minimapRect.width,
+      y: (heroRect.top + heroRect.height / 2 - minimapRect.top) / minimapRect.height,
+    };
+  };
+
+  const dispatchMinimapCameraTarget = (normalizedX: number, normalizedY: number) => {
+    const { minimap, minimapRect } = layout;
+    if (!minimap || !minimapRect || cameraTargetingModeActive(gameCanvas)) return false;
+    if (minimapRect.width <= 0 || minimapRect.height <= 0) return false;
+
+    minimap.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: SYNTHETIC_POINTER_ID,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX: minimapRect.left + normalizedX * minimapRect.width,
+      clientY: minimapRect.top + normalizedY * minimapRect.height,
+    }));
+    return true;
+  };
+
+  const dispatchHeroCameraTarget = () => {
+    const hero = heroMinimapPosition();
+    return hero ? dispatchMinimapCameraTarget(hero.x, hero.y) : false;
   };
 
   const onFocus = () => { void setCursorGrab(true); };
@@ -165,10 +183,6 @@ export function mountGameCameraControls() {
   const onKeyDown = (event: KeyboardEvent) => {
     if (isEditableTarget(event.target)) return;
 
-    // The game itself still receives Space and performs its existing center command.
-    // On the next animation frame we convert that temporary hero-follow state into a
-    // fixed minimap focus at the hero's current position, so the camera immediately
-    // becomes free again instead of continuing to follow Alden as he moves.
     if (event.code === 'Space' && !event.repeat) {
       recenterHeroOnNextFrame = true;
       return;
@@ -214,18 +228,14 @@ export function mountGameCameraControls() {
     if (disposed) return;
     const dt = Math.min(0.05, Math.max(0, (time - previousTime) / 1000));
     previousTime = time;
+    refreshLayout(time);
 
-    // createDawnreachGame initially places the camera on the hero. As soon as the
-    // minimap marker exists, issue one camera focus to that exact point. This leaves
-    // cameraFocus non-null in the game runtime, decoupling the camera from subsequent
-    // hero movement while preserving the same initial composition the player expects.
-    if (initialHeroCenterPending && dispatchHeroCameraTarget()) {
+    if (initialHeroCenterPending && gameCanvas?.dataset.dawnreachReady === 'true' && dispatchHeroCameraTarget()) {
       initialHeroCenterPending = false;
       target = null;
     }
 
-    if (recenterHeroOnNextFrame) {
-      dispatchHeroCameraTarget();
+    if (recenterHeroOnNextFrame && dispatchHeroCameraTarget()) {
       recenterHeroOnNextFrame = false;
       target = null;
     }
@@ -233,10 +243,10 @@ export function mountGameCameraControls() {
     const direction = getDirection();
     const moving = Math.abs(direction.x) > 0.001 || Math.abs(direction.y) > 0.001;
 
-    if (!moving || cameraTargetingModeActive()) {
+    if (!moving || cameraTargetingModeActive(gameCanvas)) {
       target = null;
     } else {
-      const footprint = parseViewportFootprint();
+      const footprint = layout.footprint;
       if (!target) {
         const fallback = fallbackViewportCenter();
         target = footprint
@@ -244,10 +254,8 @@ export function mountGameCameraControls() {
           : fallback;
       }
 
-      const deltaX = direction.x * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_WIDTH;
-      const deltaY = direction.y * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_HEIGHT;
-      target.x += deltaX;
-      target.y += deltaY;
+      target.x += direction.x * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_WIDTH;
+      target.y += direction.y * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_HEIGHT;
 
       const halfWidth = footprint?.halfWidth ?? 0.08;
       const halfHeight = footprint?.halfHeight ?? 0.08;
@@ -255,9 +263,9 @@ export function mountGameCameraControls() {
       target.x = Math.min(1 - halfWidth - padding, Math.max(halfWidth + padding, target.x));
       target.y = Math.min(1 - halfHeight - padding, Math.max(halfHeight + padding, target.y));
 
-      if (time - lastCameraDispatch >= 24 && dispatchMinimapCameraTarget(target.x, target.y)) {
-        lastCameraDispatch = time;
-      }
+      // Dispatch on every display frame. The previous 24 ms throttle capped camera target
+      // updates at ~41 Hz on a 60 Hz display, which was the visible source of the stepping.
+      dispatchMinimapCameraTarget(target.x, target.y);
     }
 
     frameId = requestAnimationFrame(frame);
@@ -270,6 +278,7 @@ export function mountGameCameraControls() {
   window.addEventListener('keyup', onKeyUp, true);
 
   void setCursorGrab(true);
+  refreshLayout(performance.now(), true);
   frameId = requestAnimationFrame(frame);
 
   return () => {
@@ -283,8 +292,6 @@ export function mountGameCameraControls() {
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
-    if (tauriWindow) {
-      void tauriWindow.setCursorGrab(false).catch(() => undefined);
-    }
+    if (tauriWindow) void tauriWindow.setCursorGrab(false).catch(() => undefined);
   };
 }
