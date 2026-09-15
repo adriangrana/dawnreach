@@ -82,6 +82,11 @@ const HEIGHT_DAMPING = 30;
 const LANE_CREEP_MOVE_SPEED = 3;
 const RANGED_FORMATION_TRAILING_OFFSET = 3.75;
 const SIEGE_FORMATION_TRAILING_OFFSET = 4.8;
+// Keep wave creation separate from lane routing: creeps are authored from the throne-to-throne
+// lane polyline, but physically appear on the dashed exit corridor instead of behind the throne.
+// 14 world units keeps the full formation inside the 9.2..18 guide-mark span (siege at 9.2,
+// ranged at 10.25, melee/frontline at 14) while the route still ends at the enemy throne.
+const LANE_CREEP_SPAWN_ANCHOR_DISTANCE = 14;
 const TEMP_A = new THREE.Vector3();
 const TEMP_B = new THREE.Vector3();
 const SURFACE_RAY = new THREE.Raycaster();
@@ -328,8 +333,13 @@ class LaneCreepManager {
         : SIEGE_FORMATION_TRAILING_OFFSET;
     const stats = CREEP_STATS[type];
 
-    const rawSpawnX = start[0] + sideX * lateralSlot - dirX * trailingOffset;
-    const rawSpawnZ = start[1] + sideZ * lateralSlot - dirZ * trailingOffset;
+    // Spawn on the authored dashed lane-exit corridor, but leave `route` untouched so the
+    // final waypoint remains the enemy throne. Blue and red both work because `dirX/dirZ`
+    // are calculated after reversing the route for red.
+    const spawnOriginX = start[0] + dirX * LANE_CREEP_SPAWN_ANCHOR_DISTANCE;
+    const spawnOriginZ = start[1] + dirZ * LANE_CREEP_SPAWN_ANCHOR_DISTANCE;
+    const rawSpawnX = spawnOriginX + sideX * lateralSlot - dirX * trailingOffset;
+    const rawSpawnZ = spawnOriginZ + sideZ * lateralSlot - dirZ * trailingOffset;
     const spawn = this.findFreeSpawnPoint(rawSpawnX, rawSpawnZ, dirX, dirZ, stats.collisionRadius);
 
     const seed = this.serial;
