@@ -494,7 +494,7 @@ export function ensureWardPlacementSystem(
       preview.visionMaterial.opacity = 0.16 + pulse * 0.12;
       update(now);
     }
-    previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
+    previousSceneBeforeRender.call(scene, renderer, renderedScene, camera, geometry, material, group);
   };
   scene.onBeforeRender = beforeRender;
 
