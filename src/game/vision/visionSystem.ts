@@ -692,15 +692,18 @@ function createEnvironmentVisionOcclusion(scene: THREE.Scene) {
       return false;
     });
 
-    if (!nearestOccluder) return maxDistance;
+    // TypeScript does not track assignments performed inside the callback above, so
+    // re-establish the declared union before narrowing it here.
+    const resolvedOccluder = nearestOccluder as VisionOccluder | null;
+    if (!resolvedOccluder) return maxDistance;
 
     // Gameplay LOS still stops at the source-facing surface. The fog mask alone is
     // allowed to clear the blocker footprint so the blocker itself remains readable.
-    const exit = rayOccluderExit(nearestOccluder, source, dx, dz, maxDistance);
+    const exit = rayOccluderExit(resolvedOccluder, source, dx, dz, maxDistance);
     if (!Number.isFinite(exit)) return nearestEntry;
     return Math.min(
       maxDistance,
-      exit + (nearestOccluder.fogProjectionPadding ?? 0) + FOG_OCCLUDER_REVEAL_MARGIN,
+      exit + (resolvedOccluder.fogProjectionPadding ?? 0) + FOG_OCCLUDER_REVEAL_MARGIN,
     );
   };
 
