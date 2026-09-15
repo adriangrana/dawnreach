@@ -39,7 +39,6 @@ function build(root: THREE.Group, world: THREE.Group, team: Team) {
   addDeck(visual, mats, basis, angle);
   addWalls(visual, mats, basis);
   addStairs(visual, mats, basis, angle);
-  addShopTerrace(visual, mats, basis, angle);
   addPilasters(visual, mats, basis, angle);
   addBanners(visual, mats, basis, angle);
   addVegetation(visual, mats, basis);
@@ -163,11 +162,11 @@ function stairStepSurface(a: number) {
 function makeMaterials(team: Team) {
   const blue = team === 'blue', stoneTex = stoneTexture(blue), floorTex = floorTexture(blue), waterTex = waterTexture();
   return {
-    floor: new THREE.MeshStandardMaterial({ color: blue ? 0x9aa5aa : 0xa18f8e, map: floorTex, bumpMap: floorTex, bumpScale: .07, roughness: .91 }),
-    floorDark: new THREE.MeshStandardMaterial({ color: blue ? 0x566870 : 0x6d5554, map: floorTex, bumpMap: floorTex, bumpScale: .09, roughness: .96 }),
-    stone: new THREE.MeshStandardMaterial({ color: blue ? 0x858d8b : 0x8e7b78, map: stoneTex, bumpMap: stoneTex, bumpScale: .12, roughness: .97 }),
-    dark: new THREE.MeshStandardMaterial({ color: blue ? 0x465254 : 0x5b4545, map: stoneTex, bumpMap: stoneTex, bumpScale: .15, roughness: .99 }),
-    light: new THREE.MeshStandardMaterial({ color: blue ? 0xb5ae99 : 0xb49d92, map: stoneTex, bumpMap: stoneTex, bumpScale: .08, roughness: .90 }),
+    floor: new THREE.MeshStandardMaterial({ color: blue ? 0xd8cbaa : 0xd6c5a8, map: floorTex, bumpMap: floorTex, bumpScale: .055, roughness: .94 }),
+    floorDark: new THREE.MeshStandardMaterial({ color: blue ? 0xb7a886 : 0xb59f84, map: floorTex, bumpMap: floorTex, bumpScale: .065, roughness: .96 }),
+    stone: new THREE.MeshStandardMaterial({ color: blue ? 0xc8ba98 : 0xc6b293, map: stoneTex, bumpMap: stoneTex, bumpScale: .11, roughness: .96 }),
+    dark: new THREE.MeshStandardMaterial({ color: blue ? 0x91836a : 0x907764, map: stoneTex, bumpMap: stoneTex, bumpScale: .13, roughness: .98 }),
+    light: new THREE.MeshStandardMaterial({ color: blue ? 0xe2d6b8 : 0xdfcdb2, map: stoneTex, bumpMap: stoneTex, bumpScale: .075, roughness: .91 }),
     gold: new THREE.MeshStandardMaterial({ color: 0xd2aa50, roughness: .27, metalness: .78 }),
     goldDark: new THREE.MeshStandardMaterial({ color: 0x8b692d, roughness: .43, metalness: .62 }),
     rune: new THREE.MeshStandardMaterial({ color: blue ? 0x49c8ff : 0xff6b62, emissive: blue ? 0x075c96 : 0x8b211c, emissiveIntensity: 1.15, roughness: .3, metalness: .2 }),
@@ -228,11 +227,6 @@ function addStairs(g: THREE.Group, m: Mats, b: Basis, angle: number) {
     addPillar(g, m, offset(b, STAIR_TOP + .12, side * (STAIR_HALF + .48)), DECK_Y, angle, 1.08);
     addPillar(g, m, offset(b, STAIR_BOTTOM - .10, side * (STAIR_HALF + .48)), PLAZA_Y, angle, .94);
   }
-}
-
-function addShopTerrace(g: THREE.Group, m: Mats, b: Basis, angle: number) {
-  const p = offset(b, -.55, 0), pad = new THREE.Mesh(chamfer(5.1, .18, 3.35, .08), m.floorDark);
-  pad.position.set(p.x, DECK_Y + .09, p.z); pad.rotation.y = -angle + Math.PI / 2; pad.receiveShadow = true; g.add(pad);
 }
 
 function addPilasters(g: THREE.Group, m: Mats, b: Basis, angle: number) {
@@ -307,8 +301,43 @@ function outlineShape(b:Basis){const sh=new THREE.Shape();OUTLINE.forEach(([f,s]
 function chamfer(w:number,h:number,d:number,b:number){const s=new THREE.Shape(),x=w/2,y=h/2,c=Math.min(b,x*.45,y*.45);s.moveTo(-x+c,-y);s.lineTo(x-c,-y);s.lineTo(x,-y+c);s.lineTo(x,y-c);s.lineTo(x-c,y);s.lineTo(-x+c,y);s.lineTo(-x,y-c);s.lineTo(-x,-y+c);s.closePath();const g=new THREE.ExtrudeGeometry(s,{depth:d,bevelEnabled:true,bevelSegments:6,bevelSize:Math.min(c*.55,d*.13),bevelThickness:Math.min(c*.52,d*.11),curveSegments:1});g.translate(0,0,-d/2);g.computeVertexNormals();return g;}
 function bannerGeo(w:number,h:number,cols:number,rows:number){const v:number[]=[],uv:number[]=[],idx:number[]=[];for(let r=0;r<=rows;r++){const q=r/rows,y=h*(.5-q),tap=q<.76?1:THREE.MathUtils.lerp(1,.05,(q-.76)/.24);for(let c=0;c<=cols;c++){const u=c/cols,x=(u-.5)*w*tap;v.push(x,y,Math.sin(u*Math.PI*5)*.025);uv.push(u,1-q);if(r<rows&&c<cols){const k=r*(cols+1)+c,n=k+cols+1;idx.push(k,k+1,n,k+1,n+1,n);}}}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return g;}
 
-function floorTexture(blue:boolean){const c=document.createElement('canvas');c.width=c.height=1024;const x=c.getContext('2d');if(!x)return null;x.fillStyle=blue?'#344148':'#483838';x.fillRect(0,0,1024,1024);for(let r=0;r<7;r++){const n=r%2?5:6,w=1024/n,o=r%2?-w*.38:-w*.08;for(let k=-1;k<=n;k++){const q=88+Math.floor(noise(r*71+k*43)*38);x.fillStyle=blue?`rgb(${q},${q+7},${q+12})`:`rgb(${q+10},${q},${q})`;x.fillRect(k*w+o+7,r*146+7,w-14,132);x.strokeStyle='rgba(18,24,28,.6)';x.lineWidth=5;x.strokeRect(k*w+o+7,r*146+7,w-14,132);}}return tex(c,2.2,2.2);}
-function stoneTexture(blue:boolean){const c=document.createElement('canvas');c.width=c.height=768;const x=c.getContext('2d');if(!x)return null;x.fillStyle='#343b3d';x.fillRect(0,0,768,768);for(let r=0;r<9;r++)for(let k=-1;k<7;k++){const w=144,o=r%2?72:0,q=72+Math.floor(noise(r*43+k*29)*42);x.fillStyle=blue?`rgb(${q},${q+7},${q+9})`:`rgb(${q+10},${q},${q})`;x.fillRect(k*w-o+5,r*85+5,w-10,75);x.strokeStyle='rgba(18,20,20,.65)';x.lineWidth=4;x.strokeRect(k*w-o+5,r*85+5,w-10,75);}return tex(c,3.2,2.6);}
+function floorTexture(blue:boolean){
+  const c=document.createElement('canvas');c.width=c.height=1024;const x=c.getContext('2d');if(!x)return null;
+  x.fillStyle=blue?'#c7b998':'#c4b194';x.fillRect(0,0,1024,1024);
+  for(let r=0;r<8;r++){
+    const n=r%2?6:7,w=1024/n,o=r%2?-w*.44:-w*.08;
+    for(let k=-1;k<=n;k++){
+      const seed=r*71+k*43,q=164+Math.floor(noise(seed)*30),warm=Math.floor(noise(seed+17)*13);
+      x.fillStyle=`rgb(${q+warm},${q+Math.floor(warm*.65)},${q-14})`;
+      x.fillRect(k*w+o+6,r*128+6,w-12,116);
+      x.strokeStyle='rgba(92,84,67,.52)';x.lineWidth=4;x.strokeRect(k*w+o+6,r*128+6,w-12,116);
+      if(noise(seed+31)>.53){
+        x.strokeStyle='rgba(92,79,60,.28)';x.lineWidth=2;x.beginPath();
+        const sx=k*w+o+w*(.22+noise(seed+5)*.16),sy=r*128+30+noise(seed+9)*42;
+        x.moveTo(sx,sy);x.lineTo(sx+w*.13,sy+10);x.lineTo(sx+w*.21,sy-5);x.stroke();
+      }
+    }
+  }
+  for(let i=0;i<180;i++){const px=noise(i*53+7)*1024,py=noise(i*97+19)*1024,a=.025+noise(i*31)*.04;x.fillStyle=`rgba(86,76,58,${a})`;x.fillRect(px,py,2+noise(i*17)*5,1+noise(i*23)*3);}
+  return tex(c,2.05,2.05);
+}
+function stoneTexture(blue:boolean){
+  const c=document.createElement('canvas');c.width=c.height=768;const x=c.getContext('2d');if(!x)return null;
+  x.fillStyle=blue?'#b6aa8d':'#b7a48b';x.fillRect(0,0,768,768);
+  for(let r=0;r<9;r++)for(let k=-1;k<7;k++){
+    const w=144,o=r%2?72:0,seed=r*43+k*29,q=148+Math.floor(noise(seed)*38),warm=Math.floor(noise(seed+11)*16);
+    x.fillStyle=`rgb(${q+warm},${q+Math.floor(warm*.66)},${q-18})`;x.fillRect(k*w-o+5,r*85+5,w-10,75);
+    x.strokeStyle='rgba(70,65,52,.66)';x.lineWidth=5;x.strokeRect(k*w-o+5,r*85+5,w-10,75);
+    if(noise(seed+23)>.56){x.strokeStyle='rgba(77,67,52,.34)';x.lineWidth=2;x.beginPath();const sx=k*w-o+32+noise(seed+5)*58,sy=r*85+20+noise(seed+9)*28;x.moveTo(sx,sy);x.lineTo(sx+18,sy+11);x.lineTo(sx+29,sy+4);x.stroke();}
+    if(noise(seed+37)>.78){x.fillStyle='rgba(74,86,48,.22)';x.fillRect(k*w-o+7,r*85+66,18+noise(seed+41)*28,7);}
+  }
+  for(const y of [72,382]){
+    x.fillStyle='rgba(213,199,163,.92)';x.fillRect(0,y,768,31);x.strokeStyle='rgba(99,88,66,.72)';x.lineWidth=3;x.strokeRect(0,y,768,31);
+    x.strokeStyle='rgba(105,91,64,.70)';x.lineWidth=3;
+    for(let i=0;i<16;i++){const px=i*48+24;x.beginPath();x.moveTo(px-15,y+16);x.lineTo(px,y+7);x.lineTo(px+15,y+16);x.lineTo(px,y+25);x.closePath();x.stroke();}
+  }
+  return tex(c,3.0,2.55);
+}
 function bannerTexture(blue:boolean){const c=document.createElement('canvas');c.width=512;c.height=768;const x=c.getContext('2d');if(!x)return null;const g=x.createLinearGradient(0,0,512,768);g.addColorStop(0,blue?'#0b2d57':'#5a2026');g.addColorStop(.5,blue?'#155a94':'#8a353b');g.addColorStop(1,blue?'#082341':'#42171c');x.fillStyle=g;x.fillRect(0,0,512,768);x.strokeStyle='#d2aa50';x.lineWidth=20;x.strokeRect(26,26,460,716);x.fillStyle='#d2aa50';x.beginPath();x.moveTo(256,180);x.lineTo(350,360);x.lineTo(256,545);x.lineTo(162,360);x.closePath();x.fill();x.fillStyle=blue?'#45bde9':'#db6960';x.beginPath();x.moveTo(256,235);x.lineTo(305,360);x.lineTo(256,485);x.lineTo(207,360);x.closePath();x.fill();return tex(c,1,1);}
 function waterTexture(){const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d');if(!x)return null;x.fillStyle='#808080';x.fillRect(0,0,512,512);for(let i=0;i<64;i++){x.strokeStyle='rgba(235,235,235,.06)';x.beginPath();for(let p=0;p<=512;p+=12){const y=i*8+Math.sin(p*.04+i*.7)*4;if(p===0)x.moveTo(p,y);else x.lineTo(p,y);}x.stroke();}const t=tex(c,2.8,2.8);if(t)t.colorSpace=THREE.NoColorSpace;return t;}
 function tex(c:HTMLCanvasElement,x:number,y:number){const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(x,y);t.anisotropy=4;return t;}
