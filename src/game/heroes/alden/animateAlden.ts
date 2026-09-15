@@ -23,9 +23,9 @@ const BASIC_ATTACK_BODY_DURATION = 1 / 3.4;
 const ATTACK_SIGNAL_THRESHOLD = THREE.MathUtils.degToRad(1.5);
 
 /**
- * Alden's authored idle is a 2.25 second perfectly periodic loop. The pose is a
- * relaxed left-handed guard rather than a generic T-pose/rest pose. A short settle
- * delay preserves the locomotion recovery before the authored guard fades in.
+ * Alden's authored idle is a 2.25 second perfectly periodic loop. The pose keeps both
+ * arms relaxed at his sides while preserving the breathing and weight-transfer motion.
+ * A short settle delay preserves the locomotion recovery before the authored idle fades in.
  */
 export const ALDEN_IDLE_LOOP_SECONDS = 2.25;
 const IDLE_SETTLE_SECONDS = 0.55;
@@ -277,7 +277,7 @@ function getAttackRuntime(rig: AldenRig, moving: boolean): AttackRuntime {
       active: false,
       elapsed: 0,
       swordDrivenLastFrame: false,
-      // A hero spawned already at rest should immediately assume the authored guard.
+      // A hero spawned already at rest should immediately assume the authored idle.
       // A hero arriving from locomotion uses the settle delay below instead.
       stationaryElapsed: moving ? 0 : IDLE_SETTLE_SECONDS + IDLE_BLEND_SECONDS,
       idleCycleElapsed: 0,
@@ -348,32 +348,32 @@ function applyOrganicIdlePose(
   rig.head.rotation.y = THREE.MathUtils.lerp(rig.head.rotation.y, rad(6), weight);
   rig.head.rotation.z = THREE.MathUtils.lerp(rig.head.rotation.z, rad(sway * 0.35), weight);
 
-  // Left weapon arm: 115-degree elbow angle (65 degrees of rig flexion), shoulder held
-  // slightly back and the wrist presenting the sword diagonally upward and forward.
-  rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, rad(-24 + leftArmBreath * 1.2), weight);
-  rig.leftArm.rotation.y = THREE.MathUtils.lerp(rig.leftArm.rotation.y, rad(-10), weight);
+  // Left weapon arm: relaxed beside the body, with a small elbow bend so the sword
+  // hangs naturally instead of making the limb look rigid.
+  rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, rad(-3 + leftArmBreath * 0.4), weight);
+  rig.leftArm.rotation.y = THREE.MathUtils.lerp(rig.leftArm.rotation.y, rad(-2), weight);
   rig.leftArm.rotation.z = THREE.MathUtils.lerp(
     rig.leftArm.rotation.z,
-    state.leftShoulderRestZ + rad(-2 + leftArmBreath * 0.8),
+    state.leftShoulderRestZ + rad(-1 + leftArmBreath * 0.2),
     weight,
   );
-  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, rad(-65 + leftArmBreath * 2), weight);
-  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, rad(-2.5 * sway), weight);
-  rig.swordWrist.rotation.x = THREE.MathUtils.lerp(rig.swordWrist.rotation.x, rad(-12 + leftArmBreath), weight);
-  rig.swordWrist.rotation.y = THREE.MathUtils.lerp(rig.swordWrist.rotation.y, rad(-8), weight);
-  rig.swordWrist.rotation.z = THREE.MathUtils.lerp(rig.swordWrist.rotation.z, rad(-14 + leftArmBreath * 0.8), weight);
+  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, rad(-22 + leftArmBreath * 0.6), weight);
+  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, rad(-0.5 * sway), weight);
+  rig.swordWrist.rotation.x = THREE.MathUtils.lerp(rig.swordWrist.rotation.x, rad(-3 + leftArmBreath * 0.2), weight);
+  rig.swordWrist.rotation.y = THREE.MathUtils.lerp(rig.swordWrist.rotation.y, rad(-2), weight);
+  rig.swordWrist.rotation.z = THREE.MathUtils.lerp(rig.swordWrist.rotation.z, rad(-4 + leftArmBreath * 0.2), weight);
 
-  // Right arm: compact 90-degree defensive counterweight, intentionally two frames
-  // behind the sword arm so both sides never breathe in mechanical lockstep.
-  rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, rad(-14 + rightArmBreath), weight);
-  rig.rightArm.rotation.y = THREE.MathUtils.lerp(rig.rightArm.rotation.y, rad(8), weight);
+  // Right arm: relaxed at Alden's side, slightly offset from the sword arm so the two
+  // sides retain the organic timing of the authored breathing loop.
+  rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, rad(-3 + rightArmBreath * 0.4), weight);
+  rig.rightArm.rotation.y = THREE.MathUtils.lerp(rig.rightArm.rotation.y, rad(2), weight);
   rig.rightArm.rotation.z = THREE.MathUtils.lerp(
     rig.rightArm.rotation.z,
-    state.rightShoulderRestZ + rad(-4 + rightArmBreath * 0.7),
+    state.rightShoulderRestZ + rad(1 + rightArmBreath * 0.2),
     weight,
   );
-  rig.rightForearm.rotation.x = THREE.MathUtils.lerp(rig.rightForearm.rotation.x, rad(-90 + rightArmBreath * 1.5), weight);
-  rig.rightForearm.rotation.z = THREE.MathUtils.lerp(rig.rightForearm.rotation.z, rad(1.5 * sway), weight);
+  rig.rightForearm.rotation.x = THREE.MathUtils.lerp(rig.rightForearm.rotation.x, rad(-22 + rightArmBreath * 0.6), weight);
+  rig.rightForearm.rotation.z = THREE.MathUtils.lerp(rig.rightForearm.rotation.z, rad(0.5 * sway), weight);
 
   // Tiny knee/ankle compliance sells the pelvis drop as weight transfer rather than a
   // floating root translation. The values remain intentionally below visible walking.
