@@ -2,26 +2,19 @@ const FPS_OVERLAY_ID = 'dawnreach-fps-overlay';
 const FPS_SAMPLE_MS = 300;
 const PEAK_HOLD_MS = 1_500;
 
-function compactCount(value: number) {
-  if (!Number.isFinite(value)) return '--';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
-  return String(Math.round(value));
-}
-
 export function mountFpsOverlay() {
   const existing = document.getElementById(FPS_OVERLAY_ID);
   existing?.remove();
 
   const element = document.createElement('div');
   element.id = FPS_OVERLAY_ID;
-  element.innerHTML = '<div>FPS -- · -- ms</div><div style="opacity:.8">REN -- · DC -- · TRI --</div>';
+  element.textContent = 'FPS -- · -- ms · MAX -- ms';
   Object.assign(element.style, {
     position: 'fixed',
     top: '10px',
     right: '12px',
     zIndex: '12000',
-    minWidth: '238px',
+    minWidth: '194px',
     padding: '5px 8px',
     border: '1px solid rgba(191, 220, 235, 0.28)',
     borderRadius: '5px',
@@ -37,10 +30,8 @@ export function mountFpsOverlay() {
     pointerEvents: 'none',
     userSelect: 'none',
   });
+  element.title = 'FPS promedio reciente · tiempo medio por frame · peor frame retenido 1,5 s';
   document.body.appendChild(element);
-
-  const primaryLine = element.children[0] as HTMLDivElement;
-  const renderLine = element.children[1] as HTMLDivElement;
 
   let frameId = 0;
   let frames = 0;
@@ -73,16 +64,7 @@ export function mountFpsOverlay() {
       }
 
       const peak = Math.round(heldPeakFrameMs);
-      primaryLine.textContent = `FPS ${fps} · ${averageFrameMs.toFixed(1)} ms · MAX ${peak} ms`;
-
-      const canvas = document.querySelector<HTMLCanvasElement>('.game-canvas');
-      const renderMs = Number(canvas?.dataset.renderMs ?? NaN);
-      const drawCalls = Number(canvas?.dataset.drawCalls ?? NaN);
-      const triangles = Number(canvas?.dataset.triangles ?? NaN);
-      const geometries = Number(canvas?.dataset.geometries ?? NaN);
-      const textures = Number(canvas?.dataset.textures ?? NaN);
-      renderLine.textContent = `REN ${Number.isFinite(renderMs) ? `${renderMs.toFixed(1)} ms` : '--'} · DC ${compactCount(drawCalls)} · TRI ${compactCount(triangles)}`;
-      element.title = `FPS promedio reciente · tiempo medio por frame · peor frame retenido 1,5 s\nREN: tiempo CPU dentro de renderer.render · DC: draw calls · TRI: triángulos\nGPU resources: ${compactCount(geometries)} geometrías · ${compactCount(textures)} texturas`;
+      element.textContent = `FPS ${fps} · ${averageFrameMs.toFixed(1)} ms · MAX ${peak} ms`;
 
       if (heldPeakFrameMs >= 80 || fps < 35) element.style.color = '#ffb2a8';
       else if (heldPeakFrameMs >= 35 || fps < 55) element.style.color = '#f5e7aa';
