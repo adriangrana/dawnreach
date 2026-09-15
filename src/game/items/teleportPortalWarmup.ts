@@ -174,22 +174,16 @@ function disposeWarmPortal(root: THREE.Object3D) {
 }
 
 /**
- * Exercises the exact heavy geometry paths used by the premium TP portal while the
- * loading splash is still covering the game. The portal itself is unchanged; this only
- * moves the one-time V8/Three.js allocation/JIT cost out of the first player cast.
+ * Exercises the heavy geometry paths used by the premium TP portal while the loading splash
+ * is still covering the game. One complete construction is enough to warm Three.js/V8 code
+ * paths; building the same portal twice only extended startup and doubled short-lived GC load.
  */
 export function warmTeleportPortalGeometry() {
   if (warmupPromise) return warmupPromise;
   warmupPromise = (async () => {
     await nextFrame();
-    const first = buildWarmPortal();
-    disposeWarmPortal(first);
-
-    // A second pass makes the first real cast use already-hot constructor/code paths for
-    // both origin and destination portals without keeping duplicate world resources alive.
-    await nextFrame();
-    const second = buildWarmPortal();
-    disposeWarmPortal(second);
+    const portal = buildWarmPortal();
+    disposeWarmPortal(portal);
   })();
   return warmupPromise;
 }
