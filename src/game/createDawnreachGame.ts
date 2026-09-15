@@ -74,7 +74,9 @@ const ATTACK_MOVE_ACQUISITION_RANGE = 7.2;
 const ATTACK_MOVE_SCAN_INTERVAL = 0.08;
 const ATTACK_MOVE_PRIORITY_STORAGE_KEY = 'dawnreach.attackMovePriority';
 const FALLBACK_ATTACK_COOLDOWN = 0.72;
+const ATTACK_SWING_RATE = 3.4;
 const ATTACK_IMPACT_SWING_PROGRESS = 0.38;
+const ATTACK_WINDUP_SECONDS = ATTACK_IMPACT_SWING_PROGRESS / ATTACK_SWING_RATE;
 const COMMAND_MARKER_Y = 0.12;
 const WAYPOINT_REACHED_DISTANCE = 0.22;
 const STUCK_REPATH_DELAY = 0.42;
@@ -306,6 +308,7 @@ export async function createDawnreachGame(
   let attackArmed = false;
   let attackCooldown = 0;
   let attackSwing = 0;
+  let openingAttackReady = true;
   let pendingAttackTarget: GameEntity | null = null;
   let attackImpactApplied = false;
   let targetYaw = 0;
@@ -382,7 +385,9 @@ export async function createDawnreachGame(
     attackOrder = null;
     attackMoveTarget = null;
     lastAttackPathTarget = null;
+    attackCooldown = 0;
     attackSwing = 0;
+    openingAttackReady = true;
     pendingAttackTarget = null;
     attackImpactApplied = false;
     targetMarker.visible = false;
@@ -594,9 +599,15 @@ export async function createDawnreachGame(
     return THREE.MathUtils.clamp(1 / speed, 0.28, 2.5);
   };
 
-  const triggerAttack = (target: GameEntity | null = null) => {
-    attackCooldown = getAttackCooldownSeconds();
-    attackSwing = 0.0001;
+  const triggerAttack = (target: GameEntity | null = null, openingStrike = false) => {
+    const attackInterval = getAttackCooldownSeconds();
+    // The opening strike skips only the pre-impact wind-up. Shorten the first cooldown by
+    // exactly that skipped time so the second impact still lands one full attack interval
+    // after the opener; target switching cannot manufacture extra attack speed.
+    attackCooldown = openingStrike
+      ? Math.max(0, attackInterval - ATTACK_WINDUP_SECONDS)
+      : attackInterval;
+    attackSwing = openingStrike ? ATTACK_IMPACT_SWING_PROGRESS : 0.0001;
     pendingAttackTarget = target;
     attackImpactApplied = false;
   };
@@ -627,7 +638,11 @@ export async function createDawnreachGame(
     } else {
       clearMovementRoute();
       targetYaw = Math.atan2(dx, dz);
-      if (attackCooldown <= 0 && attackSwing <= 0) triggerAttack(target);
+      if (attackCooldown <= 0 && attackSwing <= 0) {
+        const openingStrike = openingAttackReady;
+        openingAttackReady = false;
+        triggerAttack(target, openingStrike);
+      }
     }
   };
 
@@ -980,6 +995,10 @@ export async function createDawnreachGame(
     elapsed += dt;
     attackCooldown = Math.max(0, attackCooldown - dt);
 
+    if (!attackOrder && !attackMoveTarget && attackCooldown <= 0 && attackSwing <= 0) {
+      openingAttackReady = true;
+    }
+
     if (elapsed - lastVisionUpdate >= VISION_UPDATE_INTERVAL) {
       vision.updateEntityVisibility();
       lastVisionUpdate = elapsed;
@@ -1150,7 +1169,7 @@ export async function createDawnreachGame(
       else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
       if (attackSwing > 0) {
-        attackSwing = Math.min(1, attackSwing + dt * 3.4);
+        attackSwing = Math.min(1, attackSwing + dt * ATTACK_SWING_RATE);
         if (!attackImpactApplied && attackSwing >= ATTACK_IMPACT_SWING_PROGRESS) {
           attackImpactApplied = true;
           if (pendingAttackTarget) applyBasicAttackImpact(pendingAttackTarget);
