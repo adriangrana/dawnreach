@@ -54,10 +54,14 @@ export function createHumanoidRig({ name = 'humanoid', bodyScale = 1, armRestAng
     const hand = joint(elbow, `${side}-hand-socket`, 0, -0.46);
     return { shoulder, elbow, hand };
   };
-  const leftLeg = leg('left', -1);
-  const rightLeg = leg('right', 1);
-  const leftArm = arm('left', -1);
-  const rightArm = arm('right', 1);
+
+  // Dawnreach humanoids face local +Z. From the character's own point of view,
+  // anatomical left is therefore +X and anatomical right is -X. Keep the public
+  // left/right names tied to anatomy rather than to the viewer or screen side.
+  const leftLeg = leg('left', 1);
+  const rightLeg = leg('right', -1);
+  const leftArm = arm('left', 1);
+  const rightArm = arm('right', -1);
   const soleSamples = [leftLeg.foot, rightLeg.foot].map(foot => ({
     foot,
     points: Array.from({ length: 12 }, (_, vertex) => {

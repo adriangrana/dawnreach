@@ -27,10 +27,12 @@ export function animateHumanoid(rig: HumanoidRig, elapsed: number, moving: boole
   const phase = rig.gait.phase;
   const cycle = phase / (Math.PI * 2);
 
-  animateLeg(rig.leftLeg, rig.leftShin, rig.leftFoot, cycle, weight);
-  animateLeg(rig.rightLeg, rig.rightShin, rig.rightFoot, (cycle + 0.5) % 1, weight);
-  animateArm(rig.leftArm, rig.leftForearm, phase, weight, -1);
-  animateArm(rig.rightArm, rig.rightForearm, phase + Math.PI, weight, 1);
+  // Preserve Dawnreach's established visual gait after correcting anatomical side names:
+  // the physical -X side is now the right side, while the physical +X side is the left.
+  animateLeg(rig.rightLeg, rig.rightShin, rig.rightFoot, cycle, weight);
+  animateLeg(rig.leftLeg, rig.leftShin, rig.leftFoot, (cycle + 0.5) % 1, weight);
+  animateArm(rig.rightArm, rig.rightForearm, phase, weight, -1);
+  animateArm(rig.leftArm, rig.leftForearm, phase + Math.PI, weight, 1);
   rig.pelvis.rotation.y = Math.cos(phase) * THREE.MathUtils.degToRad(4) * weight * rig.waistMotionScale;
   rig.pelvis.rotation.z = -sampleAngle(supportTiltKeys, cycle) * weight * rig.waistMotionScale;
   const supportTransfer = -Math.sin(phase) * weight;

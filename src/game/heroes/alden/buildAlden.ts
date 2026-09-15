@@ -111,14 +111,15 @@ export function buildAlden(materials: AldenMaterials, options: { armRestAngle?: 
   clasp.rotation.x = Math.PI / 2;
   mesh(torso, 'clasp-ring', new THREE.TorusGeometry(0.064, 0.009, 4, 12), materials.gold, -0.30, 0.37, 0.218);
 
-  buildArm(rig.leftArm, rig.leftForearm, materials, -1, shoulderNeckBlend);
-  buildArm(rig.rightArm, rig.rightForearm, materials, 1, shoulderNeckBlend);
+  // createHumanoidRig names limbs anatomically: Alden's left side is +X and right is -X.
+  // Preserve the same physical armor mirroring while attaching it to the corrected names.
+  buildArm(rig.leftArm, rig.leftForearm, materials, 1, shoulderNeckBlend);
+  buildArm(rig.rightArm, rig.rightForearm, materials, -1, shoulderNeckBlend);
 
-  // Alden is canonically left-handed. The weapon hand owns both the gauntlet and the
-  // sword; the right hand remains free and is used as a counter-balance/guard during
-  // combat animation.
-  buildHand(group(rig.sockets.rightHand, 'right-hand'), materials, 1);
-  const swordWrist = group(rig.sockets.leftHand, 'left-wrist-attack-pivot');
+  // Alden is right-handed. The sword remains on the same physical side as before; only
+  // the rig semantics are corrected so code, sockets and what the player sees now agree.
+  buildHand(group(rig.sockets.leftHand, 'left-hand'), materials, 1);
+  const swordWrist = group(rig.sockets.rightHand, 'right-wrist-attack-pivot');
   const sword = buildSword(swordWrist, materials, -1);
 
   head.name = 'helmet';

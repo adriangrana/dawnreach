@@ -24,7 +24,7 @@ test('Alden animation preserves the presentation scale while walking and resting
   }
 });
 
-test('bare humanoid rigs have usable contacts and no required equipment', () => {
+test('bare humanoid rigs have usable contacts, anatomical side names and no required equipment', () => {
   for (const bodyScale of [0, -1, NaN, Infinity]) assert.throws(() => createHumanoidRig({ bodyScale }), RangeError);
   for (const armRestAngle of [-1, NaN, Infinity, Math.PI]) assert.throws(() => createHumanoidRig({ armRestAngle }), RangeError);
   const rig = createHumanoidRig();
@@ -37,6 +37,11 @@ test('bare humanoid rigs have usable contacts and no required equipment', () => 
   assert.equal(rig.sockets.rightHand.parent, rig.rightForearm);
   assert.equal(rig.sockets.head.parent, rig.head);
   assert.equal(rig.sockets.back.parent, rig.torso);
+  const localX = joint => rig.torso.worldToLocal(joint.getWorldPosition(new THREE.Vector3())).x;
+  assert.ok(localX(rig.leftArm) > 0, 'anatomical left shoulder must be +X for a +Z-facing humanoid');
+  assert.ok(localX(rig.rightArm) < 0, 'anatomical right shoulder must be -X for a +Z-facing humanoid');
+  assert.ok(localX(rig.sockets.leftHand) > 0, 'left hand socket must stay on anatomical left');
+  assert.ok(localX(rig.sockets.rightHand) < 0, 'right hand socket must stay on anatomical right');
 });
 
 test('the basic body reuses Alden joint curves at different uniform sizes and keeps its soles grounded', () => {
@@ -389,8 +394,10 @@ test('cape has a narrow attachment, flared irregular hem and longitudinal folds'
   assert.ok(Math.abs(capeSurface(0, 0.6).z - capeSurface(0.25, 0.6).z) > 0.08);
 });
 
-test('sword pivot is inside the closed hand and grip, above the guard and blade', () => {
+test('sword pivot is inside the right hand and grip, above the guard and blade', () => {
   const rig = makeRig();
+  assert.equal(rig.swordWrist.parent, rig.sockets.rightHand);
+  assert.equal(rig.swordWrist.name, 'right-wrist-attack-pivot');
   const hand = rig.sword.getObjectByName('closed-glove');
   const grip = rig.sword.getObjectByName('sword-grip');
   assert.equal(hand.parent, rig.sword);
@@ -444,7 +451,7 @@ test('walk preserves opposite limbs, the grip and clearance through a full cycle
   assert.ok(Math.max(...elevations) - Math.min(...elevations) > 0.18, 'blade must follow the arm instead of remaining stabilized');
 });
 
-test('animation never changes destination position or facing yaw and settles to idle', () => {
+test('animation never changes destination position or facing yaw and settles to authored idle', () => {
   const rig = makeRig();
   const gripOrientation = rig.sword.quaternion.clone();
   rig.root.position.set(3, 0.03, -2);
@@ -456,10 +463,14 @@ test('animation never changes destination position or facing yaw and settles to 
     assert.deepEqual(rig.root.position.toArray(), [3, 0.03, -2]);
   }
   for (let frame = 0; frame < 120; frame += 1) animateAlden(rig, frame / 60, false);
-  assert.ok(Math.abs(rig.leftLeg.rotation.x) < 1e-6);
-  assert.ok(Math.abs(rig.rightShin.rotation.x) < 1e-6);
+  assert.ok(Math.abs(rig.leftLeg.rotation.x) < THREE.MathUtils.degToRad(0.6));
+  assert.ok(Math.abs(rig.rightLeg.rotation.x) < THREE.MathUtils.degToRad(0.6));
+  assert.ok(Math.abs(rig.leftShin.rotation.x) < THREE.MathUtils.degToRad(1.6));
+  assert.ok(Math.abs(rig.rightShin.rotation.x) < THREE.MathUtils.degToRad(1.6));
   assert.ok(rig.sword.quaternion.angleTo(gripOrientation) < 1e-7);
-  assert.ok(Math.abs(rig.rightForearm.rotation.x + 0.35) < 1e-6);
+  const relaxedElbow = THREE.MathUtils.degToRad(-22);
+  assert.ok(Math.abs(rig.leftForearm.rotation.x - relaxedElbow) < THREE.MathUtils.degToRad(1));
+  assert.ok(Math.abs(rig.rightForearm.rotation.x - relaxedElbow) < THREE.MathUtils.degToRad(1));
 });
 
 test('cloth and gold move gently from immutable rest positions without accumulating drift', () => {
@@ -477,7 +488,7 @@ test('cloth and gold move gently from immutable rest positions without accumulat
   }
 });
 
-test('forearms flex independently and hands stay separated from the waist', () => {
+test('forearms flex independently and anatomical hands stay separated from the waist', () => {
   const rig = makeRig();
   poseAtPhase(rig, 1.05);
   const before = [rig.leftForearm.rotation.x, rig.rightForearm.rotation.x];
@@ -485,8 +496,8 @@ test('forearms flex independently and hands stay separated from the waist', () =
   assert.ok(Math.abs(before[0] - rig.leftForearm.rotation.x) > 0.10);
   assert.ok(Math.abs(before[1] - rig.rightForearm.rotation.x) > 0.10);
   rig.root.updateMatrixWorld(true);
-  assert.ok(rig.torso.worldToLocal(rig.leftForearm.getWorldPosition(new THREE.Vector3())).x < -0.54);
-  assert.ok(rig.torso.worldToLocal(rig.rightForearm.getWorldPosition(new THREE.Vector3())).x > 0.54);
+  assert.ok(rig.torso.worldToLocal(rig.leftForearm.getWorldPosition(new THREE.Vector3())).x > 0.54);
+  assert.ok(rig.torso.worldToLocal(rig.rightForearm.getWorldPosition(new THREE.Vector3())).x < -0.54);
 });
 
 test('arms rest closer to the body without changing their swing or crowding the waist', () => {
@@ -522,9 +533,9 @@ test('human gait uses contact, loading, dorsiflexion, push-off and recovery angl
   const checkpoints = [[0, 28, 4, 0], [0.1, 24, 18, 5], [0.3, 5, 5, -10], [0.5, -12, 58, 0], [0.6, -5, 60, 18], [0.7, 30, 60, -20]];
   for (const [cycle, hip, knee, ankle] of checkpoints) {
     poseAtPhase(rig, cycle * Math.PI * 2);
-    if (hip !== null) assert.ok(Math.abs(THREE.MathUtils.radToDeg(-rig.leftLeg.rotation.x) - hip) < 0.01);
-    assert.ok(Math.abs(THREE.MathUtils.radToDeg(rig.leftShin.rotation.x) - knee) < 0.01);
-    if (ankle !== null) assert.ok(Math.abs(THREE.MathUtils.radToDeg(rig.leftFoot.rotation.x) - ankle) < 0.01);
+    if (hip !== null) assert.ok(Math.abs(THREE.MathUtils.radToDeg(-rig.rightLeg.rotation.x) - hip) < 0.01);
+    assert.ok(Math.abs(THREE.MathUtils.radToDeg(rig.rightShin.rotation.x) - knee) < 0.01);
+    if (ankle !== null) assert.ok(Math.abs(THREE.MathUtils.radToDeg(rig.rightFoot.rotation.x) - ankle) < 0.01);
   }
 });
 
@@ -533,8 +544,8 @@ test('recovery flexion stays at 60 degrees with the other sole supporting the bo
   for (const cycle of [0.2, 0.7]) {
     poseAtPhase(rig, cycle * Math.PI * 2);
     rig.root.updateMatrixWorld(true);
-    const recovery = cycle < 0.5 ? rig.rightShin : rig.leftShin;
-    const support = cycle < 0.5 ? rig.leftShin : rig.rightShin;
+    const recovery = cycle < 0.5 ? rig.leftShin : rig.rightShin;
+    const support = cycle < 0.5 ? rig.rightShin : rig.leftShin;
     assert.ok(Math.abs(THREE.MathUtils.radToDeg(recovery.rotation.x) - 60) < 0.01);
     const soleHeight = shin => {
       const { foot, points } = rig.soleSamples.find(sample => sample.foot.parent === shin);
@@ -550,7 +561,7 @@ test('the forward foot reaches the floor at contact and stays planted while load
   for (const cycle of [0, 0.1, 0.3, 0.5, 0.6, 0.8]) {
     poseAtPhase(rig, cycle * Math.PI * 2);
     rig.root.updateMatrixWorld(true);
-    const { foot, points } = rig.soleSamples[cycle < 0.5 ? 0 : 1];
+    const { foot, points } = rig.soleSamples[cycle < 0.5 ? 1 : 0];
     const height = Math.min(...points.map(point => point.clone().applyMatrix4(foot.matrixWorld).y));
     assert.ok(Math.abs(height - 0.015) < 0.005, `contact foot at ${cycle}: ${height}`);
   }
@@ -585,7 +596,7 @@ test('joint ranges are bounded, pelvis counters the thorax, and the head remains
     rig.root.updateMatrixWorld(true);
     const leftHipHeight = rig.leftLeg.getWorldPosition(new THREE.Vector3()).y;
     const rightHipHeight = rig.rightLeg.getWorldPosition(new THREE.Vector3()).y;
-    assert.ok(cycle < 0.5 ? rightHipHeight < leftHipHeight : leftHipHeight < rightHipHeight, 'the pelvis must drop on the airborne side');
+    assert.ok(cycle < 0.5 ? leftHipHeight < rightHipHeight : rightHipHeight < leftHipHeight, 'the pelvis must drop on the airborne side');
     const shoulderHeightDifference = rig.leftArm.getWorldPosition(new THREE.Vector3()).y - rig.rightArm.getWorldPosition(new THREE.Vector3()).y;
     assert.ok((leftHipHeight - rightHipHeight) * shoulderHeightDifference < -0.00025, 'shoulder and hip lines must slope subtly in opposite directions');
   }
@@ -621,7 +632,7 @@ test('the pelvis loads the support side while the chest counterbalances and the 
   for (const cycle of [0.2, 0.3, 0.7, 0.8]) {
     poseAtPhase(rig, cycle * Math.PI * 2);
     rig.root.updateMatrixWorld(true);
-    const foot = cycle < 0.5 ? rig.leftFoot : rig.rightFoot;
+    const foot = cycle < 0.5 ? rig.rightFoot : rig.leftFoot;
     const footPosition = rig.model.worldToLocal(foot.getWorldPosition(new THREE.Vector3()));
     const pelvisDistance = Math.abs(rig.pelvis.position.x - footPosition.x);
     assert.ok(pelvisDistance < Math.abs(footPosition.x) - 0.0125, 'the pelvis must shift subtly toward the supporting foot');

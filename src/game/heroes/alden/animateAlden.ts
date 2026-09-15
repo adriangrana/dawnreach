@@ -10,13 +10,13 @@ export {
 } from '../../characters/animateHumanoid.js';
 
 /**
- * Alden's basic attack is authored as a four-phase left-handed diagonal cut:
+ * Alden's basic attack is authored as a four-phase right-handed diagonal cut:
  * anticipation 0-35%, impact 35-45% (contact at ~40%), follow-through 45-65%,
  * recovery 65-100%.
  *
  * createDawnreachGame already drives the local sword pivot while an attack is active.
  * We use that movement as the attack trigger and layer the full-body motion on the
- * dedicated left-wrist pivot, so combat code does not need to know anything about
+ * dedicated right-wrist pivot, so combat code does not need to know anything about
  * the animation rig.
  */
 const BASIC_ATTACK_BODY_DURATION = 1 / 3.4;
@@ -31,7 +31,7 @@ export const ALDEN_IDLE_LOOP_SECONDS = 2.25;
 const IDLE_SETTLE_SECONDS = 0.55;
 const IDLE_BLEND_SECONDS = 0.25;
 const CHEST_OFFSET_SECONDS = 3.5 / 60;
-const RIGHT_ARM_OFFSET_SECONDS = 2 / 60;
+const LEFT_ARM_OFFSET_SECONDS = 2 / 60;
 
 type AttackPose = Readonly<{
   pelvisYaw: number;
@@ -87,26 +87,26 @@ const NEUTRAL: AttackPose = {
   rightHipPitch: 0,
 };
 
-// 35% — left side loads, elbow closes near 90 degrees and the sword is cocked
-// behind the left ear. The right hand comes forward as a compact defensive guard.
+// 35% — right side loads, elbow closes near 90 degrees and the sword is cocked
+// behind the right ear. The left hand comes forward as a compact defensive guard.
 const ANTICIPATION: AttackPose = {
   pelvisYaw: -18,
   pelvisDrop: -0.055,
   torsoYaw: -30,
   torsoPitch: -3,
-  leftShoulderPitch: -62,
-  leftShoulderYaw: -25,
-  leftShoulderRollOffset: -10,
-  leftElbow: -90,
+  leftShoulderPitch: -18,
+  leftShoulderYaw: 12,
+  leftShoulderRollOffset: -5,
+  leftElbow: -55,
   wristPitch: -30,
   wristYaw: -8,
   wristRoll: -18,
-  rightShoulderPitch: -18,
-  rightShoulderYaw: 12,
-  rightShoulderRollOffset: -5,
-  rightElbow: -55,
-  leftHipPitch: 10,
-  rightHipPitch: -7,
+  rightShoulderPitch: -62,
+  rightShoulderYaw: -25,
+  rightShoulderRollOffset: -10,
+  rightElbow: -90,
+  leftHipPitch: -7,
+  rightHipPitch: 10,
 };
 
 // ~40% — actual contact. The elbow deliberately stops short of full extension
@@ -116,40 +116,40 @@ const IMPACT: AttackPose = {
   pelvisDrop: -0.015,
   torsoYaw: 40,
   torsoPitch: 5,
-  leftShoulderPitch: 42,
-  leftShoulderYaw: 28,
-  leftShoulderRollOffset: 8,
-  leftElbow: -12,
+  leftShoulderPitch: 32,
+  leftShoulderYaw: -18,
+  leftShoulderRollOffset: 12,
+  leftElbow: -30,
   wristPitch: 20,
   wristYaw: 10,
   wristRoll: 26,
-  rightShoulderPitch: 32,
-  rightShoulderYaw: -18,
-  rightShoulderRollOffset: 12,
-  rightElbow: -30,
-  leftHipPitch: -5,
-  rightHipPitch: 12,
+  rightShoulderPitch: 42,
+  rightShoulderYaw: 28,
+  rightShoulderRollOffset: 8,
+  rightElbow: -12,
+  leftHipPitch: 12,
+  rightHipPitch: -5,
 };
 
-// 65% — the blade has crossed the chest and is braking down to Alden's right.
+// 65% — the blade has crossed the chest and is braking on the opposite side.
 const FOLLOW_THROUGH: AttackPose = {
   pelvisYaw: 30,
   pelvisDrop: -0.006,
   torsoYaw: 45,
   torsoPitch: 8,
-  leftShoulderPitch: 58,
-  leftShoulderYaw: 35,
-  leftShoulderRollOffset: 20,
-  leftElbow: -40,
+  leftShoulderPitch: 38,
+  leftShoulderYaw: -24,
+  leftShoulderRollOffset: 16,
+  leftElbow: -35,
   wristPitch: 45,
   wristYaw: 16,
   wristRoll: 38,
-  rightShoulderPitch: 38,
-  rightShoulderYaw: -24,
-  rightShoulderRollOffset: 16,
-  rightElbow: -35,
-  leftHipPitch: -4,
-  rightHipPitch: 10,
+  rightShoulderPitch: 58,
+  rightShoulderYaw: 35,
+  rightShoulderRollOffset: 20,
+  rightElbow: -40,
+  leftHipPitch: 10,
+  rightHipPitch: -4,
 };
 
 export function animateAlden(
@@ -318,13 +318,13 @@ function applyOrganicIdlePose(
   const rad = THREE.MathUtils.degToRad;
   const pelvisBreath = idleBreath(phase);
   const chestBreath = idleBreath(phase - CHEST_OFFSET_SECONDS / ALDEN_IDLE_LOOP_SECONDS);
-  const leftArmBreath = chestBreath;
-  const rightArmBreath = idleBreath(
-    phase - (CHEST_OFFSET_SECONDS + RIGHT_ARM_OFFSET_SECONDS) / ALDEN_IDLE_LOOP_SECONDS,
+  const rightArmBreath = chestBreath;
+  const leftArmBreath = idleBreath(
+    phase - (CHEST_OFFSET_SECONDS + LEFT_ARM_OFFSET_SECONDS) / ALDEN_IDLE_LOOP_SECONDS,
   );
   const sway = Math.sin(wrap01(phase) * Math.PI * 2);
 
-  // Pelvis: a planted left-handed fighting stance with a 2.4% vertical compression at
+  // Pelvis: a planted right-handed fighting stance with a 2.4% vertical compression at
   // mid-cycle and one degree of lateral weight transfer. This is the center of gravity;
   // every upper-body motion is intentionally delayed from it.
   rig.pelvis.rotation.y = THREE.MathUtils.lerp(rig.pelvis.rotation.y, rad(-12), weight);
@@ -348,42 +348,42 @@ function applyOrganicIdlePose(
   rig.head.rotation.y = THREE.MathUtils.lerp(rig.head.rotation.y, rad(6), weight);
   rig.head.rotation.z = THREE.MathUtils.lerp(rig.head.rotation.z, rad(sway * 0.35), weight);
 
-  // Left weapon arm: relaxed beside the body, with a small elbow bend so the sword
+  // Right weapon arm: relaxed beside the body, with a small elbow bend so the sword
   // hangs naturally instead of making the limb look rigid.
-  rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, rad(-3 + leftArmBreath * 0.4), weight);
-  rig.leftArm.rotation.y = THREE.MathUtils.lerp(rig.leftArm.rotation.y, rad(-2), weight);
-  rig.leftArm.rotation.z = THREE.MathUtils.lerp(
-    rig.leftArm.rotation.z,
-    state.leftShoulderRestZ + rad(-1 + leftArmBreath * 0.2),
-    weight,
-  );
-  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, rad(-22 + leftArmBreath * 0.6), weight);
-  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, rad(-0.5 * sway), weight);
-  rig.swordWrist.rotation.x = THREE.MathUtils.lerp(rig.swordWrist.rotation.x, rad(-3 + leftArmBreath * 0.2), weight);
-  rig.swordWrist.rotation.y = THREE.MathUtils.lerp(rig.swordWrist.rotation.y, rad(-2), weight);
-  rig.swordWrist.rotation.z = THREE.MathUtils.lerp(rig.swordWrist.rotation.z, rad(-4 + leftArmBreath * 0.2), weight);
-
-  // Right arm: relaxed at Alden's side, slightly offset from the sword arm so the two
-  // sides retain the organic timing of the authored breathing loop.
   rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, rad(-3 + rightArmBreath * 0.4), weight);
-  rig.rightArm.rotation.y = THREE.MathUtils.lerp(rig.rightArm.rotation.y, rad(2), weight);
+  rig.rightArm.rotation.y = THREE.MathUtils.lerp(rig.rightArm.rotation.y, rad(-2), weight);
   rig.rightArm.rotation.z = THREE.MathUtils.lerp(
     rig.rightArm.rotation.z,
-    state.rightShoulderRestZ + rad(1 + rightArmBreath * 0.2),
+    state.rightShoulderRestZ + rad(-1 + rightArmBreath * 0.2),
     weight,
   );
   rig.rightForearm.rotation.x = THREE.MathUtils.lerp(rig.rightForearm.rotation.x, rad(-22 + rightArmBreath * 0.6), weight);
-  rig.rightForearm.rotation.z = THREE.MathUtils.lerp(rig.rightForearm.rotation.z, rad(0.5 * sway), weight);
+  rig.rightForearm.rotation.z = THREE.MathUtils.lerp(rig.rightForearm.rotation.z, rad(-0.5 * sway), weight);
+  rig.swordWrist.rotation.x = THREE.MathUtils.lerp(rig.swordWrist.rotation.x, rad(-3 + rightArmBreath * 0.2), weight);
+  rig.swordWrist.rotation.y = THREE.MathUtils.lerp(rig.swordWrist.rotation.y, rad(-2), weight);
+  rig.swordWrist.rotation.z = THREE.MathUtils.lerp(rig.swordWrist.rotation.z, rad(-4 + rightArmBreath * 0.2), weight);
+
+  // Left arm: relaxed at Alden's side, slightly offset from the sword arm so the two
+  // sides retain the organic timing of the authored breathing loop.
+  rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, rad(-3 + leftArmBreath * 0.4), weight);
+  rig.leftArm.rotation.y = THREE.MathUtils.lerp(rig.leftArm.rotation.y, rad(2), weight);
+  rig.leftArm.rotation.z = THREE.MathUtils.lerp(
+    rig.leftArm.rotation.z,
+    state.leftShoulderRestZ + rad(1 + leftArmBreath * 0.2),
+    weight,
+  );
+  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, rad(-22 + leftArmBreath * 0.6), weight);
+  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, rad(0.5 * sway), weight);
 
   // Tiny knee/ankle compliance sells the pelvis drop as weight transfer rather than a
   // floating root translation. The values remain intentionally below visible walking.
   const kneeFlex = rad(1.5 * pelvisBreath);
-  rig.leftLeg.rotation.x = THREE.MathUtils.lerp(rig.leftLeg.rotation.x, rad(0.45 * sway), weight);
-  rig.rightLeg.rotation.x = THREE.MathUtils.lerp(rig.rightLeg.rotation.x, rad(-0.45 * sway), weight);
-  rig.leftShin.rotation.x = THREE.MathUtils.lerp(rig.leftShin.rotation.x, kneeFlex, weight);
+  rig.rightLeg.rotation.x = THREE.MathUtils.lerp(rig.rightLeg.rotation.x, rad(0.45 * sway), weight);
+  rig.leftLeg.rotation.x = THREE.MathUtils.lerp(rig.leftLeg.rotation.x, rad(-0.45 * sway), weight);
   rig.rightShin.rotation.x = THREE.MathUtils.lerp(rig.rightShin.rotation.x, kneeFlex, weight);
-  rig.leftFoot.rotation.x = THREE.MathUtils.lerp(rig.leftFoot.rotation.x, rad(-0.65 * pelvisBreath), weight);
+  rig.leftShin.rotation.x = THREE.MathUtils.lerp(rig.leftShin.rotation.x, kneeFlex, weight);
   rig.rightFoot.rotation.x = THREE.MathUtils.lerp(rig.rightFoot.rotation.x, rad(-0.65 * pelvisBreath), weight);
+  rig.leftFoot.rotation.x = THREE.MathUtils.lerp(rig.leftFoot.rotation.x, rad(-0.65 * pelvisBreath), weight);
 }
 
 function idleBreath(phase: number) {
@@ -405,11 +405,12 @@ function applyBasicAttackPose(rig: AldenRig, state: AttackRuntime, pose: AttackP
   rig.torso.rotation.x = rad(pose.torsoPitch);
   rig.torso.rotation.y = rad(pose.torsoYaw);
 
-  rig.leftArm.rotation.x = rad(pose.leftShoulderPitch);
-  rig.leftArm.rotation.y = rad(pose.leftShoulderYaw);
-  rig.leftArm.rotation.z = state.leftShoulderRestZ + rad(pose.leftShoulderRollOffset);
-  rig.leftForearm.rotation.x = rad(pose.leftElbow);
-  rig.leftForearm.rotation.z = rad(-4 * Math.sin(Math.PI * Math.min(1, Math.abs(pose.leftElbow) / 90)));
+  // Right hand owns the sword and therefore receives the authored weapon-side motion.
+  rig.rightArm.rotation.x = rad(pose.rightShoulderPitch);
+  rig.rightArm.rotation.y = rad(pose.rightShoulderYaw);
+  rig.rightArm.rotation.z = state.rightShoulderRestZ + rad(pose.rightShoulderRollOffset);
+  rig.rightForearm.rotation.x = rad(pose.rightElbow);
+  rig.rightForearm.rotation.z = rad(-4 * Math.sin(Math.PI * Math.min(1, Math.abs(pose.rightElbow) / 90)));
 
   rig.swordWrist.rotation.set(
     rad(pose.wristPitch),
@@ -417,17 +418,17 @@ function applyBasicAttackPose(rig: AldenRig, state: AttackRuntime, pose: AttackP
     rad(pose.wristRoll),
   );
 
-  // Right hand is intentionally unarmed: it stays compact during the load, then moves
+  // Left hand is intentionally unarmed: it stays compact during the load, then moves
   // backwards/outwards as a counterweight through impact and follow-through.
-  rig.rightArm.rotation.x = rad(pose.rightShoulderPitch);
-  rig.rightArm.rotation.y = rad(pose.rightShoulderYaw);
-  rig.rightArm.rotation.z = state.rightShoulderRestZ + rad(pose.rightShoulderRollOffset);
-  rig.rightForearm.rotation.x = rad(pose.rightElbow);
+  rig.leftArm.rotation.x = rad(pose.leftShoulderPitch);
+  rig.leftArm.rotation.y = rad(pose.leftShoulderYaw);
+  rig.leftArm.rotation.z = state.leftShoulderRestZ + rad(pose.leftShoulderRollOffset);
+  rig.leftForearm.rotation.x = rad(pose.leftElbow);
 
   // Small opposing leg changes make the hip rotation read as weight transfer instead of
   // a torso-only twist while keeping root movement and navigation untouched.
-  rig.leftLeg.rotation.x += rad(pose.leftHipPitch);
   rig.rightLeg.rotation.x += rad(pose.rightHipPitch);
+  rig.leftLeg.rotation.x += rad(pose.leftHipPitch);
 }
 
 function sampleAttackPose(progress: number): AttackPose {
