@@ -209,9 +209,9 @@ export default function ShopOverlay({
             <div className="shop-catalog-heading">
               <div><span>{tier}</span><strong>{items.length} objetos disponibles</strong></div>
               {!nearShop
-                ? <em>Compra remota: el objeto caerá junto a tu héroe.</em>
+                ? <em>Compra remota: el objeto quedará frente al Mercado del Alba para recogerlo en base.</em>
                 : inventoryFull
-                  ? <em>Inventario lleno: las compras que no liberen espacio caerán junto al héroe.</em>
+                  ? <em>Inventario lleno: las compras que no liberen espacio caerán frente a la tienda.</em>
                   : null}
             </div>
             <div className="shop-item-grid">
@@ -272,8 +272,8 @@ export default function ShopOverlay({
             {affordable && (!nearShop || (inventoryFull && !freesInventorySlot)) && (
               <small className="shop-drop-warning">
                 {!nearShop
-                  ? 'Estás fuera del alcance de la tienda: la compra caerá al suelo junto a tu héroe y quedará reservada para ti.'
-                  : 'Se comprará igualmente y caerá al suelo junto a tu héroe.'}
+                  ? 'Estás fuera del alcance de la tienda: la compra quedará frente al Mercado del Alba y reservada para ti. Debes volver a la base para recogerla.'
+                  : 'Se comprará igualmente y caerá al suelo frente a la tienda.'}
               </small>
             )}
           </aside>
