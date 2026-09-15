@@ -619,7 +619,7 @@ export function createEntitySelectionController(
       gameplayCamera = camera;
       syncAttackIntentMarkers();
     }
-    previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
+    previousSceneBeforeRender.call(scene, renderer, renderedScene, camera, geometry, material, group);
   };
   scene.onBeforeRender = attackIntentBeforeRender;
 
