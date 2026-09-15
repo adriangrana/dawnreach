@@ -1,9 +1,9 @@
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
+import { mountFpsOverlay } from './hud/fpsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInventoryControls } from './hud/inventoryControls';
@@ -73,12 +73,14 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><App /></React.StrictMode>,
-);
+// The Three.js world is intentionally mounted once. React StrictMode's development-only
+// effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
+// doubling startup work and transient GPU/CPU pressure in tauri:dev.
+ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
 const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
 mountCombatStatsOverlay();
+const disposeFpsOverlay = mountFpsOverlay();
 const disposeResponsiveHudScale = mountResponsiveHudScale();
 const disposeHeroFunctionKeyControls = mountHeroFunctionKeyControls();
 const disposeInventoryControls = mountInventoryControls();
@@ -95,6 +97,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeBrowserInteractionGuards();
+    disposeFpsOverlay();
     disposeResponsiveHudScale();
     disposeHeroFunctionKeyControls();
     disposeInventoryControls();
