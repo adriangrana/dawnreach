@@ -82,11 +82,11 @@ const HEIGHT_DAMPING = 30;
 const LANE_CREEP_MOVE_SPEED = 3;
 const RANGED_FORMATION_TRAILING_OFFSET = 3.75;
 const SIEGE_FORMATION_TRAILING_OFFSET = 4.8;
-// Keep wave creation separate from lane routing: creeps are authored from the throne-to-throne
-// lane polyline, but physically appear on the dashed exit corridor instead of behind the throne.
-// 14 world units keeps the full formation inside the 9.2..18 guide-mark span (siege at 9.2,
-// ranged at 10.25, melee/frontline at 14) while the route still ends at the enemy throne.
-const LANE_CREEP_SPAWN_ANCHOR_DISTANCE = 14;
+// Spawn the wave across the actual three citadel ramps, not on the inner plaza rings.
+// The ramp begins at about radius 19.68. Anchoring the frontline at 24.48 means the
+// furthest trailing unit (siege, -4.8) still appears at the inner edge of the ramp,
+// while ranged creeps appear at 20.73 and melee/frontline units at 24.48.
+const LANE_CREEP_SPAWN_ANCHOR_DISTANCE = 24.48;
 const TEMP_A = new THREE.Vector3();
 const TEMP_B = new THREE.Vector3();
 const SURFACE_RAY = new THREE.Raycaster();
@@ -333,9 +333,8 @@ class LaneCreepManager {
         : SIEGE_FORMATION_TRAILING_OFFSET;
     const stats = CREEP_STATS[type];
 
-    // Spawn on the authored dashed lane-exit corridor, but leave `route` untouched so the
-    // final waypoint remains the enemy throne. Blue and red both work because `dirX/dirZ`
-    // are calculated after reversing the route for red.
+    // Spawn on the actual three base ramps. `route` remains throne-to-throne, so only the
+    // physical wave origin changes and the final waypoint is still the enemy throne.
     const spawnOriginX = start[0] + dirX * LANE_CREEP_SPAWN_ANCHOR_DISTANCE;
     const spawnOriginZ = start[1] + dirZ * LANE_CREEP_SPAWN_ANCHOR_DISTANCE;
     const rawSpawnX = spawnOriginX + sideX * lateralSlot - dirX * trailingOffset;
