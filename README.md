@@ -56,21 +56,21 @@ Son operaciones alternativas, no para ejecutar junto a otro servidor en el mismo
 
 ## 3. Arquitectura
 
-| Archivo | Responsabilidad |
-| --- | --- |
-| [src/App.tsx](src/App.tsx) | Contenedor React de la experiencia. |
-| [src/game/createDawnreachGame.ts](src/game/createDawnreachGame.ts) | Escena, renderer, arena, luces, overlays, seleccion de personaje, navegacion, bucle y limpieza. |
-| [src/game/characters/humanoidRig.ts](src/game/characters/humanoidRig.ts) | Articulaciones, sockets, estado por instancia y contactos iniciales. No construye armadura. |
-| [src/game/characters/animateHumanoid.ts](src/game/characters/animateHumanoid.ts) | Marcha, mezcla reposo/movimiento, apoyo, cintura, torso y cabeza. |
-| [src/game/characters/buildHumanoidBody.ts](src/game/characters/buildHumanoidBody.ts) | Cuerpo reutilizable, materiales propios, regiones ocultables y muestras de suelas. |
-| [src/game/characters/buildHumanoidUpperBody.ts](src/game/characters/buildHumanoidUpperBody.ts) | Superficie continua de pecho, hombros y brazos superiores del humanoide. |
-| [src/game/heroes/alden/buildAlden.ts](src/game/heroes/alden/buildAlden.ts) | Montaje de la apariencia de Alden sobre el rig comun. |
-| [src/game/heroes/alden/geometry.ts](src/game/heroes/alden/geometry.ts) | Perfiles de armadura, hombreras, botas, espada, tela y heraldica. |
-| [src/game/heroes/alden/materials.ts](src/game/heroes/alden/materials.ts) | Mapas pintados deterministas y colores por vertice. Requiere canvas/DOM para crear mapas. |
-| [src/game/heroes/alden/animateAlden.ts](src/game/heroes/alden/animateAlden.ts) | Marcha compartida seguida de capa; conserva las exportaciones `ALDEN_*`. |
-| [tests/alden.test.mjs](tests/alden.test.mjs) | Pruebas Node de ambos cuerpos y referencia historica. |
-| [tests/verify-alden.mjs](tests/verify-alden.mjs) | Pruebas del navegador y capturas con Edge. |
-| [src-tauri/src/lib.rs](src-tauri/src/lib.rs) | Entrada de la aplicacion Tauri. |
+| Archivo                                                                                       | Responsabilidad                                                                                 |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [src/App.tsx](src/App.tsx)                                                                     | Contenedor React de la experiencia.                                                             |
+| [src/game/createDawnreachGame.ts](src/game/createDawnreachGame.ts)                             | Escena, renderer, arena, luces, overlays, seleccion de personaje, navegacion, bucle y limpieza. |
+| [src/game/characters/humanoidRig.ts](src/game/characters/humanoidRig.ts)                       | Articulaciones, sockets, estado por instancia y contactos iniciales. No construye armadura.     |
+| [src/game/characters/animateHumanoid.ts](src/game/characters/animateHumanoid.ts)               | Marcha, mezcla reposo/movimiento, apoyo, cintura, torso y cabeza.                               |
+| [src/game/characters/buildHumanoidBody.ts](src/game/characters/buildHumanoidBody.ts)           | Cuerpo reutilizable, materiales propios, regiones ocultables y muestras de suelas.              |
+| [src/game/characters/buildHumanoidUpperBody.ts](src/game/characters/buildHumanoidUpperBody.ts) | Superficie continua de pecho, hombros y brazos superiores del humanoide.                        |
+| [src/game/heroes/alden/buildAlden.ts](src/game/heroes/alden/buildAlden.ts)                     | Montaje de la apariencia de Alden sobre el rig comun.                                           |
+| [src/game/heroes/alden/geometry.ts](src/game/heroes/alden/geometry.ts)                         | Perfiles de armadura, hombreras, botas, espada, tela y heraldica.                               |
+| [src/game/heroes/alden/materials.ts](src/game/heroes/alden/materials.ts)                       | Mapas pintados deterministas y colores por vertice. Requiere canvas/DOM para crear mapas.       |
+| [src/game/heroes/alden/animateAlden.ts](src/game/heroes/alden/animateAlden.ts)                 | Marcha compartida seguida de capa; conserva las exportaciones`ALDEN_*`.                       |
+| [tests/alden.test.mjs](tests/alden.test.mjs)                                                   | Pruebas Node de ambos cuerpos y referencia historica.                                           |
+| [tests/verify-alden.mjs](tests/verify-alden.mjs)                                               | Pruebas del navegador y capturas con Edge.                                                      |
+| [src-tauri/src/lib.rs](src-tauri/src/lib.rs)                                                   | Entrada de la aplicacion Tauri.                                                                 |
 
 No hay un registro extensible de heroes. Crear un constructor no lo conecta automaticamente a la escena.
 
@@ -109,14 +109,14 @@ Valores a escala 1. Usar referencias del rig: algunos nombres de escena son hist
 
 ### API y parametros
 
-| API | Opciones o estado |
-| --- | --- |
-| `createHumanoidRig(options)` | `name = 'humanoid'`, `bodyScale = 1`, `armRestAngle = 0.18`. |
-| `buildHumanoidBody(options)` | Las anteriores y `color = 0x428b83` para las superficies principales; otros materiales conservan sus colores. |
+| API                                | Opciones o estado                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHumanoidRig(options)`     | `name = 'humanoid'`, `bodyScale = 1`, `armRestAngle = 0.18`.                                                                           |
+| `buildHumanoidBody(options)`     | Las anteriores y`color = 0x428b83` para las superficies principales; otros materiales conservan sus colores.                               |
 | `buildAlden(materials, options)` | `armRestAngle = 0.18`, `shoulderNeckBlend = 1`, `capeNeckBlend = 1`. **No admite escalar toda su apariencia con `bodyScale`.** |
-| `rig.waistMotionScale` | Por instancia, inicializado a `0.5`; `1` reproduce la amplitud anterior. |
-| `rig.gait` | `{ phase, weight }` por instancia; no compartirlo. |
-| `rig.soleSamples` | Muestras no vacias para cada pie, en espacio local del tobillo. |
+| `rig.waistMotionScale`           | Por instancia, inicializado a`0.5`; `1` reproduce la amplitud anterior.                                                                  |
+| `rig.gait`                       | `{ phase, weight }` por instancia; no compartirlo.                                                                                         |
+| `rig.soleSamples`                | Muestras no vacias para cada pie, en espacio local del tobillo.                                                                              |
 
 `bodyScale` debe ser positivo y finito. Tamanos comprobados: 0.8, 1 y 1.2; no es retargeting de cualquier anatomia. `armRestAngle` usa radianes: 0.18 son unos 10 grados, frente a los 0.24 anteriores. Elegirlo antes de montar armas o calcular bind matrices.
 
@@ -124,17 +124,17 @@ Valores a escala 1. Usar referencias del rig: algunos nombres de escena son hist
 
 API: `animateHumanoid(rig, elapsed, moving, delta, speed)`. Tiempo/delta en segundos y velocidad positiva en unidades del mundo por segundo. Seguir llamandola al detenerse para que las articulaciones vuelvan gradualmente a reposo.
 
-| Propiedad | Estado actual |
-| --- | --- |
-| Marcha normal | `HUMANOID_WALK_SPEED = 2.4`. |
-| Marcha rapida, predeterminada | `HUMANOID_FAST_WALK_SPEED = 3.8`; `HUMANOID_DEFAULT_MOVE_SPEED` usa ese valor. |
-| Cadencia | Paso nominal 1.2; unos 120/190 pasos por minuto a escala 1. Se ajusta inversamente a `bodyScale`. |
-| Rodilla | 4 grados en contacto, 18 al cargar y maximo 60 en recuperacion. |
-| Cadera | Flexion 28 en contacto, extension 12 y recuperacion hasta 30 grados. |
-| Tobillo | Neutral en contacto, flexion plantar 5, dorsiflexion de apoyo 10, impulso 18 y recuperacion hasta 20 de dorsiflexion. |
-| Pelvis | Giro horizontal hasta 2 grados, inclinacion lateral 2.5 y desplazamiento lateral 0.0175. |
-| Pecho | Contrarrotacion horizontal/lateral; inclinacion lateral hasta 1.5 grados. |
-| Carga vertical | Ciclo suave de 0.04 unidades entre minimo y maximo a escala 1. |
+| Propiedad                     | Estado actual                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Marcha normal                 | `HUMANOID_WALK_SPEED = 2.4`.                                                                                        |
+| Marcha rapida, predeterminada | `HUMANOID_FAST_WALK_SPEED = 3.8`; `HUMANOID_DEFAULT_MOVE_SPEED` usa ese valor.                                    |
+| Cadencia                      | Paso nominal 1.2; unos 120/190 pasos por minuto a escala 1. Se ajusta inversamente a`bodyScale`.                    |
+| Rodilla                       | 4 grados en contacto, 18 al cargar y maximo 60 en recuperacion.                                                       |
+| Cadera                        | Flexion 28 en contacto, extension 12 y recuperacion hasta 30 grados.                                                  |
+| Tobillo                       | Neutral en contacto, flexion plantar 5, dorsiflexion de apoyo 10, impulso 18 y recuperacion hasta 20 de dorsiflexion. |
+| Pelvis                        | Giro horizontal hasta 2 grados, inclinacion lateral 2.5 y desplazamiento lateral 0.0175.                              |
+| Pecho                         | Contrarrotacion horizontal/lateral; inclinacion lateral hasta 1.5 grados.                                             |
+| Carga vertical                | Ciclo suave de 0.04 unidades entre minimo y maximo a escala 1.                                                        |
 
 Las curvas exactas estan en [src/game/characters/animateHumanoid.ts](src/game/characters/animateHumanoid.ts). La flexion temprana de la rodilla trasera evita que las botas grandes atraviesen el suelo. No sustituir esa curva sin comprobar el resultado.
 
@@ -319,12 +319,12 @@ Las pruebas usan materiales sencillos sin DOM. Cubren geometria, triangulos, som
 
 [tests/fixtures/alden-before-shared-rig.json](tests/fixtures/alden-before-shared-rig.json) guarda 27 firmas SHA-256 pre-extraccion: reposo, doce fases/orientaciones y arranque/parada a ambas velocidades. Incluyen geometria, materiales, sombras y matrices mundiales redondeadas a nueve decimales; no dependen del orden de recorrido.
 
-| Parametro | Perfil historico | Actual |
-| --- | --- | --- |
-| `waistMotionScale` | 1 | 0.5 |
-| `armRestAngle` | 0.24 | 0.18 |
-| `shoulderNeckBlend` | 0 | 1 |
-| `capeNeckBlend` | 0 | 1 |
+| Parametro             | Perfil historico | Actual |
+| --------------------- | ---------------- | ------ |
+| `waistMotionScale`  | 1                | 0.5    |
+| `armRestAngle`      | 0.24             | 0.18   |
+| `shoulderNeckBlend` | 0                | 1      |
+| `capeNeckBlend`     | 0                | 1      |
 
 La prueba historica elige esos valores antiguos expresamente; otras pruebas validan los nuevos. **No regenerar ni borrar el fixture para ocultar una regresion.** `CAPTURE_ALDEN_REFERENCE=1` fue solo para la captura inicial y usa escritura exclusiva; no es un comando normal de actualizacion. Los mapas reales se verifican aparte en navegador.
 

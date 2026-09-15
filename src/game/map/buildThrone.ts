@@ -156,6 +156,7 @@ export function buildThrone(team: 'blue' | 'red', stoneTexture: THREE.Texture | 
   root.add(prism);
   const crystal = add(crystalGeometry(), crystalMaterial, 0, prism);
   crystal.name = 'throne-crystal'; crystal.rotation.y = Math.PI / 6;
+  crystal.scale.set(1.35, 1.25, 1.35);
   // Thin facet ridges catch light without outlining triangulation across the faces.
   for (let ridge = 0; ridge < 6; ridge++) {
     const angle = ridge * Math.PI / 3 + Math.PI / 6;
