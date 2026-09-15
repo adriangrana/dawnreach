@@ -54,10 +54,14 @@ class Masonry {
 export function buildObjectiveRuins(kind: 'upper' | 'lower', stone: StoneMaterials, entranceAngle: number) {
   const build = new Masonry();
   const { wallRadius, gateHalfAngle } = OBJECTIVE_LAYOUT;
-  const crystal = new THREE.MeshStandardMaterial({ color: kind === 'lower' ? 0xba80d5 : 0x81d0be,
-    emissive: kind === 'lower' ? 0x642391 : 0x236e67, emissiveIntensity: 0.8, roughness: 0.32, metalness: 0.15 });
-  const inlay = new THREE.MeshStandardMaterial({ color: kind === 'lower' ? 0x947baa : 0x8bad9e,
-    emissive: kind === 'lower' ? 0x372047 : 0x244a40, emissiveIntensity: 0.45, roughness: 0.68 });
+  const crystal = new THREE.MeshStandardMaterial({
+    color: kind === 'lower' ? 0xba80d5 : 0x81d0be,
+    emissive: kind === 'lower' ? 0x642391 : 0x236e67, emissiveIntensity: 0.8, roughness: 0.32, metalness: 0.15
+  });
+  const inlay = new THREE.MeshStandardMaterial({
+    color: kind === 'lower' ? 0x947baa : 0x8bad9e,
+    emissive: kind === 'lower' ? 0x372047 : 0x244a40, emissiveIntensity: 0.45, roughness: 0.68
+  });
   const moss = new THREE.MeshStandardMaterial({ color: 0x526a3c, roughness: 1 });
   const arc = Math.PI * 2 - gateHalfAngle * 2;
   const count = 17;
@@ -151,8 +155,10 @@ function factionMaterials(team: 'blue' | 'red') {
     metal: new THREE.MeshStandardMaterial({ color: blue ? 0x53656e : 0x474851, metalness: 0.42, roughness: 0.65 }),
     trim: new THREE.MeshStandardMaterial({ color: blue ? 0xb4a47e : 0xa18d76, metalness: 0.55, roughness: 0.4 }),
     cloth: new THREE.MeshStandardMaterial({ color: blue ? 0x1b6093 : 0xa52d2a, roughness: 0.98, side: THREE.DoubleSide }),
-    crystal: new THREE.MeshPhysicalMaterial({ color: blue ? 0x58cbf4 : 0xf44b3d, emissive: blue ? 0x116bb1 : 0xb32112,
-      emissiveIntensity: 0.65, metalness: 0.15, roughness: 0.18, clearcoat: 1 }),
+    crystal: new THREE.MeshPhysicalMaterial({
+      color: blue ? 0x58cbf4 : 0xf44b3d, emissive: blue ? 0x116bb1 : 0xb32112,
+      emissiveIntensity: 0.65, metalness: 0.15, roughness: 0.18, clearcoat: 1
+    }),
     light: new THREE.MeshBasicMaterial({ color: blue ? 0x8addff : 0xff8b63 }),
     fire: new THREE.MeshStandardMaterial({ color: 0xffd281, emissive: 0xff961e, emissiveIntensity: 1.8, roughness: 0.5 }),
   };
@@ -253,9 +259,9 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
 
   const fountainX = team === 'blue' ? -4.7 : 4.7;
   const fountainZ = -fountainX;
-  build.cylinder(stone.stoneLight, 2.02, 2.22, 0.11, fountainX, 0.09, fountainZ, 48);
-  build.cylinder(faction.metal, 1.8, 1.9, 0.1, fountainX, 0.17, fountainZ, 48);
-  for (const ring of [0.65, 1.25, 1.65]) build.ring(faction.light, ring - 0.04, ring + 0.04, 0.23, 0, Math.PI * 2, fountainX, fountainZ);
+  // build.cylinder(stone.stoneLight, 2.02, 2.22, 0.11, fountainX, 0.09, fountainZ, 48);
+  // build.cylinder(faction.metal, 1.8, 1.9, 0.1, fountainX, 0.17, fountainZ, 48);
+  // for (const ring of [0.65, 1.25, 1.65]) build.ring(faction.light, ring - 0.04, ring + 0.04, 0.23, 0, Math.PI * 2, fountainX, fountainZ);
   const group = build.finish(`${team}-base`);
   group.add(buildThrone(team, stone.stone.map));
   group.userData.gates = gates;

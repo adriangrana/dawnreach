@@ -47,7 +47,7 @@ export function upgradeBasePresentation(
   battlefield.add(elevation);
 
   replaceLegacyThroneCrystal(citadel, team, materials);
-  if (team === 'blue') installTeamStartBase(battlefield, team);
+  installTeamStartBase(battlefield, team);
 }
 
 function createPresentationMaterials(team: 'blue' | 'red'): BasePresentationMaterials {
