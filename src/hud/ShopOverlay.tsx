@@ -4,6 +4,7 @@ import { isLocalHeroNearShop, subscribeLocalShopProximity } from '../game/items/
 import { ITEM_BY_ID, ITEMS, type ItemDefinition, type ItemTier } from '../game/items/itemDatabase';
 import { readInventoryDragPayload } from '../game/items/itemDrag';
 import { SHOP_OPEN_EVENT, type ShopOpenDetail } from '../game/items/shopEvents';
+import { getLocalShopPurchaseQuote } from '../game/items/shopRuntime';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 
 const TIERS: readonly ItemTier[] = ['Básico', 'Intermedio', 'Avanzado'];
@@ -129,7 +130,14 @@ export default function ShopOverlay({
     const definition = ITEM_BY_ID.get(component.id);
     return definition ? [{ definition, quantity: component.quantity }] : [];
   });
-  const affordable = gold >= selected.cost;
+  const selectedQuote = getLocalShopPurchaseQuote(selected.id);
+  const selectedCost = selectedQuote?.remainingCost ?? selected.cost;
+  const affordable = gold >= selectedCost;
+  const combinesOwnedComponents = selectedQuote?.consumesComponents ?? false;
+  const freesInventorySlot = selectedQuote?.freesInventorySlot ?? false;
+  const purchaseVerb = combinesOwnedComponents
+    ? selectedCost === selected.recipe_cost ? 'Combinar' : 'Completar'
+    : 'Comprar';
 
   const onSellDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes('application/x-dawnreach-inventory-item')) return;
@@ -203,12 +211,14 @@ export default function ShopOverlay({
               {!nearShop
                 ? <em>Compra remota: el objeto caerá junto a tu héroe.</em>
                 : inventoryFull
-                  ? <em>Inventario lleno: las compras caerán junto al héroe.</em>
+                  ? <em>Inventario lleno: las compras que no liberen espacio caerán junto al héroe.</em>
                   : null}
             </div>
             <div className="shop-item-grid">
               {items.map(item => {
-                const canAfford = gold >= item.cost;
+                const quote = getLocalShopPurchaseQuote(item.id);
+                const effectiveCost = quote?.remainingCost ?? item.cost;
+                const canAfford = gold >= effectiveCost;
                 return (
                   <button type="button" key={item.id} className={`shop-item-card ${item.id === selected.id ? 'is-selected' : ''}`} onClick={() => setSelectedId(item.id)}>
                     <span className={`shop-item-icon ${itemTierClass(item.tier)}`}><ItemArt id={item.id} className="shop-item-icon-art" /></span>
@@ -216,7 +226,7 @@ export default function ShopOverlay({
                       <strong>{item.name}</strong>
                       <small>{Object.entries(item.stats).slice(0, 2).map(([stat, value]) => formatStat(stat, Number(value))).join(' · ') || 'Efecto utilitario'}</small>
                     </span>
-                    <span className={`shop-item-cost ${canAfford ? '' : 'is-expensive'}`}><Coins />{item.cost}</span>
+                    <span className={`shop-item-cost ${canAfford ? '' : 'is-expensive'}`}><Coins />{effectiveCost}</span>
                   </button>
                 );
               })}
@@ -250,13 +260,16 @@ export default function ShopOverlay({
                   ))}
                 </div>
                 {selected.recipe_cost > 0 && <small>Coste de combinación: {selected.recipe_cost} oro</small>}
+                {selectedQuote && selectedQuote.componentCredit > 0 && (
+                  <small>Componentes aprovechados del inventario: -{selectedQuote.componentCredit} oro</small>
+                )}
               </div>
             )}
 
             <button type="button" className="shop-buy-button" disabled={!affordable} onClick={() => onBuy(selected.id)}>
-              <Coins /><span>{affordable ? `Comprar por ${selected.cost}` : `Faltan ${selected.cost - gold} de oro`}</span>
+              <Coins /><span>{affordable ? `${purchaseVerb} por ${selectedCost}` : `Faltan ${selectedCost - gold} de oro`}</span>
             </button>
-            {affordable && (!nearShop || inventoryFull) && (
+            {affordable && (!nearShop || (inventoryFull && !freesInventorySlot)) && (
               <small className="shop-drop-warning">
                 {!nearShop
                   ? 'Estás fuera del alcance de la tienda: la compra caerá al suelo junto a tu héroe y quedará reservada para ti.'
