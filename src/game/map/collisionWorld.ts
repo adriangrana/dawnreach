@@ -9,6 +9,8 @@ type CircleCollider = {
   z: number;
   radius: number;
   kind: 'tree' | 'structure';
+  source?: THREE.Object3D;
+  disableWhenDestroyed?: boolean;
 };
 
 type RockCollider = {
@@ -83,11 +85,33 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   addObjectiveWallColliders(segments, counts);
   collectPresentationBarrierColliders(battlefield, segments);
 
+  let knownBattlefieldChildCount = battlefield.children.length;
+  const refreshCircleCollidersIfNeeded = () => {
+    const childCount = battlefield.children.length;
+    if (childCount === knownBattlefieldChildCount) return;
+
+    // World shops are installed after the collision world is created. Rebuild the cheap
+    // circular subset when top-level map structures are added/removed so those late-authored
+    // structures become physical without rebuilding rocks, walls, or the navigation grids.
+    battlefield.updateMatrixWorld(true);
+    circles.length = 0;
+    const refreshedCounts = { trees: 0, structures: 0 };
+    const ignoredRuinSegments: SegmentCollider[] = [];
+    collectTreeColliders(battlefield, circles, refreshedCounts);
+    collectStructureColliders(battlefield, circles, refreshedCounts);
+    collectRuinColliders(battlefield, circles, ignoredRuinSegments, refreshedCounts);
+    counts.trees = refreshedCounts.trees;
+    counts.structures = refreshedCounts.structures;
+    knownBattlefieldChildCount = childCount;
+  };
+
   const isBlocked = (point: CollisionPoint, radius: number) => {
+    refreshCircleCollidersIfNeeded();
     if (point.x - radius < MAP_BOUNDS.minX || point.x + radius > MAP_BOUNDS.maxX
       || point.z - radius < MAP_BOUNDS.minZ || point.z + radius > MAP_BOUNDS.maxZ) return true;
 
     for (const circle of circles) {
+      if (!isCircleColliderActive(circle)) continue;
       const required = radius + circle.radius;
       if ((point.x - circle.x) ** 2 + (point.z - circle.z) ** 2 < required ** 2) return true;
     }
@@ -109,6 +133,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   };
 
   const resolvePoint = (point: CollisionPoint, previous: CollisionPoint, radius: number) => {
+    refreshCircleCollidersIfNeeded();
     const resolved = {
       x: THREE.MathUtils.clamp(point.x, MAP_BOUNDS.minX + radius, MAP_BOUNDS.maxX - radius),
       z: THREE.MathUtils.clamp(point.z, MAP_BOUNDS.minZ + radius, MAP_BOUNDS.maxZ - radius),
@@ -118,6 +143,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
       let changed = false;
 
       for (const circle of circles) {
+        if (!isCircleColliderActive(circle)) continue;
         const required = radius + circle.radius;
         const dx = resolved.x - circle.x;
         const dz = resolved.z - circle.z;
@@ -264,6 +290,13 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
       return current;
     },
   };
+}
+
+function isCircleColliderActive(collider: CircleCollider) {
+  if (!collider.disableWhenDestroyed) return true;
+  if (!collider.source?.parent) return false;
+  const currentHp = Number(collider.source.userData.currentHp);
+  return !Number.isFinite(currentHp) || currentHp > 0;
 }
 
 function isStoneRock(object: THREE.Object3D): object is THREE.Mesh {
@@ -431,19 +464,29 @@ function collectStructureColliders(
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Group)) return;
 
+    const name = object.name.toLowerCase();
+    const disableWhenDestroyed = object.userData.structureKind === 'defense-tower'
+      || name.endsWith('-tower')
+      || name.endsWith('-defense-tower');
     const authoredRadius = Number(object.userData.collisionRadius ?? 0);
     if (authoredRadius > 0) {
       object.getWorldPosition(center);
       const radius = object.userData.structureKind === 'throne'
         ? Math.max(authoredRadius, THRONE_PLATFORM_RADIUS)
         : authoredRadius;
-      colliders.push({ x: center.x, z: center.z, radius, kind: 'structure' });
+      colliders.push({
+        x: center.x,
+        z: center.z,
+        radius,
+        kind: 'structure',
+        source: object,
+        disableWhenDestroyed,
+      });
       counts.structures++;
       return;
     }
 
-    const name = object.name.toLowerCase();
-    if (!(name.endsWith('-tower') || name.endsWith('-defense-tower'))) return;
+    if (!disableWhenDestroyed) return;
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) return;
     box.getCenter(center);
@@ -453,6 +496,8 @@ function collectStructureColliders(
       z: center.z,
       radius: THREE.MathUtils.clamp(Math.min(size.x, size.z) * 0.34, 0.65, 1.45),
       kind: 'structure',
+      source: object,
+      disableWhenDestroyed: true,
     });
     counts.structures++;
   });
