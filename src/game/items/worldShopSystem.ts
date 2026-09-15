@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry, TeamId } from '../entities/gameEntities';
-import { BASE_LAYOUT, DAWNREACH_LAYOUT } from '../map/mapLayout';
+import { BASE_LAYOUT, DAWNREACH_LAYOUT, TEAM_START_BASE_LAYOUT, getTeamStartSpawnPosition } from '../map/mapLayout';
 import { consumeShopPurchaseStorefrontDrop, setLocalShopProximity } from './shopAccess';
 import { getItemDefinition, type ItemDefinition } from './itemDatabase';
 import { getItemIconDataUrl, getItemVisualSpec } from './itemVisuals';
@@ -37,9 +37,7 @@ const SHOP_LOCAL_FOOTPRINT_RADIUS = 3.0;
 const SHOP_WORLD_FOOTPRINT_RADIUS = SHOP_LOCAL_FOOTPRINT_RADIUS * SHOP_WORLD_SCALE;
 const SHOP_SELECTION_RADIUS = 1.72;
 const SHOP_WALL_GAP = 0.55;
-const SHOP_DELIVERY_LOCAL_Z = -4.25;
-const SHOP_DELIVERY_COLUMN_SPACING = 0.78;
-const SHOP_DELIVERY_ROW_SPACING = 0.72;
+const SHOP_DELIVERY_RING_SPACING = 0.62;
 let disposeActiveWorldShopSystem: (() => void) | null = null;
 
 export function ensureWorldShopSystem(
@@ -95,7 +93,6 @@ export function ensureWorldShopSystem(
   const pointerRaycaster = new THREE.Raycaster();
   const heroPosition = new THREE.Vector3();
   const shopPosition = new THREE.Vector3();
-  const storefrontDropPosition = new THREE.Vector3();
   let gameplayCamera: THREE.Camera | null = null;
   let pendingGroundId: string | null = null;
   let disposed = false;
@@ -188,19 +185,21 @@ export function ensureWorldShopSystem(
     const storefrontDelivery = consumeShopPurchaseStorefrontDrop(detail.token);
     const localShop = storefrontDelivery ? shopRoots.get(localTeam) : null;
     if (localShop?.parent) {
-      // Purchased items that cannot be delivered directly to inventory wait on the dry
-      // plaza in front of the counter. Until a courier exists, the hero must return to
-      // base and physically collect them.
-      const column = (dropIndex % 5) - 2;
-      const row = Math.floor(dropIndex / 5) % 3;
-      storefrontDropPosition.set(
-        column * SHOP_DELIVERY_COLUMN_SPACING,
-        0.10,
-        SHOP_DELIVERY_LOCAL_Z - row * SHOP_DELIVERY_ROW_SPACING,
+      // Remote purchases share the same guaranteed-accessible sanctuary service point used
+      // for hero spawn/respawn. Keep additional purchases in a tight ring around that point
+      // instead of deriving delivery from the shop model's local axes (which could place them
+      // behind the market or outside the walkable upper plaza).
+      const team = localTeam === 'red' ? 'red' : 'blue';
+      const servicePoint = getTeamStartSpawnPosition(team);
+      const slot = dropIndex % 7;
+      const ring = Math.floor(dropIndex / 7) % 2;
+      const distance = slot === 0 ? ring * 0.45 : SHOP_DELIVERY_RING_SPACING + ring * 0.45;
+      const angle = slot === 0 ? 0 : (slot - 1) / 6 * Math.PI * 2;
+      root.position.set(
+        servicePoint.x + Math.cos(angle) * distance,
+        TEAM_START_BASE_LAYOUT.elevation + 0.15,
+        servicePoint.z + Math.sin(angle) * distance,
       );
-      localShop.updateWorldMatrix(true, false);
-      localShop.localToWorld(storefrontDropPosition);
-      root.position.copy(storefrontDropPosition);
       root.userData.shopDelivery = true;
     } else {
       // Manually dropping an inventory item keeps the existing behavior: it lands beside
@@ -537,7 +536,6 @@ function buildGroundItem(definition: ItemDefinition, groundId: string) {
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.04;
   root.add(ring);
-
   const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.37, 0.13, 8), baseMaterial);
   pedestal.position.y = 0.09;
   pedestal.castShadow = true;
