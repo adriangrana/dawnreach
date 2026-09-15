@@ -3,7 +3,7 @@ import { getHeroDefinition } from '../heroes/catalog';
 import { getRequiredHero } from '../match/matchState';
 import { calculateDefinitionStatsAtLevel, calculateHeroStats } from '../match/stats';
 import type { MatchHeroState, MatchState } from '../match/types';
-import { isLocalHeroNearShop } from './shopAccess';
+import { isLocalHeroNearShop, markShopPurchaseForStorefrontDrop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 import { canMergeItemStacks, getItemStackLimit } from './itemStacking';
 import { planShopPurchase, type ShopPurchasePlan } from './shopRecipePricing';
@@ -272,6 +272,7 @@ export function purchaseShopItem(
     return { match: next, definition, item, ok: true, dropped: false, reason: null };
   }
 
+  markShopPurchaseForStorefrontDrop(instanceId);
   syncHeroItemRuntime(next, heroEntityId);
   return {
     match: next,
