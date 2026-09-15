@@ -180,7 +180,7 @@ function addTorus(
   y: number,
   material: THREE.Material,
 ) {
-  const torus = addMesh(parent, new THREE.TorusGeometry(radius, tube, 8, 64), material);
+  const torus = addMesh(parent, new THREE.TorusGeometry(radius, tube, 8, 32), material);
   torus.rotation.x = Math.PI / 2;
   torus.position.y = y;
   return torus;
@@ -295,12 +295,13 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
     new THREE.Vector3(0, 1.11, 0), new THREE.Euler(0, Math.PI / 8, 0));
 
   // Layered armor plates wrap the core and generate deep readable facets from the isometric camera.
+  // All four plates share the same immutable geometry instead of allocating duplicate GPU buffers.
   const plateGeometry = armorPlateGeometry();
   for (let side = 0; side < 4; side++) {
     const angle = side * Math.PI / 2;
     const plate = addMesh(
       tower,
-      plateGeometry.clone(),
+      plateGeometry,
       side % 2 === 0 ? materials.stone : materials.armor,
       new THREE.Vector3(Math.sin(angle) * 0.67, 1.12, Math.cos(angle) * 0.67),
       new THREE.Euler(0, angle, 0),
@@ -334,12 +335,13 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   crown.position.y = 2.04;
   tower.add(crown);
 
+  // Fins also share one immutable geometry. Transform differences belong to the meshes.
   const finGeometry = shoulderFinGeometry();
   for (let side = 0; side < 4; side++) {
     const angle = side * Math.PI / 2 + Math.PI / 4;
     const fin = addMesh(
       crown,
-      finGeometry.clone(),
+      finGeometry,
       side % 2 === 0 ? materials.armor : materials.stone,
       new THREE.Vector3(Math.sin(angle) * 0.54, 0.47, Math.cos(angle) * 0.54),
       new THREE.Euler(0, angle, side % 2 === 0 ? -0.16 : 0.16),
@@ -394,9 +396,10 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
   addRing(crown, 0.28, 0.43, 0.22, materials.energy, 40);
   addTorus(crown, 0.47, 0.028, 0.235, materials.trim);
 
-  const light = new THREE.PointLight(team === 'blue' ? 0x61cde8 : 0xe4574e, 3.2, 4.4, 2);
-  light.position.set(0, 2.75, 0);
-  tower.add(light);
+  // The emissive crystal and energy layers provide the tower glow without a PointLight.
+  // Keeping one PointLight inside every tower changed Three.js' active light count whenever a
+  // tower was hidden on death, forcing Standard/Physical shader variants to recompile and
+  // producing the large one-time hitch observed on the first tower destruction.
 
   // The final authored proportion belongs to the asset itself. Call sites must never scale
   // towers differently by location; this keeps lane/base towers identical in footprint and height.
@@ -408,7 +411,6 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
     materials.crystal.emissiveIntensity = (team === 'blue' ? 0.76 : 0.72) + Math.sin(elapsed * 2.15) * 0.09;
     materials.energy.opacity = 0.84 + Math.sin(elapsed * 2.6 + 0.5) * 0.04;
     materials.energySoft.opacity = 0.17 + (Math.sin(elapsed * 1.9) + 1) * 0.035;
-    light.intensity = 2.8 + (Math.sin(elapsed * 2.1) + 1) * 0.28;
     updateDefenseTowerCombat(tower, elapsed, team);
   };
 
