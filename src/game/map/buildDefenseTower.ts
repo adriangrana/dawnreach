@@ -20,6 +20,7 @@ type TowerMaterials = {
 };
 
 const materialCache = new Map<string, TowerMaterials>();
+const DESTROYED_PRESENTATION_CLEANUP_KEY = 'dawnreachDestroyedTowerPresentationCleaned';
 
 function towerMaterials(team: 'blue' | 'red', stone: TowerStoneMaterials): TowerMaterials {
   const key = [
@@ -252,6 +253,21 @@ function createEnergyVein(
   return vein;
 }
 
+function cleanupDestroyedTowerPresentation(tower: THREE.Group) {
+  if (tower.userData[DESTROYED_PRESENTATION_CLEANUP_KEY] === true) return;
+  const currentHp = Number(tower.userData.currentHp);
+  if (!Number.isFinite(currentHp) || currentHp > 0) return;
+
+  tower.userData[DESTROYED_PRESENTATION_CLEANUP_KEY] = true;
+  tower.traverse((object) => {
+    object.visible = false;
+    if (!(object instanceof THREE.Mesh)) return;
+    object.castShadow = false;
+    object.receiveShadow = false;
+  });
+  tower.visible = false;
+}
+
 export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneMaterials) {
   const materials = towerMaterials(team, stone);
   const tower = new THREE.Group();
@@ -412,6 +428,7 @@ export function buildDefenseTowerVisual(team: 'blue' | 'red', stone: TowerStoneM
     materials.energy.opacity = 0.84 + Math.sin(elapsed * 2.6 + 0.5) * 0.04;
     materials.energySoft.opacity = 0.17 + (Math.sin(elapsed * 1.9) + 1) * 0.035;
     updateDefenseTowerCombat(tower, elapsed, team);
+    cleanupDestroyedTowerPresentation(tower);
   };
 
   return tower;
