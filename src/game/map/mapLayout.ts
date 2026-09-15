@@ -28,10 +28,10 @@ export const TEAM_START_BASE_LAYOUT = {
   rampWidth: 4.4,
   fountainForward: 2.05,
   fountainSide: 0,
-  // Keep heroes on the dry sanctuary plaza, clear of the fountain/pool footprint (~3.2u),
-  // while remaining comfortably inside the 7u healing/protection radius.
-  spawnForward: 4.8,
-  spawnSide: -2.8,
+  // Shared accessible service area beside the shop and stairs. This point stays outside the
+  // market footprint and healing pool, while remaining inside the sanctuary protection radius.
+  spawnForward: 2.55,
+  spawnSide: -3.75,
   hpRegenFractionPerSecond: 0.10,
   resourceRegenFractionPerSecond: 0.08,
   fountainTrueDamagePerSecond: 200,
