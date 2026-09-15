@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry, TeamId } from '../entities/gameEntities';
 import { BASE_LAYOUT, DAWNREACH_LAYOUT } from '../map/mapLayout';
-import { setLocalShopProximity } from './shopAccess';
+import { consumeShopPurchaseStorefrontDrop, setLocalShopProximity } from './shopAccess';
 import { getItemDefinition, type ItemDefinition } from './itemDatabase';
 import { getItemIconDataUrl, getItemVisualSpec } from './itemVisuals';
 import {
@@ -37,6 +37,9 @@ const SHOP_LOCAL_FOOTPRINT_RADIUS = 3.0;
 const SHOP_WORLD_FOOTPRINT_RADIUS = SHOP_LOCAL_FOOTPRINT_RADIUS * SHOP_WORLD_SCALE;
 const SHOP_SELECTION_RADIUS = 1.72;
 const SHOP_WALL_GAP = 0.55;
+const SHOP_DELIVERY_LOCAL_Z = -4.25;
+const SHOP_DELIVERY_COLUMN_SPACING = 0.78;
+const SHOP_DELIVERY_ROW_SPACING = 0.72;
 let disposeActiveWorldShopSystem: (() => void) | null = null;
 
 export function ensureWorldShopSystem(
@@ -92,6 +95,7 @@ export function ensureWorldShopSystem(
   const pointerRaycaster = new THREE.Raycaster();
   const heroPosition = new THREE.Vector3();
   const shopPosition = new THREE.Vector3();
+  const storefrontDropPosition = new THREE.Vector3();
   let gameplayCamera: THREE.Camera | null = null;
   let pendingGroundId: string | null = null;
   let disposed = false;
@@ -177,16 +181,39 @@ export function ensureWorldShopSystem(
     const localHero = getLocalHero();
     if (!definition || !localHero?.root.parent) return;
 
-    localHero.root.getWorldPosition(heroPosition);
-    const angle = (dropCounter++ * 2.399963229728653) % (Math.PI * 2);
-    const distance = 0.82 + (dropCounter % 3) * 0.18;
+    const dropIndex = dropCounter++;
     const root = buildGroundItem(definition, detail.token);
     root.userData.ownerEntityId = localHero.id;
-    root.position.set(
-      heroPosition.x + Math.cos(angle) * distance,
-      heroPosition.y + 0.05,
-      heroPosition.z + Math.sin(angle) * distance,
-    );
+
+    const storefrontDelivery = consumeShopPurchaseStorefrontDrop(detail.token);
+    const localShop = storefrontDelivery ? shopRoots.get(localTeam) : null;
+    if (localShop?.parent) {
+      // Purchased items that cannot be delivered directly to inventory wait on the dry
+      // plaza in front of the counter. Until a courier exists, the hero must return to
+      // base and physically collect them.
+      const column = (dropIndex % 5) - 2;
+      const row = Math.floor(dropIndex / 5) % 3;
+      storefrontDropPosition.set(
+        column * SHOP_DELIVERY_COLUMN_SPACING,
+        0.10,
+        SHOP_DELIVERY_LOCAL_Z - row * SHOP_DELIVERY_ROW_SPACING,
+      );
+      localShop.updateWorldMatrix(true, false);
+      localShop.localToWorld(storefrontDropPosition);
+      root.position.copy(storefrontDropPosition);
+      root.userData.shopDelivery = true;
+    } else {
+      // Manually dropping an inventory item keeps the existing behavior: it lands beside
+      // the hero who dropped it rather than being teleported back to the shop.
+      localHero.root.getWorldPosition(heroPosition);
+      const angle = (dropIndex * 2.399963229728653) % (Math.PI * 2);
+      const distance = 0.82 + (dropIndex % 3) * 0.18;
+      root.position.set(
+        heroPosition.x + Math.cos(angle) * distance,
+        heroPosition.y + 0.05,
+        heroPosition.z + Math.sin(angle) * distance,
+      );
+    }
     scene.add(root);
 
     groundItems.set(detail.token, {
