@@ -127,7 +127,7 @@ export function ensureItemVisionWorldSystem(
       }
     }
 
-    previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
+    previousSceneBeforeRender.call(scene, renderer, renderedScene, camera, geometry, material, group);
   };
   scene.onBeforeRender = beforeRender;
 
