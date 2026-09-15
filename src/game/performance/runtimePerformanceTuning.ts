@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
+const MINIMAP_RENDER_SCALE = 0.8;
 const SHADOW_REFRESH_INTERVAL_MS = 1000 / 30;
 const SHADOW_MAP_SIZE = 1536;
-const MINIMAP_RENDER_INTERVAL_MS = 250;
 
 const DECORATIVE_POINT_LIGHT_PARENT_NAMES = new Set([
   'blue-shop',
@@ -16,7 +16,6 @@ const DECORATIVE_POINT_LIGHT_PARENT_NAMES = new Set([
 
 type RendererTimingState = {
   lastShadowRefreshAt: number;
-  lastMinimapRenderAt: number;
   shadowSchedulingInitialized: boolean;
   shadowAtlasConfigured: boolean;
 };
@@ -28,7 +27,6 @@ function timingFor(renderer: THREE.WebGLRenderer) {
   if (!state) {
     state = {
       lastShadowRefreshAt: -Infinity,
-      lastMinimapRenderAt: -Infinity,
       shadowSchedulingInitialized: false,
       shadowAtlasConfigured: false,
     };
@@ -61,20 +59,33 @@ function configureDirectionalShadowAtlases(scene: THREE.Object3D) {
  * and, importantly, avoids first-use shader permutations when the TP portals appear.
  *
  * Directional shadows remain enabled, but their atlas is slightly smaller and refreshed
- * at 30 Hz while the beauty pass can run at the monitor refresh rate. This is a useful
- * split for an isometric game: camera/units stay fluid while soft shadows do not need
- * 120+ complete map updates per second.
+ * at 30 Hz while the beauty pass can run at the monitor refresh rate. The minimap keeps
+ * its live cadence but renders to a smaller internal surface before CSS scales it to the
+ * HUD size, avoiding another full-resolution scene pass.
  */
 export function installRuntimePerformanceTuning() {
   const rendererPrototype = THREE.WebGLRenderer.prototype;
   const objectPrototype = THREE.Object3D.prototype;
 
   const originalSetPixelRatio = rendererPrototype.setPixelRatio;
+  const originalSetSize = rendererPrototype.setSize;
   const originalRender = rendererPrototype.render;
   const originalAdd = objectPrototype.add;
 
   rendererPrototype.setPixelRatio = function setPixelRatio(value: number) {
     return originalSetPixelRatio.call(this, Math.min(value, MAX_DEVICE_PIXEL_RATIO));
+  };
+
+  rendererPrototype.setSize = function setSize(width: number, height: number, updateStyle?: boolean) {
+    if (this.domElement.classList.contains('minimap-canvas')) {
+      return originalSetSize.call(
+        this,
+        Math.max(1, Math.round(width * MINIMAP_RENDER_SCALE)),
+        Math.max(1, Math.round(height * MINIMAP_RENDER_SCALE)),
+        updateStyle,
+      );
+    }
+    return originalSetSize.call(this, width, height, updateStyle);
   };
 
   objectPrototype.add = function add(...objects: THREE.Object3D[]) {
@@ -93,12 +104,6 @@ export function installRuntimePerformanceTuning() {
     const state = timingFor(this);
     const now = performance.now();
     const canvas = this.domElement;
-
-    if (canvas.classList.contains('minimap-canvas')) {
-      if (now - state.lastMinimapRenderAt < MINIMAP_RENDER_INTERVAL_MS) return;
-      state.lastMinimapRenderAt = now;
-      return originalRender.call(this, scene, camera);
-    }
 
     if (canvas.classList.contains('game-canvas') && this.shadowMap.enabled) {
       const renderingOffscreen = this.getRenderTarget() !== null;
@@ -132,6 +137,7 @@ export function installRuntimePerformanceTuning() {
 
   return () => {
     rendererPrototype.setPixelRatio = originalSetPixelRatio;
+    rendererPrototype.setSize = originalSetSize;
     rendererPrototype.render = originalRender;
     objectPrototype.add = originalAdd;
   };
