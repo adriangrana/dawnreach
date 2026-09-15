@@ -47,6 +47,20 @@ const LANE_ROCK_CLEARANCE = 2.35;
 const TRAIL_ROCK_CLEARANCE = 1.25;
 const CAMP_ENTRANCE_ROCKS = 2;
 
+// Keep these collision dimensions in sync with fountainSanctuaryPresentation.ts. The
+// presentation itself is installed after the collision world is authored, so the collision
+// layer must describe the sanctuary perimeter from the same local layout rather than trying
+// to discover those visual meshes later.
+const SANCTUARY_STAIR_TOP = 6.05;
+const SANCTUARY_STAIR_BOTTOM = 12.35;
+const SANCTUARY_STAIR_HALF = 3.1;
+const SANCTUARY_WALL_RADIUS = 0.44;
+const SANCTUARY_STAIR_SIDE_RADIUS = 0.38;
+const SANCTUARY_OUTLINE = [
+  [-1.65, -4.4], [-1.65, 4.4], [0.3, 5.8], [3.2, 6.4], [5.7, 5.5],
+  [6.45, 3.4], [6.45, -3.4], [5.7, -5.5], [3.2, -6.4], [0.3, -5.8],
+] as const;
+
 export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionWorld {
   battlefield.updateMatrixWorld(true);
   openCampEntrances(battlefield);
@@ -65,6 +79,7 @@ export function createMapCollisionWorld(battlefield: THREE.Object3D): CollisionW
   collectRuinColliders(battlefield, circles, segments, counts);
   addRetainingWallColliders(segments, counts);
   addBaseWallColliders(segments, counts);
+  addFountainSanctuaryColliders(battlefield, segments, counts);
   addObjectiveWallColliders(segments, counts);
   collectPresentationBarrierColliders(battlefield, segments);
 
@@ -604,6 +619,67 @@ function addBaseWallColliders(
       });
       counts.walls++;
       counts.elevations++;
+    }
+  }
+}
+
+function addFountainSanctuaryColliders(
+  battlefield: THREE.Object3D,
+  colliders: SegmentCollider[],
+  counts: { walls: number },
+) {
+  const center = new THREE.Vector3();
+
+  for (const team of ['blue', 'red'] as const) {
+    const root = battlefield.getObjectByName(`${team}-team-start-base`) as THREE.Group | undefined;
+    if (!root) continue;
+
+    root.getWorldPosition(center);
+    const length = Math.hypot(center.x, center.z) || 1;
+    const fx = -center.x / length;
+    const fz = -center.z / length;
+    const sx = -fz;
+    const sz = fx;
+    const point = (forward: number, side: number) => ({
+      x: center.x + fx * forward + sx * side,
+      z: center.z + fz * forward + sz * side,
+    });
+
+    // Solid perimeter everywhere except the intentional stair opening. This prevents the hero
+    // from climbing the raised sanctuary from the sides or rear and makes the staircase the
+    // only walkable approach from the citadel plaza.
+    for (let index = 0; index < SANCTUARY_OUTLINE.length; index++) {
+      const a = SANCTUARY_OUTLINE[index];
+      const b = SANCTUARY_OUTLINE[(index + 1) % SANCTUARY_OUTLINE.length];
+      if (a[0] === 6.45 && b[0] === 6.45) continue;
+      const start = point(a[0], a[1]);
+      const end = point(b[0], b[1]);
+      colliders.push({
+        ax: start.x,
+        az: start.z,
+        bx: end.x,
+        bz: end.z,
+        radius: SANCTUARY_WALL_RADIUS,
+        kind: 'barrier',
+      });
+      counts.walls++;
+    }
+
+    // Continuous side barriers match the masonry rails that run beside the stepped surface.
+    // The bottom remains open so pathing can enter normally and then ascend the real treads.
+    for (const side of [-1, 1]) {
+      const lateral = side * (SANCTUARY_STAIR_HALF + 0.35);
+      const start = point(SANCTUARY_STAIR_TOP, lateral);
+      const end = point(SANCTUARY_STAIR_BOTTOM, lateral);
+      colliders.push({
+        ax: start.x,
+        az: start.z,
+        bx: end.x,
+        bz: end.z,
+        radius: SANCTUARY_STAIR_SIDE_RADIUS,
+        kind: 'barrier',
+      });
+      counts.walls++;
     }
   }
 }
