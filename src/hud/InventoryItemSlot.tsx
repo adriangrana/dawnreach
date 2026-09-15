@@ -273,7 +273,7 @@ export default function InventoryItemSlot({
       <span className="item-key">{hotkey}</span>
 
       {tooltipOpen && item && definition && createPortal(
-        <div id={tooltipId} className="inventory-item-tooltip inventory-item-tooltip--portal" role="tooltip" style={tooltipStyle}>
+        <div id={tooltipId} className="inventory-item-tooltip inventory-item-tooltip--portal" role="tooltip" style={tooltipStyle ?? undefined}>
           <div className="inventory-tooltip-head">
             <img src={getItemIconDataUrl(item.definitionId)} alt="" />
             <div>
