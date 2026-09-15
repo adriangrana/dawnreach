@@ -1356,7 +1356,7 @@ export function ensureTeleportScrollSystem(
     if (isMinimap) minimapCamera = camera;
     else gameplayCamera = camera;
     update(performance.now());
-    previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
+    previousSceneBeforeRender.call(scene, renderer, renderedScene, camera, geometry, material, group);
   };
   scene.onBeforeRender = beforeRender;
 
