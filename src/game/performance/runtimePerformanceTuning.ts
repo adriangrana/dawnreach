@@ -21,6 +21,7 @@ type RendererTimingState = {
   shadowSchedulingInitialized: boolean;
   shadowAtlasConfigured: boolean;
   sceneShadowCastersConfigured: boolean;
+  baseStaticBatchesConfigured: boolean;
   lastCameraPosition: THREE.Vector3;
   cameraPositionInitialized: boolean;
 };
@@ -35,6 +36,7 @@ function timingFor(renderer: THREE.WebGLRenderer) {
       shadowSchedulingInitialized: false,
       shadowAtlasConfigured: false,
       sceneShadowCastersConfigured: false,
+      baseStaticBatchesConfigured: false,
       lastCameraPosition: new THREE.Vector3(),
       cameraPositionInitialized: false,
     };
@@ -63,6 +65,48 @@ function configureKnownShadowCasters(scene: THREE.Object3D) {
     // that is almost completely hidden under those crowns from the gameplay camera.
     if (object.name.startsWith('pine-trunks:')) object.castShadow = false;
   });
+}
+
+function batchBaseElevationWalls(scene: THREE.Object3D) {
+  const baseGroups: THREE.Group[] = [];
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.Group)) return;
+    if (object.name === 'blue-base-elevation' || object.name === 'red-base-elevation') {
+      baseGroups.push(object);
+    }
+  });
+
+  for (const base of baseGroups) {
+    const byMaterial = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const child of [...base.children]) {
+      if (!(child instanceof THREE.Mesh)) continue;
+      if (child.name !== '' || !(child.geometry instanceof THREE.BoxGeometry)) continue;
+      if (Array.isArray(child.material)) continue;
+      const meshes = byMaterial.get(child.material) ?? [];
+      meshes.push(child);
+      byMaterial.set(child.material, meshes);
+    }
+
+    let batchIndex = 0;
+    for (const [material, meshes] of byMaterial) {
+      if (meshes.length < 2) continue;
+      const geometry = meshes[0].geometry.clone();
+      const batch = new THREE.InstancedMesh(geometry, material, meshes.length);
+      batch.name = `${base.name}-static-wall-batch-${batchIndex++}`;
+      batch.castShadow = meshes.some(mesh => mesh.castShadow);
+      batch.receiveShadow = meshes.some(mesh => mesh.receiveShadow);
+
+      meshes.forEach((mesh, index) => {
+        mesh.updateMatrix();
+        batch.setMatrixAt(index, mesh.matrix);
+        base.remove(mesh);
+        mesh.geometry.dispose();
+      });
+      batch.instanceMatrix.needsUpdate = true;
+      batch.computeBoundingSphere();
+      base.add(batch);
+    }
+  }
 }
 
 function cameraMoved(state: RendererTimingState, camera: THREE.Camera) {
@@ -102,7 +146,9 @@ function publishRendererDiagnostics(renderer: THREE.WebGLRenderer, renderMs: num
  * frame rate. Camera motion refreshes it at 15 Hz and an idle camera at 6 Hz so animated
  * units still receive moving shadows without forcing a full shadow pass on every frame.
  * The minimap keeps its live cadence but renders to a smaller internal surface before CSS
- * scales it to the HUD size.
+ * scales it to the HUD size. Hundreds of identical base-wall meshes are also collapsed into
+ * instanced batches before the first visible frame, preserving geometry while removing the
+ * draw-call spike around each starting base.
  */
 export function installRuntimePerformanceTuning() {
   const rendererPrototype = THREE.WebGLRenderer.prototype;
@@ -148,33 +194,40 @@ export function installRuntimePerformanceTuning() {
     const mainCanvas = canvas.classList.contains('game-canvas');
     const renderingOffscreen = this.getRenderTarget() !== null;
 
-    if (mainCanvas && this.shadowMap.enabled) {
-      if (!state.shadowAtlasConfigured) {
-        configureDirectionalShadowAtlases(scene);
-        state.shadowAtlasConfigured = true;
-      }
-      if (!state.sceneShadowCastersConfigured) {
-        configureKnownShadowCasters(scene);
-        state.sceneShadowCastersConfigured = true;
+    if (mainCanvas) {
+      if (!state.baseStaticBatchesConfigured) {
+        batchBaseElevationWalls(scene);
+        state.baseStaticBatchesConfigured = true;
       }
 
-      if (!state.shadowSchedulingInitialized) {
-        this.shadowMap.autoUpdate = false;
-        this.shadowMap.needsUpdate = true;
-        state.shadowSchedulingInitialized = true;
-      }
+      if (this.shadowMap.enabled) {
+        if (!state.shadowAtlasConfigured) {
+          configureDirectionalShadowAtlases(scene);
+          state.shadowAtlasConfigured = true;
+        }
+        if (!state.sceneShadowCastersConfigured) {
+          configureKnownShadowCasters(scene);
+          state.sceneShadowCastersConfigured = true;
+        }
 
-      if (renderingOffscreen) {
-        // Loading warmups must still compile/upload shadow variants and geometry.
-        this.shadowMap.needsUpdate = true;
-      } else {
-        const moved = cameraMoved(state, camera);
-        const refreshInterval = moved
-          ? MOVING_SHADOW_REFRESH_INTERVAL_MS
-          : IDLE_SHADOW_REFRESH_INTERVAL_MS;
-        if (now - state.lastShadowRefreshAt >= refreshInterval) {
+        if (!state.shadowSchedulingInitialized) {
+          this.shadowMap.autoUpdate = false;
           this.shadowMap.needsUpdate = true;
-          state.lastShadowRefreshAt = now;
+          state.shadowSchedulingInitialized = true;
+        }
+
+        if (renderingOffscreen) {
+          // Loading warmups must still compile/upload shadow variants and geometry.
+          this.shadowMap.needsUpdate = true;
+        } else {
+          const moved = cameraMoved(state, camera);
+          const refreshInterval = moved
+            ? MOVING_SHADOW_REFRESH_INTERVAL_MS
+            : IDLE_SHADOW_REFRESH_INTERVAL_MS;
+          if (now - state.lastShadowRefreshAt >= refreshInterval) {
+            this.shadowMap.needsUpdate = true;
+            state.lastShadowRefreshAt = now;
+          }
         }
       }
     }
