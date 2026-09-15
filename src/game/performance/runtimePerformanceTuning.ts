@@ -2,8 +2,10 @@ import * as THREE from 'three';
 
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const MINIMAP_RENDER_SCALE = 0.8;
-const SHADOW_REFRESH_INTERVAL_MS = 1000 / 30;
+const MOVING_SHADOW_REFRESH_INTERVAL_MS = 1000 / 15;
+const IDLE_SHADOW_REFRESH_INTERVAL_MS = 1000 / 6;
 const SHADOW_MAP_SIZE = 1536;
+const CAMERA_MOVE_EPSILON_SQ = 0.0004;
 
 const DECORATIVE_POINT_LIGHT_PARENT_NAMES = new Set([
   'blue-shop',
@@ -18,6 +20,9 @@ type RendererTimingState = {
   lastShadowRefreshAt: number;
   shadowSchedulingInitialized: boolean;
   shadowAtlasConfigured: boolean;
+  sceneShadowCastersConfigured: boolean;
+  lastCameraPosition: THREE.Vector3;
+  cameraPositionInitialized: boolean;
 };
 
 const rendererTiming = new WeakMap<THREE.WebGLRenderer, RendererTimingState>();
@@ -29,6 +34,9 @@ function timingFor(renderer: THREE.WebGLRenderer) {
       lastShadowRefreshAt: -Infinity,
       shadowSchedulingInitialized: false,
       shadowAtlasConfigured: false,
+      sceneShadowCastersConfigured: false,
+      lastCameraPosition: new THREE.Vector3(),
+      cameraPositionInitialized: false,
     };
     rendererTiming.set(renderer, state);
   }
@@ -48,6 +56,38 @@ function configureDirectionalShadowAtlases(scene: THREE.Object3D) {
   });
 }
 
+function configureKnownShadowCasters(scene: THREE.Object3D) {
+  scene.traverse((object) => {
+    // Pine crowns provide essentially all of the readable forest shadow silhouette.
+    // Rendering the narrow trunk batches into the atlas duplicates draw work for a detail
+    // that is almost completely hidden under those crowns from the gameplay camera.
+    if (object.name.startsWith('pine-trunks:')) object.castShadow = false;
+  });
+}
+
+function cameraMoved(state: RendererTimingState, camera: THREE.Camera) {
+  const position = camera.position;
+  if (!state.cameraPositionInitialized) {
+    state.lastCameraPosition.copy(position);
+    state.cameraPositionInitialized = true;
+    return true;
+  }
+
+  const moved = state.lastCameraPosition.distanceToSquared(position) > CAMERA_MOVE_EPSILON_SQ;
+  state.lastCameraPosition.copy(position);
+  return moved;
+}
+
+function publishRendererDiagnostics(renderer: THREE.WebGLRenderer, renderMs: number) {
+  const canvas = renderer.domElement;
+  const info = renderer.info;
+  canvas.dataset.renderMs = renderMs.toFixed(2);
+  canvas.dataset.drawCalls = String(info.render.calls);
+  canvas.dataset.triangles = String(info.render.triangles);
+  canvas.dataset.geometries = String(info.memory.geometries);
+  canvas.dataset.textures = String(info.memory.textures);
+}
+
 /**
  * Installs narrow Three.js runtime tuning before the Dawnreach scene is constructed.
  *
@@ -58,10 +98,11 @@ function configureDirectionalShadowAtlases(scene: THREE.Object3D) {
  * lights keeps the authored glow while avoiding a high global per-fragment lighting cost
  * and, importantly, avoids first-use shader permutations when the TP portals appear.
  *
- * Directional shadows remain enabled, but their atlas is slightly smaller and refreshed
- * at 30 Hz while the beauty pass can run at the monitor refresh rate. The minimap keeps
- * its live cadence but renders to a smaller internal surface before CSS scales it to the
- * HUD size, avoiding another full-resolution scene pass.
+ * Directional shadows remain enabled, but the expensive atlas is decoupled from the beauty
+ * frame rate. Camera motion refreshes it at 15 Hz and an idle camera at 6 Hz so animated
+ * units still receive moving shadows without forcing a full shadow pass on every frame.
+ * The minimap keeps its live cadence but renders to a smaller internal surface before CSS
+ * scales it to the HUD size.
  */
 export function installRuntimePerformanceTuning() {
   const rendererPrototype = THREE.WebGLRenderer.prototype;
@@ -104,35 +145,46 @@ export function installRuntimePerformanceTuning() {
     const state = timingFor(this);
     const now = performance.now();
     const canvas = this.domElement;
+    const mainCanvas = canvas.classList.contains('game-canvas');
+    const renderingOffscreen = this.getRenderTarget() !== null;
 
-    if (canvas.classList.contains('game-canvas') && this.shadowMap.enabled) {
-      const renderingOffscreen = this.getRenderTarget() !== null;
-
+    if (mainCanvas && this.shadowMap.enabled) {
       if (!state.shadowAtlasConfigured) {
         configureDirectionalShadowAtlases(scene);
         state.shadowAtlasConfigured = true;
       }
+      if (!state.sceneShadowCastersConfigured) {
+        configureKnownShadowCasters(scene);
+        state.sceneShadowCastersConfigured = true;
+      }
 
       if (!state.shadowSchedulingInitialized) {
-        // Three defaults to rebuilding the whole directional shadow atlas on every beauty
-        // frame. Dawnreach has mostly static world geometry, so explicit scheduling is much
-        // cheaper and still keeps moving-unit shadows responsive.
         this.shadowMap.autoUpdate = false;
         this.shadowMap.needsUpdate = true;
         state.shadowSchedulingInitialized = true;
       }
 
       if (renderingOffscreen) {
-        // Loading warmups must still compile/upload the shadow variants, but should not
-        // consume the cadence slot for the first visible gameplay frame.
+        // Loading warmups must still compile/upload shadow variants and geometry.
         this.shadowMap.needsUpdate = true;
-      } else if (now - state.lastShadowRefreshAt >= SHADOW_REFRESH_INTERVAL_MS) {
-        this.shadowMap.needsUpdate = true;
-        state.lastShadowRefreshAt = now;
+      } else {
+        const moved = cameraMoved(state, camera);
+        const refreshInterval = moved
+          ? MOVING_SHADOW_REFRESH_INTERVAL_MS
+          : IDLE_SHADOW_REFRESH_INTERVAL_MS;
+        if (now - state.lastShadowRefreshAt >= refreshInterval) {
+          this.shadowMap.needsUpdate = true;
+          state.lastShadowRefreshAt = now;
+        }
       }
     }
 
-    return originalRender.call(this, scene, camera);
+    const renderStartedAt = performance.now();
+    const result = originalRender.call(this, scene, camera);
+    const renderMs = performance.now() - renderStartedAt;
+
+    if (mainCanvas && !renderingOffscreen) publishRendererDiagnostics(this, renderMs);
+    return result;
   };
 
   return () => {
