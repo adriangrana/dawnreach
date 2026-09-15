@@ -1,4 +1,4 @@
-import type { InventoryItem, ItemStatModifier } from '../heroes/types';
+import type { InventoryItem, InventorySlot, ItemStatModifier } from '../heroes/types';
 import { getHeroDefinition } from '../heroes/catalog';
 import { getRequiredHero } from '../match/matchState';
 import { calculateDefinitionStatsAtLevel, calculateHeroStats } from '../match/stats';
@@ -6,6 +6,7 @@ import type { MatchHeroState, MatchState } from '../match/types';
 import { isLocalHeroNearShop } from './shopAccess';
 import { getItemDefinition, type ItemDefinition, type ItemStats } from './itemDatabase';
 import { canMergeItemStacks, getItemStackLimit } from './itemStacking';
+import { planShopPurchase, type ShopPurchasePlan } from './shopRecipePricing';
 import {
   TELEPORT_COMPLETE_EVENT,
   TELEPORT_SCROLL_EFFECT_ID,
@@ -71,6 +72,7 @@ const heroItemRuntimeContexts = new Map<string, HeroItemRuntimeContext>();
 const itemActivationOwners = new Map<string, ItemActivationOwnerContext>();
 const heroAliveStates = new Map<string, boolean>();
 const completedTeleportCounts = new Map<string, number>();
+let latestLocalShopInventory: readonly InventorySlot[] = [];
 
 if (typeof window !== 'undefined') {
   window.addEventListener(TELEPORT_COMPLETE_EVENT, ((event: Event) => {
@@ -182,6 +184,7 @@ export function syncHeroItemRuntime(
   nowMs = runtimeNowMs(),
 ): HeroItemRuntimeContext {
   const hero = getRequiredHero(state, heroEntityId);
+  latestLocalShopInventory = structuredClone(hero.inventory);
   const definition = getHeroDefinition(hero.definitionId);
   const baseStats = calculateDefinitionStatsAtLevel(definition, hero.level);
   const stats = calculateHeroStats(state, heroEntityId, { nowMs });
@@ -208,10 +211,24 @@ export function getItemActivationOwnerContext(instanceId: string): ItemActivatio
   return itemActivationOwners.get(instanceId) ?? null;
 }
 
+export function getLocalShopPurchaseQuote(itemId: string): ShopPurchasePlan | null {
+  const definition = getItemDefinition(itemId);
+  return definition ? planShopPurchase(latestLocalShopInventory, definition) : null;
+}
+
 export function heroHasInventorySpace(state: MatchState, heroEntityId: string) {
   return getRequiredHero(state, heroEntityId).inventory.some(slot => (
     slot.slot !== TELEPORT_SCROLL_SLOT && slot.item === null
   ));
+}
+
+function consumePurchaseComponents(hero: MatchHeroState, plan: ShopPurchasePlan) {
+  for (const use of plan.componentUses) {
+    const slot = hero.inventory.find(candidate => candidate.slot === use.slot);
+    if (!slot?.item || slot.item.instanceId !== use.instanceId || slot.item.quantity < use.quantity) continue;
+    slot.item.quantity -= use.quantity;
+    if (slot.item.quantity <= 0) slot.item = null;
+  }
 }
 
 export function purchaseShopItem(
@@ -226,13 +243,15 @@ export function purchaseShopItem(
   }
 
   const sourceHero = getRequiredHero(state, heroEntityId);
-  if (sourceHero.gold < definition.cost) {
+  const purchasePlan = planShopPurchase(sourceHero.inventory, definition);
+  if (sourceHero.gold < purchasePlan.remainingCost) {
     return { match: state, definition, item: null, ok: false, dropped: false, reason: 'not-enough-gold' };
   }
 
   const next = structuredClone(state);
   const hero = getRequiredHero(next, heroEntityId);
-  hero.gold = Math.max(0, hero.gold - definition.cost);
+  consumePurchaseComponents(hero, purchasePlan);
+  hero.gold = Math.max(0, hero.gold - purchasePlan.remainingCost);
   const item = createInventoryItem(definition, instanceId);
   inheritTeleportCooldown(hero, item);
   const nearShop = isLocalHeroNearShop();
