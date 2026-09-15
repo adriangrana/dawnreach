@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const SHADOW_REFRESH_INTERVAL_MS = 1000 / 30;
+const SHADOW_MAP_SIZE = 1536;
 const MINIMAP_RENDER_INTERVAL_MS = 250;
 
 const DECORATIVE_POINT_LIGHT_PARENT_NAMES = new Set([
@@ -17,6 +18,7 @@ type RendererTimingState = {
   lastShadowRefreshAt: number;
   lastMinimapRenderAt: number;
   shadowSchedulingInitialized: boolean;
+  shadowAtlasConfigured: boolean;
 };
 
 const rendererTiming = new WeakMap<THREE.WebGLRenderer, RendererTimingState>();
@@ -28,6 +30,7 @@ function timingFor(renderer: THREE.WebGLRenderer) {
       lastShadowRefreshAt: -Infinity,
       lastMinimapRenderAt: -Infinity,
       shadowSchedulingInitialized: false,
+      shadowAtlasConfigured: false,
     };
     rendererTiming.set(renderer, state);
   }
@@ -37,6 +40,14 @@ function timingFor(renderer: THREE.WebGLRenderer) {
 function isDecorativePointLightParent(object: THREE.Object3D) {
   if (DECORATIVE_POINT_LIGHT_PARENT_NAMES.has(object.name)) return true;
   return object.name.endsWith('-team-start-fountain');
+}
+
+function configureDirectionalShadowAtlases(scene: THREE.Object3D) {
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.DirectionalLight) || !object.castShadow) return;
+    object.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+    object.shadow.needsUpdate = true;
+  });
 }
 
 /**
@@ -49,9 +60,10 @@ function isDecorativePointLightParent(object: THREE.Object3D) {
  * lights keeps the authored glow while avoiding a high global per-fragment lighting cost
  * and, importantly, avoids first-use shader permutations when the TP portals appear.
  *
- * Directional shadows remain enabled, but the shadow map is refreshed at 30 Hz while the
- * beauty pass can run at the monitor refresh rate. This is a common split for an isometric
- * game: camera/units stay fluid while soft shadows do not need 120+ updates per second.
+ * Directional shadows remain enabled, but their atlas is slightly smaller and refreshed
+ * at 30 Hz while the beauty pass can run at the monitor refresh rate. This is a useful
+ * split for an isometric game: camera/units stay fluid while soft shadows do not need
+ * 120+ complete map updates per second.
  */
 export function installRuntimePerformanceTuning() {
   const rendererPrototype = THREE.WebGLRenderer.prototype;
@@ -74,7 +86,7 @@ export function installRuntimePerformanceTuning() {
         object.userData.dawnreachDecorativeLightDisabled = true;
       }
     }
-    return originalAdd.apply(this, objects);
+    return originalAdd.call(this, ...objects);
   };
 
   rendererPrototype.render = function render(scene: THREE.Object3D, camera: THREE.Camera) {
@@ -90,6 +102,11 @@ export function installRuntimePerformanceTuning() {
 
     if (canvas.classList.contains('game-canvas') && this.shadowMap.enabled) {
       const renderingOffscreen = this.getRenderTarget() !== null;
+
+      if (!state.shadowAtlasConfigured) {
+        configureDirectionalShadowAtlases(scene);
+        state.shadowAtlasConfigured = true;
+      }
 
       if (!state.shadowSchedulingInitialized) {
         // Three defaults to rebuilding the whole directional shadow atlas on every beauty
