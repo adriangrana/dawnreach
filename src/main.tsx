@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { mountAldenWorldAbilityRuntime } from './game/heroes/alden/worldAbilityRuntime';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
@@ -76,6 +77,9 @@ function dismissBootSplash() {
 
 // Install renderer/lighting scheduling before React mounts the Three.js game world.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
+// Alden's world runtime wraps the already-tuned renderer only to discover the authoritative
+// Three.js scene/camera, then resolves successful HUD casts against live GameEntity ids.
+const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityRuntime();
 
 // The Three.js world is intentionally mounted once. React StrictMode's development-only
 // effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
@@ -100,6 +104,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    disposeAldenWorldAbilityRuntime();
     disposeRuntimePerformanceTuning();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
