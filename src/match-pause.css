@@ -31,7 +31,7 @@
   pointer-events: none;
   color: #efe9da;
   background:
-    radial-gradient(circle at 50% 48%, rgba(76, 105, 118, 0.16), transparent 31%),
+    radial-gradient(circle at 50% 46%, rgba(76, 105, 118, 0.14), transparent 28%),
     linear-gradient(180deg, rgba(2, 7, 10, 0.65), rgba(1, 5, 8, 0.83));
   backdrop-filter: blur(8px) saturate(0.72);
   -webkit-backdrop-filter: blur(8px) saturate(0.72);
@@ -52,43 +52,43 @@
   content: "";
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 47%;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
 .match-pause-overlay::before {
-  width: min(48vw, 760px);
+  width: min(38vw, 610px);
   aspect-ratio: 1;
-  border: 1px solid rgba(210, 186, 120, 0.12);
+  border: 1px solid rgba(210, 186, 120, 0.105);
   box-shadow:
-    0 0 0 54px rgba(210, 186, 120, 0.022),
-    0 0 0 108px rgba(210, 186, 120, 0.013);
+    0 0 0 42px rgba(210, 186, 120, 0.019),
+    0 0 0 84px rgba(210, 186, 120, 0.010);
 }
 
 .match-pause-overlay::after {
-  width: min(760px, 68vw);
+  width: min(650px, 58vw);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(207, 184, 121, 0.42), transparent);
+  background: linear-gradient(90deg, transparent, rgba(207, 184, 121, 0.36), transparent);
 }
 
 .match-pause-emblem {
   position: absolute;
   left: 50%;
-  top: calc(50% - 86px);
+  top: calc(47% - 118px);
   display: flex;
-  gap: 8px;
+  gap: 7px;
   transform: translateX(-50%);
-  opacity: 0.62;
+  opacity: 0.54;
 }
 
 .match-pause-emblem span {
-  width: 5px;
-  height: 34px;
+  width: 4px;
+  height: 24px;
   border-radius: 3px;
   background: linear-gradient(180deg, #e4cc86, #7d6737);
-  box-shadow: 0 0 18px rgba(222, 190, 102, 0.18);
+  box-shadow: 0 0 15px rgba(222, 190, 102, 0.14);
 }
 
 .match-pause-copy {
@@ -98,11 +98,12 @@
   padding: 24px 38px;
   text-align: center;
   text-shadow: 0 3px 16px rgba(0, 0, 0, 0.74);
+  transform: translateY(-3vh);
 }
 
 .match-pause-copy small {
   display: block;
-  margin-bottom: 9px;
+  margin-bottom: 15px;
   color: #b99d5d;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 10px;
@@ -120,7 +121,7 @@
 }
 
 .match-pause-copy p {
-  margin: 12px 0 15px;
+  margin: 14px 0 16px;
   color: #9eafb3;
   font-size: clamp(11px, 1.2vw, 14px);
   letter-spacing: 0.02em;
