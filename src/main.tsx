@@ -3,6 +3,7 @@ import App from './App';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
+import { installShadowInvalidationBridge } from './game/performance/shadowInvalidationBridge';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountFpsOverlay } from './hud/fpsOverlay';
@@ -77,6 +78,10 @@ function dismissBootSplash() {
 
 // Install renderer/lighting scheduling before React mounts the Three.js game world.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
+// Destructive world-state changes can happen between scheduled shadow passes. Track the main
+// renderer and force a short refresh burst after deaths so removed structures cannot leave a
+// stale silhouette in the reused shadow atlas.
+const disposeShadowInvalidationBridge = installShadowInvalidationBridge();
 // Three r180 creates render as an instance method. Install the Alden bootstrap before React
 // constructs the game renderer so live ability effects bind to the actual renderer instance.
 const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
@@ -105,6 +110,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeAldenWorldAbilityRuntime();
+    disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
