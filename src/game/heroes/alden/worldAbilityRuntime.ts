@@ -13,11 +13,10 @@ import {
 } from '../../entities/worldCombatBridge';
 import { MAP_BOUNDS } from '../../map/mapLayout';
 import { LOCAL_HERO_ENTITY_ID, reduceHeroAbilityCooldown } from '../../match/abilityControls';
-import type { AbilityKey } from '../types';
 import { calculateDefinitionStatsAtLevel } from '../heroAttributes';
+import type { AbilityKey } from '../types';
 import { ALDEN } from './gameplay';
 
-const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const GAME_UNIT_TO_WORLD = 0.01;
 const WORLD_STATUS_KEY = 'dawnreachItemWorldStatuses';
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -97,49 +96,47 @@ type AbilityJoints = {
   wrist: THREE.Object3D | null;
 };
 
+export type AldenWorldAbilityRuntimeHandle = Readonly<{
+  update(nowMs: number): void;
+  dispose(): void;
+}>;
+
 /**
- * Connects Alden's already-authored match/HUD ability data to the real Three.js battlefield.
- *
- * The match layer remains authoritative for ranks, mana and cooldowns. This runtime watches a
- * successful 0 -> cooling transition on the existing HUD button, so blocked casts never touch
- * the world. World damage, movement, CC, VFX and full-body ability poses are then resolved
- * against GameEntity ids. This keeps the implementation compatible with future 5v5 heroes and
- * avoids treating creeps/towers/neutral bosses as fake MatchHeroState records.
+ * The old implementation discovered the game by monkey-patching WebGLRenderer.prototype.render.
+ * Three.js r180 defines render on each WebGLRenderer instance, so that prototype hook never ran
+ * in the actual Dawnreach renderer. The ability runtime is now mounted explicitly by
+ * createDawnreachGame with the authoritative scene, registry, hero, canvas and camera.
+ */
+export function ensureAldenWorldAbilityRuntime(
+  scene: THREE.Scene,
+  registry: GameEntityRegistry,
+  hero: GameEntity,
+  canvas: HTMLCanvasElement,
+  camera: THREE.Camera,
+): AldenWorldAbilityRuntimeHandle {
+  let runtime = installedScenes.get(scene);
+  if (!runtime) {
+    runtime = new AldenWorldRuntime(scene, registry, hero, canvas, camera);
+    installedScenes.set(scene, runtime);
+    activeRuntimes.add(runtime);
+  } else {
+    runtime.setCamera(camera);
+  }
+  return runtime;
+}
+
+/**
+ * Kept for the bootstrap/HMR contract. Runtime discovery no longer happens here; live game
+ * instances register themselves through ensureAldenWorldAbilityRuntime.
  */
 export function mountAldenWorldAbilityRuntime() {
-  const rendererPrototype = THREE.WebGLRenderer.prototype;
-  const previousRender = rendererPrototype.render;
-  let disposed = false;
-
-  const wrappedRender: typeof rendererPrototype.render = function render(this: THREE.WebGLRenderer, scene, camera) {
-    if (!disposed && scene instanceof THREE.Scene && this.domElement.classList.contains('game-canvas')) {
-      let runtime = installedScenes.get(scene);
-      if (!runtime) {
-        const registry = scene.userData.entityRegistry as GameEntityRegistry | undefined;
-        const hero = registry?.values().find(entity => entity.id === LOCAL_WORLD_HERO_ENTITY_ID) ?? null;
-        if (registry && hero) {
-          runtime = new AldenWorldRuntime(scene, registry, hero, this.domElement);
-          installedScenes.set(scene, runtime);
-          activeRuntimes.add(runtime);
-        }
-      }
-      runtime?.setCamera(camera);
-    }
-    return previousRender.call(this, scene, camera);
-  };
-
-  rendererPrototype.render = wrappedRender;
-
   return () => {
-    if (disposed) return;
-    disposed = true;
-    if (rendererPrototype.render === wrappedRender) rendererPrototype.render = previousRender;
     for (const runtime of [...activeRuntimes]) runtime.dispose();
     activeRuntimes.clear();
   };
 }
 
-class AldenWorldRuntime {
+class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
   private readonly commandSurfaces: THREE.Mesh[] = [];
   private readonly cadenceByTarget = new Map<string, CadenceState>();
   private readonly judgedUntilByTarget = new Map<string, number>();
@@ -156,7 +153,7 @@ class AldenWorldRuntime {
   private readonly cooldownWasActive = new Map<AbilityKey, boolean>();
   private readonly joints: AbilityJoints;
 
-  private camera: THREE.Camera | null = null;
+  private camera: THREE.Camera;
   private pointerSeen = false;
   private disposed = false;
   private suppressAbilityAttackBroadcast = false;
@@ -170,12 +167,11 @@ class AldenWorldRuntime {
   private majestyRank = 0;
   private lastMajestyCooldownProcAtMs = -Infinity;
   private movementLockUntilMs = 0;
-  private movementLockPosition = new THREE.Vector3();
+  private readonly movementLockPosition = new THREE.Vector3();
   private dash: DashState | null = null;
   private animation: AbilityAnimation | null = null;
 
   private readonly observer: MutationObserver;
-  private readonly previousSceneBeforeRender: typeof THREE.Scene.prototype.onBeforeRender;
   private readonly disposeAttackSubscription: () => void;
   private readonly disposeAttackGuard: () => void;
   private readonly disposeCombatGuard: () => void;
@@ -185,13 +181,15 @@ class AldenWorldRuntime {
     private readonly registry: GameEntityRegistry,
     private readonly hero: GameEntity,
     private readonly canvas: HTMLCanvasElement,
+    camera: THREE.Camera,
   ) {
+    this.camera = camera;
     scene.traverse(object => {
       if (object instanceof THREE.Mesh && object.userData.commandSurface) this.commandSurfaces.push(object);
     });
+
     this.joints = this.resolveAbilityJoints();
     this.hero.root.getWorldPosition(this.lastHeroPosition);
-
     this.canvas.addEventListener('pointermove', this.onPointerMove, { passive: true });
 
     this.observer = new MutationObserver(this.onHudMutation);
@@ -211,15 +209,6 @@ class AldenWorldRuntime {
       `alden-world-defense:${scene.uuid}`,
       this.guardIncomingHeroDamage,
     );
-
-    this.previousSceneBeforeRender = scene.onBeforeRender;
-    const runtime = this;
-    scene.onBeforeRender = function onBeforeRender(renderer, renderedScene, camera, geometry, material, group) {
-      if (renderer.domElement.classList.contains('game-canvas') && renderer.getRenderTarget() === null) {
-        runtime.update(performance.now());
-      }
-      runtime.previousSceneBeforeRender.call(this, renderer, renderedScene, camera, geometry, material, group);
-    };
   }
 
   setCamera(camera: THREE.Camera) {
@@ -234,16 +223,24 @@ class AldenWorldRuntime {
     this.disposeAttackSubscription();
     this.disposeAttackGuard();
     this.disposeCombatGuard();
-    if (this.scene.onBeforeRender !== this.previousSceneBeforeRender) {
-      // Restore only when our wrapper is still the active top-level scene hook. Other systems
-      // chain through it, so replacing a newer hook here would be more destructive than leaving
-      // an inert disposed runtime in the chain during HMR teardown.
-      const current = this.scene.onBeforeRender;
-      if (String(current).includes('runtime.update')) this.scene.onBeforeRender = this.previousSceneBeforeRender;
-    }
-    for (const effect of this.effects) this.disposeEffect(effect);
+    for (const effect of [...this.effects]) this.disposeEffect(effect);
     this.effects.length = 0;
+    this.pendingImpacts.length = 0;
+    this.frozenTargets.clear();
+    this.cadenceByTarget.clear();
+    this.judgedUntilByTarget.clear();
     activeRuntimes.delete(this);
+  }
+
+  update(nowMs: number) {
+    if (this.disposed) return;
+    this.updateDash(nowMs);
+    this.updateMovementModifiers(nowMs);
+    this.updateFrozenTargets(nowMs);
+    this.runPendingImpacts(nowMs);
+    this.updateEffects(nowMs);
+    this.applyAbilityPose(nowMs);
+    this.pruneRuntimeState(nowMs);
   }
 
   private readonly onPointerMove = (event: PointerEvent) => {
@@ -307,6 +304,7 @@ class AldenWorldRuntime {
     const start = this.hero.root.position.clone();
     const end = this.findDashEndpoint(start, direction, Q_DASH_RANGE);
     const facingYaw = Math.atan2(direction.x, direction.y);
+    const impactAt = nowMs + ALDEN.q.castTimeSeconds * 1000;
 
     this.dash = {
       startedAtMs: nowMs,
@@ -315,32 +313,30 @@ class AldenWorldRuntime {
       end,
     };
     this.animation = { key: 'Q', startedAtMs: nowMs, durationMs: 460, facingYaw };
-    this.spawnSectorFx(this.hero.root, Q_CLEAVE_RANGE, ALDEN.q.cleaveAngleDegrees, facingYaw, BLUE, 360, 0.13);
+    this.spawnSectorFx(this.hero.root, Q_CLEAVE_RANGE, ALDEN.q.cleaveAngleDegrees, facingYaw, BLUE, 360, 0.22);
 
     this.pendingImpacts.push({
-      atMs: nowMs + ALDEN.q.castTimeSeconds * 1000,
+      atMs: impactAt,
       run: () => {
         const stats = this.readHudCombatStats();
-        const rawDamage = this.applyAbilityPower(
+        const damage = this.applyAbilityPower(
           rankData.baseDamage + ALDEN.q.totalAdRatio * stats.attackDamage,
           stats.abilityPowerPercent,
         );
         const hits = this.findEnemiesInCone(Q_CLEAVE_RANGE, ALDEN.q.cleaveAngleDegrees, direction);
-        const cadencePriority = [...hits]
+        const priority = [...hits]
           .filter(target => target.kind !== 'creep')
           .sort((a, b) => this.priorityForCadence(a) - this.priorityForCadence(b))[0] ?? null;
 
         for (const target of hits) {
-          this.damageTarget(target, rawDamage, nowMs + ALDEN.q.castTimeSeconds * 1000);
-          this.publishAbilityAggro(target, nowMs + ALDEN.q.castTimeSeconds * 1000);
+          this.damageTarget(target, damage, impactAt);
+          this.publishAbilityAggro(target, impactAt);
           if (target.kind === 'creep' || target.kind === 'jungle-creature' || target.kind === 'hero') {
-            this.applyMovementSlow(target, rankData.slowPercent, rankData.slowDurationSeconds, nowMs);
+            this.applyMovementSlow(target, rankData.slowPercent, rankData.slowDurationSeconds, impactAt);
           }
         }
-        if (cadencePriority) {
-          this.addCadence(cadencePriority, ALDEN.q.cadenceStacksAppliedToFirstPriorityTarget, nowMs);
-        }
-        this.spawnGroundRing(this.hero.root, Q_CLEAVE_RANGE * 0.82, BLUE, 320, 0.42);
+        if (priority) this.addCadence(priority, ALDEN.q.cadenceStacksAppliedToFirstPriorityTarget, impactAt);
+        this.spawnGroundRing(this.hero.root, Q_CLEAVE_RANGE * 0.84, BLUE, 320, 0.62);
       },
     });
   }
@@ -358,7 +354,7 @@ class AldenWorldRuntime {
       this.currentFacingYaw(),
       GUARD_BLUE,
       ALDEN.w.guardDurationSeconds * 1000,
-      0.46,
+      0.70,
       true,
     );
   }
@@ -371,30 +367,29 @@ class AldenWorldRuntime {
     let healing = 0;
 
     this.animation = { key: 'E', startedAtMs: nowMs, durationMs: 560 };
-    this.spawnGroundRing(this.hero.root, E_RADIUS, GOLD, 520, 0.56);
+    this.spawnGroundRing(this.hero.root, E_RADIUS, GOLD, 520, 0.72);
 
     for (const target of targets) {
       const cadence = this.getCadence(target.id, nowMs);
       const stacks = cadence?.stacks ?? 0;
-      const rawDamage = this.applyAbilityPower(
+      const damage = this.applyAbilityPower(
         rankData.activeBaseDamage
           + ALDEN.e.activeTotalAdRatio * stats.attackDamage
           + rankData.bonusDamagePerConsumedStack * stacks,
         stats.abilityPowerPercent,
       );
-      this.damageTarget(target, rawDamage, nowMs);
+      this.damageTarget(target, damage, nowMs);
       this.publishAbilityAggro(target, nowMs);
 
-      if (stacks > 0) {
-        const healingMultiplier = target.kind === 'creep'
-          ? ALDEN.e.normalEnemyHealingMultiplier
-          : ALDEN.e.eliteBossPlayerHealingMultiplier;
-        healing += stats.maxHp
-          * (rankData.healingPercentMaxHpPerStack / 100)
-          * stacks
-          * healingMultiplier;
-        this.cadenceByTarget.delete(target.id);
-      }
+      if (stacks <= 0) continue;
+      const healingMultiplier = target.kind === 'creep'
+        ? ALDEN.e.normalEnemyHealingMultiplier
+        : ALDEN.e.eliteBossPlayerHealingMultiplier;
+      healing += stats.maxHp
+        * (rankData.healingPercentMaxHpPerStack / 100)
+        * stacks
+        * healingMultiplier;
+      this.cadenceByTarget.delete(target.id);
     }
 
     if (healing > 0) this.healHero(healing, nowMs);
@@ -403,29 +398,28 @@ class AldenWorldRuntime {
   private castR(rank: number, nowMs: number) {
     const safeRank = Math.min(ALDEN.r.ranks.length, Math.max(1, rank));
     const rankData = ALDEN.r.ranks[safeRank - 1];
+    const impactAt = nowMs + ALDEN.r.castTimeSeconds * 1000;
+
     this.majestyRank = safeRank;
-    this.majestyUntilMs = nowMs + ALDEN.r.majestyDurationSeconds * 1000;
+    this.majestyUntilMs = impactAt + ALDEN.r.majestyDurationSeconds * 1000;
     this.lastMajestyCooldownProcAtMs = -Infinity;
-    this.movementLockUntilMs = nowMs + ALDEN.r.castTimeSeconds * 1000;
+    this.movementLockUntilMs = impactAt;
     this.movementLockPosition.copy(this.hero.root.position);
     this.animation = { key: 'R', startedAtMs: nowMs, durationMs: 900 };
 
-    this.spawnGroundRing(this.hero.root, R_RADIUS, JUDGEMENT_GOLD, ALDEN.r.castTimeSeconds * 1000, 0.32, true);
-    this.spawnGroundRing(this.hero.root, 1.5, GOLD, ALDEN.r.majestyDurationSeconds * 1000, 0.16, true);
-
+    this.spawnGroundRing(this.hero.root, R_RADIUS, JUDGEMENT_GOLD, ALDEN.r.castTimeSeconds * 1000, 0.50, true);
     this.pendingImpacts.push({
-      atMs: nowMs + ALDEN.r.castTimeSeconds * 1000,
+      atMs: impactAt,
       run: () => {
-        const impactAt = nowMs + ALDEN.r.castTimeSeconds * 1000;
         const stats = this.readHudCombatStats();
-        const rawDamage = this.applyAbilityPower(
+        const damage = this.applyAbilityPower(
           rankData.baseDamage + ALDEN.r.totalAdRatio * stats.attackDamage,
           stats.abilityPowerPercent,
         );
         const targets = this.findEnemiesInRadius(R_RADIUS);
 
         for (const target of targets) {
-          this.damageTarget(target, rawDamage, impactAt);
+          this.damageTarget(target, damage, impactAt);
           this.publishAbilityAggro(target, impactAt);
           this.addCadence(target, 1, impactAt);
           this.judgedUntilByTarget.set(target.id, impactAt + ALDEN.r.majestyDurationSeconds * 1000);
@@ -440,10 +434,11 @@ class AldenWorldRuntime {
             target.root.userData.aldenThreatMultiplier = ALDEN.r.bossThreatMultiplier;
             target.root.userData.aldenThreatSourceEntityId = this.hero.id;
           }
-          this.spawnGroundRing(target.root, Math.max(0.5, target.selectionRadius * 0.8), GOLD, 420, 0.48, true);
+          this.spawnGroundRing(target.root, Math.max(0.5, target.selectionRadius * 0.8), GOLD, 420, 0.68, true);
         }
 
-        this.spawnGroundRing(this.hero.root, R_RADIUS, JUDGEMENT_GOLD, 620, 0.72);
+        this.spawnGroundRing(this.hero.root, R_RADIUS, JUDGEMENT_GOLD, 620, 0.86);
+        this.spawnGroundRing(this.hero.root, 1.5, GOLD, ALDEN.r.majestyDurationSeconds * 1000, 0.28, true);
       },
     });
   }
@@ -478,7 +473,7 @@ class AldenWorldRuntime {
       this.reprisalUntilMs = 0;
       this.reprisalRank = 0;
       this.animation = { key: 'REPRISAL', startedAtMs: nowMs, durationMs: 430 };
-      this.spawnGroundRing(target.root, Math.max(0.45, target.selectionRadius * 0.72), GUARD_BLUE, 360, 0.72, true);
+      this.spawnGroundRing(target.root, Math.max(0.45, target.selectionRadius * 0.72), GUARD_BLUE, 360, 0.85, true);
     }
 
     const judgedUntil = this.judgedUntilByTarget.get(target.id) ?? 0;
@@ -529,7 +524,7 @@ class AldenWorldRuntime {
       if (this.guardPreventedDamage + EPSILON >= threshold) {
         this.reprisalRank = this.guardRank;
         this.reprisalUntilMs = nowMs + ALDEN.w.reprisalWindowSeconds * 1000;
-        this.spawnGroundRing(this.hero.root, 1.05, GUARD_BLUE, ALDEN.w.reprisalWindowSeconds * 1000, 0.34, true);
+        this.spawnGroundRing(this.hero.root, 1.05, GUARD_BLUE, ALDEN.w.reprisalWindowSeconds * 1000, 0.48, true);
       }
     }
 
@@ -553,17 +548,6 @@ class AldenWorldRuntime {
     }
     return false;
   };
-
-  private update(nowMs: number) {
-    if (this.disposed) return;
-    this.updateDash(nowMs);
-    this.updateMovementModifiers(nowMs);
-    this.updateFrozenTargets(nowMs);
-    this.runPendingImpacts(nowMs);
-    this.updateEffects(nowMs);
-    this.applyAbilityPose(nowMs);
-    this.pruneRuntimeState(nowMs);
-  }
 
   private updateDash(nowMs: number) {
     const dash = this.dash;
@@ -641,7 +625,7 @@ class AldenWorldRuntime {
 
   private resolveAimDirection() {
     const heroWorld = this.hero.root.getWorldPosition(this.tempSource);
-    if (this.pointerSeen && this.camera) {
+    if (this.pointerSeen) {
       this.raycaster.setFromCamera(this.pointerNdc, this.camera);
       const surface = this.raycaster.intersectObjects(this.commandSurfaces, false)[0];
       if (surface) {
@@ -745,6 +729,7 @@ class AldenWorldRuntime {
     target.currentHp = Math.max(0, target.currentHp - adjustedDamage);
     target.alive = target.currentHp > 0;
     target.root.userData.currentHp = target.currentHp;
+    target.root.userData.alive = target.alive;
     this.publishRuntime(target);
 
     const dealt = Math.max(0, before - target.currentHp);
@@ -807,9 +792,6 @@ class AldenWorldRuntime {
     target.root.getWorldPosition(this.tempTarget);
     this.suppressAbilityAttackBroadcast = true;
     try {
-      // publishWorldAttackEvent stores the event before listener guards run. Suppressing the
-      // listener broadcast prevents React from mistaking an ability hit for a basic attack,
-      // while tower/creep AI still sees the event through getWorldAttackEventsAfter and aggroes.
       publishWorldAttackEvent({
         attackerId: this.hero.id,
         targetId: target.id,
@@ -935,7 +917,7 @@ class AldenWorldRuntime {
     }
 
     const ease = t * t * (3 - 2 * t);
-    const envelope = Math.min(1, t / 0.14, (1 - t) / 0.16);
+    const envelope = Math.max(0, Math.min(1, t / 0.14, (1 - t) / 0.16));
     const { model, pelvis, torso, leftShoulder, rightShoulder, leftElbow, rightElbow, wrist } = this.joints;
 
     if (animation.key === 'Q') {
@@ -953,7 +935,7 @@ class AldenWorldRuntime {
     }
 
     if (animation.key === 'W') {
-      const hold = Math.min(1, t / 0.12, (1 - t) / 0.12);
+      const hold = Math.max(0, Math.min(1, t / 0.12, (1 - t) / 0.12));
       if (torso) {
         torso.rotation.y -= 0.22 * hold;
         torso.rotation.x -= 0.08 * hold;
@@ -1018,6 +1000,7 @@ class AldenWorldRuntime {
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       toneMapped: false,
@@ -1057,6 +1040,7 @@ class AldenWorldRuntime {
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       toneMapped: false,
@@ -1094,6 +1078,7 @@ class AldenWorldRuntime {
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       toneMapped: false,
