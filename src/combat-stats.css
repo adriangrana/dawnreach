@@ -1,6 +1,62 @@
+.combat-stats-settings-button {
+  position: fixed;
+  top: 8px;
+  left: 10px;
+  z-index: 121;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(210, 192, 142, 0.42);
+  border-radius: 8px;
+  color: rgba(239, 228, 190, 0.94);
+  background:
+    linear-gradient(180deg, rgba(40, 50, 53, 0.94), rgba(11, 17, 20, 0.94)),
+    radial-gradient(circle at 50% 0%, rgba(225, 195, 122, 0.16), transparent 70%);
+  box-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.34),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.combat-stats-settings-button svg {
+  width: 19px;
+  height: 19px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}
+
+.combat-stats-settings-button:hover {
+  color: #fff2c5;
+  border-color: rgba(230, 204, 137, 0.74);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.4),
+    0 0 12px rgba(211, 178, 96, 0.13),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+  transform: translateY(-1px);
+}
+
+.combat-stats-settings-button:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.combat-stats-settings-button:focus-visible {
+  outline: 2px solid rgba(121, 199, 235, 0.9);
+  outline-offset: 2px;
+}
+
 .combat-stats-overlay {
   position: fixed;
-  top: 0;
+  top: 48px;
   left: 0;
   z-index: 120;
   min-width: 158px;
@@ -136,8 +192,21 @@
 }
 
 @media (max-width: 900px), (max-height: 650px) {
+  .combat-stats-settings-button {
+    top: 7px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+  }
+
+  .combat-stats-settings-button svg {
+    width: 16px;
+    height: 16px;
+  }
+
   .combat-stats-overlay {
-    top: 0;
+    top: 42px;
     left: 0;
     min-width: 136px;
     padding: 6px 11px 7px 10px;
