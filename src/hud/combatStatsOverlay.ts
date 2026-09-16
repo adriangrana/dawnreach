@@ -18,6 +18,7 @@ type MutableCombatHudStats = {
 
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const PANEL_ID = 'dawnreach-combat-stats';
+const SETTINGS_BUTTON_ID = 'dawnreach-combat-settings-button';
 const listeners = new Set<(stats: CombatHudStats) => void>();
 const stats: MutableCombatHudStats = {
   kills: 0,
@@ -85,6 +86,29 @@ function statRow(label: string, valueClass: string) {
   return row;
 }
 
+function createSettingsButton() {
+  const button = document.createElement('button');
+  button.id = SETTINGS_BUTTON_ID;
+  button.className = 'combat-stats-settings-button';
+  button.type = 'button';
+  button.title = 'Menú de partida (F10)';
+  button.setAttribute('aria-label', 'Abrir menú de partida');
+  button.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" />
+      <path d="M19.3 13.5a7.58 7.58 0 0 0 .05-3l2.02-1.57-1.9-3.29-2.39.96a7.8 7.8 0 0 0-2.58-1.5L14.14 2.5h-3.8L9.97 5.1A7.8 7.8 0 0 0 7.4 6.6L5 5.64 3.1 8.93l2.02 1.57a7.58 7.58 0 0 0 .05 3l-2.07 1.6L5 18.4l2.45-.98a7.7 7.7 0 0 0 2.52 1.46l.37 2.62h3.8l.37-2.62a7.7 7.7 0 0 0 2.52-1.46l2.45.98 1.9-3.3-2.08-1.6Z" />
+    </svg>`;
+  button.addEventListener('click', () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'F10',
+      code: 'F10',
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
+  return button;
+}
+
 function renderStats(panel: HTMLElement, current: CombatHudStats) {
   const kda = panel.querySelector<HTMLElement>('.combat-stats-value--kda');
   const lane = panel.querySelector<HTMLElement>('.combat-stats-value--lane');
@@ -97,7 +121,9 @@ export function mountCombatStatsOverlay() {
   startWorldCombatSubscription();
 
   document.getElementById(PANEL_ID)?.remove();
+  document.getElementById(SETTINGS_BUTTON_ID)?.remove();
 
+  const settingsButton = createSettingsButton();
   const panel = document.createElement('aside');
   panel.id = PANEL_ID;
   panel.className = 'combat-stats-overlay';
@@ -106,11 +132,12 @@ export function mountCombatStatsOverlay() {
     statRow('K/D/A', 'combat-stats-value--kda'),
     statRow('LH/DN', 'combat-stats-value--lane'),
   );
-  document.body.append(panel);
+  document.body.append(settingsButton, panel);
 
   const unsubscribe = subscribeCombatHudStats((current) => renderStats(panel, current));
   return () => {
     unsubscribe();
+    settingsButton.remove();
     panel.remove();
   };
 }
