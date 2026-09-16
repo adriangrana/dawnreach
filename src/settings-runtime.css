@@ -1,0 +1,99 @@
+:root {
+  --dawnreach-user-ui-scale: 1;
+  --dawnreach-hud-opacity: 1;
+  --dawnreach-minimap-scale: 1;
+  --dawnreach-minimap-icon-scale: 1.1;
+}
+
+.game-hud,
+.combat-stats-overlay,
+.hud-settings-button {
+  opacity: var(--dawnreach-hud-opacity, 1);
+}
+
+.scoreboard,
+.command-deck,
+.combat-stats-overlay,
+.hud-settings-button {
+  scale: var(--dawnreach-user-ui-scale, 1);
+}
+
+.minimap-shell {
+  scale: calc(var(--dawnreach-user-ui-scale, 1) * var(--dawnreach-minimap-scale, 1));
+  transform-origin: left bottom;
+}
+
+.minimap-hero-icon {
+  scale: var(--dawnreach-minimap-icon-scale, 1.1);
+}
+
+body[data-dawnreach-minimap-side="right"] .minimap-shell {
+  left: auto !important;
+  right: 0 !important;
+  transform-origin: right bottom;
+}
+
+body[data-dawnreach-show-hero-names="false"] .hero-identity > strong {
+  display: none !important;
+}
+
+body[data-dawnreach-show-health-bars="false"] .resource--health,
+body[data-dawnreach-show-mana-bars="false"] .resource--mana,
+body[data-dawnreach-show-status-effects="false"] .hero-status-bar {
+  display: none !important;
+}
+
+body[data-dawnreach-show-cooldown-numbers="false"] .ability-cooldown {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+body[data-dawnreach-high-contrast="true"] .game-canvas {
+  filter: contrast(1.18) saturate(1.08);
+}
+
+body[data-dawnreach-high-contrast="true"] .game-hud,
+body[data-dawnreach-high-contrast="true"] .combat-stats-overlay,
+body[data-dawnreach-high-contrast="true"] .hud-settings-button {
+  filter: contrast(1.12);
+}
+
+.game-setting-row.is-unavailable,
+.game-keybind-row.is-unavailable {
+  opacity: 0.42;
+  filter: saturate(0.45);
+}
+
+.game-setting-row.is-unavailable .game-setting-control,
+.game-keybind-row.is-unavailable .game-keybind-input {
+  pointer-events: none;
+}
+
+.game-setting-row.is-unavailable select,
+.game-setting-row.is-unavailable input,
+.game-keybind-row.is-unavailable input {
+  cursor: not-allowed !important;
+}
+
+.game-setting-availability {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 7px;
+  padding: 3px 7px;
+  border: 1px solid rgba(139, 151, 154, 0.18);
+  border-radius: 999px;
+  color: #75858a;
+  background: rgba(5, 10, 13, 0.52);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.game-options-sidebar button.is-roadmap-only::after {
+  content: "PRÓXIMAMENTE";
+  margin-top: 3px;
+  color: #5d696d;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
