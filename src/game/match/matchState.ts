@@ -8,6 +8,8 @@ import {
   type HeroId,
   type InventoryItem,
 } from '../heroes/types';
+import { getItemDefinition } from '../items/itemDatabase';
+import { TELEPORT_SCROLL_ITEM_ID, TELEPORT_SCROLL_SLOT } from '../items/teleportScrollEvents';
 import type {
   MatchHeroState,
   MatchPlayerState,
@@ -22,6 +24,29 @@ const TEAMS: readonly TeamId[] = ['dawn', 'dusk'];
 const SLOT_INDEXES: readonly TeamSlotIndex[] = [1, 2, 3, 4, 5];
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 export const HERO_STARTING_GOLD = 600;
+
+function createStartingInventory(heroEntityId: string) {
+  const inventory = createEmptyInventory();
+  const teleportDefinition = getItemDefinition(TELEPORT_SCROLL_ITEM_ID);
+  if (!teleportDefinition) {
+    throw new Error(`Missing starting item definition ${TELEPORT_SCROLL_ITEM_ID}.`);
+  }
+
+  const teleportSlot = inventory.find(slot => slot.slot === TELEPORT_SCROLL_SLOT);
+  if (!teleportSlot) {
+    throw new Error(`Missing dedicated teleport slot ${TELEPORT_SCROLL_SLOT}.`);
+  }
+
+  teleportSlot.item = {
+    instanceId: `${TELEPORT_SCROLL_ITEM_ID}:spawn:${heroEntityId}`,
+    definitionId: teleportDefinition.id,
+    displayName: teleportDefinition.name,
+    quantity: 1,
+    statModifiers: [],
+    cooldownReadyAtMs: 0,
+  };
+  return inventory;
+}
 
 export function createMatchSlots(): MatchSlotState[] {
   return TEAMS.flatMap(team => SLOT_INDEXES.map(index => ({
@@ -126,7 +151,7 @@ export function assignSelectedHeroToPlayer(
     currentHp: stats.maxHp,
     currentResource: stats.maxResource,
     abilityRanks: createEmptyAbilityRanks(),
-    inventory: createEmptyInventory(),
+    inventory: createStartingInventory(heroEntityId),
     cooldownReadyAtMs: { Q: 0, W: 0, E: 0, R: 0 },
     runtime: {
       statuses: {},
