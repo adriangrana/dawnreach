@@ -204,6 +204,7 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'interface.scoreboardDetailed',
 
   'accessibility.highContrast',
+  'accessibility.visualPings',
 
   'controls.abilityQ',
   'controls.abilityW',
@@ -216,6 +217,8 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'controls.centerHero',
   'controls.scoreboard',
   'controls.shop',
+  'controls.pingWheel',
+  'controls.dangerPing',
   'controls.teleport',
   'controls.item1',
   'controls.item2',
