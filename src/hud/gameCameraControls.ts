@@ -196,7 +196,9 @@ export function mountGameCameraControls() {
   const onGameMenuState = (event: Event) => {
     const menuOpen = Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open);
     clearMotion();
-    void setCursorGrab(!menuOpen);
+    // gameMenu also adjusts cursor grab after dispatching this event. Re-apply the gameplay
+    // preference in a microtask so "Confinar cursor" remains authoritative after F10 closes.
+    queueMicrotask(() => { void setCursorGrab(!menuOpen); });
   };
 
   const onSettingsChanged = (event: Event) => {
