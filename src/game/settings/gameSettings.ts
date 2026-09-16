@@ -210,6 +210,8 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'controls.abilityE',
   'controls.abilityR',
   'controls.attackMove',
+  'controls.stop',
+  'controls.holdPosition',
   'controls.selectHero',
   'controls.centerHero',
   'controls.scoreboard',
