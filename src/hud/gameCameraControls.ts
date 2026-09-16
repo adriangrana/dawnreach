@@ -1,9 +1,14 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import {
+  GAME_SETTINGS_CHANGED_EVENT,
+  getGameSettingsSnapshot,
+  settingBindingMatchesEvent,
+  type GameSettings,
+  type GameSettingsChangedDetail,
+} from '../game/settings/gameSettings';
 import { GAME_MENU_STATE_EVENT, isGameMenuOpen } from './gameMenu';
 
-const EDGE_SCROLL_ZONE_PX = 14;
-const CAMERA_PAN_WORLD_UNITS_PER_SECOND = 18;
 const MAP_WORLD_WIDTH = 150;
 const MAP_WORLD_HEIGHT = 125;
 const MINIMAP_SELECTOR = '.minimap-live';
@@ -28,6 +33,8 @@ type CachedLayout = {
   footprint: ViewportFootprint | null;
   refreshedAt: number;
 };
+
+type CameraDirection = 'left' | 'right' | 'up' | 'down';
 
 function isEditableTarget(target: EventTarget | null) {
   return target instanceof Element
@@ -73,8 +80,14 @@ function cameraTargetingModeActive(canvas: HTMLCanvasElement | null) {
   return canvas?.style.cursor === 'crosshair';
 }
 
+function numericSetting(settings: GameSettings, key: string, fallback: number) {
+  const value = Number(settings[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export function mountGameCameraControls() {
-  const pressedArrows = new Set<string>();
+  const pressedDirections = new Set<CameraDirection>();
+  let settings = getGameSettingsSnapshot();
   let pointerX = window.innerWidth / 2;
   let pointerY = window.innerHeight / 2;
   let pointerSeen = false;
@@ -97,10 +110,11 @@ export function mountGameCameraControls() {
   const tauriWindow = isTauri() ? getCurrentWindow() : null;
   const setCursorGrab = async (grab: boolean) => {
     if (!tauriWindow || disposed) return;
+    const shouldGrab = grab && settings['gameplay.cursorConfine'] !== false;
     try {
-      await tauriWindow.setCursorGrab(grab);
+      await tauriWindow.setCursorGrab(shouldGrab);
     } catch (error) {
-      console.warn(`[Dawnreach] Cursor ${grab ? 'grab' : 'release'} unavailable`, error);
+      console.warn(`[Dawnreach] Cursor ${shouldGrab ? 'grab' : 'release'} unavailable`, error);
     }
   };
 
@@ -167,20 +181,28 @@ export function mountGameCameraControls() {
     return hero ? dispatchMinimapCameraTarget(hero.x, hero.y) : false;
   };
 
-  const onFocus = () => { void setCursorGrab(!isGameMenuOpen()); };
-  const onBlur = () => {
-    pressedArrows.clear();
+  const clearMotion = () => {
+    pressedDirections.clear();
     target = null;
     recenterHeroOnNextFrame = false;
+  };
+
+  const onFocus = () => { void setCursorGrab(!isGameMenuOpen()); };
+  const onBlur = () => {
+    clearMotion();
     void setCursorGrab(false);
   };
 
   const onGameMenuState = (event: Event) => {
     const menuOpen = Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open);
-    pressedArrows.clear();
-    target = null;
-    recenterHeroOnNextFrame = false;
+    clearMotion();
     void setCursorGrab(!menuOpen);
+  };
+
+  const onSettingsChanged = (event: Event) => {
+    settings = (event as CustomEvent<GameSettingsChangedDetail>).detail?.settings ?? getGameSettingsSnapshot();
+    clearMotion();
+    void setCursorGrab(!isGameMenuOpen());
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -189,22 +211,34 @@ export function mountGameCameraControls() {
     pointerSeen = true;
   };
 
+  const directionForEvent = (event: KeyboardEvent): CameraDirection | null => {
+    if (settingBindingMatchesEvent(event, 'controls.cameraLeft', settings)) return 'left';
+    if (settingBindingMatchesEvent(event, 'controls.cameraRight', settings)) return 'right';
+    if (settingBindingMatchesEvent(event, 'controls.cameraUp', settings)) return 'up';
+    if (settingBindingMatchesEvent(event, 'controls.cameraDown', settings)) return 'down';
+    return null;
+  };
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (isGameMenuOpen() || isEditableTarget(event.target)) return;
 
-    if (event.code === 'Space' && !event.repeat) {
+    if (settingBindingMatchesEvent(event, 'controls.centerHero', settings) && !event.repeat) {
       recenterHeroOnNextFrame = true;
+      event.preventDefault();
       return;
     }
 
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.code)) return;
-    pressedArrows.add(event.code);
+    if (settings['camera.keyboardPan'] === false) return;
+    const direction = directionForEvent(event);
+    if (!direction) return;
+    pressedDirections.add(direction);
     event.preventDefault();
   };
 
   const onKeyUp = (event: KeyboardEvent) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.code)) return;
-    pressedArrows.delete(event.code);
+    const direction = directionForEvent(event);
+    if (!direction) return;
+    pressedDirections.delete(direction);
     if (!isGameMenuOpen()) event.preventDefault();
   };
 
@@ -214,17 +248,20 @@ export function mountGameCameraControls() {
     let x = 0;
     let y = 0;
 
-    if (pressedArrows.has('ArrowLeft')) x -= 1;
-    if (pressedArrows.has('ArrowRight')) x += 1;
-    if (pressedArrows.has('ArrowUp')) y -= 1;
-    if (pressedArrows.has('ArrowDown')) y += 1;
+    if (settings['camera.keyboardPan'] !== false) {
+      if (pressedDirections.has('left')) x -= 1;
+      if (pressedDirections.has('right')) x += 1;
+      if (pressedDirections.has('up')) y -= 1;
+      if (pressedDirections.has('down')) y += 1;
+    }
 
-    if (pointerSeen && document.hasFocus()) {
-      if (pointerX <= EDGE_SCROLL_ZONE_PX) x -= 1;
-      else if (pointerX >= window.innerWidth - EDGE_SCROLL_ZONE_PX) x += 1;
+    if (settings['camera.edgePan'] !== false && pointerSeen && document.hasFocus()) {
+      const edgeSize = Math.max(2, numericSetting(settings, 'camera.edgeSize', 14));
+      if (pointerX <= edgeSize) x -= 1;
+      else if (pointerX >= window.innerWidth - edgeSize) x += 1;
 
-      if (pointerY <= EDGE_SCROLL_ZONE_PX) y -= 1;
-      else if (pointerY >= window.innerHeight - EDGE_SCROLL_ZONE_PX) y += 1;
+      if (pointerY <= edgeSize) y -= 1;
+      else if (pointerY >= window.innerHeight - edgeSize) y += 1;
     }
 
     const length = Math.hypot(x, y);
@@ -265,8 +302,9 @@ export function mountGameCameraControls() {
           : fallback;
       }
 
-      target.x += direction.x * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_WIDTH;
-      target.y += direction.y * CAMERA_PAN_WORLD_UNITS_PER_SECOND * dt / MAP_WORLD_HEIGHT;
+      const panSpeed = Math.max(1, numericSetting(settings, 'camera.panSpeed', 18));
+      target.x += direction.x * panSpeed * dt / MAP_WORLD_WIDTH;
+      target.y += direction.y * panSpeed * dt / MAP_WORLD_HEIGHT;
 
       const halfWidth = footprint?.halfWidth ?? 0.08;
       const halfHeight = footprint?.halfHeight ?? 0.08;
@@ -274,8 +312,6 @@ export function mountGameCameraControls() {
       target.x = Math.min(1 - halfWidth - padding, Math.max(halfWidth + padding, target.x));
       target.y = Math.min(1 - halfHeight - padding, Math.max(halfHeight + padding, target.y));
 
-      // Dispatch on every display frame. The previous 24 ms throttle capped camera target
-      // updates at ~41 Hz on a 60 Hz display, which was the visible source of the stepping.
       dispatchMinimapCameraTarget(target.x, target.y);
     }
 
@@ -285,6 +321,7 @@ export function mountGameCameraControls() {
   window.addEventListener('focus', onFocus);
   window.addEventListener('blur', onBlur);
   window.addEventListener(GAME_MENU_STATE_EVENT, onGameMenuState as EventListener);
+  window.addEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
   window.addEventListener('pointermove', onPointerMove, { capture: true, passive: true });
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
@@ -296,12 +333,11 @@ export function mountGameCameraControls() {
   return () => {
     disposed = true;
     cancelAnimationFrame(frameId);
-    pressedArrows.clear();
-    target = null;
-    recenterHeroOnNextFrame = false;
+    clearMotion();
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('blur', onBlur);
     window.removeEventListener(GAME_MENU_STATE_EVENT, onGameMenuState as EventListener);
+    window.removeEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
