@@ -173,20 +173,15 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
  * suggests that a switch changes the game when no engine subsystem consumes it yet.
  */
 export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
-  'gameplay.attackMoveTarget',
   'gameplay.showCastRange',
-  'gameplay.moveCommandIndicator',
-  'gameplay.screenShake',
   'gameplay.cursorConfine',
 
   'camera.edgePan',
   'camera.keyboardPan',
   'camera.edgeSize',
   'camera.panSpeed',
-  'camera.smoothing',
   'camera.minimapDrag',
   'camera.minimapClick',
-  'camera.shakeIntensity',
 
   'graphics.renderScale',
   'graphics.frameLimit',
@@ -212,8 +207,6 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'controls.abilityE',
   'controls.abilityR',
   'controls.attackMove',
-  'controls.stop',
-  'controls.holdPosition',
   'controls.selectHero',
   'controls.centerHero',
   'controls.shop',
