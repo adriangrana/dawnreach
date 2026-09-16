@@ -42,6 +42,7 @@ import {
   type ItemPickupResultDetail,
   type ItemUseDetail,
 } from './game/items/shopEvents';
+import { toMatchGameTimeMs } from './game/match/matchPauseRuntime';
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
@@ -149,11 +150,12 @@ type HudAction =
   | { type: 'feedback'; message: string; nowMs: number };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
-  const actionNowMs = action.type === 'world-hero-sync'
+  const rawActionNowMs = action.type === 'world-hero-sync'
     || action.type === 'world-hero-attack'
     || action.type === 'world-progression'
     ? action.event.atMs
     : action.nowMs;
+  const actionNowMs = toMatchGameTimeMs(rawActionNowMs);
   const nowMs = Math.max(runtime.nowMs, actionNowMs);
   const elapsedMs = Math.max(0, nowMs - runtime.nowMs);
   let match = recoverHeroResource(runtime.match, LOCAL_HERO_ENTITY_ID, elapsedMs, nowMs);
@@ -347,7 +349,7 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
         ? 0
         : runtime.respawnDurationMs;
     const respawnReadyAtMs = action.event.reason === 'death'
-      ? action.event.atMs + respawnDurationMs
+      ? nowMs + respawnDurationMs
       : action.event.reason === 'respawn'
         ? null
         : runtime.respawnReadyAtMs;
@@ -676,7 +678,7 @@ export default function App() {
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const minimapHeroRef = useRef<HTMLImageElement | null>(null);
   const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
-    const nowMs = performance.now();
+    const nowMs = toMatchGameTimeMs();
     return {
       match: createPlayableMatch('H001', 1, nowMs),
       nowMs,
@@ -726,7 +728,7 @@ export default function App() {
 
   useEffect(() => subscribeWorldCombatEvents((event) => {
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
-    dispatch({ type: 'world-hero-sync', event });
+    dispatch({ type: 'world-hero-sync', event: { ...event, atMs: toMatchGameTimeMs(event.atMs) } });
   }), []);
 
   useEffect(() => subscribeWorldAttackEvents((event) => {
@@ -734,22 +736,24 @@ export default function App() {
     if (event.targetTeam === event.attackerTeam) return;
 
     const snapshot = runtimeStateRef.current;
+    const atMs = toMatchGameTimeMs(event.atMs);
+    const normalizedEvent = { ...event, atMs };
     const targetClass = worldTargetClass(event.targetKind);
     const preview = calculateHeroWorldBasicAttackPreview(
       snapshot.match,
       LOCAL_HERO_ENTITY_ID,
-      event.atMs,
+      atMs,
       targetClass,
     );
     if (preview.consumesInnate && preview.bonusDamage > 0) {
       queueWorldDamageAdjustment(event.targetId, preview.bonusDamage);
     }
-    dispatch({ type: 'world-hero-attack', event });
+    dispatch({ type: 'world-hero-attack', event: normalizedEvent });
   }), []);
 
   useEffect(() => subscribeWorldHeroProgressionEvents((event) => {
     if (event.heroEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
-    dispatch({ type: 'world-progression', event });
+    dispatch({ type: 'world-progression', event: { ...event, atMs: toMatchGameTimeMs(event.atMs) } });
   }), []);
 
   useEffect(() => {
