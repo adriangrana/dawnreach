@@ -1,3 +1,11 @@
+import {
+  GAME_SETTINGS_CHANGED_EVENT,
+  getGameSettingsSnapshot,
+  settingBindingMatchesEvent,
+  type GameSettings,
+  type GameSettingsChangedDetail,
+} from '../game/settings/gameSettings';
+
 const SELECTION_OVERLAY_SELECTOR = '.selected-entity-hud-overlay';
 const LOCAL_HERO_ENTITY_ID = 'blue-hero-alden';
 
@@ -8,8 +16,10 @@ function localHeroIsSelected() {
 }
 
 export function mountHeroFunctionKeyControls() {
+  let settings: GameSettings = getGameSettingsSnapshot();
   let suppressSyntheticCameraFocus = false;
   let clearSuppressionTimer = 0;
+  let dispatchingMappedF1 = false;
 
   const clearSuppression = () => {
     suppressSyntheticCameraFocus = false;
@@ -19,25 +29,43 @@ export function mountHeroFunctionKeyControls() {
     }
   };
 
+  const primeSelectionSuppression = () => {
+    clearSuppression();
+    suppressSyntheticCameraFocus = !localHeroIsSelected();
+    if (suppressSyntheticCameraFocus) {
+      clearSuppressionTimer = window.setTimeout(() => {
+        suppressSyntheticCameraFocus = false;
+        clearSuppressionTimer = 0;
+      }, 0);
+    }
+  };
+
   const onKeyDownCapture = (event: KeyboardEvent) => {
-    if (event.code === 'F1') {
+    if (dispatchingMappedF1 && event.code === 'F1') return;
+
+    if (settingBindingMatchesEvent(event, 'controls.selectHero', settings)) {
       if (event.repeat) {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
       }
 
-      // Snapshot the actual selected entity before the game's own F1 handler runs.
-      // The selection HUD remains mounted even when Alden is selected, so `hidden`
-      // cannot be used as a selection signal. The first F1 selects Alden without
-      // moving the camera; subsequent F1 presses are allowed to recenter him.
-      clearSuppression();
-      suppressSyntheticCameraFocus = !localHeroIsSelected();
-      if (suppressSyntheticCameraFocus) {
-        clearSuppressionTimer = window.setTimeout(() => {
-          suppressSyntheticCameraFocus = false;
-          clearSuppressionTimer = 0;
-        }, 0);
+      // Snapshot the actual selected entity before the game's own selection handler runs.
+      // The first selection press selects Alden without moving the camera; later presses may
+      // recenter him. Custom bindings are translated to the engine's legacy F1 command so the
+      // underlying selection logic remains single-sourced.
+      primeSelectionSuppression();
+      if (event.code !== 'F1' || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        dispatchingMappedF1 = true;
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          code: 'F1',
+          key: 'F1',
+          bubbles: true,
+          cancelable: true,
+        }));
+        dispatchingMappedF1 = false;
       }
       return;
     }
@@ -52,10 +80,17 @@ export function mountHeroFunctionKeyControls() {
     event.stopImmediatePropagation();
   };
 
+  const onSettingsChanged = (event: Event) => {
+    settings = (event as CustomEvent<GameSettingsChangedDetail>).detail?.settings ?? getGameSettingsSnapshot();
+    clearSuppression();
+  };
+
   window.addEventListener('keydown', onKeyDownCapture, true);
+  window.addEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
 
   return () => {
     clearSuppression();
     window.removeEventListener('keydown', onKeyDownCapture, true);
+    window.removeEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
   };
 }
