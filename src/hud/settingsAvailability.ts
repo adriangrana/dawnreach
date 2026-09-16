@@ -1,4 +1,7 @@
-import { isGameSettingImplemented } from '../game/settings/gameSettings';
+import {
+  IMPLEMENTED_GAME_SETTINGS,
+  isGameSettingImplemented,
+} from '../game/settings/gameSettings';
 
 const MENU_ROOT_ID = 'dawnreach-game-menu';
 const AVAILABILITY_CLASS = 'game-setting-availability';
@@ -21,7 +24,10 @@ function markUnavailable(control: HTMLElement, rowSelector: string) {
     control.disabled = !implemented;
   }
 
-  const copy = row.querySelector<HTMLElement>('.game-setting-copy') ?? row.firstElementChild as HTMLElement | null;
+  const copy = (
+    row.querySelector<HTMLElement>('.game-setting-copy')
+    ?? (row.firstElementChild instanceof HTMLElement ? row.firstElementChild : null)
+  );
   let badge = row.querySelector<HTMLElement>(`.${AVAILABILITY_CLASS}`);
   if (implemented) {
     badge?.remove();
@@ -36,6 +42,15 @@ function markUnavailable(control: HTMLElement, rowSelector: string) {
   }
 }
 
+function categoryHasRuntimeSupport(category: string) {
+  if (category === 'network') {
+    return [...IMPLEMENTED_GAME_SETTINGS].some(key => (
+      key.startsWith('network.') || key.startsWith('social.') || key.startsWith('privacy.')
+    ));
+  }
+  return [...IMPLEMENTED_GAME_SETTINGS].some(key => key.startsWith(`${category}.`));
+}
+
 function refreshAvailability(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>('[data-setting-key]').forEach(control => {
     markUnavailable(control, '.game-setting-row');
@@ -47,12 +62,7 @@ function refreshAvailability(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>('.game-options-sidebar button[data-category]').forEach(button => {
     const category = button.dataset.category;
     if (!category) return;
-    const anyImplemented = Array.from(root.querySelectorAll<HTMLElement>(`[data-setting-key^="${category}."]`))
-      .some(control => isGameSettingImplemented(control.dataset.settingKey ?? ''));
-    const hasImplementedKeybind = category === 'controls'
-      && Array.from(root.querySelectorAll<HTMLElement>('[data-keybind-key]'))
-        .some(control => isGameSettingImplemented(control.dataset.keybindKey ?? ''));
-    button.classList.toggle('is-roadmap-only', !anyImplemented && !hasImplementedKeybind);
+    button.classList.toggle('is-roadmap-only', !categoryHasRuntimeSupport(category));
   });
 }
 
