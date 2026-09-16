@@ -174,6 +174,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
  */
 export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'gameplay.showCastRange',
+  'gameplay.screenShake',
   'gameplay.cursorConfine',
 
   'camera.edgePan',
@@ -182,6 +183,7 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'camera.panSpeed',
   'camera.minimapDrag',
   'camera.minimapClick',
+  'camera.shakeIntensity',
 
   'graphics.renderScale',
   'graphics.frameLimit',
