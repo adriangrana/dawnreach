@@ -19,6 +19,16 @@ type PingDefinition = Readonly<{
 
 type ViewportPoint = Readonly<{ x: number; y: number }>;
 
+type PingAnchor = Readonly<{
+  surface: PingSurface;
+  clientX: number;
+  clientY: number;
+  normalizedX: number;
+  normalizedY: number;
+  mapX: number;
+  mapY: number;
+}>;
+
 export type DawnreachPingDetail = Readonly<{
   pingId: string;
   type: PingType;
@@ -37,7 +47,7 @@ export type DawnreachPingDetail = Readonly<{
 }>;
 
 const WHEEL_ID = 'dawnreach-ping-wheel';
-const DEAD_ZONE = 38;
+const DEAD_ZONE = 40;
 const MARKER_LIFETIME_MS = 3000;
 const DIRECT_PING_COOLDOWN_MS = 280;
 const PING_CHANNEL_NAME = 'dawnreach-match-pings-v1';
@@ -164,6 +174,28 @@ function mapPointToScreen(mapX: number, mapY: number) {
   };
 }
 
+function resolvePingAnchor(clientX: number, clientY: number): PingAnchor | null {
+  const surface = surfaceAt(clientX, clientY);
+  if (!surface) return null;
+
+  const normalizedX = clamp01((clientX - surface.rect.left) / Math.max(1, surface.rect.width));
+  const normalizedY = clamp01((clientY - surface.rect.top) / Math.max(1, surface.rect.height));
+  const mapPoint = surface.surface === 'minimap'
+    ? { x: normalizedX, y: normalizedY }
+    : screenPointToMap(normalizedX, normalizedY);
+  if (!mapPoint) return null;
+
+  return {
+    surface: surface.surface,
+    clientX,
+    clientY,
+    normalizedX,
+    normalizedY,
+    mapX: mapPoint.x,
+    mapY: mapPoint.y,
+  };
+}
+
 function buildPingMarker(detail: DawnreachPingDetail, minimap: boolean) {
   const definition = pingDefinition(detail.type);
   const reduced = !Boolean(getGameSettingsSnapshot()['accessibility.visualPings']);
@@ -226,29 +258,20 @@ function createPingId(playerId: string, createdAtMs: number) {
   return `${playerId}:${Math.round(createdAtMs * 1000)}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function publishPing(type: PingType, clientX: number, clientY: number, channel: BroadcastChannel | null) {
-  const surface = surfaceAt(clientX, clientY);
-  if (!surface) return false;
+function publishPing(type: PingType, anchor: PingAnchor, channel: BroadcastChannel | null) {
   const definition = pingDefinition(type);
-  const normalizedX = clamp01((clientX - surface.rect.left) / Math.max(1, surface.rect.width));
-  const normalizedY = clamp01((clientY - surface.rect.top) / Math.max(1, surface.rect.height));
-  const mapPoint = surface.surface === 'minimap'
-    ? { x: normalizedX, y: normalizedY }
-    : screenPointToMap(normalizedX, normalizedY);
-  if (!mapPoint) return false;
-
   const createdAtMs = performance.now();
   const detail: DawnreachPingDetail = {
     pingId: createPingId('local-player', createdAtMs),
     type,
     label: definition.label,
-    surface: surface.surface,
-    clientX,
-    clientY,
-    normalizedX,
-    normalizedY,
-    mapX: mapPoint.x,
-    mapY: mapPoint.y,
+    surface: anchor.surface,
+    clientX: anchor.clientX,
+    clientY: anchor.clientY,
+    normalizedX: anchor.normalizedX,
+    normalizedY: anchor.normalizedY,
+    mapX: anchor.mapX,
+    mapY: anchor.mapY,
     playerId: 'local-player',
     team: 'dawn',
     audience: 'all',
@@ -279,6 +302,7 @@ export function mountPingWheel() {
   let pointerY = window.innerHeight * 0.5;
   let centerX = pointerX;
   let centerY = pointerY;
+  let wheelAnchor: PingAnchor | null = null;
   let open = false;
   let selected: PingType = 'attention';
   let lastDirectPingAt = -Infinity;
@@ -297,7 +321,7 @@ export function mountPingWheel() {
     root.hidden = true;
     root.innerHTML = `
       <div class="dawnreach-ping-wheel__ring" aria-hidden="true"></div>
-      <div class="dawnreach-ping-wheel__center"><i>•</i><span>ATENCIÓN</span></div>
+      <div class="dawnreach-ping-wheel__center" style="--ping-color:${ATTENTION.color}"><i aria-hidden="true"></i><span>ATENCIÓN</span></div>
       ${PINGS.map(ping => `
         <div class="dawnreach-ping-wheel__item" data-ping-type="${ping.type}"
           style="--angle:${ping.angle}deg;--ping-color:${ping.color}">
@@ -335,8 +359,14 @@ export function mountPingWheel() {
   };
 
   const openWheel = () => {
-    const surface = surfaceAt(pointerX, pointerY);
-    if (!surface || blocked()) return false;
+    if (blocked()) return false;
+    const anchor = resolvePingAnchor(pointerX, pointerY);
+    if (!anchor) return false;
+
+    // Lock the target at the exact map point under the cursor when G is pressed. From this
+    // moment on the cursor is only a radial selector; moving it must never move the ping target.
+    wheelAnchor = anchor;
+
     const wheel = ensureRoot();
     centerX = Math.min(window.innerWidth - 150, Math.max(150, pointerX));
     centerY = Math.min(window.innerHeight - 150, Math.max(150, pointerY));
@@ -353,8 +383,9 @@ export function mountPingWheel() {
 
   const closeWheel = (commit: boolean) => {
     if (!open) return;
-    if (commit) publishPing(selected, pointerX, pointerY, channel);
+    if (commit && wheelAnchor) publishPing(selected, wheelAnchor, channel);
     open = false;
+    wheelAnchor = null;
     document.body.dataset.dawnreachPingWheelOpen = 'false';
     root?.classList.remove('is-open');
     if (root) root.hidden = true;
@@ -381,7 +412,8 @@ export function mountPingWheel() {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat || performance.now() - lastDirectPingAt < DIRECT_PING_COOLDOWN_MS) return;
-      if (publishPing('danger', pointerX, pointerY, channel)) lastDirectPingAt = performance.now();
+      const anchor = resolvePingAnchor(pointerX, pointerY);
+      if (anchor && publishPing('danger', anchor, channel)) lastDirectPingAt = performance.now();
       return;
     }
 
