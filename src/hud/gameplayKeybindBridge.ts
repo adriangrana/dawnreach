@@ -17,6 +17,8 @@ const KEY_BRIDGES: readonly KeyBridge[] = [
   { settingKey: 'controls.abilityE', engineCode: 'KeyE', engineKey: 'e' },
   { settingKey: 'controls.abilityR', engineCode: 'KeyR', engineKey: 'r' },
   { settingKey: 'controls.attackMove', engineCode: 'KeyA', engineKey: 'a' },
+  { settingKey: 'controls.stop', engineCode: 'KeyS', engineKey: 's' },
+  { settingKey: 'controls.holdPosition', engineCode: 'KeyH', engineKey: 'h' },
   { settingKey: 'controls.centerHero', engineCode: 'Space', engineKey: ' ' },
   { settingKey: 'controls.shop', engineCode: 'KeyP', engineKey: 'p' },
   { settingKey: 'controls.teleport', engineCode: 'KeyT', engineKey: 't' },
