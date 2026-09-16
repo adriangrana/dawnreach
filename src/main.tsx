@@ -30,6 +30,7 @@ import './teleport-slot.css';
 import './shop-panel.css';
 import './game-menu.css';
 import './settings-runtime.css';
+import './scoreboard.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
