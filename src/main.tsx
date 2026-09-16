@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
+import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './game/performance/shadowInvalidationBridge';
 import { mountAbilityRangeSettingsGuard } from './hud/abilityRangeSettingsGuard';
@@ -29,6 +30,7 @@ import './item-ui.css';
 import './teleport-slot.css';
 import './shop-panel.css';
 import './game-menu.css';
+import './match-pause.css';
 import './settings-runtime.css';
 import './scoreboard.css';
 
@@ -83,6 +85,9 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
+// Install the match-wide pause clock before any Three.js Clock is constructed. F10 itself does
+// not pause; only an explicit pause request freezes simulation time for the entire match.
+const disposeMatchPauseRuntime = installMatchPauseRuntime();
 // Install renderer/lighting scheduling before the Dawnreach scene is constructed.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
 // Destructive world-state changes can happen between scheduled shadow passes. Track the main
@@ -125,6 +130,7 @@ if (import.meta.hot) {
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
+    disposeMatchPauseRuntime();
     disposeSettingsAvailability();
     disposeAbilityRangeSettingsGuard();
     disposeGameMenu();
