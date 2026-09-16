@@ -38,7 +38,6 @@ const state: MutablePauseState = {
 };
 
 let installed = false;
-let matchEpochMs = 0;
 
 function realNowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -62,10 +61,6 @@ export function toMatchGameTimeMs(realTimestampMs = realNowMs()) {
     ? Math.max(0, realTimestampMs - state.pauseStartedAtMs)
     : 0;
   return Math.max(0, realTimestampMs - state.accumulatedPauseMs - livePause);
-}
-
-export function getMatchElapsedMs(createdAtMatchTimeMs = matchEpochMs, realTimestampMs = realNowMs()) {
-  return Math.max(0, toMatchGameTimeMs(realTimestampMs) - createdAtMatchTimeMs);
 }
 
 export function requestMatchPause(paused: boolean, requestedByPlayerId = LOCAL_PLAYER_ID) {
@@ -138,14 +133,8 @@ function renderPauseOverlay() {
   root.classList.toggle('is-visible', state.paused);
 }
 
-function refreshTopMatchClock() {
-  const clock = document.querySelector<HTMLElement>('.game-hud .match-clock b');
-  if (!clock) return;
-  const elapsedMs = getMatchElapsedMs();
-  const secondsTotal = Math.max(0, Math.floor(elapsedMs / 1000));
-  const minutes = Math.floor(secondsTotal / 60);
-  const seconds = secondsTotal % 60;
-  clock.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+function setText(element: HTMLElement | null, value: string) {
+  if (element && element.textContent !== value) element.textContent = value;
 }
 
 function refreshMenuPauseAction() {
@@ -156,16 +145,16 @@ function refreshMenuPauseAction() {
   const strong = button.querySelector<HTMLElement>('strong');
   const small = button.querySelector<HTMLElement>('small');
   const index = button.querySelector<HTMLElement>('.game-menu-action-index');
-  if (index) index.textContent = '01';
+  setText(index, '01');
 
   if (state.paused) {
-    if (strong) strong.textContent = 'Reanudar partida';
-    if (small) small.textContent = 'Reanudar la batalla para todos los jugadores';
+    setText(strong, 'Reanudar partida');
+    setText(small, 'Reanudar la batalla para todos los jugadores');
     button.classList.add('game-menu-primary-action--resume');
     button.classList.remove('game-menu-primary-action--pause');
   } else {
-    if (strong) strong.textContent = 'Pausar partida';
-    if (small) small.textContent = 'Detener temporalmente la batalla para todos';
+    setText(strong, 'Pausar partida');
+    setText(small, 'Detener temporalmente la batalla para todos');
     button.classList.remove('game-menu-primary-action--resume');
     button.classList.add('game-menu-primary-action--pause');
   }
@@ -189,7 +178,6 @@ function shouldBlockPointerTarget(target: EventTarget | null) {
 export function installMatchPauseRuntime() {
   if (installed) return () => undefined;
   installed = true;
-  matchEpochMs = toMatchGameTimeMs(realNowMs());
   document.body.dataset.dawnreachMatchPaused = 'false';
 
   const clockPrototype = THREE.Clock.prototype;
@@ -251,7 +239,6 @@ export function installMatchPauseRuntime() {
   const menuObserver = new MutationObserver(() => refreshMenuPauseAction());
   menuObserver.observe(document.body, { subtree: true, childList: true });
 
-  const clockTimer = window.setInterval(refreshTopMatchClock, 100);
   window.addEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
   window.addEventListener('click', onClickCapture, true);
   window.addEventListener('pointerdown', onPointerCapture, true);
@@ -259,12 +246,10 @@ export function installMatchPauseRuntime() {
   window.addEventListener('keydown', onKeyDownCapture, true);
 
   renderPauseOverlay();
-  refreshTopMatchClock();
   refreshMenuPauseAction();
 
   return () => {
     installed = false;
-    window.clearInterval(clockTimer);
     menuObserver.disconnect();
     window.removeEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
     window.removeEventListener('click', onClickCapture, true);
