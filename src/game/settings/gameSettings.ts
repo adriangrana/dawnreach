@@ -201,6 +201,7 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'interface.showStatusEffects',
   'interface.showCooldownNumbers',
   'interface.showFps',
+  'interface.scoreboardDetailed',
 
   'accessibility.highContrast',
 
@@ -211,6 +212,7 @@ export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
   'controls.attackMove',
   'controls.selectHero',
   'controls.centerHero',
+  'controls.scoreboard',
   'controls.shop',
   'controls.teleport',
   'controls.item1',
