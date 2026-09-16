@@ -1,5 +1,23 @@
 function belongsToDawnreach(target: EventTarget | null) {
-  return target instanceof Node && Boolean(document.getElementById('root')?.contains(target));
+  if (!(target instanceof Node)) return false;
+  if (document.getElementById('root')?.contains(target)) return true;
+
+  // Some game-owned overlays (notably the F10 menu and the global pause treatment) are mounted
+  // directly under <body> instead of inside the React root. They are still part of the game
+  // surface and must never expose browser/WebView chrome.
+  if (target instanceof Element) {
+    return Boolean(target.closest(
+      '#dawnreach-game-menu, #dawnreach-match-pause-overlay, .match-scoreboard-overlay',
+    ));
+  }
+
+  return false;
+}
+
+function modalGameSurfaceActive() {
+  return document.body.dataset.dawnreachGameMenuOpen === 'true'
+    || document.body.dataset.dawnreachMatchPaused === 'true'
+    || document.querySelector('.match-scoreboard-overlay') !== null;
 }
 
 /**
@@ -10,8 +28,13 @@ function belongsToDawnreach(target: EventTarget | null) {
  */
 export function mountBrowserInteractionGuards() {
   const onContextMenu = (event: MouseEvent) => {
-    if (!belongsToDawnreach(event.target)) return;
+    // F10 and TAB are game-owned modal surfaces. While either is visible, suppress the native
+    // browser menu regardless of which underlying element receives the right click (the TAB
+    // scoreboard intentionally uses pointer-events:none, so its target can be the world below).
+    const modalSurface = modalGameSurfaceActive();
+    if (!modalSurface && !belongsToDawnreach(event.target)) return;
     event.preventDefault();
+    if (modalSurface) event.stopImmediatePropagation();
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
