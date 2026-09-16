@@ -36,8 +36,9 @@ export function mountMinimapDragCamera() {
       && event.clientY <= rect.bottom;
     if (!inside) return;
 
-    // The game already owns minimap click-to-focus behaviour. Reuse that exact
-    // projection logic while dragging instead of maintaining a second world mapping.
+    // The game already owns minimap click-to-focus behaviour. Reuse that exact projection
+    // logic while dragging. Synthetic drag samples bypass the trusted-event click blocker below
+    // so dragging can stay enabled independently from one-click camera jumps.
     minimap.dispatchEvent(new PointerEvent('pointerdown', {
       bubbles: true,
       cancelable: true,
@@ -51,19 +52,26 @@ export function mountMinimapDragCamera() {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (settings['camera.minimapDrag'] === false || !event.isTrusted || event.button !== 0) return;
+    if (!event.isTrusted || event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
 
     const candidate = target.closest<HTMLElement>(MINIMAP_SELECTOR);
     if (!candidate) return;
 
-    // Crosshair means the game has armed an attack command. In that state the
-    // left button belongs to targeting, not camera dragging.
+    // Crosshair means the game has armed an attack command. In that state the left button
+    // belongs to targeting, not camera navigation, regardless of camera settings.
     if (candidate.style.cursor === 'crosshair' || getComputedStyle(candidate).cursor === 'crosshair') return;
 
-    activePointerId = event.pointerId;
-    minimap = candidate;
+    if (settings['camera.minimapDrag'] !== false) {
+      activePointerId = event.pointerId;
+      minimap = candidate;
+    }
+
+    if (settings['camera.minimapClick'] === false) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
   };
 
   const onPointerMove = (event: PointerEvent) => {
