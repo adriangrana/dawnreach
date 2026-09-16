@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { mountAldenAudioRuntime } from './game/heroes/alden/aldenAudioRuntime';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
@@ -109,6 +110,10 @@ const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 // doubling startup work and transient GPU/CPU pressure in tauri:dev.
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
+// Alden's audio listens to successful ability cooldown transitions and authoritative world
+// attack-impact events, so mount it once after the HUD exists and before gameplay input starts.
+const disposeAldenAudioRuntime = mountAldenAudioRuntime();
+
 // Main-menu accelerators must be registered before mountGameMenu because the menu itself owns
 // gameplay keys such as A/S/H while open. The accelerator layer converts those keys into menu
 // actions first, then the regular menu/input guards keep them from leaking into gameplay.
@@ -139,6 +144,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    disposeAldenAudioRuntime();
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
