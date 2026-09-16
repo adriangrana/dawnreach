@@ -45,6 +45,7 @@ import {
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
+import ScoreboardOverlay from './hud/ScoreboardOverlay';
 import ShopOverlay from './hud/ShopOverlay';
 import { setCombatHudStats } from './hud/combatStatsOverlay';
 import {
@@ -864,6 +865,11 @@ export default function App() {
     <main className="app-shell">
       <div ref={hostRef} className="game-host" onDragOver={onWorldDragOver} onDrop={onWorldDrop} />
       <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} />
+      <ScoreboardOverlay
+        match={runtime.match}
+        nowMs={runtime.nowMs}
+        respawnReadyAtMs={runtime.respawnReadyAtMs}
+      />
       <ShopOverlay
         open={runtime.shopOpen}
         gold={localHero.gold}
