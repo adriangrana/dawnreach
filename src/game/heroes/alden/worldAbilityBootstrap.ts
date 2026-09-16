@@ -21,6 +21,7 @@ import {
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const DEFAULT_SHADOW_EXTENT = 24;
 const DEFAULT_SHADOW_DISTANCE_PERCENT = 75;
+const MAX_RENDER_PIXEL_RATIO = 1.5;
 
 type RendererRender = THREE.WebGLRenderer['render'];
 
@@ -36,6 +37,7 @@ type ShadowPresentationState = {
 
 const presentationPoseGuards = new WeakMap<THREE.Object3D, PresentationPoseGuard>();
 const rendererLastPresentedAt = new WeakMap<THREE.WebGLRenderer, number>();
+const rendererScaleState = new WeakMap<THREE.WebGLRenderer, number>();
 const sceneShadowState = new WeakMap<THREE.Scene, ShadowPresentationState>();
 
 function getPresentationPoseGuard(heroRoot: THREE.Object3D): PresentationPoseGuard {
@@ -102,6 +104,16 @@ function shouldPresentFrame(renderer: THREE.WebGLRenderer, nowMs: number, settin
   return true;
 }
 
+function applyRenderScale(renderer: THREE.WebGLRenderer, settings: GameSettings) {
+  const rawScale = Number(settings['graphics.renderScale']);
+  const scale = Number.isFinite(rawScale) ? THREE.MathUtils.clamp(rawScale / 100, 0.5, 1.5) : 1;
+  if (Math.abs((rendererScaleState.get(renderer) ?? -1) - scale) < 0.0001) return;
+
+  const baseDeviceRatio = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(THREE.MathUtils.clamp(baseDeviceRatio * scale, 0.5, MAX_RENDER_PIXEL_RATIO));
+  rendererScaleState.set(renderer, scale);
+}
+
 function shadowMapSize(quality: string) {
   if (quality === 'low') return 768;
   if (quality === 'medium') return 1024;
@@ -123,7 +135,12 @@ function applyShadowSettings(scene: THREE.Scene, renderer: THREE.WebGLRenderer, 
   const extent = DEFAULT_SHADOW_EXTENT * distancePercent / DEFAULT_SHADOW_DISTANCE_PERCENT;
   scene.traverse((object) => {
     if (!(object instanceof THREE.DirectionalLight) || !object.castShadow) return;
+    const sizeChanged = object.shadow.mapSize.x !== size || object.shadow.mapSize.y !== size;
     object.shadow.mapSize.set(size, size);
+    if (sizeChanged && object.shadow.map) {
+      object.shadow.map.dispose();
+      object.shadow.map = null;
+    }
     const shadowCamera = object.shadow.camera;
     if (shadowCamera instanceof THREE.OrthographicCamera) {
       shadowCamera.left = -extent;
@@ -136,6 +153,13 @@ function applyShadowSettings(scene: THREE.Scene, renderer: THREE.WebGLRenderer, 
   });
   renderer.shadowMap.needsUpdate = true;
   sceneShadowState.set(scene, { quality, distancePercent });
+}
+
+function publishPresentedFrame(renderer: THREE.WebGLRenderer, nowMs: number) {
+  const canvas = renderer.domElement;
+  const frame = Number(canvas.dataset.presentedFrame ?? 0);
+  canvas.dataset.presentedFrame = String(Number.isFinite(frame) ? frame + 1 : 1);
+  canvas.dataset.presentedAt = nowMs.toFixed(2);
 }
 
 /**
@@ -155,6 +179,8 @@ export function mountAldenWorldAbilityBootstrap() {
     const wrappedRender: RendererRender = function render(scene, camera) {
       let settings: GameSettings | null = null;
       let shouldPresent = true;
+      let mainBeautyFrame = false;
+      let presentAtMs = performance.now();
 
       if (
         !disposed
@@ -162,6 +188,7 @@ export function mountAldenWorldAbilityBootstrap() {
         && renderer.domElement.classList.contains('game-canvas')
       ) {
         settings = getGameSettingsSnapshot();
+        applyRenderScale(renderer, settings);
         const registry = scene.userData.entityRegistry as GameEntityRegistry | undefined;
         const hero = registry?.values().find(entity => entity.id === LOCAL_WORLD_HERO_ENTITY_ID) ?? null;
         if (registry && hero) {
@@ -183,6 +210,8 @@ export function mountAldenWorldAbilityBootstrap() {
           const linePolish = ensureWorldLineVfxPolish(scene);
           if (renderer.getRenderTarget() === null) {
             const nowMs = performance.now();
+            presentAtMs = nowMs;
+            mainBeautyFrame = true;
             runtime.update(nowMs);
 
             // abilityPresentation owns VFX only. Its legacy pose layer used additive Euler
@@ -203,7 +232,9 @@ export function mountAldenWorldAbilityBootstrap() {
       }
 
       if (!shouldPresent) return;
-      return assignedRender.call(renderer, scene, camera);
+      const result = assignedRender.call(renderer, scene, camera);
+      if (mainBeautyFrame) publishPresentedFrame(renderer, presentAtMs);
+      return result;
     };
 
     Object.defineProperty(renderer, 'render', {
