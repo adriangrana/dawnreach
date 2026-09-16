@@ -11,6 +11,7 @@ import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountFpsOverlay } from './hud/fpsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
 import { mountGameMenu } from './hud/gameMenu';
+import { mountGameMenuQuickKeys } from './hud/gameMenuQuickKeys';
 import { mountGameplayKeybindBridge } from './hud/gameplayKeybindBridge';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInventoryControls } from './hud/inventoryControls';
@@ -30,6 +31,7 @@ import './item-ui.css';
 import './teleport-slot.css';
 import './shop-panel.css';
 import './game-menu.css';
+import './game-menu-hotkeys.css';
 import './match-pause.css';
 import './settings-runtime.css';
 import './scoreboard.css';
@@ -103,6 +105,10 @@ const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 // doubling startup work and transient GPU/CPU pressure in tauri:dev.
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
+// Main-menu accelerators must be registered before mountGameMenu because the menu itself owns
+// gameplay keys such as A/S/H while open. The accelerator layer converts those keys into menu
+// actions first, then the regular menu/input guards keep them from leaking into gameplay.
+const disposeGameMenuQuickKeys = mountGameMenuQuickKeys();
 // Register the F10 menu before gameplay hotkeys so an open menu owns keyboard input and
 // never leaks commands to the world underneath it.
 const disposeGameMenu = mountGameMenu();
@@ -134,6 +140,7 @@ if (import.meta.hot) {
     disposeSettingsAvailability();
     disposeAbilityRangeSettingsGuard();
     disposeGameMenu();
+    disposeGameMenuQuickKeys();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
     disposeResponsiveHudScale();
