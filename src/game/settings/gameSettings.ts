@@ -167,10 +167,75 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   'controls.altSelfCast': true,
 };
 
+/**
+ * Settings with a real runtime consumer in the current Dawnreach build.
+ * Everything else remains visible in Options as a disabled roadmap entry so the UI never
+ * suggests that a switch changes the game when no engine subsystem consumes it yet.
+ */
+export const IMPLEMENTED_GAME_SETTINGS: ReadonlySet<string> = new Set([
+  'gameplay.attackMoveTarget',
+  'gameplay.showCastRange',
+  'gameplay.moveCommandIndicator',
+  'gameplay.screenShake',
+  'gameplay.cursorConfine',
+
+  'camera.edgePan',
+  'camera.keyboardPan',
+  'camera.edgeSize',
+  'camera.panSpeed',
+  'camera.smoothing',
+  'camera.minimapDrag',
+  'camera.minimapClick',
+  'camera.shakeIntensity',
+
+  'graphics.renderScale',
+  'graphics.frameLimit',
+  'graphics.shadowQuality',
+  'graphics.shadowDistance',
+
+  'interface.uiScale',
+  'interface.hudOpacity',
+  'interface.minimapScale',
+  'interface.minimapSide',
+  'interface.minimapIconScale',
+  'interface.showHeroNames',
+  'interface.showHealthBars',
+  'interface.showManaBars',
+  'interface.showStatusEffects',
+  'interface.showCooldownNumbers',
+  'interface.showFps',
+
+  'accessibility.highContrast',
+
+  'controls.abilityQ',
+  'controls.abilityW',
+  'controls.abilityE',
+  'controls.abilityR',
+  'controls.attackMove',
+  'controls.stop',
+  'controls.holdPosition',
+  'controls.selectHero',
+  'controls.centerHero',
+  'controls.shop',
+  'controls.teleport',
+  'controls.item1',
+  'controls.item2',
+  'controls.item3',
+  'controls.item4',
+  'controls.item5',
+  'controls.item6',
+  'controls.cameraLeft',
+  'controls.cameraRight',
+  'controls.cameraUp',
+  'controls.cameraDown',
+]);
+
 export type GameSettingsChangedDetail = Readonly<{
   settings: GameSettings;
   changedAtMs: number;
 }>;
+
+let liveSettings: GameSettings = { ...DEFAULT_GAME_SETTINGS };
 
 function sanitizedSettings(candidate: unknown): GameSettings {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
@@ -185,6 +250,10 @@ function sanitizedSettings(candidate: unknown): GameSettings {
   return next;
 }
 
+export function isGameSettingImplemented(key: string) {
+  return IMPLEMENTED_GAME_SETTINGS.has(key);
+}
+
 export function loadGameSettings(): GameSettings {
   if (typeof window === 'undefined') return { ...DEFAULT_GAME_SETTINGS };
   try {
@@ -193,6 +262,10 @@ export function loadGameSettings(): GameSettings {
   } catch {
     return { ...DEFAULT_GAME_SETTINGS };
   }
+}
+
+export function getGameSettingsSnapshot(): GameSettings {
+  return { ...liveSettings };
 }
 
 export function saveGameSettings(settings: GameSettings) {
@@ -218,8 +291,10 @@ function finiteNumber(settings: GameSettings, key: string, fallback: number) {
 }
 
 export function applyGameSettings(settings: GameSettings) {
-  if (typeof document === 'undefined' || typeof window === 'undefined') return;
   const normalized = sanitizedSettings(settings);
+  liveSettings = { ...normalized };
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
   const root = document.documentElement;
   const body = document.body;
 
@@ -227,12 +302,17 @@ export function applyGameSettings(settings: GameSettings) {
   root.style.setProperty('--dawnreach-text-scale', `${finiteNumber(normalized, 'interface.textScale', 100) / 100}`);
   root.style.setProperty('--dawnreach-hud-opacity', `${finiteNumber(normalized, 'interface.hudOpacity', 100) / 100}`);
   root.style.setProperty('--dawnreach-cursor-scale', `${finiteNumber(normalized, 'interface.cursorScale', 100) / 100}`);
+  root.style.setProperty('--dawnreach-minimap-scale', `${finiteNumber(normalized, 'interface.minimapScale', 100) / 100}`);
+  root.style.setProperty('--dawnreach-minimap-icon-scale', `${finiteNumber(normalized, 'interface.minimapIconScale', 110) / 100}`);
 
-  body.dataset.dawnreachReducedMotion = String(Boolean(normalized['accessibility.reducedMotion']));
-  body.dataset.dawnreachReduceFlashes = String(Boolean(normalized['accessibility.reduceFlashes']));
+  body.dataset.dawnreachMinimapSide = String(normalized['interface.minimapSide'] ?? 'left');
+  body.dataset.dawnreachShowHeroNames = String(Boolean(normalized['interface.showHeroNames']));
+  body.dataset.dawnreachShowHealthBars = String(Boolean(normalized['interface.showHealthBars']));
+  body.dataset.dawnreachShowManaBars = String(Boolean(normalized['interface.showManaBars']));
+  body.dataset.dawnreachShowStatusEffects = String(Boolean(normalized['interface.showStatusEffects']));
+  body.dataset.dawnreachShowCooldownNumbers = String(Boolean(normalized['interface.showCooldownNumbers']));
+  body.dataset.dawnreachShowFps = String(Boolean(normalized['interface.showFps']));
   body.dataset.dawnreachHighContrast = String(Boolean(normalized['accessibility.highContrast']));
-  body.dataset.dawnreachColorBlindMode = String(normalized['accessibility.colorBlindMode'] ?? 'none');
-  body.dataset.dawnreachStreamerMode = String(Boolean(normalized['social.streamerMode']));
 
   window.dispatchEvent(new CustomEvent<GameSettingsChangedDetail>(GAME_SETTINGS_CHANGED_EVENT, {
     detail: { settings: { ...normalized }, changedAtMs: performance.now() },
@@ -273,4 +353,27 @@ export function bindingFromKeyboardEvent(event: KeyboardEvent) {
   if (event.shiftKey && !event.code.startsWith('Shift')) modifiers.push('Shift');
   if (event.metaKey && !event.code.startsWith('Meta')) modifiers.push('Meta');
   return [...modifiers, event.code].join('+');
+}
+
+export function keyBindingMatchesEvent(event: KeyboardEvent, binding: string) {
+  const parts = binding.split('+').map(part => part.trim()).filter(Boolean);
+  if (parts.length === 0) return false;
+  const code = parts[parts.length - 1];
+  const wantsCtrl = parts.includes('Ctrl');
+  const wantsAlt = parts.includes('Alt');
+  const wantsShift = parts.includes('Shift');
+  const wantsMeta = parts.includes('Meta');
+  return event.code === code
+    && event.ctrlKey === wantsCtrl
+    && event.altKey === wantsAlt
+    && event.shiftKey === wantsShift
+    && event.metaKey === wantsMeta;
+}
+
+export function settingBindingMatchesEvent(
+  event: KeyboardEvent,
+  settingKey: string,
+  settings: GameSettings = liveSettings,
+) {
+  return keyBindingMatchesEvent(event, String(settings[settingKey] ?? DEFAULT_GAME_SETTINGS[settingKey] ?? ''));
 }
