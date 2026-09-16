@@ -8,6 +8,7 @@ import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountFpsOverlay } from './hud/fpsOverlay';
 import { mountGameCameraControls } from './hud/gameCameraControls';
+import { mountGameMenu } from './hud/gameMenu';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInventoryControls } from './hud/inventoryControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
@@ -24,6 +25,7 @@ import './shop.css';
 import './item-ui.css';
 import './teleport-slot.css';
 import './shop-panel.css';
+import './game-menu.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
@@ -91,6 +93,9 @@ const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 // doubling startup work and transient GPU/CPU pressure in tauri:dev.
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
+// Register the F10 menu before gameplay hotkeys so an open menu owns keyboard input and
+// never leaks commands to the world underneath it.
+const disposeGameMenu = mountGameMenu();
 const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
 mountCombatStatsOverlay();
 const disposeFpsOverlay = mountFpsOverlay();
@@ -112,6 +117,7 @@ if (import.meta.hot) {
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
+    disposeGameMenu();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
     disposeResponsiveHudScale();
