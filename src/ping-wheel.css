@@ -1,0 +1,211 @@
+.dawnreach-ping-wheel {
+  position: fixed;
+  z-index: 2600;
+  width: 270px;
+  height: 270px;
+  transform: translate(-50%, -50%) scale(.94);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 90ms ease, transform 90ms ease;
+  filter: drop-shadow(0 18px 42px rgba(0, 0, 0, .48));
+}
+
+.dawnreach-ping-wheel.is-open {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.dawnreach-ping-wheel__ring {
+  position: absolute;
+  inset: 30px;
+  border: 1px solid rgba(201, 181, 126, .26);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(4, 11, 15, .92) 0 26%, rgba(8, 17, 22, .78) 27% 52%, rgba(8, 18, 24, .54) 53% 68%, rgba(1, 5, 8, .08) 69%),
+    conic-gradient(from -120deg, rgba(100, 216, 255, .045), transparent 15%, rgba(210, 184, 113, .05) 33%, transparent 55%, rgba(100, 216, 255, .04) 78%, transparent);
+  box-shadow:
+    inset 0 0 0 7px rgba(2, 7, 10, .34),
+    inset 0 0 36px rgba(93, 204, 240, .05),
+    0 0 0 1px rgba(0, 0, 0, .55);
+}
+
+.dawnreach-ping-wheel__ring::before,
+.dawnreach-ping-wheel__ring::after {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(108, 208, 238, .11);
+  border-radius: 50%;
+}
+
+.dawnreach-ping-wheel__ring::after {
+  inset: 58px;
+  border-color: rgba(213, 186, 116, .2);
+}
+
+.dawnreach-ping-wheel__center,
+.dawnreach-ping-wheel__item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.dawnreach-ping-wheel__center {
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(97, 201, 235, .2);
+  border-radius: 50%;
+  background: rgba(5, 14, 18, .93);
+  box-shadow: inset 0 0 20px rgba(68, 181, 220, .07);
+  color: #9fadb1;
+}
+
+.dawnreach-ping-wheel__center i,
+.dawnreach-ping-wheel__item i {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font: 800 18px/1 Inter, sans-serif;
+  font-style: normal;
+}
+
+.dawnreach-ping-wheel__center i {
+  color: #7adfff;
+  background: rgba(54, 171, 211, .13);
+}
+
+.dawnreach-ping-wheel__center span,
+.dawnreach-ping-wheel__item span {
+  margin-top: 3px;
+  max-width: 78px;
+  font: 800 8px/1.05 Inter, sans-serif;
+  letter-spacing: .07em;
+}
+
+.dawnreach-ping-wheel__item {
+  --radius: 101px;
+  width: 78px;
+  height: 58px;
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--angle))
+    translateX(var(--radius))
+    rotate(calc(var(--angle) * -1));
+  color: #9aa9ad;
+  transition: filter 90ms ease;
+}
+
+.dawnreach-ping-wheel__item i {
+  border: 1px solid color-mix(in srgb, var(--ping-color) 48%, transparent);
+  color: var(--ping-color);
+  background: rgba(4, 12, 16, .94);
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--ping-color) 8%, transparent);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 90ms ease;
+}
+
+.dawnreach-ping-wheel__item.is-selected i,
+.dawnreach-ping-wheel__center.is-selected i {
+  transform: scale(1.13);
+  color: #f3fbff;
+  background: color-mix(in srgb, var(--ping-color, #7adfff) 34%, rgba(5, 14, 18, .95));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--ping-color, #7adfff) 35%, transparent);
+}
+
+.dawnreach-ping-wheel__item.is-selected span,
+.dawnreach-ping-wheel__center.is-selected span {
+  color: #f4f0e6;
+}
+
+.dawnreach-ping-marker {
+  --ping-color: #7adfff;
+  position: fixed;
+  z-index: 2050;
+  width: 74px;
+  height: 74px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  color: var(--ping-color);
+  animation: dawnreach-ping-arrive 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.dawnreach-ping-marker::before,
+.dawnreach-ping-marker::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--ping-color) 82%, white 8%);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--ping-color) 36%, transparent);
+  animation: dawnreach-ping-pulse 900ms ease-out infinite;
+}
+
+.dawnreach-ping-marker::before { inset: 9px; }
+.dawnreach-ping-marker::after { inset: 19px; animation-delay: 180ms; }
+
+.dawnreach-ping-marker > i {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--ping-color) 75%, white 8%);
+  border-radius: 50%;
+  background: rgba(4, 10, 13, .9);
+  color: var(--ping-color);
+  font: 900 17px/1 Inter, sans-serif;
+  font-style: normal;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--ping-color) 30%, transparent);
+}
+
+.dawnreach-ping-marker > span {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  white-space: nowrap;
+  border-radius: 3px;
+  color: #f1eee5;
+  background: rgba(3, 8, 11, .78);
+  font: 800 8px/1 Inter, sans-serif;
+  letter-spacing: .08em;
+}
+
+.dawnreach-ping-marker.is-minimap {
+  position: absolute;
+  z-index: 90;
+  width: 44px;
+  height: 44px;
+}
+
+.dawnreach-ping-marker.is-minimap > span { display: none; }
+.dawnreach-ping-marker.is-minimap > i { width: 20px; height: 20px; font-size: 12px; }
+.dawnreach-ping-marker.is-minimap::before { inset: 4px; border-width: 1px; }
+.dawnreach-ping-marker.is-minimap::after { inset: 10px; border-width: 1px; }
+
+.dawnreach-ping-marker.is-reduced::before,
+.dawnreach-ping-marker.is-reduced::after { animation-iteration-count: 1; }
+
+.dawnreach-ping-marker.is-expiring {
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+@keyframes dawnreach-ping-arrive {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.65); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes dawnreach-ping-pulse {
+  0% { opacity: .9; transform: scale(.65); }
+  70% { opacity: .3; }
+  100% { opacity: 0; transform: scale(1.35); }
+}
