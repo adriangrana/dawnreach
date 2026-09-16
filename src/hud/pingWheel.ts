@@ -6,7 +6,7 @@ import { isGameMenuOpen } from './gameMenu';
 
 export const DAWNREACH_PING_EVENT = 'dawnreach:ping';
 
-type PingType = 'attention' | 'danger' | 'assist' | 'on-my-way' | 'retreat' | 'missing' | 'attack';
+export type PingType = 'attention' | 'danger' | 'assist' | 'on-my-way' | 'retreat' | 'missing' | 'attack';
 type PingSurface = 'world' | 'minimap';
 
 type PingDefinition = Readonly<{
@@ -17,7 +17,10 @@ type PingDefinition = Readonly<{
   angle: number;
 }>;
 
+type ViewportPoint = Readonly<{ x: number; y: number }>;
+
 export type DawnreachPingDetail = Readonly<{
+  pingId: string;
   type: PingType;
   label: string;
   surface: PingSurface;
@@ -25,15 +28,19 @@ export type DawnreachPingDetail = Readonly<{
   clientY: number;
   normalizedX: number;
   normalizedY: number;
+  mapX: number;
+  mapY: number;
   playerId: string;
-  team: 'dawn';
+  team: 'dawn' | 'dusk';
+  audience: 'all';
   createdAtMs: number;
 }>;
 
 const WHEEL_ID = 'dawnreach-ping-wheel';
 const DEAD_ZONE = 38;
-const MARKER_LIFETIME_MS = 2300;
+const MARKER_LIFETIME_MS = 3000;
 const DIRECT_PING_COOLDOWN_MS = 280;
+const PING_CHANNEL_NAME = 'dawnreach-match-pings-v1';
 
 const PINGS: readonly PingDefinition[] = [
   { type: 'danger', label: 'PELIGRO', glyph: '!', color: '#ff625f', angle: -90 },
@@ -66,6 +73,10 @@ function angularDistance(a: number, b: number) {
   return Math.abs(normalizeAngle(a - b));
 }
 
+function clamp01(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+
 function surfaceAt(clientX: number, clientY: number) {
   const minimap = document.querySelector<HTMLElement>('.minimap-field');
   const world = document.querySelector<HTMLElement>('.game-canvas');
@@ -95,38 +106,140 @@ function surfaceAt(clientX: number, clientY: number) {
   return null;
 }
 
-function renderPingMarker(detail: DawnreachPingDetail) {
+function readViewportPolygon(): readonly ViewportPoint[] | null {
+  const polygon = document.querySelector<SVGPolygonElement>('.minimap-camera-viewport polygon');
+  const raw = polygon?.getAttribute('points')?.trim();
+  if (!raw) return null;
+
+  const points = raw.split(/\s+/).map(token => {
+    const [x, y] = token.split(',').map(Number);
+    return { x, y };
+  }).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  return points.length === 4 ? points : null;
+}
+
+function screenPointToMap(normalizedX: number, normalizedY: number) {
+  const viewport = readViewportPolygon();
+  if (!viewport) return null;
+  const [topLeft, topRight, bottomRight, bottomLeft] = viewport;
+  const u = clamp01(normalizedX);
+  const v = clamp01(normalizedY);
+
+  // The minimap viewport polygon is generated from the four main-camera corners. Bilinear
+  // interpolation therefore converts a point on the screen into the same fixed minimap/map
+  // coordinate system, independent of where the camera moves afterwards.
+  const topX = topLeft.x + (topRight.x - topLeft.x) * u;
+  const topY = topLeft.y + (topRight.y - topLeft.y) * u;
+  const bottomX = bottomLeft.x + (bottomRight.x - bottomLeft.x) * u;
+  const bottomY = bottomLeft.y + (bottomRight.y - bottomLeft.y) * u;
+  return {
+    x: clamp01((topX + (bottomX - topX) * v) / 100),
+    y: clamp01((topY + (bottomY - topY) * v) / 100),
+  };
+}
+
+function mapPointToScreen(mapX: number, mapY: number) {
+  const viewport = readViewportPolygon();
+  const world = document.querySelector<HTMLElement>('.game-canvas');
+  const rect = world?.getBoundingClientRect();
+  if (!viewport || !world || !rect) return null;
+
+  const [topLeft, topRight, , bottomLeft] = viewport;
+  const ax = topRight.x - topLeft.x;
+  const ay = topRight.y - topLeft.y;
+  const bx = bottomLeft.x - topLeft.x;
+  const by = bottomLeft.y - topLeft.y;
+  const cx = mapX * 100 - topLeft.x;
+  const cy = mapY * 100 - topLeft.y;
+  const determinant = ax * by - ay * bx;
+  if (Math.abs(determinant) < 1e-5) return null;
+
+  const u = (cx * by - cy * bx) / determinant;
+  const v = (ax * cy - ay * cx) / determinant;
+  return {
+    visible: u >= -0.03 && u <= 1.03 && v >= -0.03 && v <= 1.03,
+    clientX: rect.left + u * rect.width,
+    clientY: rect.top + v * rect.height,
+  };
+}
+
+function buildPingMarker(detail: DawnreachPingDetail, minimap: boolean) {
   const definition = pingDefinition(detail.type);
   const reduced = !Boolean(getGameSettingsSnapshot()['accessibility.visualPings']);
   const marker = document.createElement('div');
-  marker.className = `dawnreach-ping-marker dawnreach-ping-marker--${detail.type}${reduced ? ' is-reduced' : ''}`;
+  marker.className = `dawnreach-ping-marker dawnreach-ping-marker--${detail.type}${minimap ? ' is-minimap' : ' is-world-map'}${reduced ? ' is-reduced' : ''}`;
+  marker.dataset.pingId = detail.pingId;
   marker.style.setProperty('--ping-color', definition.color);
   marker.innerHTML = `<i>${definition.glyph}</i><span>${definition.label}</span>`;
-
-  if (detail.surface === 'minimap') {
-    const minimap = document.querySelector<HTMLElement>('.minimap-field');
-    if (!minimap) return;
-    marker.classList.add('is-minimap');
-    marker.style.left = `${detail.normalizedX * 100}%`;
-    marker.style.top = `${detail.normalizedY * 100}%`;
-    minimap.appendChild(marker);
-  } else {
-    marker.style.left = `${detail.clientX}px`;
-    marker.style.top = `${detail.clientY}px`;
-    document.body.appendChild(marker);
-  }
-
-  window.setTimeout(() => marker.classList.add('is-expiring'), MARKER_LIFETIME_MS - 420);
-  window.setTimeout(() => marker.remove(), MARKER_LIFETIME_MS);
+  return marker;
 }
 
-function publishPing(type: PingType, clientX: number, clientY: number) {
+function renderAnchoredPing(detail: DawnreachPingDetail) {
+  const minimap = document.querySelector<HTMLElement>('.minimap-field');
+  if (!minimap) return () => undefined;
+
+  const minimapMarker = buildPingMarker(detail, true);
+  minimapMarker.style.left = `${clamp01(detail.mapX) * 100}%`;
+  minimapMarker.style.top = `${clamp01(detail.mapY) * 100}%`;
+  minimap.appendChild(minimapMarker);
+
+  const worldMarker = buildPingMarker(detail, false);
+  document.body.appendChild(worldMarker);
+
+  let animationFrame = 0;
+  let disposed = false;
+  const updateWorldMarker = () => {
+    if (disposed) return;
+    const projected = mapPointToScreen(detail.mapX, detail.mapY);
+    if (!projected) {
+      worldMarker.style.visibility = 'hidden';
+    } else {
+      worldMarker.style.visibility = projected.visible ? 'visible' : 'hidden';
+      worldMarker.style.left = `${projected.clientX}px`;
+      worldMarker.style.top = `${projected.clientY}px`;
+    }
+    animationFrame = requestAnimationFrame(updateWorldMarker);
+  };
+  updateWorldMarker();
+
+  const expireTimer = window.setTimeout(() => {
+    minimapMarker.classList.add('is-expiring');
+    worldMarker.classList.add('is-expiring');
+  }, MARKER_LIFETIME_MS - 420);
+  const removeTimer = window.setTimeout(() => dispose(), MARKER_LIFETIME_MS);
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(animationFrame);
+    window.clearTimeout(expireTimer);
+    window.clearTimeout(removeTimer);
+    minimapMarker.remove();
+    worldMarker.remove();
+  };
+
+  return dispose;
+}
+
+function createPingId(playerId: string, createdAtMs: number) {
+  return `${playerId}:${Math.round(createdAtMs * 1000)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function publishPing(type: PingType, clientX: number, clientY: number, channel: BroadcastChannel | null) {
   const surface = surfaceAt(clientX, clientY);
   if (!surface) return false;
   const definition = pingDefinition(type);
-  const normalizedX = Math.min(1, Math.max(0, (clientX - surface.rect.left) / Math.max(1, surface.rect.width)));
-  const normalizedY = Math.min(1, Math.max(0, (clientY - surface.rect.top) / Math.max(1, surface.rect.height)));
+  const normalizedX = clamp01((clientX - surface.rect.left) / Math.max(1, surface.rect.width));
+  const normalizedY = clamp01((clientY - surface.rect.top) / Math.max(1, surface.rect.height));
+  const mapPoint = surface.surface === 'minimap'
+    ? { x: normalizedX, y: normalizedY }
+    : screenPointToMap(normalizedX, normalizedY);
+  if (!mapPoint) return false;
+
+  const createdAtMs = performance.now();
   const detail: DawnreachPingDetail = {
+    pingId: createPingId('local-player', createdAtMs),
     type,
     label: definition.label,
     surface: surface.surface,
@@ -134,13 +247,31 @@ function publishPing(type: PingType, clientX: number, clientY: number) {
     clientY,
     normalizedX,
     normalizedY,
+    mapX: mapPoint.x,
+    mapY: mapPoint.y,
     playerId: 'local-player',
     team: 'dawn',
-    createdAtMs: performance.now(),
+    audience: 'all',
+    createdAtMs,
   };
-  renderPingMarker(detail);
+
   window.dispatchEvent(new CustomEvent<DawnreachPingDetail>(DAWNREACH_PING_EVENT, { detail }));
+  // This mirrors pings to other Dawnreach views on the same origin. The event payload is also
+  // deliberately transport-neutral so the future multiplayer server can replicate the exact
+  // same detail to every remote client without changing the renderer.
+  channel?.postMessage(detail);
   return true;
+}
+
+function isPingDetail(value: unknown): value is DawnreachPingDetail {
+  if (!value || typeof value !== 'object') return false;
+  const detail = value as Partial<DawnreachPingDetail>;
+  return typeof detail.pingId === 'string'
+    && typeof detail.type === 'string'
+    && typeof detail.mapX === 'number'
+    && typeof detail.mapY === 'number'
+    && Number.isFinite(detail.mapX)
+    && Number.isFinite(detail.mapY);
 }
 
 export function mountPingWheel() {
@@ -152,6 +283,9 @@ export function mountPingWheel() {
   let selected: PingType = 'attention';
   let lastDirectPingAt = -Infinity;
   let root: HTMLDivElement | null = null;
+  const activePingDisposers = new Map<string, () => void>();
+  const renderedPingIds = new Set<string>();
+  const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(PING_CHANNEL_NAME) : null;
 
   const blocked = () => isGameMenuOpen() || document.body.dataset.dawnreachMatchPaused === 'true';
 
@@ -219,7 +353,7 @@ export function mountPingWheel() {
 
   const closeWheel = (commit: boolean) => {
     if (!open) return;
-    if (commit) publishPing(selected, pointerX, pointerY);
+    if (commit) publishPing(selected, pointerX, pointerY, channel);
     open = false;
     document.body.dataset.dawnreachPingWheelOpen = 'false';
     root?.classList.remove('is-open');
@@ -247,7 +381,7 @@ export function mountPingWheel() {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat || performance.now() - lastDirectPingAt < DIRECT_PING_COOLDOWN_MS) return;
-      if (publishPing('danger', pointerX, pointerY)) lastDirectPingAt = performance.now();
+      if (publishPing('danger', pointerX, pointerY, channel)) lastDirectPingAt = performance.now();
       return;
     }
 
@@ -273,6 +407,23 @@ export function mountPingWheel() {
     event.stopImmediatePropagation();
   };
 
+  const onPing = (event: Event) => {
+    const detail = (event as CustomEvent<DawnreachPingDetail>).detail;
+    if (!isPingDetail(detail) || renderedPingIds.has(detail.pingId)) return;
+    renderedPingIds.add(detail.pingId);
+    const dispose = renderAnchoredPing(detail);
+    activePingDisposers.set(detail.pingId, dispose);
+    window.setTimeout(() => {
+      activePingDisposers.delete(detail.pingId);
+      renderedPingIds.delete(detail.pingId);
+    }, MARKER_LIFETIME_MS + 250);
+  };
+
+  const onChannelMessage = (event: MessageEvent<unknown>) => {
+    if (!isPingDetail(event.data)) return;
+    window.dispatchEvent(new CustomEvent<DawnreachPingDetail>(DAWNREACH_PING_EVENT, { detail: event.data }));
+  };
+
   const onBlur = () => closeWheel(false);
 
   document.body.dataset.dawnreachPingWheelOpen = 'false';
@@ -280,15 +431,22 @@ export function mountPingWheel() {
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
   window.addEventListener('contextmenu', onContextMenu, true);
+  window.addEventListener(DAWNREACH_PING_EVENT, onPing as EventListener);
   window.addEventListener('blur', onBlur);
+  if (channel) channel.onmessage = onChannelMessage;
 
   return () => {
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('contextmenu', onContextMenu, true);
+    window.removeEventListener(DAWNREACH_PING_EVENT, onPing as EventListener);
     window.removeEventListener('blur', onBlur);
     document.body.dataset.dawnreachPingWheelOpen = 'false';
+    activePingDisposers.forEach(dispose => dispose());
+    activePingDisposers.clear();
+    renderedPingIds.clear();
+    channel?.close();
     root?.remove();
     root = null;
   };
