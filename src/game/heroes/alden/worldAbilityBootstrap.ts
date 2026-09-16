@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry } from '../../entities/gameEntities';
+import { isMatchPaused } from '../../match/matchPauseRuntime';
 import { getGameSettingsSnapshot, type GameSettings } from '../../settings/gameSettings';
 import {
   disposeAldenAbilityEdgePolishes,
@@ -229,21 +230,26 @@ export function mountAldenWorldAbilityBootstrap() {
             const nowMs = performance.now();
             presentAtMs = nowMs;
             mainBeautyFrame = true;
-            runtime.update(nowMs);
 
-            // abilityPresentation owns VFX only. Its legacy pose layer used additive Euler
-            // rotations every rendered frame, so Q permanently pitched the pelvis forward and
-            // each later cast compounded the error. Preserve the authoritative pose produced by
-            // animateAlden/worldAbilityRuntime while presentation updates its VFX.
-            const poseGuard = getPresentationPoseGuard(hero.root);
-            capturePresentationPose(poseGuard);
-            cameraBeforePresentation.copy(camera.position);
-            presentation.update(nowMs);
-            applyConfiguredCameraShake(camera, settings);
-            restorePresentationPose(poseGuard);
+            // Match pause freezes all ability mechanics and VFX progression. Rendering continues
+            // so the pause/menu overlays stay responsive, but pending impacts cannot advance.
+            if (!isMatchPaused()) {
+              runtime.update(nowMs);
 
-            edgePolish.update();
-            linePolish.update();
+              // abilityPresentation owns VFX only. Its legacy pose layer used additive Euler
+              // rotations every rendered frame, so Q permanently pitched the pelvis forward and
+              // each later cast compounded the error. Preserve the authoritative pose produced by
+              // animateAlden/worldAbilityRuntime while presentation updates its VFX.
+              const poseGuard = getPresentationPoseGuard(hero.root);
+              capturePresentationPose(poseGuard);
+              cameraBeforePresentation.copy(camera.position);
+              presentation.update(nowMs);
+              applyConfiguredCameraShake(camera, settings);
+              restorePresentationPose(poseGuard);
+
+              edgePolish.update();
+              linePolish.update();
+            }
             applyShadowSettings(scene, renderer, settings);
 
             // Asset warmup may intentionally issue several immediate main-target renders before
