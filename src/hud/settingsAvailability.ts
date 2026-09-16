@@ -10,6 +10,8 @@ const AVAILABILITY_CLASS = 'game-setting-availability';
 // settings registry. Keep these explicit and narrow so the Options UI only enables controls
 // that have a real consumer in the current build.
 const RUNTIME_IMPLEMENTED_OVERRIDES = new Set<string>([
+  'audio.master',
+  'audio.effects',
   'audio.pings',
 ]);
 
