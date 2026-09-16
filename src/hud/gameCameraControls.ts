@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { GAME_MENU_STATE_EVENT, isGameMenuOpen } from './gameMenu';
 
 const EDGE_SCROLL_ZONE_PX = 14;
 const CAMERA_PAN_WORLD_UNITS_PER_SECOND = 18;
@@ -144,7 +145,7 @@ export function mountGameCameraControls() {
 
   const dispatchMinimapCameraTarget = (normalizedX: number, normalizedY: number) => {
     const { minimap, minimapRect } = layout;
-    if (!minimap || !minimapRect || cameraTargetingModeActive(gameCanvas)) return false;
+    if (!minimap || !minimapRect || cameraTargetingModeActive(gameCanvas) || isGameMenuOpen()) return false;
     if (minimapRect.width <= 0 || minimapRect.height <= 0) return false;
 
     minimap.dispatchEvent(new PointerEvent('pointerdown', {
@@ -166,12 +167,20 @@ export function mountGameCameraControls() {
     return hero ? dispatchMinimapCameraTarget(hero.x, hero.y) : false;
   };
 
-  const onFocus = () => { void setCursorGrab(true); };
+  const onFocus = () => { void setCursorGrab(!isGameMenuOpen()); };
   const onBlur = () => {
     pressedArrows.clear();
     target = null;
     recenterHeroOnNextFrame = false;
     void setCursorGrab(false);
+  };
+
+  const onGameMenuState = (event: Event) => {
+    const menuOpen = Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open);
+    pressedArrows.clear();
+    target = null;
+    recenterHeroOnNextFrame = false;
+    void setCursorGrab(!menuOpen);
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -181,7 +190,7 @@ export function mountGameCameraControls() {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (isEditableTarget(event.target)) return;
+    if (isGameMenuOpen() || isEditableTarget(event.target)) return;
 
     if (event.code === 'Space' && !event.repeat) {
       recenterHeroOnNextFrame = true;
@@ -196,10 +205,12 @@ export function mountGameCameraControls() {
   const onKeyUp = (event: KeyboardEvent) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.code)) return;
     pressedArrows.delete(event.code);
-    event.preventDefault();
+    if (!isGameMenuOpen()) event.preventDefault();
   };
 
   const getDirection = () => {
+    if (isGameMenuOpen()) return { x: 0, y: 0 };
+
     let x = 0;
     let y = 0;
 
@@ -230,12 +241,12 @@ export function mountGameCameraControls() {
     previousTime = time;
     refreshLayout(time);
 
-    if (initialHeroCenterPending && gameCanvas?.dataset.dawnreachReady === 'true' && dispatchHeroCameraTarget()) {
+    if (!isGameMenuOpen() && initialHeroCenterPending && gameCanvas?.dataset.dawnreachReady === 'true' && dispatchHeroCameraTarget()) {
       initialHeroCenterPending = false;
       target = null;
     }
 
-    if (recenterHeroOnNextFrame && dispatchHeroCameraTarget()) {
+    if (!isGameMenuOpen() && recenterHeroOnNextFrame && dispatchHeroCameraTarget()) {
       recenterHeroOnNextFrame = false;
       target = null;
     }
@@ -243,7 +254,7 @@ export function mountGameCameraControls() {
     const direction = getDirection();
     const moving = Math.abs(direction.x) > 0.001 || Math.abs(direction.y) > 0.001;
 
-    if (!moving || cameraTargetingModeActive(gameCanvas)) {
+    if (!moving || cameraTargetingModeActive(gameCanvas) || isGameMenuOpen()) {
       target = null;
     } else {
       const footprint = layout.footprint;
@@ -273,11 +284,12 @@ export function mountGameCameraControls() {
 
   window.addEventListener('focus', onFocus);
   window.addEventListener('blur', onBlur);
+  window.addEventListener(GAME_MENU_STATE_EVENT, onGameMenuState as EventListener);
   window.addEventListener('pointermove', onPointerMove, { capture: true, passive: true });
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
 
-  void setCursorGrab(true);
+  void setCursorGrab(!isGameMenuOpen());
   refreshLayout(performance.now(), true);
   frameId = requestAnimationFrame(frame);
 
@@ -289,6 +301,7 @@ export function mountGameCameraControls() {
     recenterHeroOnNextFrame = false;
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('blur', onBlur);
+    window.removeEventListener(GAME_MENU_STATE_EVENT, onGameMenuState as EventListener);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
