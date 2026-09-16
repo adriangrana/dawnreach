@@ -4,6 +4,7 @@ import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilit
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './game/performance/shadowInvalidationBridge';
+import { mountAbilityRangeSettingsGuard } from './hud/abilityRangeSettingsGuard';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
 import { mountCombatStatsOverlay } from './hud/combatStatsOverlay';
 import { mountFpsOverlay } from './hud/fpsOverlay';
@@ -100,6 +101,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 // never leaks commands to the world underneath it.
 const disposeGameMenu = mountGameMenu();
 const disposeSettingsAvailability = mountSettingsAvailability();
+const disposeAbilityRangeSettingsGuard = mountAbilityRangeSettingsGuard();
 const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
 mountCombatStatsOverlay();
 const disposeFpsOverlay = mountFpsOverlay();
@@ -123,6 +125,7 @@ if (import.meta.hot) {
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
     disposeSettingsAvailability();
+    disposeAbilityRangeSettingsGuard();
     disposeGameMenu();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
