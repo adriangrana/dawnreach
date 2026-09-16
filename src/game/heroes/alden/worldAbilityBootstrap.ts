@@ -226,14 +226,22 @@ export function mountAldenWorldAbilityBootstrap() {
             edgePolish.update();
             linePolish.update();
             applyShadowSettings(scene, renderer, settings);
-            shouldPresent = shouldPresentFrame(renderer, nowMs, settings);
+
+            // Asset warmup may intentionally issue several immediate main-target renders before
+            // the game marks the canvas ready. Never throttle those; the user-selected cap only
+            // applies to live gameplay frames after startup is complete.
+            if (renderer.domElement.dataset.dawnreachReady === 'true') {
+              shouldPresent = shouldPresentFrame(renderer, nowMs, settings);
+            }
           }
         }
       }
 
       if (!shouldPresent) return;
       const result = assignedRender.call(renderer, scene, camera);
-      if (mainBeautyFrame) publishPresentedFrame(renderer, presentAtMs);
+      if (mainBeautyFrame && renderer.domElement.dataset.dawnreachReady === 'true') {
+        publishPresentedFrame(renderer, presentAtMs);
+      }
       return result;
     };
 
