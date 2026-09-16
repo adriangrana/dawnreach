@@ -1,6 +1,12 @@
 import * as THREE from 'three';
+import {
+  GAME_SETTINGS_CHANGED_EVENT,
+  getGameSettingsSnapshot,
+  type GameSettingsChangedDetail,
+} from '../settings/gameSettings';
 
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
+const MIN_DEVICE_PIXEL_RATIO = 0.5;
 const MINIMAP_RENDER_SCALE = 0.8;
 const MOVING_SHADOW_REFRESH_INTERVAL_MS = 1000 / 15;
 const IDLE_SHADOW_REFRESH_INTERVAL_MS = 1000 / 6;
@@ -132,6 +138,19 @@ function publishRendererDiagnostics(renderer: THREE.WebGLRenderer, renderMs: num
   canvas.dataset.textures = String(info.memory.textures);
 }
 
+function renderScaleMultiplier() {
+  const raw = Number(getGameSettingsSnapshot()['graphics.renderScale']);
+  return Number.isFinite(raw) ? THREE.MathUtils.clamp(raw / 100, 0.5, 1.5) : 1;
+}
+
+function scaledPixelRatio(base: number) {
+  return THREE.MathUtils.clamp(
+    base * renderScaleMultiplier(),
+    MIN_DEVICE_PIXEL_RATIO,
+    MAX_DEVICE_PIXEL_RATIO,
+  );
+}
+
 /**
  * Installs narrow Three.js runtime tuning before the Dawnreach scene is constructed.
  *
@@ -158,9 +177,11 @@ export function installRuntimePerformanceTuning() {
   const originalSetSize = rendererPrototype.setSize;
   const originalRender = rendererPrototype.render;
   const originalAdd = objectPrototype.add;
+  const trackedRenderers = new Set<THREE.WebGLRenderer>();
 
   rendererPrototype.setPixelRatio = function setPixelRatio(value: number) {
-    return originalSetPixelRatio.call(this, Math.min(value, MAX_DEVICE_PIXEL_RATIO));
+    trackedRenderers.add(this);
+    return originalSetPixelRatio.call(this, scaledPixelRatio(value));
   };
 
   rendererPrototype.setSize = function setSize(width: number, height: number, updateStyle?: boolean) {
@@ -240,7 +261,19 @@ export function installRuntimePerformanceTuning() {
     return result;
   };
 
+  const onSettingsChanged = (_event: Event) => {
+    for (const renderer of trackedRenderers) {
+      const baseRatio = renderer.domElement.classList.contains('minimap-canvas')
+        ? 1
+        : Math.min(window.devicePixelRatio || 1, 2);
+      originalSetPixelRatio.call(renderer, scaledPixelRatio(baseRatio));
+    }
+  };
+  window.addEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
+
   return () => {
+    window.removeEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
+    trackedRenderers.clear();
     rendererPrototype.setPixelRatio = originalSetPixelRatio;
     rendererPrototype.setSize = originalSetSize;
     rendererPrototype.render = originalRender;
