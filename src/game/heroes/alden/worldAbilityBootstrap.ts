@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry } from '../../entities/gameEntities';
 import {
+  disposeAldenAbilityPresentations,
+  ensureAldenAbilityPresentation,
+} from './abilityPresentation';
+import {
   ensureAldenWorldAbilityRuntime,
   mountAldenWorldAbilityRuntime,
 } from './worldAbilityRuntime';
@@ -39,7 +43,18 @@ export function mountAldenWorldAbilityBootstrap() {
             renderer.domElement,
             camera,
           );
-          if (renderer.getRenderTarget() === null) runtime.update(performance.now());
+          const presentation = ensureAldenAbilityPresentation(
+            scene,
+            registry,
+            hero,
+            renderer.domElement,
+            camera,
+          );
+          if (renderer.getRenderTarget() === null) {
+            const nowMs = performance.now();
+            runtime.update(nowMs);
+            presentation.update(nowMs);
+          }
         }
       }
       return assignedRender.call(renderer, scene, camera);
@@ -68,6 +83,7 @@ export function mountAldenWorldAbilityBootstrap() {
 
   return () => {
     disposed = true;
+    disposeAldenAbilityPresentations();
     disposeRuntimes();
     if (previousDescriptor) Object.defineProperty(rendererPrototype, 'render', previousDescriptor);
     else delete (rendererPrototype as Partial<THREE.WebGLRenderer>).render;
