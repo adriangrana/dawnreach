@@ -55,12 +55,28 @@ export function isMatchPaused() {
  * Converts the browser's monotonic clock into Dawnreach match time. Time spent in a global
  * pause is removed, so cooldowns, regeneration, respawn timers and the match clock do not
  * advance while every player is paused.
+ *
+ * The conversion is intentionally idempotent for current/live timestamps: HUD bridges may
+ * normalize an event before it reaches the reducer, and normalizing that value again must not
+ * subtract the accumulated pause a second time.
  */
-export function toMatchGameTimeMs(realTimestampMs = realNowMs()) {
-  const livePause = state.paused && state.pauseStartedAtMs !== null
-    ? Math.max(0, realTimestampMs - state.pauseStartedAtMs)
+export function toMatchGameTimeMs(timestampMs = realNowMs()) {
+  const currentRealMs = realNowMs();
+  const currentLivePauseMs = state.paused && state.pauseStartedAtMs !== null
+    ? Math.max(0, currentRealMs - state.pauseStartedAtMs)
     : 0;
-  return Math.max(0, realTimestampMs - state.accumulatedPauseMs - livePause);
+  const currentOffsetMs = state.accumulatedPauseMs + currentLivePauseMs;
+  const currentMatchMs = Math.max(0, currentRealMs - currentOffsetMs);
+
+  // A timestamp at or behind the current match clock is already expressed in match time.
+  // Live browser timestamps after at least one pause remain ahead by approximately the pause
+  // offset and therefore take the conversion path below.
+  if (timestampMs <= currentMatchMs + 1) return Math.max(0, timestampMs);
+
+  const livePauseAtTimestamp = state.paused && state.pauseStartedAtMs !== null
+    ? Math.max(0, timestampMs - state.pauseStartedAtMs)
+    : 0;
+  return Math.max(0, timestampMs - state.accumulatedPauseMs - livePauseAtTimestamp);
 }
 
 export function requestMatchPause(paused: boolean, requestedByPlayerId = LOCAL_PLAYER_ID) {
