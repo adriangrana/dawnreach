@@ -70,6 +70,14 @@ export function mountHeroFunctionKeyControls() {
       return;
     }
 
+    // Once F1 is remapped it must stop acting as a hidden second binding. Synthetic F1 events
+    // emitted above are explicitly exempt while dispatchingMappedF1 is true.
+    if (event.code === 'F1') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
     if (
       event.code !== 'Space'
       || !suppressSyntheticCameraFocus
