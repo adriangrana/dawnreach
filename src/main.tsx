@@ -14,6 +14,7 @@ import { mountInventoryControls } from './hud/inventoryControls';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import { mountSelectionHudNameLayout } from './hud/selectionHudNameLayout';
+import { mountSettingsAvailability } from './hud/settingsAvailability';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
 import './styles.css';
 import './hud-overrides.css';
@@ -26,6 +27,7 @@ import './item-ui.css';
 import './teleport-slot.css';
 import './shop-panel.css';
 import './game-menu.css';
+import './settings-runtime.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
@@ -78,7 +80,7 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
-// Install renderer/lighting scheduling before React mounts the Three.js game world.
+// Install renderer/lighting scheduling before the Dawnreach scene is constructed.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
 // Destructive world-state changes can happen between scheduled shadow passes. Track the main
 // renderer and force a short refresh burst after deaths so removed structures cannot leave a
@@ -96,6 +98,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 // Register the F10 menu before gameplay hotkeys so an open menu owns keyboard input and
 // never leaks commands to the world underneath it.
 const disposeGameMenu = mountGameMenu();
+const disposeSettingsAvailability = mountSettingsAvailability();
 const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
 mountCombatStatsOverlay();
 const disposeFpsOverlay = mountFpsOverlay();
@@ -117,6 +120,7 @@ if (import.meta.hot) {
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
+    disposeSettingsAvailability();
     disposeGameMenu();
     disposeBrowserInteractionGuards();
     disposeFpsOverlay();
