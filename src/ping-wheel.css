@@ -1,13 +1,13 @@
 .dawnreach-ping-wheel {
   position: fixed;
   z-index: 2600;
-  width: 270px;
-  height: 270px;
+  width: 286px;
+  height: 286px;
   transform: translate(-50%, -50%) scale(.94);
   pointer-events: none;
   opacity: 0;
   transition: opacity 90ms ease, transform 90ms ease;
-  filter: drop-shadow(0 18px 42px rgba(0, 0, 0, .48));
+  filter: drop-shadow(0 20px 44px rgba(0, 0, 0, .5));
 }
 
 .dawnreach-ping-wheel.is-open {
@@ -17,30 +17,37 @@
 
 .dawnreach-ping-wheel__ring {
   position: absolute;
-  inset: 30px;
-  border: 1px solid rgba(201, 181, 126, .26);
+  inset: 28px;
+  border: 1px solid rgba(208, 185, 121, .3);
   border-radius: 50%;
   background:
-    radial-gradient(circle at center, rgba(4, 11, 15, .92) 0 26%, rgba(8, 17, 22, .78) 27% 52%, rgba(8, 18, 24, .54) 53% 68%, rgba(1, 5, 8, .08) 69%),
-    conic-gradient(from -120deg, rgba(100, 216, 255, .045), transparent 15%, rgba(210, 184, 113, .05) 33%, transparent 55%, rgba(100, 216, 255, .04) 78%, transparent);
+    radial-gradient(circle at center, rgba(4, 11, 15, .96) 0 27%, rgba(7, 17, 22, .86) 28% 53%, rgba(7, 17, 22, .58) 54% 70%, rgba(1, 5, 8, .08) 71%),
+    repeating-conic-gradient(from -120deg, rgba(108, 211, 243, .075) 0 1deg, transparent 1deg 60deg),
+    conic-gradient(from -120deg, rgba(100, 216, 255, .055), transparent 15%, rgba(210, 184, 113, .06) 33%, transparent 55%, rgba(100, 216, 255, .05) 78%, transparent);
   box-shadow:
-    inset 0 0 0 7px rgba(2, 7, 10, .34),
-    inset 0 0 36px rgba(93, 204, 240, .05),
-    0 0 0 1px rgba(0, 0, 0, .55);
+    inset 0 0 0 7px rgba(2, 7, 10, .32),
+    inset 0 0 42px rgba(93, 204, 240, .06),
+    0 0 0 1px rgba(0, 0, 0, .58),
+    0 0 24px rgba(0, 0, 0, .18);
 }
 
 .dawnreach-ping-wheel__ring::before,
 .dawnreach-ping-wheel__ring::after {
   content: "";
   position: absolute;
-  inset: 14px;
-  border: 1px solid rgba(108, 208, 238, .11);
   border-radius: 50%;
 }
 
+.dawnreach-ping-wheel__ring::before {
+  inset: 12px;
+  border: 1px solid rgba(108, 208, 238, .13);
+  box-shadow: inset 0 0 18px rgba(88, 201, 234, .035);
+}
+
 .dawnreach-ping-wheel__ring::after {
-  inset: 58px;
-  border-color: rgba(213, 186, 116, .2);
+  inset: 62px;
+  border: 1px solid rgba(213, 186, 116, .22);
+  box-shadow: 0 0 16px rgba(213, 186, 116, .025);
 }
 
 .dawnreach-ping-wheel__center,
@@ -55,12 +62,21 @@
 }
 
 .dawnreach-ping-wheel__center {
-  width: 72px;
-  height: 72px;
-  border: 1px solid rgba(97, 201, 235, .2);
+  width: 78px;
+  height: 78px;
+  grid-template-rows: 34px auto;
+  align-content: center;
+  justify-items: center;
+  row-gap: 4px;
+  box-sizing: border-box;
+  border: 1px solid rgba(97, 201, 235, .23);
   border-radius: 50%;
-  background: rgba(5, 14, 18, .93);
-  box-shadow: inset 0 0 20px rgba(68, 181, 220, .07);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(38, 130, 165, .13), transparent 58%),
+    rgba(5, 14, 18, .95);
+  box-shadow:
+    inset 0 0 22px rgba(68, 181, 220, .08),
+    0 0 0 1px rgba(0, 0, 0, .32);
   color: #9fadb1;
 }
 
@@ -68,30 +84,60 @@
 .dawnreach-ping-wheel__item i {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   font: 800 18px/1 Inter, sans-serif;
   font-style: normal;
+  box-sizing: border-box;
 }
 
 .dawnreach-ping-wheel__center i {
-  color: #7adfff;
-  background: rgba(54, 171, 211, .13);
+  position: relative;
+  border: 1px solid rgba(122, 223, 255, .22);
+  background: rgba(54, 171, 211, .11);
+  box-shadow: inset 0 0 14px rgba(54, 171, 211, .08);
+}
+
+.dawnreach-ping-wheel__center i::before,
+.dawnreach-ping-wheel__center i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.dawnreach-ping-wheel__center i::before {
+  width: 9px;
+  height: 9px;
+  background: #7adfff;
+  box-shadow: 0 0 11px rgba(122, 223, 255, .48);
+}
+
+.dawnreach-ping-wheel__center i::after {
+  width: 19px;
+  height: 19px;
+  border: 1px solid rgba(122, 223, 255, .2);
 }
 
 .dawnreach-ping-wheel__center span,
 .dawnreach-ping-wheel__item span {
-  margin-top: 3px;
-  max-width: 78px;
-  font: 800 8px/1.05 Inter, sans-serif;
-  letter-spacing: .07em;
+  max-width: 86px;
+  font: 800 9px/1.08 Inter, sans-serif;
+  letter-spacing: .065em;
+}
+
+.dawnreach-ping-wheel__center span {
+  margin: 0;
+  transform: translateY(-1px);
 }
 
 .dawnreach-ping-wheel__item {
-  --radius: 101px;
-  width: 78px;
-  height: 58px;
+  --radius: 108px;
+  width: 84px;
+  height: 62px;
   transform:
     translate(-50%, -50%)
     rotate(var(--angle))
@@ -101,25 +147,43 @@
   transition: filter 90ms ease;
 }
 
-.dawnreach-ping-wheel__item i {
-  border: 1px solid color-mix(in srgb, var(--ping-color) 48%, transparent);
-  color: var(--ping-color);
-  background: rgba(4, 12, 16, .94);
-  box-shadow: inset 0 0 14px color-mix(in srgb, var(--ping-color) 8%, transparent);
-  transition: transform 90ms ease, box-shadow 90ms ease, background 90ms ease;
+.dawnreach-ping-wheel__item span {
+  margin-top: 4px;
 }
 
-.dawnreach-ping-wheel__item.is-selected i,
+.dawnreach-ping-wheel__item i {
+  border: 1px solid color-mix(in srgb, var(--ping-color) 52%, transparent);
+  color: var(--ping-color);
+  background: rgba(4, 12, 16, .95);
+  box-shadow:
+    inset 0 0 15px color-mix(in srgb, var(--ping-color) 9%, transparent),
+    0 0 0 1px rgba(0, 0, 0, .25);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 90ms ease, border-color 90ms ease;
+}
+
+.dawnreach-ping-wheel__item.is-selected i {
+  transform: scale(1.14);
+  color: #f5fbff;
+  border-color: color-mix(in srgb, var(--ping-color) 82%, white 8%);
+  background: color-mix(in srgb, var(--ping-color) 32%, rgba(5, 14, 18, .96));
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--ping-color) 38%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--ping-color) 12%, transparent);
+}
+
 .dawnreach-ping-wheel__center.is-selected i {
-  transform: scale(1.13);
-  color: #f3fbff;
-  background: color-mix(in srgb, var(--ping-color, #7adfff) 34%, rgba(5, 14, 18, .95));
-  box-shadow: 0 0 18px color-mix(in srgb, var(--ping-color, #7adfff) 35%, transparent);
+  transform: scale(1.1);
+  border-color: rgba(122, 223, 255, .6);
+  background: rgba(50, 154, 190, .22);
+  box-shadow:
+    0 0 20px rgba(122, 223, 255, .24),
+    inset 0 0 16px rgba(122, 223, 255, .09);
 }
 
 .dawnreach-ping-wheel__item.is-selected span,
 .dawnreach-ping-wheel__center.is-selected span {
   color: #f4f0e6;
+  text-shadow: 0 0 10px rgba(255, 255, 255, .12);
 }
 
 .dawnreach-ping-marker {
