@@ -2,7 +2,9 @@ import type { AbilityKey } from '../types';
 import { getGameSettingsSnapshot } from '../../settings/gameSettings';
 import {
   subscribeWorldAttackEvents,
+  subscribeWorldHeroProgressionEvents,
   type WorldAttackEvent,
+  type WorldHeroProgressionEvent,
 } from '../../entities/worldCombatBridge';
 import {
   MATCH_PAUSE_STATE_EVENT,
@@ -14,6 +16,17 @@ import { ALDEN } from './gameplay';
 const ALDEN_WORLD_ENTITY_ID = 'blue-hero-alden';
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const MIN_GAIN = 0.0001;
+
+// Keep the source assets under src/game/sounds so Vite fingerprints/bundles them when present.
+// import.meta.glob intentionally tolerates a local working tree where the authored sounds have
+// not been pushed yet: the synthetic attack fallback remains available until the mp3 is present.
+const SOUND_ASSETS = import.meta.glob<string>('../../sounds/*.mp3', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+const BASIC_ATTACK_SAMPLE_URL = SOUND_ASSETS['../../sounds/basic_attack.mp3'];
+const GOLD_SAMPLE_URL = SOUND_ASSETS['../../sounds/gold.mp3'];
 
 type NoiseFilterType = 'bandpass' | 'highpass' | 'lowpass';
 
@@ -37,6 +50,7 @@ type ToneOptions = Readonly<{
 
 let audioContext: AudioContext | null = null;
 let noiseBuffer: AudioBuffer | null = null;
+const activeSamples = new Set<HTMLAudioElement>();
 
 function percentageSetting(key: string, fallback: number) {
   const value = Number(getGameSettingsSnapshot()[key]);
@@ -60,9 +74,7 @@ function ensureNoiseBuffer(context: AudioContext) {
   const frameCount = Math.ceil(context.sampleRate * 0.7);
   const buffer = context.createBuffer(1, frameCount, context.sampleRate);
   const channel = buffer.getChannelData(0);
-  for (let index = 0; index < frameCount; index += 1) {
-    channel[index] = Math.random() * 2 - 1;
-  }
+  for (let index = 0; index < frameCount; index += 1) channel[index] = Math.random() * 2 - 1;
   noiseBuffer = buffer;
   return buffer;
 }
@@ -95,7 +107,7 @@ function scheduleTone(context: AudioContext, options: ToneOptions) {
   window.setTimeout(() => {
     oscillator.disconnect();
     gainNode.disconnect();
-  }, Math.ceil((end - context.currentTime + 0.08) * 1000));
+  }, Math.max(0, Math.ceil((end - context.currentTime + 0.08) * 1000)));
 }
 
 function scheduleNoise(context: AudioContext, options: NoiseOptions) {
@@ -129,7 +141,7 @@ function scheduleNoise(context: AudioContext, options: NoiseOptions) {
     source.disconnect();
     filter.disconnect();
     gainNode.disconnect();
-  }, Math.ceil((end - context.currentTime + 0.08) * 1000));
+  }, Math.max(0, Math.ceil((end - context.currentTime + 0.08) * 1000)));
 }
 
 function scheduleBladeImpact(context: AudioContext, when: number, strength = 1) {
@@ -159,10 +171,8 @@ function scheduleBladeImpact(context: AudioContext, when: number, strength = 1) 
   });
 }
 
-function playBasicAttack(context: AudioContext) {
+function playSyntheticBasicAttack(context: AudioContext) {
   const now = context.currentTime + 0.004;
-  // The world attack event is emitted at the hit frame, so this is deliberately an impact,
-  // not an early key-down sound. That keeps repeated attacks synchronized with the sword.
   scheduleBladeImpact(context, now, 0.92);
   scheduleNoise(context, {
     when: now - 0.002,
@@ -281,7 +291,6 @@ function playR(context: AudioContext) {
     q: 0.5,
     filterType: 'lowpass',
   });
-
   scheduleNoise(context, {
     when: impact,
     duration: 0.26,
@@ -329,11 +338,59 @@ function withRunningContext(play: (context: AudioContext) => void) {
   void context.resume().then(() => play(context)).catch(() => undefined);
 }
 
+function playAuthoredSample(
+  url: string | undefined,
+  gain = 1,
+  onFailure?: () => void,
+) {
+  if (!url || combatVolume() <= 0 || isMatchPaused()) return false;
+
+  const sample = new Audio(url);
+  sample.preload = 'auto';
+  sample.volume = Math.min(1, Math.max(0, combatVolume() * gain));
+  activeSamples.add(sample);
+
+  const cleanup = () => {
+    activeSamples.delete(sample);
+    sample.removeEventListener('ended', cleanup);
+    sample.removeEventListener('error', handleError);
+  };
+  const handleError = () => {
+    cleanup();
+    onFailure?.();
+  };
+
+  sample.addEventListener('ended', cleanup, { once: true });
+  sample.addEventListener('error', handleError, { once: true });
+  void sample.play().catch(() => {
+    cleanup();
+    onFailure?.();
+  });
+  return true;
+}
+
+function playBasicAttackSample() {
+  const fallback = () => withRunningContext(playSyntheticBasicAttack);
+  if (!playAuthoredSample(BASIC_ATTACK_SAMPLE_URL, 0.92, fallback)) fallback();
+}
+
+function playGoldSample() {
+  playAuthoredSample(GOLD_SAMPLE_URL, 0.9);
+}
+
+function stopActiveSamples() {
+  for (const sample of activeSamples) {
+    sample.pause();
+    sample.currentTime = 0;
+  }
+  activeSamples.clear();
+}
+
 /**
- * Alden's combat audio intentionally listens to authoritative gameplay signals:
- * - basic attacks use the world attack event emitted on the actual impact frame;
- * - abilities use the successful HUD cooldown transition (the same success signal consumed by
- *   Alden's live world ability runtime), so failed/unlearned casts never make a sound.
+ * Alden's combat audio listens to authoritative gameplay signals:
+ * - basic_attack.mp3 fires from the real world attack impact event;
+ * - gold.mp3 fires only when the local hero receives a positive kill/objective reward event;
+ * - Q/W/E/R still use their distinct generated ability layers on successful casts.
  */
 export function mountAldenAudioRuntime() {
   const cooldownWasActive = new Map<AbilityKey, boolean>();
@@ -371,16 +428,25 @@ export function mountAldenAudioRuntime() {
 
   const disposeAttackSubscription = subscribeWorldAttackEvents((event: WorldAttackEvent) => {
     if (event.attackerId !== ALDEN_WORLD_ENTITY_ID || event.attackerKind !== 'hero') return;
-    withRunningContext(playBasicAttack);
+    playBasicAttackSample();
   });
+
+  const disposeProgressionSubscription = subscribeWorldHeroProgressionEvents(
+    (event: WorldHeroProgressionEvent) => {
+      if (event.heroEntityId !== ALDEN_WORLD_ENTITY_ID || event.goldDelta <= 0) return;
+      playGoldSample();
+    },
+  );
 
   const onPauseState = (event: Event) => {
     const detail = (event as CustomEvent<MatchPauseStateDetail>).detail;
     const context = audioContext;
-    if (!context || !detail) return;
+    if (!detail) return;
+
     if (detail.paused) {
-      void context.suspend().catch(() => undefined);
-    } else if (context.state === 'suspended') {
+      stopActiveSamples();
+      if (context && context.state === 'running') void context.suspend().catch(() => undefined);
+    } else if (context?.state === 'suspended') {
       void context.resume().catch(() => undefined);
     }
   };
@@ -389,7 +455,9 @@ export function mountAldenAudioRuntime() {
   return () => {
     observer.disconnect();
     disposeAttackSubscription();
+    disposeProgressionSubscription();
     window.removeEventListener(MATCH_PAUSE_STATE_EVENT, onPauseState as EventListener);
+    stopActiveSamples();
     const context = audioContext;
     audioContext = null;
     noiseBuffer = null;
