@@ -1,3 +1,9 @@
+import {
+  GAME_SETTINGS_CHANGED_EVENT,
+  getGameSettingsSnapshot,
+  type GameSettingsChangedDetail,
+} from '../game/settings/gameSettings';
+
 const FPS_OVERLAY_ID = 'dawnreach-fps-overlay';
 const FPS_SAMPLE_MS = 300;
 const PEAK_HOLD_MS = 1_500;
@@ -32,6 +38,16 @@ export function mountFpsOverlay() {
   });
   element.title = 'FPS promedio reciente · tiempo medio por frame · peor frame retenido 1,5 s';
   document.body.appendChild(element);
+
+  const applyVisibility = (settings = getGameSettingsSnapshot()) => {
+    element.style.display = settings['interface.showFps'] === false ? 'none' : 'block';
+  };
+  const onSettingsChanged = (event: Event) => {
+    const detail = (event as CustomEvent<GameSettingsChangedDetail>).detail;
+    applyVisibility(detail?.settings ?? getGameSettingsSnapshot());
+  };
+  applyVisibility();
+  window.addEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
 
   let frameId = 0;
   let frames = 0;
@@ -83,6 +99,7 @@ export function mountFpsOverlay() {
   return () => {
     disposed = true;
     cancelAnimationFrame(frameId);
+    window.removeEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
     element.remove();
   };
 }
