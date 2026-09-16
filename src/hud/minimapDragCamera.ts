@@ -1,6 +1,13 @@
+import {
+  GAME_SETTINGS_CHANGED_EVENT,
+  getGameSettingsSnapshot,
+  type GameSettingsChangedDetail,
+} from '../game/settings/gameSettings';
+
 const MINIMAP_SELECTOR = '.minimap-live';
 
 export function mountMinimapDragCamera() {
+  let settings = getGameSettingsSnapshot();
   let activePointerId: number | null = null;
   let minimap: HTMLElement | null = null;
   let pendingPointer: PointerEvent | null = null;
@@ -20,7 +27,7 @@ export function mountMinimapDragCamera() {
     animationFrame = 0;
     const event = pendingPointer;
     pendingPointer = null;
-    if (!event || !minimap || activePointerId === null) return;
+    if (!event || !minimap || activePointerId === null || settings['camera.minimapDrag'] === false) return;
 
     const rect = minimap.getBoundingClientRect();
     const inside = event.clientX >= rect.left
@@ -44,7 +51,7 @@ export function mountMinimapDragCamera() {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (!event.isTrusted || event.button !== 0) return;
+    if (settings['camera.minimapDrag'] === false || !event.isTrusted || event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
 
@@ -60,6 +67,10 @@ export function mountMinimapDragCamera() {
   };
 
   const onPointerMove = (event: PointerEvent) => {
+    if (settings['camera.minimapDrag'] === false) {
+      stopDragging();
+      return;
+    }
     if (activePointerId === null || event.pointerId !== activePointerId) return;
     if ((event.buttons & 1) === 0) {
       stopDragging();
@@ -80,11 +91,17 @@ export function mountMinimapDragCamera() {
     if (event.pointerId === activePointerId) stopDragging();
   };
 
+  const onSettingsChanged = (event: Event) => {
+    settings = (event as CustomEvent<GameSettingsChangedDetail>).detail?.settings ?? getGameSettingsSnapshot();
+    if (settings['camera.minimapDrag'] === false) stopDragging();
+  };
+
   document.addEventListener('pointerdown', onPointerDown, true);
   document.addEventListener('pointermove', onPointerMove, true);
   document.addEventListener('pointerup', onPointerUp, true);
   document.addEventListener('pointercancel', onPointerUp, true);
   window.addEventListener('blur', stopDragging);
+  window.addEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
 
   return () => {
     stopDragging();
@@ -93,5 +110,6 @@ export function mountMinimapDragCamera() {
     document.removeEventListener('pointerup', onPointerUp, true);
     document.removeEventListener('pointercancel', onPointerUp, true);
     window.removeEventListener('blur', stopDragging);
+    window.removeEventListener(GAME_SETTINGS_CHANGED_EVENT, onSettingsChanged as EventListener);
   };
 }
