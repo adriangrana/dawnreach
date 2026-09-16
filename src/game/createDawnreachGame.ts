@@ -311,6 +311,9 @@ export async function createDawnreachGame(
   let openingAttackReady = true;
   let pendingAttackTarget: GameEntity | null = null;
   let attackImpactApplied = false;
+  let holdPositionActive = false;
+  let holdPositionTarget: GameEntity | null = null;
+  let lastHoldPositionScanAt = -Infinity;
   let targetYaw = 0;
   let currentYaw = 0;
   let elapsed = 0;
@@ -390,6 +393,9 @@ export async function createDawnreachGame(
     openingAttackReady = true;
     pendingAttackTarget = null;
     attackImpactApplied = false;
+    holdPositionActive = false;
+    holdPositionTarget = null;
+    hero.root.userData.dawnreachHoldPosition = false;
     targetMarker.visible = false;
     attackMarker.visible = false;
     disarmAttack();
@@ -480,6 +486,19 @@ export async function createDawnreachGame(
     setCommandCursor(false);
   };
 
+  const clearAttackSwing = () => {
+    attackSwing = 0;
+    pendingAttackTarget = null;
+    attackImpactApplied = false;
+    if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
+  };
+
+  const leaveHoldPosition = () => {
+    holdPositionActive = false;
+    holdPositionTarget = null;
+    hero.root.userData.dawnreachHoldPosition = false;
+  };
+
   const showCommandMarker = (marker: THREE.Group, point: Point3) => {
     marker.userData.surfaceHeight = sampleSurfaceHeight(point.x, point.z, 0);
     marker.position.set(point.x, marker.userData.surfaceHeight + COMMAND_MARKER_Y, point.z);
@@ -489,7 +508,39 @@ export async function createDawnreachGame(
     marker.visible = true;
   };
 
+  const issueStopCommand = () => {
+    leaveHoldPosition();
+    clearMovementRoute();
+    attackOrder = null;
+    attackMoveTarget = null;
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    targetMarker.visible = false;
+    attackMarker.visible = false;
+    disarmAttack();
+    clearAttackSwing();
+    openingAttackReady = attackCooldown <= 0;
+  };
+
+  const issueHoldPositionCommand = () => {
+    clearMovementRoute();
+    attackOrder = null;
+    attackMoveTarget = null;
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    targetMarker.visible = false;
+    attackMarker.visible = false;
+    disarmAttack();
+    clearAttackSwing();
+    holdPositionActive = true;
+    holdPositionTarget = null;
+    lastHoldPositionScanAt = -Infinity;
+    hero.root.userData.dawnreachHoldPosition = true;
+    openingAttackReady = attackCooldown <= 0;
+  };
+
   const issueMoveCommand = (point: Point3) => {
+    leaveHoldPosition();
     attackOrder = null;
     attackMoveTarget = null;
     lastAttackPathTarget = null;
@@ -502,6 +553,7 @@ export async function createDawnreachGame(
   };
 
   const issueGroundAttack = (point: Point3) => {
+    leaveHoldPosition();
     attackOrder = { kind: 'ground', point };
     attackMoveTarget = null;
     lastAttackMoveScanAt = -Infinity;
@@ -515,6 +567,7 @@ export async function createDawnreachGame(
   };
 
   const issueTargetAttack = (target: GameEntity) => {
+    leaveHoldPosition();
     attackOrder = { kind: 'target', target };
     attackMoveTarget = null;
     pendingAttackTarget = null;
@@ -830,6 +883,20 @@ export async function createDawnreachGame(
       return;
     }
 
+    if (event.code === 'KeyS') {
+      if (!canControlLocalHero()) return;
+      event.preventDefault();
+      issueStopCommand();
+      return;
+    }
+
+    if (event.code === 'KeyH') {
+      if (!canControlLocalHero()) return;
+      event.preventDefault();
+      issueHoldPositionCommand();
+      return;
+    }
+
     if (event.code === 'Space') {
       event.preventDefault();
       cameraFocus = null;
@@ -995,7 +1062,7 @@ export async function createDawnreachGame(
     elapsed += dt;
     attackCooldown = Math.max(0, attackCooldown - dt);
 
-    if (!attackOrder && !attackMoveTarget && attackCooldown <= 0 && attackSwing <= 0) {
+    if (!attackOrder && !attackMoveTarget && !holdPositionActive && attackCooldown <= 0 && attackSwing <= 0) {
       openingAttackReady = true;
     }
 
@@ -1023,7 +1090,49 @@ export async function createDawnreachGame(
     }
     movementWasLocked = movementLocked;
 
-    if (!movementLocked && attackOrder?.kind === 'ground') {
+    if (!movementLocked && holdPositionActive) {
+      clearMovementRoute();
+
+      if (holdPositionTarget && (!holdPositionTarget.root.parent || !isAutomaticAttackMoveTarget(holdPositionTarget))) {
+        if (pendingAttackTarget === holdPositionTarget) pendingAttackTarget = null;
+        holdPositionTarget = null;
+      }
+
+      if ((!holdPositionTarget || elapsed - lastHoldPositionScanAt >= ATTACK_MOVE_SCAN_INTERVAL) && attackSwing <= 0) {
+        lastHoldPositionScanAt = elapsed;
+        const candidate = findNearestAcquisitionTarget();
+        if (candidate) {
+          candidate.root.getWorldPosition(attackTargetPosition);
+          const distance = Math.hypot(
+            attackTargetPosition.x - hero.root.position.x,
+            attackTargetPosition.z - hero.root.position.z,
+          );
+          holdPositionTarget = distance <= getTargetAttackReach(candidate) ? candidate : null;
+        } else {
+          holdPositionTarget = null;
+        }
+      }
+
+      if (holdPositionTarget) {
+        holdPositionTarget.root.getWorldPosition(attackTargetPosition);
+        const dx = attackTargetPosition.x - hero.root.position.x;
+        const dz = attackTargetPosition.z - hero.root.position.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance > getTargetAttackReach(holdPositionTarget)) {
+          if (pendingAttackTarget === holdPositionTarget) pendingAttackTarget = null;
+          holdPositionTarget = null;
+        } else {
+          targetYaw = Math.atan2(dx, dz);
+          if (attackCooldown <= 0 && attackSwing <= 0) {
+            const openingStrike = openingAttackReady;
+            openingAttackReady = false;
+            triggerAttack(holdPositionTarget, openingStrike);
+          }
+        }
+      }
+    }
+
+    if (!movementLocked && !holdPositionActive && attackOrder?.kind === 'ground') {
       const groundOrder = attackOrder;
 
       if (attackMoveTarget && (!attackMoveTarget.root.parent || !isAutomaticAttackMoveTarget(attackMoveTarget))) {
@@ -1046,7 +1155,7 @@ export async function createDawnreachGame(
       if (attackMoveTarget) pursueAttackTarget(attackMoveTarget, false);
     }
 
-    if (!movementLocked && attackOrder?.kind === 'target') {
+    if (!movementLocked && !holdPositionActive && attackOrder?.kind === 'target') {
       const target = attackOrder.target;
       if (!target.root.parent || !isHostileAttackTarget(target)) {
         const targetWasDefeated = target.currentHp <= 0 || target.alive === false;
@@ -1062,7 +1171,7 @@ export async function createDawnreachGame(
       }
     }
 
-    if (!movementLocked && routeRequest && attackOrder?.kind !== 'target' && !attackMoveTarget) {
+    if (!movementLocked && !holdPositionActive && routeRequest && attackOrder?.kind !== 'target' && !attackMoveTarget) {
       const nextWaypoint = destination && currentWaypointIndex < currentPath.length
         ? currentPath[currentWaypointIndex]
         : null;
@@ -1086,7 +1195,7 @@ export async function createDawnreachGame(
     let moving = false;
     let reachedDestination = false;
 
-    if (!movementLocked && destination && currentPath.length > 0) {
+    if (!movementLocked && !holdPositionActive && destination && currentPath.length > 0) {
       while (currentWaypointIndex < currentPath.length) {
         const waypoint = currentPath[currentWaypointIndex];
         if (Math.hypot(waypoint.x - hero.root.position.x, waypoint.z - hero.root.position.z) > WAYPOINT_REACHED_DISTANCE) break;
@@ -1152,7 +1261,7 @@ export async function createDawnreachGame(
       }
     }
 
-    if (!movementLocked && reachedDestination && attackOrder?.kind === 'ground' && !attackMoveTarget) {
+    if (!movementLocked && !holdPositionActive && reachedDestination && attackOrder?.kind === 'ground' && !attackMoveTarget) {
       attackOrder = null;
       attackMarker.visible = false;
     }
