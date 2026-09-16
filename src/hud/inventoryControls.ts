@@ -1,12 +1,13 @@
 import { writeInventoryDragPayload } from '../game/items/itemDrag';
+import { getGameSettingsSnapshot, settingBindingMatchesEvent } from '../game/settings/gameSettings';
 
 export const INVENTORY_SLOT_HOTKEYS = [
-  { code: 'KeyQ', label: 'ALT+Q' },
-  { code: 'KeyW', label: 'ALT+W' },
-  { code: 'KeyE', label: 'ALT+E' },
-  { code: 'KeyA', label: 'ALT+A' },
-  { code: 'KeyS', label: 'ALT+S' },
-  { code: 'KeyD', label: 'ALT+D' },
+  { code: 'KeyQ', label: 'ALT+Q', settingKey: 'controls.item1' },
+  { code: 'KeyW', label: 'ALT+W', settingKey: 'controls.item2' },
+  { code: 'KeyE', label: 'ALT+E', settingKey: 'controls.item3' },
+  { code: 'KeyA', label: 'ALT+A', settingKey: 'controls.item4' },
+  { code: 'KeyS', label: 'ALT+S', settingKey: 'controls.item5' },
+  { code: 'KeyD', label: 'ALT+D', settingKey: 'controls.item6' },
 ] as const;
 
 const DRAG_THRESHOLD_PX = 6;
@@ -219,8 +220,11 @@ export function mountInventoryControls() {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat || isTypingTarget(event.target)) return;
-    const hotkeyIndex = INVENTORY_SLOT_HOTKEYS.findIndex(hotkey => hotkey.code === event.code);
+    if (event.repeat || isTypingTarget(event.target)) return;
+    const settings = getGameSettingsSnapshot();
+    const hotkeyIndex = INVENTORY_SLOT_HOTKEYS.findIndex(hotkey => (
+      settingBindingMatchesEvent(event, hotkey.settingKey, settings)
+    ));
     if (hotkeyIndex < 0) return;
 
     event.preventDefault();
