@@ -16,6 +16,11 @@ type ToneProfile = Readonly<{
   durationSeconds: number;
 }>;
 
+type EnrichedPingDetail = DawnreachPingDetail & {
+  senderHeroName?: string;
+  senderDisplayName?: string;
+};
+
 const TONE_PROFILES: Record<PingType, ToneProfile> = {
   attention: { startHz: 720, endHz: 980, overtoneRatio: 1.52, durationSeconds: 0.17 },
   danger: { startHz: 540, endHz: 390, overtoneRatio: 1.43, durationSeconds: 0.21 },
@@ -42,6 +47,81 @@ function replaceAttackIcons(root: ParentNode = document) {
     if (icon.dataset.dawnreachSwordIcon === 'true') return;
     icon.dataset.dawnreachSwordIcon = 'true';
     icon.innerHTML = ATTACK_SWORD_SVG;
+  });
+}
+
+function getLocalHeroName() {
+  const hero = document.querySelector<HTMLElement>('.game-hud .hero-identity > strong');
+  return hero?.textContent?.trim() || null;
+}
+
+function getLocalPlayerName() {
+  const player = document.querySelector<HTMLElement>(
+    '.match-scoreboard-player.is-local .match-scoreboard-identity strong',
+  );
+  return player?.textContent?.trim() || null;
+}
+
+function readablePlayerId(playerId: string) {
+  if (!playerId || playerId === 'local-player') return null;
+  return playerId
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase())
+    .trim() || null;
+}
+
+function resolveSenderIdentity(detail: DawnreachPingDetail) {
+  const enriched = detail as EnrichedPingDetail;
+
+  if (!enriched.senderHeroName && detail.playerId === 'local-player') {
+    const heroName = getLocalHeroName();
+    if (heroName) enriched.senderHeroName = heroName;
+  }
+  if (!enriched.senderDisplayName && detail.playerId === 'local-player') {
+    const playerName = getLocalPlayerName();
+    if (playerName) enriched.senderDisplayName = playerName;
+  }
+
+  const heroName = enriched.senderHeroName?.trim() || null;
+  const displayName = enriched.senderDisplayName?.trim() || readablePlayerId(detail.playerId);
+  return {
+    heroName,
+    displayName,
+    label: heroName || displayName || 'ALIADO',
+  };
+}
+
+function decorateOnMyWayPing(detail: DawnreachPingDetail) {
+  if (detail.type !== 'on-my-way') return;
+  const identity = resolveSenderIdentity(detail);
+
+  document.querySelectorAll<HTMLElement>('.dawnreach-ping-marker--on-my-way').forEach((marker) => {
+    if (marker.dataset.pingId !== detail.pingId) return;
+    marker.dataset.sender = identity.label;
+    marker.setAttribute('aria-label', `${identity.label} está en camino`);
+    marker.title = `${identity.label} está en camino`;
+
+    const text = marker.querySelector<HTMLElement>(':scope > span');
+    if (text && !marker.classList.contains('is-minimap')) {
+      text.replaceChildren();
+      const sender = document.createElement('small');
+      sender.className = 'dawnreach-ping-sender-name';
+      sender.textContent = identity.label.toLocaleUpperCase();
+      const status = document.createElement('b');
+      status.textContent = 'EN CAMINO';
+      text.append(sender, status);
+    }
+
+    if (marker.classList.contains('is-minimap')) {
+      let badge = marker.querySelector<HTMLElement>('.dawnreach-ping-sender-badge');
+      if (!badge) {
+        badge = document.createElement('em');
+        badge.className = 'dawnreach-ping-sender-badge';
+        marker.appendChild(badge);
+      }
+      badge.textContent = identity.label.slice(0, 1).toLocaleUpperCase();
+      badge.setAttribute('aria-hidden', 'true');
+    }
   });
 }
 
@@ -118,7 +198,9 @@ function playPingSound(type: PingType) {
 
 /**
  * Presentation additions that intentionally stay transport-agnostic: every local or replicated
- * DAWNREACH_PING_EVENT gets the same sword icon treatment and short audible cue.
+ * DAWNREACH_PING_EVENT gets the same sword icon treatment, sender identity and audible cue.
+ * Local sender identity is added to the event object before pingWheel posts it to the shared
+ * BroadcastChannel, so other Dawnreach clients receive the same hero/player label.
  */
 export function mountPingPresentationEnhancements() {
   replaceAttackIcons();
@@ -140,7 +222,12 @@ export function mountPingPresentationEnhancements() {
   const onPing = (event: Event) => {
     const detail = (event as CustomEvent<DawnreachPingDetail>).detail;
     if (!isPingDetail(detail)) return;
+
+    // Enrich local payloads before pingWheel returns from dispatchEvent and posts the same
+    // object to BroadcastChannel. Remote payloads already retain these fields.
+    resolveSenderIdentity(detail);
     replaceAttackIcons();
+    decorateOnMyWayPing(detail);
     playPingSound(detail.type);
   };
   window.addEventListener(DAWNREACH_PING_EVENT, onPing as EventListener);
