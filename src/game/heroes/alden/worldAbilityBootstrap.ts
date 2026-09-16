@@ -21,6 +21,55 @@ const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 
 type RendererRender = THREE.WebGLRenderer['render'];
 
+type PresentationPoseGuard = {
+  joints: THREE.Object3D[];
+  rotations: Float64Array;
+};
+
+const presentationPoseGuards = new WeakMap<THREE.Object3D, PresentationPoseGuard>();
+
+function getPresentationPoseGuard(heroRoot: THREE.Object3D): PresentationPoseGuard {
+  const cached = presentationPoseGuards.get(heroRoot);
+  if (cached) return cached;
+
+  const leftShoulder = heroRoot.getObjectByName('left-shoulder') ?? null;
+  const rightShoulder = heroRoot.getObjectByName('right-shoulder') ?? null;
+  const candidates = [
+    heroRoot.getObjectByName('pelvis') ?? null,
+    heroRoot.getObjectByName('torso') ?? null,
+    leftShoulder,
+    rightShoulder,
+    leftShoulder?.getObjectByName('elbow') ?? null,
+    rightShoulder?.getObjectByName('elbow') ?? null,
+    heroRoot.getObjectByName('right-wrist-attack-pivot') ?? null,
+  ];
+  const joints = candidates.filter((joint): joint is THREE.Object3D => joint !== null);
+  const guard = {
+    joints,
+    rotations: new Float64Array(joints.length * 3),
+  };
+  presentationPoseGuards.set(heroRoot, guard);
+  return guard;
+}
+
+function capturePresentationPose(guard: PresentationPoseGuard) {
+  guard.joints.forEach((joint, index) => {
+    const offset = index * 3;
+    guard.rotations[offset] = joint.rotation.x;
+    guard.rotations[offset + 1] = joint.rotation.y;
+    guard.rotations[offset + 2] = joint.rotation.z;
+  });
+}
+
+function restorePresentationPose(guard: PresentationPoseGuard) {
+  guard.joints.forEach((joint, index) => {
+    const offset = index * 3;
+    joint.rotation.x = guard.rotations[offset];
+    joint.rotation.y = guard.rotations[offset + 1];
+    joint.rotation.z = guard.rotations[offset + 2];
+  });
+}
+
 /**
  * Three.js r180 assigns WebGLRenderer.render directly on every renderer instance from inside
  * the constructor. Patching WebGLRenderer.prototype.render therefore does not intercept the
@@ -63,7 +112,18 @@ export function mountAldenWorldAbilityBootstrap() {
           if (renderer.getRenderTarget() === null) {
             const nowMs = performance.now();
             runtime.update(nowMs);
+
+            // abilityPresentation owns VFX only. Its legacy pose layer used additive Euler
+            // rotations every rendered frame, so Q permanently pitched the pelvis forward and
+            // each later cast compounded the error (the visible "sitting in the air" pose).
+            // Preserve the authoritative pose produced by animateAlden/worldAbilityRuntime,
+            // allow presentation to spawn/update VFX, then restore those joint rotations before
+            // the frame is rendered. This also prevents W/E/R from accumulating pose residue.
+            const poseGuard = getPresentationPoseGuard(hero.root);
+            capturePresentationPose(poseGuard);
             presentation.update(nowMs);
+            restorePresentationPose(poseGuard);
+
             edgePolish.update();
             linePolish.update();
           }
