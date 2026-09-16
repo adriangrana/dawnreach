@@ -36,7 +36,7 @@ export function mountFpsOverlay() {
     pointerEvents: 'none',
     userSelect: 'none',
   });
-  element.title = 'FPS promedio reciente · tiempo medio por frame · peor frame retenido 1,5 s';
+  element.title = 'FPS presentados · tiempo medio entre frames · peor intervalo retenido 1,5 s';
   document.body.appendChild(element);
 
   const applyVisibility = (settings = getGameSettingsSnapshot()) => {
@@ -52,7 +52,8 @@ export function mountFpsOverlay() {
   let frameId = 0;
   let frames = 0;
   let sampleStartedAt = performance.now();
-  let lastFrameAt = sampleStartedAt;
+  let lastPresentedCounter = -1;
+  let lastPresentedAt = -1;
   let smoothedFps = 60;
   let samplePeakFrameMs = 0;
   let heldPeakFrameMs = 0;
@@ -62,17 +63,32 @@ export function mountFpsOverlay() {
   const frame = (now: number) => {
     if (disposed) return;
 
-    const frameMs = Math.max(0, now - lastFrameAt);
-    lastFrameAt = now;
-    samplePeakFrameMs = Math.max(samplePeakFrameMs, frameMs);
-    frames += 1;
+    const canvas = document.querySelector<HTMLCanvasElement>('.game-canvas');
+    const counter = Number(canvas?.dataset.presentedFrame ?? NaN);
+    const presentedAt = Number(canvas?.dataset.presentedAt ?? NaN);
+    if (Number.isFinite(counter)) {
+      if (lastPresentedCounter < 0) {
+        lastPresentedCounter = counter;
+        lastPresentedAt = Number.isFinite(presentedAt) ? presentedAt : now;
+      } else if (counter > lastPresentedCounter) {
+        const frameDelta = Math.max(1, counter - lastPresentedCounter);
+        const actualPresentedAt = Number.isFinite(presentedAt) ? presentedAt : now;
+        const interval = lastPresentedAt >= 0
+          ? Math.max(0, (actualPresentedAt - lastPresentedAt) / frameDelta)
+          : 0;
+        frames += frameDelta;
+        samplePeakFrameMs = Math.max(samplePeakFrameMs, interval);
+        lastPresentedCounter = counter;
+        lastPresentedAt = actualPresentedAt;
+      }
+    }
 
     const elapsed = now - sampleStartedAt;
     if (elapsed >= FPS_SAMPLE_MS) {
       const measured = frames * 1000 / Math.max(1, elapsed);
       smoothedFps += (measured - smoothedFps) * 0.58;
       const fps = Math.max(0, Math.round(smoothedFps));
-      const averageFrameMs = elapsed / Math.max(1, frames);
+      const averageFrameMs = frames > 0 ? elapsed / frames : 0;
 
       if (samplePeakFrameMs >= heldPeakFrameMs || now >= peakHeldUntil) {
         heldPeakFrameMs = samplePeakFrameMs;
