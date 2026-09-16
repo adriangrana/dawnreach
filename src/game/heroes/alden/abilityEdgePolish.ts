@@ -14,7 +14,10 @@ const MIN_EFFECT_RENDER_ORDER = 40;
 const MAX_EFFECT_RENDER_ORDER = 72;
 
 type SoftenedRing = {
-  mesh: THREE.Mesh<THREE.RingGeometry, THREE.ShaderMaterial>;
+  // The mesh starts with a MeshBasicMaterial, is temporarily replaced by our
+  // ShaderMaterial, then restored during cleanup. Type the slot as Material so
+  // both assignments are valid under strict TypeScript.
+  mesh: THREE.Mesh<THREE.RingGeometry, THREE.Material>;
   sourceMaterial: THREE.MeshBasicMaterial;
   softMaterial: THREE.ShaderMaterial;
 };
@@ -143,7 +146,7 @@ function softenRing(mesh: THREE.Mesh): SoftenedRing | null {
   oldGeometry.dispose();
 
   return {
-    mesh: mesh as THREE.Mesh<THREE.RingGeometry, THREE.ShaderMaterial>,
+    mesh: mesh as THREE.Mesh<THREE.RingGeometry, THREE.Material>,
     sourceMaterial,
     softMaterial,
   };
