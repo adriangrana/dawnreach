@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { mountAldenWorldAbilityRuntime } from './game/heroes/alden/worldAbilityRuntime';
+import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { mountBrowserInteractionGuards } from './hud/browserInteractionGuards';
@@ -77,9 +77,9 @@ function dismissBootSplash() {
 
 // Install renderer/lighting scheduling before React mounts the Three.js game world.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
-// Alden's world runtime wraps the already-tuned renderer only to discover the authoritative
-// Three.js scene/camera, then resolves successful HUD casts against live GameEntity ids.
-const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityRuntime();
+// Three r180 creates render as an instance method. Install the Alden bootstrap before React
+// constructs the game renderer so live ability effects bind to the actual renderer instance.
+const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 
 // The Three.js world is intentionally mounted once. React StrictMode's development-only
 // effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
