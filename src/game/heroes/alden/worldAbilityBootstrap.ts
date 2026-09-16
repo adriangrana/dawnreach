@@ -22,6 +22,7 @@ const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const DEFAULT_SHADOW_EXTENT = 24;
 const DEFAULT_SHADOW_DISTANCE_PERCENT = 75;
 const MAX_RENDER_PIXEL_RATIO = 1.5;
+const DEFAULT_SHAKE_PERCENT = 55;
 
 type RendererRender = THREE.WebGLRenderer['render'];
 
@@ -39,6 +40,8 @@ const presentationPoseGuards = new WeakMap<THREE.Object3D, PresentationPoseGuard
 const rendererLastPresentedAt = new WeakMap<THREE.WebGLRenderer, number>();
 const rendererScaleState = new WeakMap<THREE.WebGLRenderer, number>();
 const sceneShadowState = new WeakMap<THREE.Scene, ShadowPresentationState>();
+const cameraBeforePresentation = new THREE.Vector3();
+const cameraAfterPresentation = new THREE.Vector3();
 
 function getPresentationPoseGuard(heroRoot: THREE.Object3D): PresentationPoseGuard {
   const cached = presentationPoseGuards.get(heroRoot);
@@ -155,6 +158,20 @@ function applyShadowSettings(scene: THREE.Scene, renderer: THREE.WebGLRenderer, 
   sceneShadowState.set(scene, { quality, distancePercent });
 }
 
+function cameraShakeScale(settings: GameSettings) {
+  const gameplay = Number(settings['gameplay.screenShake']);
+  const camera = Number(settings['camera.shakeIntensity']);
+  const gameplayScale = Number.isFinite(gameplay) ? Math.max(0, gameplay) / DEFAULT_SHAKE_PERCENT : 1;
+  const cameraScale = Number.isFinite(camera) ? Math.max(0, camera) / DEFAULT_SHAKE_PERCENT : 1;
+  return THREE.MathUtils.clamp(gameplayScale * cameraScale, 0, 2);
+}
+
+function applyConfiguredCameraShake(camera: THREE.Camera, settings: GameSettings) {
+  cameraAfterPresentation.copy(camera.position);
+  const scale = cameraShakeScale(settings);
+  camera.position.copy(cameraBeforePresentation).lerp(cameraAfterPresentation, scale);
+}
+
 function publishPresentedFrame(renderer: THREE.WebGLRenderer, nowMs: number) {
   const canvas = renderer.domElement;
   const frame = Number(canvas.dataset.presentedFrame ?? 0);
@@ -220,7 +237,9 @@ export function mountAldenWorldAbilityBootstrap() {
             // animateAlden/worldAbilityRuntime while presentation updates its VFX.
             const poseGuard = getPresentationPoseGuard(hero.root);
             capturePresentationPose(poseGuard);
+            cameraBeforePresentation.copy(camera.position);
             presentation.update(nowMs);
+            applyConfiguredCameraShake(camera, settings);
             restorePresentationPose(poseGuard);
 
             edgePolish.update();
