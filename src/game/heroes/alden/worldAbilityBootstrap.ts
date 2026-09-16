@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry } from '../../entities/gameEntities';
 import {
+  disposeAldenAbilityEdgePolishes,
+  ensureAldenAbilityEdgePolish,
+} from './abilityEdgePolish';
+import {
   disposeAldenAbilityPresentations,
   ensureAldenAbilityPresentation,
 } from './abilityPresentation';
@@ -50,10 +54,12 @@ export function mountAldenWorldAbilityBootstrap() {
             renderer.domElement,
             camera,
           );
+          const edgePolish = ensureAldenAbilityEdgePolish(scene);
           if (renderer.getRenderTarget() === null) {
             const nowMs = performance.now();
             runtime.update(nowMs);
             presentation.update(nowMs);
+            edgePolish.update();
           }
         }
       }
@@ -83,6 +89,7 @@ export function mountAldenWorldAbilityBootstrap() {
 
   return () => {
     disposed = true;
+    disposeAldenAbilityEdgePolishes();
     disposeAldenAbilityPresentations();
     disposeRuntimes();
     if (previousDescriptor) Object.defineProperty(rendererPrototype, 'render', previousDescriptor);
