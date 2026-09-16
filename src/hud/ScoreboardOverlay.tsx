@@ -215,6 +215,16 @@ export default function ScoreboardOverlay({
 
   useEffect(() => subscribeCombatHudStats(setLocalStats), []);
 
+  // The match clock belongs to the always-visible top HUD, directly below DAWNREACH.
+  // ScoreboardOverlay already receives the authoritative match timestamp and the 100 ms HUD
+  // tick, so keep the top clock synchronized from that same source instead of maintaining a
+  // second timer with its own epoch.
+  useEffect(() => {
+    const clock = document.querySelector<HTMLElement>('.game-hud .match-clock b');
+    if (!clock) return;
+    clock.textContent = formatClock(Math.max(0, nowMs - match.createdAtMs));
+  }, [match.createdAtMs, nowMs]);
+
   useEffect(() => {
     const onSettingsChanged = (event: Event) => {
       setSettings((event as CustomEvent<GameSettingsChangedDetail>).detail?.settings ?? getGameSettingsSnapshot());
@@ -259,7 +269,6 @@ export default function ScoreboardOverlay({
   if (!open) return null;
 
   const detailed = settings['interface.scoreboardDetailed'] !== false;
-  const elapsed = Math.max(0, nowMs - match.createdAtMs);
   const hotkey = formatKeyBinding(String(settings['controls.scoreboard'] ?? 'Tab'));
 
   return (
@@ -267,7 +276,6 @@ export default function ScoreboardOverlay({
       <div className="match-scoreboard-window">
         <header className="match-scoreboard-header">
           <div><span>PARTIDA EN CURSO</span><strong>MARCADOR</strong></div>
-          <div className="match-scoreboard-clock"><small>TIEMPO</small><b>{formatClock(elapsed)}</b></div>
           <div className="match-scoreboard-hint"><kbd>{hotkey}</kbd><span>Mantén para ver</span></div>
         </header>
         <TeamTable
