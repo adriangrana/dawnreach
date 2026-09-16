@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { GameEntityRegistry } from '../../entities/gameEntities';
-import { ensureAldenWorldAbilityRuntime } from './worldAbilityRuntime';
+import {
+  ensureAldenWorldAbilityRuntime,
+  mountAldenWorldAbilityRuntime,
+} from './worldAbilityRuntime';
 
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 
@@ -15,6 +18,7 @@ type RendererRender = THREE.WebGLRenderer['render'];
 export function mountAldenWorldAbilityBootstrap() {
   const rendererPrototype = THREE.WebGLRenderer.prototype as THREE.WebGLRenderer;
   const previousDescriptor = Object.getOwnPropertyDescriptor(rendererPrototype, 'render');
+  const disposeRuntimes = mountAldenWorldAbilityRuntime();
   let disposed = false;
 
   function interceptRenderAssignment(this: THREE.WebGLRenderer, assignedRender: RendererRender) {
@@ -64,6 +68,7 @@ export function mountAldenWorldAbilityBootstrap() {
 
   return () => {
     disposed = true;
+    disposeRuntimes();
     if (previousDescriptor) Object.defineProperty(rendererPrototype, 'render', previousDescriptor);
     else delete (rendererPrototype as Partial<THREE.WebGLRenderer>).render;
   };
