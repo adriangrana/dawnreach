@@ -6,10 +6,21 @@ import {
 const MENU_ROOT_ID = 'dawnreach-game-menu';
 const AVAILABILITY_CLASS = 'game-setting-availability';
 
+// Some presentation subsystems can become functional without changing the central engine
+// settings registry. Keep these explicit and narrow so the Options UI only enables controls
+// that have a real consumer in the current build.
+const RUNTIME_IMPLEMENTED_OVERRIDES = new Set<string>([
+  'audio.pings',
+]);
+
+function settingHasRuntimeSupport(key: string) {
+  return isGameSettingImplemented(key) || RUNTIME_IMPLEMENTED_OVERRIDES.has(key);
+}
+
 function markUnavailable(control: HTMLElement, rowSelector: string) {
   const key = control.dataset.settingKey ?? control.dataset.keybindKey;
   if (!key) return;
-  const implemented = isGameSettingImplemented(key);
+  const implemented = settingHasRuntimeSupport(key);
   const row = control.closest<HTMLElement>(rowSelector);
   if (!row) return;
 
@@ -48,6 +59,7 @@ function categoryHasRuntimeSupport(category: string) {
       key.startsWith('network.') || key.startsWith('social.') || key.startsWith('privacy.')
     ));
   }
+  if ([...RUNTIME_IMPLEMENTED_OVERRIDES].some(key => key.startsWith(`${category}.`))) return true;
   return [...IMPLEMENTED_GAME_SETTINGS].some(key => key.startsWith(`${category}.`));
 }
 
