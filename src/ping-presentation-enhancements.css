@@ -1,0 +1,77 @@
+.dawnreach-ping-marker.is-world-map {
+  width: 136px;
+  height: 136px;
+}
+
+.dawnreach-ping-marker.is-world-map::before,
+.dawnreach-ping-marker.is-world-map::after {
+  box-shadow:
+    0 0 26px color-mix(in srgb, var(--ping-color) 42%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--ping-color) 8%, transparent);
+}
+
+.dawnreach-ping-marker.is-world-map::before {
+  inset: 14px;
+  border-width: 3px;
+}
+
+.dawnreach-ping-marker.is-world-map::after {
+  inset: 31px;
+  border-width: 2px;
+}
+
+.dawnreach-ping-marker.is-world-map > i {
+  width: 48px;
+  height: 48px;
+  border-width: 2px;
+  font-size: 27px;
+  box-shadow:
+    0 0 24px color-mix(in srgb, var(--ping-color) 38%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--ping-color) 8%, transparent);
+}
+
+.dawnreach-ping-marker.is-world-map > span {
+  top: calc(100% - 14px);
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 5px;
+  background: rgba(3, 8, 11, .86);
+  font: 900 11px/1 Inter, sans-serif;
+  letter-spacing: .085em;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .24);
+}
+
+.dawnreach-ping-sword-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(-2deg);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 35%, transparent));
+}
+
+.dawnreach-ping-wheel__item[data-ping-type="attack"] > i .dawnreach-ping-sword-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.dawnreach-ping-wheel__item[data-ping-type="attack"].is-selected > i .dawnreach-ping-sword-icon {
+  width: 23px;
+  height: 23px;
+}
+
+.dawnreach-ping-marker--attack.is-world-map > i .dawnreach-ping-sword-icon {
+  width: 31px;
+  height: 31px;
+}
+
+.dawnreach-ping-marker--attack.is-minimap > i .dawnreach-ping-sword-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
