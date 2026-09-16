@@ -43,10 +43,12 @@ function publish() {
   for (const listener of listeners) listener(next);
 }
 
-export function subscribeCombatHudStats(listener: (stats: CombatHudStats) => void) {
+export function subscribeCombatHudStats(listener: (stats: CombatHudStats) => void): () => void {
   listeners.add(listener);
   listener(snapshot());
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function recordCombatHudStat(stat: keyof MutableCombatHudStats, amount = 1) {
