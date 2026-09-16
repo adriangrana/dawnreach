@@ -1,4 +1,7 @@
-import { subscribeWorldCombatEvents } from '../game/entities/worldCombatBridge';
+import {
+  getMostRecentAttackOnTarget,
+  subscribeWorldCombatEvents,
+} from '../game/entities/worldCombatBridge';
 
 export type CombatHudStats = Readonly<{
   kills: number;
@@ -28,6 +31,7 @@ const stats: MutableCombatHudStats = {
   denies: 0,
 };
 let lastRecordedDeathAtMs = -1;
+let lastRecordedKillKey = '';
 let worldSubscriptionStarted = false;
 
 function snapshot(): CombatHudStats {
@@ -64,10 +68,23 @@ function startWorldCombatSubscription() {
   if (worldSubscriptionStarted) return;
   worldSubscriptionStarted = true;
   subscribeWorldCombatEvents((event) => {
-    if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID || event.reason !== 'death') return;
-    if (event.atMs === lastRecordedDeathAtMs) return;
-    lastRecordedDeathAtMs = event.atMs;
-    recordCombatHudStat('deaths');
+    if (event.reason !== 'death') return;
+
+    if (event.entityId === LOCAL_WORLD_HERO_ENTITY_ID) {
+      if (event.atMs === lastRecordedDeathAtMs) return;
+      lastRecordedDeathAtMs = event.atMs;
+      recordCombatHudStat('deaths');
+      return;
+    }
+
+    if (event.sourceEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
+    const recentAttack = getMostRecentAttackOnTarget(event.entityId, event.atMs, 3_500);
+    if (!recentAttack || recentAttack.attackerId !== LOCAL_WORLD_HERO_ENTITY_ID || recentAttack.targetKind !== 'hero') return;
+
+    const killKey = `${event.entityId}:${event.atMs}`;
+    if (killKey === lastRecordedKillKey) return;
+    lastRecordedKillKey = killKey;
+    recordCombatHudStat('kills');
   });
 }
 
