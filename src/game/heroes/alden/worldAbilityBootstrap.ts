@@ -9,6 +9,10 @@ import {
   ensureAldenAbilityPresentation,
 } from './abilityPresentation';
 import {
+  disposeWorldLineVfxPolishes,
+  ensureWorldLineVfxPolish,
+} from './lineVfxPolish';
+import {
   ensureAldenWorldAbilityRuntime,
   mountAldenWorldAbilityRuntime,
 } from './worldAbilityRuntime';
@@ -55,11 +59,13 @@ export function mountAldenWorldAbilityBootstrap() {
             camera,
           );
           const edgePolish = ensureAldenAbilityEdgePolish(scene);
+          const linePolish = ensureWorldLineVfxPolish(scene);
           if (renderer.getRenderTarget() === null) {
             const nowMs = performance.now();
             runtime.update(nowMs);
             presentation.update(nowMs);
             edgePolish.update();
+            linePolish.update();
           }
         }
       }
@@ -89,6 +95,7 @@ export function mountAldenWorldAbilityBootstrap() {
 
   return () => {
     disposed = true;
+    disposeWorldLineVfxPolishes();
     disposeAldenAbilityEdgePolishes();
     disposeAldenAbilityPresentations();
     disposeRuntimes();
