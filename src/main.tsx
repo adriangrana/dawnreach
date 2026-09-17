@@ -32,6 +32,7 @@ import './platform-home-cinematic.css';
 import './platform-home-reference.css';
 import './platform-home-events-reference.css';
 import './platform-home-mode-ribbon-reference.css';
+import './platform-home-social-reference.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;

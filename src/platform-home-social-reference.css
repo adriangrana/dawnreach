@@ -1,0 +1,404 @@
+/* Home social rail polish: party + friends panels aligned to the cinematic reference. */
+
+.platform-home-shell .platform-home-grid {
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 18vw, 410px) !important;
+}
+
+.dr-home-right-rail {
+  box-sizing: border-box !important;
+  padding: 16px 14px 18px !important;
+  gap: 12px !important;
+  border-left: 1px solid rgba(199, 173, 101, .22) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(45, 77, 96, .10), transparent 36%),
+    linear-gradient(180deg, #07131c 0%, #050d13 56%, #040a0f 100%) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(111, 137, 150, .24) transparent;
+}
+
+/* PARTY */
+.dr-home-party-card {
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  padding: 14px !important;
+  border: 1px solid rgba(109, 143, 162, .30) !important;
+  background:
+    linear-gradient(180deg, rgba(10, 24, 34, .97), rgba(5, 14, 21, .98)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    0 14px 34px rgba(0, 0, 0, .20) !important;
+}
+
+.dr-home-party-card > header {
+  min-height: 28px !important;
+  margin: 0 0 10px !important;
+  padding: 0 1px !important;
+}
+
+.dr-home-party-card > header strong {
+  color: #d9e0df !important;
+  font: 600 13px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .13em !important;
+}
+
+.dr-home-party-card > header span {
+  color: #90a5b2 !important;
+  font: 600 11px/1 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-home-party-slots {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+  margin: 0 0 11px !important;
+}
+
+.dr-home-party-slots > span {
+  position: relative !important;
+  min-width: 0 !important;
+  height: 72px !important;
+  border: 1px solid rgba(91, 129, 151, .32) !important;
+  background:
+    linear-gradient(180deg, rgba(18, 42, 56, .90), rgba(9, 24, 34, .96)) !important;
+  color: #66889a !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    inset 0 -1px 0 rgba(72, 104, 122, .10) !important;
+}
+
+.dr-home-party-slots > span:not(.is-filled) > svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 1.4 !important;
+  color: #5f7f91 !important;
+}
+
+.dr-home-party-slots > span.is-filled {
+  border-color: rgba(207, 177, 96, .56) !important;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(62, 114, 145, .18), transparent 46%),
+    linear-gradient(180deg, rgba(21, 48, 64, .96), rgba(8, 22, 31, .98)) !important;
+}
+
+.dr-home-party-slots b {
+  width: 40px !important;
+  height: 40px !important;
+  border: 1px solid rgba(101, 177, 210, .42) !important;
+  background:
+    radial-gradient(circle at 38% 30%, #2d5872 0%, #17384d 48%, #102536 100%) !important;
+  color: #eef2ef !important;
+  font-size: 10px !important;
+  box-shadow:
+    0 0 0 2px rgba(10, 25, 35, .70),
+    0 0 12px rgba(63, 148, 185, .13) !important;
+}
+
+.dr-home-party-slots > span.is-filled > svg {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+  width: 12px !important;
+  height: 12px !important;
+  color: #ddb95d !important;
+  filter: drop-shadow(0 0 4px rgba(221, 185, 93, .24));
+}
+
+.dr-home-party-main {
+  width: 100% !important;
+  height: 40px !important;
+  border: 1px solid rgba(90, 154, 184, .48) !important;
+  background:
+    linear-gradient(180deg, rgba(29, 73, 99, .78), rgba(15, 48, 68, .90)) !important;
+  color: #dce9f0 !important;
+  font: 700 10px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .055em !important;
+  box-shadow:
+    inset 0 1px 0 rgba(169, 215, 235, .08),
+    0 4px 12px rgba(0, 0, 0, .18) !important;
+}
+
+.dr-home-party-main:hover {
+  border-color: rgba(114, 185, 216, .62) !important;
+  background:
+    linear-gradient(180deg, rgba(37, 91, 120, .88), rgba(18, 57, 79, .94)) !important;
+}
+
+.dr-home-party-invite {
+  height: 40px !important;
+  grid-template-columns: minmax(0, 1fr) 74px !important;
+  border: 1px solid rgba(93, 143, 167, .38) !important;
+  background: rgba(3, 10, 15, .82) !important;
+}
+
+.dr-home-party-invite input {
+  padding: 0 11px !important;
+  color: #d6e1e5 !important;
+  font-size: 10px !important;
+}
+
+.dr-home-party-invite input::placeholder {
+  color: #607785 !important;
+}
+
+.dr-home-party-invite button {
+  border-left: 1px solid rgba(93, 143, 167, .30) !important;
+  background: linear-gradient(180deg, rgba(31, 80, 105, .72), rgba(17, 53, 72, .86)) !important;
+  color: #cae3ef !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  letter-spacing: .055em !important;
+}
+
+.dr-home-party-leave {
+  margin: 8px 0 0 !important;
+  padding: 0 !important;
+  color: #647984 !important;
+  font-size: 9px !important;
+}
+
+/* FRIENDS */
+.dr-home-right-rail > .platform-social-rail {
+  flex: 0 0 auto !important;
+  min-height: 250px !important;
+  max-height: min(58vh, 590px) !important;
+  border: 1px solid rgba(103, 137, 157, .26) !important;
+  background:
+    linear-gradient(180deg, rgba(7, 18, 26, .98), rgba(4, 12, 18, .99)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .02),
+    0 16px 38px rgba(0, 0, 0, .18) !important;
+  overflow: hidden !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head {
+  flex: 0 0 52px !important;
+  height: 52px !important;
+  padding: 0 13px !important;
+  border-bottom: 1px solid rgba(102, 132, 148, .16) !important;
+  background: linear-gradient(180deg, rgba(10, 25, 35, .46), rgba(6, 17, 24, .18)) !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head > div {
+  gap: 9px !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head svg {
+  width: 17px !important;
+  height: 17px !important;
+  color: #6dc9df !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head strong {
+  color: #d9dfdd !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: .09em !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head small {
+  color: #71858f !important;
+  font-size: 9px !important;
+}
+
+.dr-home-right-rail .platform-social-live-dot {
+  width: 6px !important;
+  height: 6px !important;
+  background: #6fe09f !important;
+  box-shadow: 0 0 8px rgba(111, 224, 159, .45) !important;
+}
+
+.dr-home-right-rail .platform-social-search {
+  flex: 0 0 38px !important;
+  height: 38px !important;
+  margin: 10px 12px 8px !important;
+  grid-template-columns: 27px minmax(0, 1fr) 30px !important;
+  border: 1px solid rgba(94, 128, 148, .24) !important;
+  background: rgba(2, 9, 14, .78) !important;
+}
+
+.dr-home-right-rail .platform-social-search > svg {
+  width: 14px !important;
+  color: #6d8592 !important;
+}
+
+.dr-home-right-rail .platform-social-search input {
+  min-width: 0 !important;
+  color: #d8e1e2 !important;
+  font-size: 10px !important;
+}
+
+.dr-home-right-rail .platform-social-search input::placeholder {
+  color: #6a7d87 !important;
+}
+
+.dr-home-right-rail .platform-social-search button {
+  color: #6e8a98 !important;
+  font-size: 11px !important;
+}
+
+.dr-home-right-rail .platform-social-search-results {
+  margin: 0 12px 8px !important;
+  border-color: rgba(100, 133, 151, .18) !important;
+  background: rgba(5, 15, 21, .96) !important;
+}
+
+.dr-home-right-rail .platform-social-requests {
+  margin: 4px 12px 0 !important;
+  padding-top: 9px !important;
+  border-top-color: rgba(109, 139, 153, .12) !important;
+}
+
+.dr-home-right-rail .platform-social-friends {
+  min-height: 0 !important;
+  flex: 0 1 auto !important;
+  margin: 5px 0 0 !important;
+  overflow: hidden !important;
+}
+
+/* The rail header already says FRIENDS; remove the duplicated subsection title. */
+.dr-home-right-rail .platform-social-friends > h4 {
+  display: none !important;
+}
+
+.dr-home-right-rail .platform-social-friends > div {
+  max-height: 352px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 133, 148, .24) transparent;
+}
+
+.dr-home-right-rail .platform-social-friends > div > button {
+  height: 52px !important;
+  grid-template-columns: 35px minmax(0, 1fr) 8px auto 15px !important;
+  gap: 8px !important;
+  padding: 0 12px !important;
+  border-left: 0 !important;
+  border-top: 1px solid transparent !important;
+  border-bottom: 1px solid rgba(100, 128, 142, .07) !important;
+  background: transparent !important;
+}
+
+.dr-home-right-rail .platform-social-friends > div > button::after {
+  content: "⌄";
+  grid-column: 5;
+  justify-self: end;
+  align-self: center;
+  color: #5d7786;
+  font: 700 14px/1 Arial, sans-serif;
+  transform: translateY(-1px);
+}
+
+.dr-home-right-rail .platform-social-friends > div > button:hover,
+.dr-home-right-rail .platform-social-friends > div > button.is-selected {
+  border-left: 0 !important;
+  border-top-color: rgba(91, 138, 161, .08) !important;
+  background:
+    linear-gradient(90deg, rgba(35, 83, 105, .17), rgba(13, 38, 52, .07)) !important;
+}
+
+.dr-home-right-rail .platform-social-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  border: 1px solid rgba(102, 176, 202, .31) !important;
+  background:
+    radial-gradient(circle at 38% 28%, #315c6a, #17343c 58%, #10242b) !important;
+  color: #dce8e7 !important;
+  font-size: 8px !important;
+  box-shadow: 0 0 9px rgba(58, 137, 163, .08) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > span:nth-child(2) {
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+
+.dr-home-right-rail .platform-social-friends button strong {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: #ccd5d3 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.dr-home-right-rail .platform-social-friends button small {
+  color: #6d8089 !important;
+  font-size: 9px !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i {
+  width: 6px !important;
+  height: 6px !important;
+  background: #53616a !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-online {
+  background: #68d99b !important;
+  box-shadow: 0 0 7px rgba(104, 217, 155, .46) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > em {
+  grid-column: 4;
+  min-width: 18px !important;
+  height: 18px !important;
+  border-radius: 9px !important;
+  background: #81433f !important;
+  font-size: 9px !important;
+  line-height: 18px !important;
+}
+
+.dr-home-right-rail .platform-social-empty {
+  margin: 0 !important;
+  padding: 18px 14px !important;
+  color: #657984 !important;
+  font-size: 10px !important;
+}
+
+.dr-home-right-rail .platform-social-pending {
+  padding: 9px 0 !important;
+  border-top-color: rgba(100, 130, 145, .10) !important;
+}
+
+.dr-home-right-rail .platform-social-notice {
+  margin: 8px 12px 12px !important;
+}
+
+@media (max-width: 1500px) {
+  .platform-home-shell .platform-home-grid {
+    grid-template-columns: minmax(0, 1fr) 360px !important;
+  }
+
+  .dr-home-right-rail {
+    padding: 12px 11px 14px !important;
+    gap: 10px !important;
+  }
+
+  .dr-home-party-card {
+    padding: 12px !important;
+  }
+
+  .dr-home-party-slots {
+    gap: 6px !important;
+  }
+
+  .dr-home-party-slots > span {
+    height: 64px !important;
+  }
+
+  .dr-home-party-slots b {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .dr-home-right-rail .platform-social-friends > div > button {
+    height: 48px !important;
+  }
+}
+
+@media (max-width: 1000px) {
+  .dr-home-right-rail {
+    display: none !important;
+  }
+}
