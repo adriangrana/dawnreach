@@ -11,64 +11,29 @@ import {
   type MatchEventParticipant,
   type MatchEventTeam,
 } from './matchEvents';
+import {
+  matchEventKindFromEntityId,
+  matchEventLabelForEntityId,
+  matchEventTeamFromEntityId,
+} from './matchEventParticipants';
 
 const HERO_ASSIST_WINDOW_MS = 10_000;
 const KILL_SOURCE_LOOKBACK_MS = 3_000;
 const processedDeaths = new Set<string>();
 let installed = false;
 
-function titleCase(value: string) {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function teamFromEntityId(entityId: string): MatchEventTeam {
-  if (entityId.startsWith('blue-')) return 'blue';
-  if (entityId.startsWith('red-')) return 'red';
-  return 'neutral';
-}
-
-function kindFromEntityId(entityId: string): MatchEventEntityKind {
-  if (entityId === 'blue-throne' || entityId === 'red-throne') return 'building';
-  if (entityId.includes('-hero-') || entityId.startsWith('hero-')) return 'hero';
-  if (entityId.includes('-tower-') || entityId.startsWith('tower-')) return 'tower';
-  if (entityId.includes('-creep-') || entityId.startsWith('creep-')) return 'creep';
-  if (entityId.includes('drake') || entityId.includes('aurelios') || entityId.includes('jungle')) return 'jungle-creature';
-  return 'unknown';
-}
-
-function labelFromEntityId(entityId: string, kind: MatchEventEntityKind) {
-  if (entityId === 'blue-throne') return 'Trono del Alba';
-  if (entityId === 'red-throne') return 'Trono del Ocaso';
-  if (entityId.toLowerCase().includes('radiant-drake') || entityId.toLowerCase().includes('aurelios')) return 'Aurelios';
-
-  const heroMarker = '-hero-';
-  const heroIndex = entityId.indexOf(heroMarker);
-  if (kind === 'hero' && heroIndex >= 0) return titleCase(entityId.slice(heroIndex + heroMarker.length));
-
-  if (kind === 'tower') {
-    const withoutTeam = entityId.replace(/^(blue|red)-/, '').replace(/^tower-/, '');
-    return `Torre ${titleCase(withoutTeam.replace(/^tower-/, ''))}`.trim();
-  }
-
-  return titleCase(entityId.replace(/^(blue|red|neutral)-/, '')) || 'Entidad';
-}
-
 function participant(
   entityId: string,
   kind?: MatchEventEntityKind,
   team?: MatchEventTeam,
 ): MatchEventParticipant {
-  const resolvedKind = kind ?? kindFromEntityId(entityId);
-  const resolvedTeam = team ?? teamFromEntityId(entityId);
+  const resolvedKind = kind ?? matchEventKindFromEntityId(entityId);
+  const resolvedTeam = team ?? matchEventTeamFromEntityId(entityId);
   return {
     entityId,
     kind: resolvedKind,
     team: resolvedTeam,
-    label: labelFromEntityId(entityId, resolvedKind),
+    label: matchEventLabelForEntityId(entityId, resolvedKind),
   };
 }
 
