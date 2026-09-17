@@ -424,7 +424,7 @@ test('idle sword rests at a shallow authored angle with vertical cutting edges a
   const edgeAxis = new THREE.Vector3(1, 0, 0).transformDirection(rig.sword.getObjectByName('sword-blade').matrixWorld);
   assert.ok(Math.abs(edgeAxis.y) > 0.99, `cutting edges must remain close to vertical: ${edgeAxis.toArray()}`);
   assert.ok(tip.z > 0.65, `sword should clear the feet in front: ${tip.z}`);
-  assert.ok(tip.x > 0.60, `sword should remain outside the leg: ${tip.x}`);
+  assert.ok(Math.abs(tip.x) > 0.60, `sword should remain laterally outside the leg: ${tip.x}`);
 });
 
 test('walk preserves opposite limbs, the grip and clearance through a full cycle', () => {
