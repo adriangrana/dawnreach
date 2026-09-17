@@ -132,6 +132,56 @@
   width: auto !important;
 }
 
+/* =========================================================
+   FEATURED HERO ART
+   ========================================================= */
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero {
+  position: absolute !important;
+  z-index: 1 !important;
+  left: 51.5% !important;
+  top: 18px !important;
+  bottom: 42px !important;
+  width: min(46vw, 620px) !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  width: 92%;
+  height: 58%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 50% 58%, rgba(82, 143, 193, .16) 0%, rgba(61, 112, 154, .08) 38%, rgba(223, 185, 92, .045) 54%, transparent 73%);
+  filter: blur(22px);
+  pointer-events: none;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  object-position: bottom center;
+  filter:
+    saturate(1.04)
+    contrast(1.02)
+    drop-shadow(0 12px 24px rgba(0, 0, 0, .28))
+    drop-shadow(0 30px 56px rgba(0, 0, 0, .24));
+}
+
 @media (max-width: 1500px) {
   .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
     right: 0px !important;
@@ -144,12 +194,24 @@
     right: 382px !important;
     width: 250px !important;
   }
+
+  .platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero {
+    left: 52% !important;
+    top: 16px !important;
+    bottom: 38px !important;
+    width: min(45vw, 540px) !important;
+  }
 }
 
 @media (max-height: 850px) {
   .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
     top: 8px !important;
     bottom: 258px !important;
+  }
+
+  .platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero {
+    top: 10px !important;
+    bottom: 30px !important;
   }
 }
 
@@ -162,5 +224,11 @@
 
   .platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
     right: 5% !important;
+  }
+
+  .platform-home-grid:has(.dr-home-overview) .dr-home-feature-hero {
+    left: 54% !important;
+    width: min(50vw, 480px) !important;
+    opacity: .94;
   }
 }

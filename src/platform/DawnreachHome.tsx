@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import aldenPortrait from '../game/heroes/alden/images/H001.webp';
+import aldenFullArt from '../game/heroes/alden/images/H001F.png';
 import { platformRealtime } from './realtimeClient';
 import { SocialRail } from './SocialRail';
 import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
@@ -95,6 +96,10 @@ export function DawnreachHomeOverview({
           <div><span className="dr-home-event-icon"><Users /></span><p><strong>War Council</strong><small>{party.party ? `Party ${party.party.members.length}/5` : 'Form a party'}</small></p><em>{online.length} ON</em></div>
         </article>
       </aside>
+
+      <div className="dr-home-feature-hero" aria-hidden="true">
+        <img src={aldenFullArt} alt="" draggable={false} />
+      </div>
 
       <div className="dr-home-feature-copy">
         <span>FEATURED HERO</span>
