@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import aldenPortrait from '../game/heroes/alden/images/H001.webp';
 import aldenFullArt from '../game/heroes/alden/images/H001F.png';
+import { HomeChatPanel } from './HomeChatPanel';
 import { platformRealtime } from './realtimeClient';
 import { SocialRail } from './SocialRail';
 import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
@@ -61,6 +62,9 @@ export function DawnreachHomeOverview({
   user,
   party,
   online,
+  social,
+  selectedChatFriendId,
+  refreshSocial,
   onPlay,
   onLocalPlay,
   onNormal,
@@ -70,6 +74,9 @@ export function DawnreachHomeOverview({
   user: PlatformUser;
   party: PartySnapshot;
   online: readonly PlatformUser[];
+  social: SocialSnapshot;
+  selectedChatFriendId: string | null;
+  refreshSocial: () => Promise<void>;
   onPlay: () => void;
   onLocalPlay: () => void;
   onNormal: () => void;
@@ -122,7 +129,7 @@ export function DawnreachHomeOverview({
       <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
       <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
       <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
-      <article className="dr-home-channel-card"><header><strong>CHANNEL</strong><span>General&nbsp;&nbsp; · &nbsp;&nbsp;Party</span></header><div><p>Social chat and direct messages are available in the friends panel.</p></div><footer><input disabled placeholder="Select a friend to start a conversation…" /><button disabled><MessageSquare /></button></footer></article>
+      <HomeChatPanel me={user} online={online} snapshot={social} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} />
       <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>
     </div>
   </section>;
@@ -134,12 +141,16 @@ export function DawnreachHomeRightRail({
   snapshot,
   party,
   refresh,
+  activeConversationId,
+  onOpenConversation,
 }: {
   me: PlatformUser;
   online: readonly PlatformUser[];
   snapshot: SocialSnapshot;
   party: PartySnapshot;
   refresh: () => Promise<void>;
+  activeConversationId?: string | null;
+  onOpenConversation?: (userId: string) => void;
 }) {
   const [inviteName, setInviteName] = useState('');
   const activeParty = party.party;
@@ -163,6 +174,6 @@ export function DawnreachHomeRightRail({
       {!activeParty ? <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.create')}>CREATE PARTY</button> : isLeader ? <div className="dr-home-party-invite"><input value={inviteName} onChange={event => setInviteName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); invite(); } }} placeholder="Invite by username" /><button type="button" onClick={invite}>INVITE</button></div> : <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.leave')}>LEAVE PARTY</button>}
       {activeParty && isLeader && <button className="dr-home-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Leave party</button>}
     </section>
-    <SocialRail me={me} online={online} snapshot={snapshot} party={party} refresh={refresh} />
+    <SocialRail me={me} online={online} snapshot={snapshot} party={party} refresh={refresh} activeConversationId={activeConversationId} onOpenConversation={onOpenConversation} />
   </aside>;
 }
