@@ -160,8 +160,7 @@ function systemEventCopy(event: FeedSystemEvent) {
     };
   }
 
-  const exhaustive: never = event;
-  return exhaustive;
+  throw new Error(`Unsupported match feed event: ${event.type}`);
 }
 
 function createSystemRow(event: FeedSystemEvent) {
