@@ -16,10 +16,10 @@
 
 # Prioridad inmediata — siguiente vertical slice jugable
 
-Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en este orden aproximado:
+Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en este orden aproximado.
 
-- [ ] **P0 · Corregir el layout de torres a 3 torres por equipo y por carril.** El generador actual crea 2 torres azules + 2 rojas por carril (`getLaneTowerSites()` usa cuatro posiciones totales por lane). El objetivo de diseño fijado es 3 por equipo/carril.
-- [ ] **P0 · Definir y conectar los tiers reales de esas torres con su posición.** `towers.json` ya contiene T1–T4, pero el layout físico y los tiers no están completamente alineados.
+> **Decisión de diseño cerrada:** el layout actual de torres es definitivo. Dawnreach tendrá **2 torres por equipo en cada carril** (6 por equipo en total). No se añadirán más torres ni se ampliará ese layout.
+
 - [ ] **P0 · Sustituir el reloj `00:00` del HUD por el tiempo real de partida**, respetando pausa.
 - [ ] **P0 · Sustituir el marcador superior 0–0 por kills reales de ambos equipos.**
 - [ ] **P0 · Registrar kills/deaths/assists y alimentar scoreboard/HUD con datos reales.**
@@ -86,8 +86,8 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Dos fosas/zonas de objetivo definidas en el layout.
 - [x] Collision world del mapa.
 - [x] Superficies navegables para órdenes del jugador.
-- [ ] **PENDIENTE · 3 torres por equipo/carril.** Hoy el generador de sitios crea 2 por equipo/carril.
-- [ ] **PARCIAL · Jerarquía T1/T2/T3/T4 y distribución física.** Hay datos de tiers, pero falta casar diseño, número de torres y layout definitivo.
+- [x] **Layout definitivo de torres: 2 torres por equipo/carril, 6 por equipo en total.** No se añadirán más torres.
+- [ ] **PARCIAL · Configuración/tiering de las torres existentes.** `towers.json` contiene datos T1–T4; cualquier ajuste debe aplicarse únicamente a las torres actuales, sin aumentar su número ni cambiar el layout definitivo salvo correcciones técnicas.
 - [ ] **PARCIAL · Campamentos neutrales.** Los ocho campamentos tienen clearing, entrada, fogata y spawn points, pero no todos tienen criaturas/gameplay.
 - [ ] **PENDIENTE · Definir/implementar criatura(s) para cada tipo de campamento neutral.**
 - [ ] **PENDIENTE · Definir el segundo gran objetivo neutral si ambas fosas deben tener gameplay.**
@@ -183,6 +183,7 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 # 8. Torres y estructuras
 
 - [x] Torres como entidades seleccionables/atacables.
+- [x] **Cantidad y distribución final de torres: 2 por equipo/carril, 6 por equipo.** Este layout es definitivo.
 - [x] HP y stats de torre configurables desde `towers.json`.
 - [x] Ataque automático de torre.
 - [x] Selección/prioridad de targets.
@@ -195,7 +196,7 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Datos/configuración para backdoor protection.
 - [x] Tiers T1–T4 definidos en datos.
 - [x] Tronos registrados como `attackable-structure`, con 5000 HP.
-- [ ] **PARCIAL · Número y tiers reales de torres en el mapa.** La distribución actual no coincide con 3 por equipo/carril.
+- [ ] **PARCIAL · Asignación/reglas de tiers sobre las torres existentes.** Si se mantienen T1–T4 en datos, deben alinearse con las torres actuales sin añadir torres nuevas.
 - [ ] **PENDIENTE · Reglas de dependencia entre estructuras** si se desea impedir atacar estructuras internas antes de destruir las externas.
 - [ ] **PENDIENTE · Recompensa individual/global por destruir torre.**
 - [ ] **PENDIENTE · Victoria cuando el trono llega a 0 HP.**
@@ -452,8 +453,8 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [ ] `ensureWorldShopSystem(..., 'blue')` mantiene una perspectiva de tienda local Blue; convertir a owner/team context.
 - [ ] `AldenWorldRuntime` utiliza `MutationObserver` del HUD para descubrir casts. Reemplazar por eventos de habilidad emitidos desde el gameplay state.
 - [ ] Match score y reloj superior siguen hardcodeados.
-- [ ] `getLaneTowerSites()` no coincide con el objetivo de 3 torres por equipo/carril.
-- [ ] Los datos de torres contemplan T1–T4, pero la topología física actual no expresa claramente esos tiers.
+- [x] `getLaneTowerSites()` representa el layout final aprobado: 2 torres por equipo/carril. No añadir más torres.
+- [ ] Si se mantienen tiers T1–T4 en datos, alinear su configuración con las torres existentes sin modificar cantidad ni distribución.
 - [ ] Los campamentos neutrales están mayormente en fase de escenario/spawn points; falta gameplay de criaturas y respawn.
 - [ ] El modelo `MatchState` está preparado para 10 slots, pero el world runtime todavía no está derivado de ese estado de forma genérica.
 - [ ] La cobertura de tests quedó por detrás del volumen actual de sistemas.
@@ -467,7 +468,8 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 Considerar este hito terminado cuando se cumpla todo lo siguiente:
 
-- [ ] 3 torres por equipo en cada lane y tiers correctamente asignados.
+- [x] Layout final de torres mantenido: 2 torres por equipo/carril; no añadir más.
+- [ ] Si se usan tiers diferenciados, asignarlos/configurarlos sobre las torres actuales sin alterar el layout.
 - [ ] Waves funcionando durante una partida larga sin degradación evidente.
 - [ ] Alden Blue jugable.
 - [ ] Un héroe Dusk controlado por bot básico y usando el mismo modelo genérico de entidad/héroe.
