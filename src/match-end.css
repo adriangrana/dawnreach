@@ -1,0 +1,139 @@
+body[data-dawnreach-match-finished="true"] .match-pause-overlay {
+  display: none !important;
+}
+
+body[data-dawnreach-match-finished="true"] #dawnreach-game-menu [data-action="resume"] {
+  pointer-events: none;
+  opacity: 0.42;
+  filter: grayscale(0.65);
+}
+
+.match-end-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 360ms ease;
+}
+
+.match-end-overlay[hidden] {
+  display: none;
+}
+
+.match-end-overlay.is-visible {
+  opacity: 1;
+}
+
+.match-end-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(10, 18, 24, 0.12), rgba(3, 7, 10, 0.78) 54%, rgba(1, 3, 5, 0.94) 100%),
+    linear-gradient(180deg, rgba(5, 10, 14, 0.28), rgba(3, 7, 10, 0.72));
+  backdrop-filter: blur(2.5px) saturate(0.82);
+}
+
+.match-end-panel {
+  position: relative;
+  width: min(620px, calc(100vw - 40px));
+  padding: 34px 46px 38px;
+  text-align: center;
+  color: #efe7ce;
+  background:
+    linear-gradient(180deg, rgba(18, 27, 33, 0.96), rgba(6, 11, 15, 0.97)),
+    radial-gradient(circle at 50% 0, rgba(214, 181, 107, 0.17), transparent 52%);
+  border: 1px solid rgba(214, 181, 107, 0.42);
+  box-shadow:
+    0 28px 72px rgba(0, 0, 0, 0.62),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 18px 46px rgba(255, 255, 255, 0.018);
+  clip-path: polygon(7% 0, 93% 0, 100% 16%, 100% 84%, 93% 100%, 7% 100%, 0 84%, 0 16%);
+  transform: translateY(14px) scale(0.985);
+  opacity: 0;
+  transition: transform 420ms cubic-bezier(.2,.8,.2,1), opacity 320ms ease;
+}
+
+.match-end-overlay.is-visible .match-end-panel {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.match-end-kicker {
+  display: block;
+  margin-bottom: 10px;
+  font: 700 11px/1.2 "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.32em;
+  color: #b6a87f;
+}
+
+.match-end-title {
+  display: block;
+  font: 700 clamp(46px, 6vw, 76px)/0.95 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.05em;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.68);
+}
+
+.match-end-overlay.is-victory .match-end-title {
+  color: #a9ddff;
+  text-shadow: 0 0 28px rgba(88, 181, 255, 0.3), 0 4px 18px rgba(0, 0, 0, 0.68);
+}
+
+.match-end-overlay.is-defeat .match-end-title {
+  color: #ff8c95;
+  text-shadow: 0 0 28px rgba(230, 90, 100, 0.28), 0 4px 18px rgba(0, 0, 0, 0.68);
+}
+
+.match-end-divider {
+  display: grid;
+  grid-template-columns: 1fr 14px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: min(360px, 80%);
+  margin: 24px auto 18px;
+}
+
+.match-end-divider i {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(214, 181, 107, 0.62));
+}
+
+.match-end-divider i:last-child {
+  transform: scaleX(-1);
+}
+
+.match-end-divider b {
+  width: 12px;
+  height: 12px;
+  margin: auto;
+  border: 1px solid rgba(214, 181, 107, 0.8);
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(214, 181, 107, 0.18);
+}
+
+.match-end-copy {
+  margin: 0;
+  font: 600 17px/1.45 "Trebuchet MS", "Segoe UI", sans-serif;
+  color: #d8d5c8;
+}
+
+.match-end-team {
+  display: block;
+  margin-top: 12px;
+  font: 800 11px/1.2 "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.22em;
+  color: #d6b56b;
+}
+
+@media (max-width: 600px) {
+  .match-end-panel {
+    padding: 28px 24px 30px;
+  }
+
+  .match-end-copy {
+    font-size: 15px;
+  }
+}
