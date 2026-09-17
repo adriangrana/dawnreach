@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { LogIn, Shield, Swords, UserPlus } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
@@ -99,7 +99,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [currentLobby, setCurrentLobby] = useState<CustomLobby | null>(null);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
-  const refreshSocial = async () => { setSocial(await getSocialSnapshot()); };
+  const [chatFriendId, setChatFriendId] = useState<string | null>(null);
+  const refreshSocial = useCallback(async () => { setSocial(await getSocialSnapshot()); }, []);
+
+  useEffect(() => {
+    if (chatFriendId && !social.friends.some(friend => friend.id === chatFriendId)) setChatFriendId(null);
+  }, [chatFriendId, social.friends]);
 
   useEffect(() => {
     void refreshSocial().catch(() => undefined);
@@ -154,7 +159,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     try { socket = platformRealtime.connect(); socket.addEventListener('open', () => setRealtime('online')); socket.addEventListener('close', () => setRealtime('offline')); socket.addEventListener('error', () => setRealtime('offline')); }
     catch { setRealtime('offline'); }
     return () => { unsubscribe(); platformRealtime.disconnect(); };
-  }, [user.id]);
+  }, [refreshSocial, user.id]);
 
   const chooseMode = (mode: QueueMode) => setQueue(current => current.joined ? current : { ...current, mode });
   const joinQueue = (mode: QueueMode) => {
@@ -176,7 +181,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
-          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
+          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
             <header className="platform-play-heading"><div><p className="platform-eyebrow">PLAY</p><h1>Prepare for your next battle</h1><p>Matchmaking and custom lobbies share the same session, party, and presence.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Custom</button></div></header>
             <PartyBar me={user} snapshot={party} />
             {playSection === 'matchmaking' ? <MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /> : <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />}
@@ -184,7 +189,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
             {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
           </section>}
         </section>
-        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} />
+        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={section === 'home' ? chatFriendId : null} onOpenConversation={section === 'home' ? setChatFriendId : undefined} />
       </div>
     </main>
     {ready && <ReadyCheckOverlay ready={ready} me={user} />}
