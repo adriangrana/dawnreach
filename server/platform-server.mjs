@@ -10,6 +10,7 @@ import { hashPassword } from './security.mjs';
 import { PlatformStore } from './store.mjs';
 import { PartyManager } from './parties.mjs';
 import { Matchmaker } from './matchmaking.mjs';
+import { LobbyManager } from './lobbies.mjs';
 import { acceptWebSocket } from './websocket.mjs';
 
 export function createPlatformServer(options = {}) {
@@ -50,7 +51,7 @@ export function createPlatformServer(options = {}) {
     broadcast({
       type: 'match.session.pending',
       match: safe,
-      note: 'Matchmaking completado. El transporte de la sesión de juego se conectará en la siguiente fase.',
+      note: 'La plataforma ya creó la partida. El transporte de la sesión de juego se conectará en la siguiente fase.',
     }, match.players.map(player => player.userId));
   }
 
@@ -62,9 +63,20 @@ export function createPlatformServer(options = {}) {
     onLaunch: launchMatch,
   });
 
+  const lobbies = new LobbyManager({
+    store,
+    onEvent: (event, userIds) => broadcast(event, userIds),
+    onLaunch: launchMatch,
+  });
+
+  function requireNotInLobby(userId) {
+    if (lobbies.lobbyForUser(userId)) throw new Error('Sal de la sala personalizada antes de entrar en matchmaking.');
+  }
+
   function queueParty(user, mode) {
     const party = parties.partyForUser(user.id);
     if (!party) {
+      requireNotInLobby(user.id);
       const competitor = store.competitiveUser(store.getUser(user.id));
       if (!competitor) throw new Error('Jugador no encontrado.');
       matchmaker.join(competitor, mode);
@@ -72,6 +84,7 @@ export function createPlatformServer(options = {}) {
     }
     if (party.leaderId !== user.id) throw new Error('Solo el líder del grupo puede iniciar matchmaking.');
     const members = parties.membersAsUsers(party);
+    members.forEach(member => requireNotInLobby(member.id));
     matchmaker.joinMany(members, mode, party.id);
   }
 
@@ -272,7 +285,7 @@ export function createPlatformServer(options = {}) {
       return json(req, res, 404, { error: 'Not found' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected server error';
-      const clientFault = /registrado|contraseña|nombre de usuario|caracteres|tipos|solicitud|amistad|amigos|mensaje|usuario solicitado|lista de amigos/i.test(message);
+      const clientFault = /registrado|contraseña|nombre de usuario|caracteres|tipos|solicitud|amistad|amigos|mensaje|usuario solicitado|lista de amigos|sala|partida|equipo|posición|matchmaking/i.test(message);
       const status = clientFault ? 400 : 500;
       if (status === 500) logger.error?.('[platform] request failed', error);
       return json(req, res, status, { error: status === 500 ? 'Error interno del servidor.' : message });
@@ -297,6 +310,16 @@ export function createPlatformServer(options = {}) {
           if (type === 'queue.join' || type === 'party.queue') queueParty(user, message.mode === 'normal' ? 'normal' : 'ranked');
           else if (type === 'queue.leave') leaveQueue(user);
           else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
+          else if (type === 'lobby.create') {
+            leaveQueue(user);
+            lobbies.create(user, String(message.name || ''), message.privacy === 'private' ? 'private' : 'public', Number(message.maxPlayers || 10));
+          } else if (type === 'lobby.join') {
+            leaveQueue(user);
+            lobbies.join(user, String(message.code || message.lobbyId || ''));
+          } else if (type === 'lobby.move') lobbies.move(user.id, message.team === 'red' ? 'red' : 'blue', Number(message.slot));
+          else if (type === 'lobby.leave') lobbies.leave(user.id);
+          else if (type === 'lobby.start') lobbies.start(user.id);
+          else if (type === 'lobby.list') lobbies.emitList();
           else if (type === 'party.create') parties.create(user);
           else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
           else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
@@ -320,6 +343,8 @@ export function createPlatformServer(options = {}) {
         social: socialSnapshot(user.id),
         party: parties.snapshotFor(user.id),
         queue: { joined: Boolean(matchmaker.statusFor(user.id)), target: config.queueSize },
+        lobbies: lobbies.listPublic(),
+        lobby: lobbies.lobbyForUser(user.id),
       });
       broadcastPresence();
     } catch {
@@ -348,5 +373,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, start, close };
+  return { config, server, store, sessions, parties, matchmaker, lobbies, start, close };
 }
