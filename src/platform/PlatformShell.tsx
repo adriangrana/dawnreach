@@ -129,8 +129,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       if (type === 'ready.start' && 'readyId' in event && 'players' in event && 'expiresAt' in event) {
         setReady({ readyId: String(event.readyId), mode: event.mode === 'normal' ? 'normal' : 'ranked', players: Array.isArray(event.players) ? event.players as ReadyState['players'] : [], expiresAt: Number(event.expiresAt), acceptedUserIds: [], declinedUserIds: [] });
       }
-      if (type === 'ready.progress' && 'readyId' in event) {
-        setReady(current => current && current.readyId === event.readyId ? { ...current, acceptedUserIds: Array.isArray(event.acceptedUserIds) ? event.acceptedUserIds as string[] : [], declinedUserIds: Array.isArray(event.declinedUserIds) ? event.declinedUserIds as string[] : [] } : current);
+      if (type === 'ready.progress' && 'readyId' in event && 'acceptedUserIds' in event && 'declinedUserIds' in event) {
+        const acceptedUserIds = Array.isArray(event.acceptedUserIds) ? event.acceptedUserIds as string[] : [];
+        const declinedUserIds = Array.isArray(event.declinedUserIds) ? event.declinedUserIds as string[] : [];
+        setReady(current => current && current.readyId === event.readyId ? { ...current, acceptedUserIds, declinedUserIds } : current);
       }
       if (type === 'ready.cancelled') {
         const declinedUserId = 'declinedUserId' in event ? String(event.declinedUserId || '') : '';
