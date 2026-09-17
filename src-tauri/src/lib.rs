@@ -1,3 +1,7 @@
+mod secure_auth;
+
+use secure_auth::{auth_token_delete, auth_token_read, auth_token_write};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut context = tauri::generate_context!();
@@ -6,6 +10,11 @@ pub fn run() {
     )));
 
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            auth_token_read,
+            auth_token_write,
+            auth_token_delete
+        ])
         .run(context)
         .expect("error while running Dawnreach");
 }
