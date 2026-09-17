@@ -20,9 +20,9 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 
 > **Decisión de diseño cerrada:** el layout actual de torres es definitivo. Dawnreach tendrá **2 torres por equipo en cada carril** (6 por equipo en total). No se añadirán más torres ni se ampliará ese layout.
 
-- [ ] **P0 · Sustituir el reloj `00:00` del HUD por el tiempo real de partida**, respetando pausa.
-- [ ] **P0 · Sustituir el marcador superior 0–0 por kills reales de ambos equipos.**
-- [ ] **P0 · Registrar kills/deaths/assists y alimentar scoreboard/HUD con datos reales.**
+- [x] **HECHO · Reloj real de partida en el HUD**, usando `nowMs - match.createdAtMs` y la fuente de tiempo pause-aware. El JSX conserva `00:00` solo como valor inicial antes de que el runtime sincronice el reloj.
+- [ ] **P0 · Sustituir el marcador superior 0–0 por kills reales de ambos equipos.** Los dos valores del header siguen siendo literales en `App.tsx`; el scoreboard detallado sí calcula un total a partir de sus filas, pero no alimenta todavía el header superior.
+- [ ] **PARCIAL · K/D/A y scoreboard.** Las kills y deaths locales de Alden ya se registran desde eventos de combate y alimentan HUD/scoreboard. El campo de assists existe en la UI/modelo de presentación, pero todavía no se atribuyen asistencias; tampoco existe aún K/D/A autoritativo para 10 héroes reales.
 - [ ] **P0 · Convertir la destrucción del trono/núcleo enemigo en victoria/derrota.** El trono ya es una entidad atacable con HP, pero falta cerrar el ciclo de partida.
 - [ ] **P0 · Implementar estado de fin de partida** (`finished`), overlay de victoria/derrota y bloqueo de gameplay posterior.
 - [ ] **P0 · Añadir reinicio/nueva partida local** sin tener que recargar manualmente toda la aplicación.
@@ -62,9 +62,9 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [ ] **PARCIAL · Runtime actual solo materializa el héroe local Alden.**
 - [ ] **PARCIAL · HUD superior tiene 10 huecos, pero 9 siguen siendo placeholders.**
 - [ ] **PENDIENTE · Crear/instanciar los 10 héroes reales a partir del estado del match.**
-- [ ] **PENDIENTE · Estado real de kills/deaths/assists por jugador.**
-- [ ] **PENDIENTE · Score por equipos.**
-- [ ] **PENDIENTE · Asistencia y atribución de kills.**
+- [ ] **PARCIAL · Estado K/D/A por jugador.** K/D local de Alden ya se registra; assists y estadísticas autoritativas de los demás jugadores siguen pendientes.
+- [ ] **PENDIENTE · Score por equipos en el header superior.**
+- [ ] **PENDIENTE · Asistencia y atribución de kills multi-héroe.**
 - [ ] **PENDIENTE · Autoridad multiplayer/networking.** Actualmente el juego es esencialmente un runtime local.
 - [ ] **PENDIENTE · Reconexión real a partida.**
 - [ ] **PENDIENTE · Matchmaking/party/lobby online.**
@@ -151,8 +151,9 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Muerte de entidades y publicación de eventos.
 - [x] Respawn de héroe con tiempo dependiente del nivel.
 - [x] Bloqueo de órdenes mientras el héroe local está muerto.
+- [x] **K/D local de Alden registrado desde eventos reales de muerte/kill y mostrado en HUD/scoreboard.**
+- [ ] **PENDIENTE · Assists y K/D/A genérico multi-héroe.**
 - [ ] **PENDIENTE · Héroe enemigo real para validar PvP completo.**
-- [ ] **PENDIENTE · KDA/assists.**
 - [ ] **PENDIENTE · Recompensas completas por kill de héroe y distribución de asistencias.**
 - [ ] **PENDIENTE · Revisión global de CC stacking, inmunidades, dispels y prioridades**, cuando haya más de un héroe.
 - [ ] **PENDIENTE · Sistema genérico de proyectiles de héroes**, necesario para futuros héroes ranged.
@@ -336,10 +337,11 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Escalado responsive del HUD.
 - [x] Menú F10.
 - [x] Menú de opciones con disponibilidad explícita por setting.
-- [ ] **PARCIAL · Match header.** El score visible sigue hardcodeado a `0 - 0`.
-- [ ] **PARCIAL · Match clock.** El HUD superior sigue mostrando `00:00`.
+- [x] **Match clock real y pause-aware.** `ScoreboardOverlay` sincroniza el reloj superior con el tiempo real de partida.
+- [x] **K/D local de Alden mostrado en HUD y scoreboard.**
+- [ ] **PARCIAL · Match header.** El score visible superior sigue hardcodeado a `0 - 0`.
+- [ ] **PARCIAL · K/D/A completo.** Assists siguen sin atribución y faltan estadísticas reales de los demás héroes.
 - [ ] **PARCIAL · Team portraits.** Alden es real; los demás son placeholders por inicial.
-- [ ] **PENDIENTE · KDA real en scoreboard.**
 - [ ] **PENDIENTE · Objective timers reales.**
 - [ ] **PENDIENTE · Pantalla de victoria/derrota.**
 - [ ] **PENDIENTE · Pantalla postpartida.**
@@ -452,7 +454,9 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [ ] `registerAuthoredMapEntities()` inicializa varias estructuras con targetability pensada desde Blue/local. Generalizar para ambos lados.
 - [ ] `ensureWorldShopSystem(..., 'blue')` mantiene una perspectiva de tienda local Blue; convertir a owner/team context.
 - [ ] `AldenWorldRuntime` utiliza `MutationObserver` del HUD para descubrir casts. Reemplazar por eventos de habilidad emitidos desde el gameplay state.
-- [ ] Match score y reloj superior siguen hardcodeados.
+- [ ] El match score superior sigue hardcodeado a `0 - 0`.
+- [ ] El reloj funciona, pero hoy `ScoreboardOverlay` actualiza imperativamente el nodo `.match-clock b`; cuando se desacople HUD/gameplay conviene pasarlo a render declarativo.
+- [ ] K/D local funciona, pero assists y K/D/A multi-héroe todavía no tienen atribución autoritativa.
 - [x] `getLaneTowerSites()` representa el layout final aprobado: 2 torres por equipo/carril. No añadir más torres.
 - [ ] Si se mantienen tiers T1–T4 en datos, alinear su configuración con las torres existentes sin modificar cantidad ni distribución.
 - [ ] Los campamentos neutrales están mayormente en fase de escenario/spawn points; falta gameplay de criaturas y respawn.
@@ -474,9 +478,9 @@ Considerar este hito terminado cuando se cumpla todo lo siguiente:
 - [ ] Alden Blue jugable.
 - [ ] Un héroe Dusk controlado por bot básico y usando el mismo modelo genérico de entidad/héroe.
 - [ ] Ambos héroes pueden dañarse, morir, otorgar kill y reaparecer.
-- [ ] K/D/A real.
-- [ ] Marcador real.
-- [ ] Reloj real.
+- [ ] **PARCIAL · K/D/A real:** K/D local ya funciona; assists y multi-héroe pendientes.
+- [ ] Marcador real de kills por equipos en el header superior.
+- [x] Reloj real de partida, pause-aware.
 - [ ] XP/oro/levels reales durante toda la partida.
 - [ ] Tienda e inventario funcionales para la perspectiva de ambos equipos.
 - [ ] Fog/visión correcto desde Blue y Dusk.
