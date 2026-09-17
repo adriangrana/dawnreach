@@ -43,6 +43,7 @@ import './platform-home-topbar-right-polish.css';
 import './platform-home-topbar-currency-reference.css';
 import './platform-home-social-search-polish.css';
 import './platform-home-friend-chevron-polish.css';
+import './platform-play-reference.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
