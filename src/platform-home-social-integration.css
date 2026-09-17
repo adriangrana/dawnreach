@@ -21,8 +21,7 @@
 
 /*
  * PARTY / FRIENDS float over the right side of the hero stage.
- * The bottom offset reserves the mode ribbon and the lower content strip,
- * matching the reference instead of creating a tall black sidebar.
+ * The rail itself is the dark translucent mother card from the reference.
  */
 .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
   position: absolute !important;
@@ -35,31 +34,71 @@
 
   display: flex !important;
   flex-direction: column !important;
-  gap: 10px !important;
+  gap: 12px !important;
 
-  padding: 0 !important;
+  box-sizing: border-box !important;
+  padding: 12px !important;
   margin: 0 !important;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+
+  border: 1px solid rgba(101, 132, 149, .28) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(57, 91, 111, .14), transparent 38%),
+    linear-gradient(180deg, rgba(5, 17, 26, .78) 0%, rgba(4, 12, 19, .88) 57%, rgba(3, 8, 13, .94) 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .028),
+    inset 0 0 34px rgba(1, 7, 11, .22),
+    0 18px 44px rgba(0, 0, 0, .34) !important;
+  backdrop-filter: blur(10px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(112%) !important;
   overflow: hidden !important;
 }
 
-/* The panel cards themselves carry the visual surface. */
+/* Subtle rim/highlight so the mother card reads as one premium surface. */
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .03), transparent 46%),
+    linear-gradient(90deg, rgba(205, 174, 95, .08), transparent 18%, transparent 82%, rgba(205, 174, 95, .04));
+}
+
+/* PARTY is an inner section of the shared mother card. */
 .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .dr-home-party-card {
+  position: relative !important;
+  z-index: 1 !important;
   flex: 0 0 auto !important;
   width: 100% !important;
   margin: 0 !important;
-  backdrop-filter: blur(4px) !important;
+
+  border: 1px solid rgba(82, 116, 136, .28) !important;
+  background:
+    linear-gradient(180deg, rgba(8, 23, 34, .74), rgba(5, 14, 21, .84)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .022),
+    0 8px 18px rgba(0, 0, 0, .17) !important;
+  backdrop-filter: blur(3px) !important;
 }
 
+/* FRIENDS is the second inner section of the same shell. */
 .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail > .platform-social-rail {
+  position: relative !important;
+  z-index: 1 !important;
   flex: 1 1 auto !important;
   width: 100% !important;
   min-height: 0 !important;
   max-height: none !important;
   margin: 0 !important;
-  backdrop-filter: blur(4px) !important;
+
+  border: 1px solid rgba(80, 112, 132, .24) !important;
+  background:
+    linear-gradient(180deg, rgba(7, 19, 29, .72), rgba(4, 11, 17, .84)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .018),
+    0 8px 18px rgba(0, 0, 0, .15) !important;
+  backdrop-filter: blur(3px) !important;
   overflow: hidden !important;
 }
 
@@ -76,13 +115,13 @@
   overflow-x: hidden !important;
 }
 
-/* Move the featured hero copy left so it never sits beneath the social rail. */
+/* Move the featured hero copy left so it never sits beneath the social shell. */
 .platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
-  right: calc(clamp(318px, 17.5vw, 388px) + clamp(34px, 2.2vw, 54px)) !important;
+  right: calc(clamp(318px, 17.5vw, 388px) + clamp(46px, 2.8vw, 68px)) !important;
   width: clamp(245px, 16vw, 320px) !important;
 }
 
-/* The mode ribbon now naturally spans the complete stage, like the reference. */
+/* The mode ribbon spans the complete stage, like the reference. */
 .platform-home-grid:has(.dr-home-overview) .dr-home-mode-ribbon {
   right: 26px !important;
 }
@@ -103,10 +142,11 @@
     right: 10px !important;
     bottom: calc(clamp(176px, 18vh, 206px) + 116px) !important;
     width: 330px !important;
+    padding: 10px !important;
   }
 
   .platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
-    right: 368px !important;
+    right: 382px !important;
     width: 250px !important;
   }
 }
