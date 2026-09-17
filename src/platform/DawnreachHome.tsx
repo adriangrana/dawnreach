@@ -108,7 +108,7 @@ export function DawnreachHomeOverview({
         <button type="button" onClick={onLocalPlay}><Gamepad2 /><span><strong>ENTRENAMIENTO</strong><small>Prueba el campo de batalla</small></span></button>
         <button type="button" onClick={onNormal}><Shield /><span><strong>NORMAL</strong><small>Combate sin presión</small></span></button>
         <button className="is-primary" type="button" onClick={onPlay}><Swords /><span><strong>JUGAR</strong><small>Elige tu modo</small></span></button>
-        <button type="button" onClick={onRanked}><Trophy /><span><strong>RANKED</strong><small>Asciende en la clasificación</small></span></button>
+        <button type="button" onClick={onRanked} className='invert'><Trophy /><span><strong>RANKED</strong><small>Asciende en la clasificación</small></span></button>
         <button type="button" onClick={onCustom}><Sparkles /><span><strong>PERSONALIZADA</strong><small>Tus reglas, tu sala</small></span></button>
       </nav>
     </div>
