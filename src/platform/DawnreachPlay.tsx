@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   BookOpen,
   Bot,
@@ -257,7 +257,7 @@ export function DawnreachPlayScreen({
             <strong>{queue.joined ? `Searching · ${queue.count}/${queue.target}` : selectedMode === 'ranked' && rankedCalibration ? 'Calibration ready' : 'Ready to queue'}</strong>
             <small>{queue.joined ? `${queue.mode.toUpperCase()} · party ${partySize}/5` : `${roleSummary} · party ${partySize}/5`}</small>
           </span>
-          {queue.joined && <i style={{ '--dr-queue-progress': `${queueProgress}%` } as React.CSSProperties} />}
+          {queue.joined && <i style={{ '--dr-queue-progress': `${queueProgress}%` } as CSSProperties} />}
         </div>
       </section>
     </div>
