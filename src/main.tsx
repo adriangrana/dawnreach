@@ -3,6 +3,7 @@ import App from './App';
 import { mountAldenAudioRuntime } from './game/heroes/alden/aldenAudioRuntime';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
+import { installMatchEndRuntime } from './game/match/matchEndRuntime';
 import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './game/performance/shadowInvalidationBridge';
@@ -37,6 +38,7 @@ import './shop-panel.css';
 import './game-menu.css';
 import './game-menu-hotkeys.css';
 import './match-pause.css';
+import './match-end.css';
 import './settings-runtime.css';
 import './scoreboard.css';
 import './ping-wheel.css';
@@ -93,6 +95,9 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
+// Register terminal-state protection before the pause controller. If the match has ended, its
+// capture listener owns the menu's resume action before pause can ever restart simulation.
+const disposeMatchEndRuntime = installMatchEndRuntime();
 // Install the match-wide pause clock before any Three.js Clock is constructed. F10 itself does
 // not pause; only an explicit pause request freezes simulation time for the entire match.
 const disposeMatchPauseRuntime = installMatchPauseRuntime();
@@ -153,6 +158,7 @@ if (import.meta.hot) {
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
     disposeMatchPauseRuntime();
+    disposeMatchEndRuntime();
     disposeSettingsAvailability();
     disposeSettingsSliderValueGuard();
     disposeAbilityRangeSettingsGuard();
