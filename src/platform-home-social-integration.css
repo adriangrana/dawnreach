@@ -1,0 +1,130 @@
+/* Home social integration: keep PARTY / FRIENDS inside the cinematic home composition. */
+
+/* On HOME the social rail is an overlay, not a second application column. */
+.platform-home-grid:has(.dr-home-overview) {
+  position: relative !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) > .platform-main-workspace {
+  grid-column: 1 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+/* Let the hero background and lower strip use the full available width. */
+.platform-home-grid:has(.dr-home-overview) .dr-home-overview,
+.platform-home-grid:has(.dr-home-overview) .dr-home-stage,
+.platform-home-grid:has(.dr-home-overview) .dr-home-lower-strip {
+  width: 100% !important;
+}
+
+/*
+ * PARTY / FRIENDS float over the right side of the hero stage.
+ * The bottom offset reserves the mode ribbon and the lower content strip,
+ * matching the reference instead of creating a tall black sidebar.
+ */
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+  position: absolute !important;
+  z-index: 6 !important;
+  top: 10px !important;
+  right: 14px !important;
+  bottom: calc(clamp(176px, 18vh, 206px) + 132px) !important;
+  width: clamp(318px, 17.5vw, 388px) !important;
+  min-height: 0 !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+/* The panel cards themselves carry the visual surface. */
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .dr-home-party-card {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail > .platform-social-rail {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  backdrop-filter: blur(4px) !important;
+  overflow: hidden !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .platform-social-friends {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .platform-social-friends > div {
+  height: 100% !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Move the featured hero copy left so it never sits beneath the social rail. */
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
+  right: calc(clamp(318px, 17.5vw, 388px) + clamp(34px, 2.2vw, 54px)) !important;
+  width: clamp(245px, 16vw, 320px) !important;
+}
+
+/* The mode ribbon now naturally spans the complete stage, like the reference. */
+.platform-home-grid:has(.dr-home-overview) .dr-home-mode-ribbon {
+  right: 26px !important;
+}
+
+/* Do not change the PLAY / matchmaking layout: there the rail remains a real column. */
+.platform-home-grid:not(:has(.dr-home-overview)) {
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 18vw, 410px) !important;
+}
+
+.platform-home-grid:not(:has(.dr-home-overview)) > .dr-home-right-rail {
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+}
+
+@media (max-width: 1500px) {
+  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+    right: 10px !important;
+    bottom: calc(clamp(176px, 18vh, 206px) + 116px) !important;
+    width: 330px !important;
+  }
+
+  .platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
+    right: 368px !important;
+    width: 250px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+    top: 8px !important;
+    bottom: 258px !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  /* Preserve the existing compact/mobile behavior instead of covering the hero. */
+  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+    display: none !important;
+  }
+
+  .platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
+    right: 5% !important;
+  }
+}
