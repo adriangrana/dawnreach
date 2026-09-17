@@ -35,23 +35,23 @@ export function DawnreachHomeTopbar({
   onLogout: () => void;
 }) {
   return <header className="platform-topbar dr-home-topbar">
-    <button className="dr-home-mark" type="button" onClick={onHome} aria-label="Inicio de Dawnreach"><img src={DAWNREACH_ICON} alt="" /></button>
-    <nav className="dr-home-nav" aria-label="Navegación principal">
-      <button className={section === 'home' ? 'is-active' : ''} onClick={onHome}>INICIO</button>
-      <button className={section === 'play' ? 'is-active' : ''} onClick={onPlay}>JUGAR</button>
-      <button disabled>HÉROES</button>
-      <button disabled>COLECCIÓN</button>
+    <button className="dr-home-mark" type="button" onClick={onHome} aria-label="Dawnreach home"><img src={DAWNREACH_ICON} alt="" /></button>
+    <nav className="dr-home-nav" aria-label="Main navigation">
+      <button className={section === 'home' ? 'is-active' : ''} onClick={onHome}>HOME</button>
+      <button className={section === 'play' ? 'is-active' : ''} onClick={onPlay}>PLAY</button>
+      <button disabled>HEROES</button>
+      <button disabled>COLLECTION</button>
       <button disabled>RANKING</button>
-      <button disabled>PERFIL</button>
+      <button disabled>PROFILE</button>
     </nav>
     <div className="dr-home-top-actions">
       <span className="dr-home-top-stat"><Trophy /> <strong>{user.calibrated ? user.rating : user.calibrationGames}</strong><small>{user.calibrated ? 'MMR' : 'CAL.'}</small></span>
-      <span className="dr-home-top-stat"><Shield /> <strong>{user.wins}</strong><small>VICTORIAS</small></span>
-      <button className="dr-home-icon-button" type="button" disabled aria-label="Mensajes"><MessageSquare /></button>
-      <button className="dr-home-icon-button" type="button" disabled aria-label="Ajustes"><Settings /></button>
+      <span className="dr-home-top-stat"><Shield /> <strong>{user.wins}</strong><small>WINS</small></span>
+      <button className="dr-home-icon-button" type="button" disabled aria-label="Messages"><MessageSquare /></button>
+      <button className="dr-home-icon-button" type="button" disabled aria-label="Settings"><Settings /></button>
       <span className="dr-home-account-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
-      <span className="dr-home-account-copy"><strong>{user.username}</strong><small><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'En línea' : realtime === 'connecting' ? 'Conectando…' : 'Sin conexión'}</small></span>
-      <button className="dr-home-account-menu" type="button" onClick={onLogout} title="Cerrar sesión"><ChevronDown /></button>
+      <span className="dr-home-account-copy"><strong>{user.username}</strong><small><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</small></span>
+      <button className="dr-home-account-menu" type="button" onClick={onLogout} title="Sign out"><ChevronDown /></button>
     </div>
   </header>;
 }
@@ -81,44 +81,44 @@ export function DawnreachHomeOverview({
     <div className="dr-home-stage">
       <aside className="dr-home-left-column">
         <article className="dr-home-season-card">
-          <div><small>TEMPORADA I</small><h2>EL ALBA DE<br />LOS REINOS</h2><p>La guerra por los dos tronos acaba de comenzar.</p></div>
-          <button type="button" disabled>VER TEMPORADA</button>
+          <div><small>SEASON I</small><h2>DAWN OF<br />THE REALMS</h2><p>The war for the two thrones has only just begun.</p></div>
+          <button type="button" disabled>VIEW SEASON</button>
         </article>
         <article className="dr-home-progress-card">
           <div className="dr-home-progress-medal">{user.calibrated ? user.rating : user.calibrationGames}</div>
-          <div><small>{user.calibrated ? 'CLASIFICACIÓN' : 'CALIBRACIÓN'}</small><strong>{user.calibrated ? `${user.rating} MMR` : `${user.calibrationGames} / ${user.calibrationTarget}`}</strong><span className="dr-home-progress-track"><i style={{ width: `${user.calibrated ? 100 : calibrationProgress}%` }} /></span></div>
+          <div><small>{user.calibrated ? 'RANKING' : 'CALIBRATION'}</small><strong>{user.calibrated ? `${user.rating} MMR` : `${user.calibrationGames} / ${user.calibrationTarget}`}</strong><span className="dr-home-progress-track"><i style={{ width: `${user.calibrated ? 100 : calibrationProgress}%` }} /></span></div>
         </article>
         <article className="dr-home-events-card">
-          <header><strong>ACTIVIDAD</strong><button type="button" disabled>VER TODO</button></header>
-          <div><span className="dr-home-event-icon"><Swords /></span><p><strong>Frontera abierta</strong><small>Matchmaking Normal disponible</small></p><em>AHORA</em></div>
-          <div><span className="dr-home-event-icon"><Trophy /></span><p><strong>Clasificatoria</strong><small>{user.calibrated ? 'Defiende tu posición' : 'Completa tu calibración'}</small></p><em>{games} P.</em></div>
-          <div><span className="dr-home-event-icon"><Users /></span><p><strong>Consejo de guerra</strong><small>{party.party ? `Escuadra ${party.party.members.length}/5` : 'Forma una escuadra'}</small></p><em>{online.length} ON</em></div>
+          <header><strong>ACTIVITY</strong><button type="button" disabled>SEE ALL</button></header>
+          <div><span className="dr-home-event-icon"><Swords /></span><p><strong>Open Frontier</strong><small>Normal Matchmaking available</small></p><em>NOW</em></div>
+          <div><span className="dr-home-event-icon"><Trophy /></span><p><strong>Ranked</strong><small>{user.calibrated ? 'Defend your position' : 'Complete your calibration'}</small></p><em>{games} G.</em></div>
+          <div><span className="dr-home-event-icon"><Users /></span><p><strong>War Council</strong><small>{party.party ? `Party ${party.party.members.length}/5` : 'Form a party'}</small></p><em>{online.length} ON</em></div>
         </article>
       </aside>
 
       <div className="dr-home-feature-copy">
-        <span>HÉROE DESTACADO</span>
+        <span>FEATURED HERO</span>
         <h1>ALDEN</h1>
-        <h3>EL REY DE HIERRO</h3>
-        <p>Frontline, iniciador y combatiente de daño sostenido.</p>
-        <button type="button" onClick={onPlay}>PREPARAR BATALLA</button>
+        <h3>THE IRON KING</h3>
+        <p>Frontline initiator and sustained-damage fighter.</p>
+        <button type="button" onClick={onPlay}>PREPARE FOR BATTLE</button>
       </div>
 
-      <nav className="dr-home-mode-ribbon" aria-label="Modos de juego">
-        <button type="button" onClick={onLocalPlay}><Gamepad2 /><span><strong>ENTRENAMIENTO</strong><small>Prueba el campo de batalla</small></span></button>
-        <button type="button" onClick={onNormal}><Shield /><span><strong>NORMAL</strong><small>Combate sin presión</small></span></button>
-        <button className="is-primary" type="button" onClick={onPlay}><Swords /><span><strong>JUGAR</strong><small>Elige tu modo</small></span></button>
-        <button type="button" onClick={onRanked} className='invert'><Trophy /><span><strong>RANKED</strong><small>Asciende en la clasificación</small></span></button>
-        <button type="button" onClick={onCustom}><Sparkles /><span><strong>PERSONALIZADA</strong><small>Tus reglas, tu sala</small></span></button>
+      <nav className="dr-home-mode-ribbon" aria-label="Game modes">
+        <button type="button" onClick={onLocalPlay}><Gamepad2 /><span><strong>PRACTICE</strong><small>Test the battlefield</small></span></button>
+        <button type="button" onClick={onNormal}><Shield /><span><strong>NORMAL</strong><small>Fight without pressure</small></span></button>
+        <button className="is-primary" type="button" onClick={onPlay}><Swords /><span><strong>PLAY</strong><small>Choose your mode</small></span></button>
+        <button type="button" onClick={onRanked} className="invert"><Trophy /><span><strong>RANKED</strong><small>Climb the ranks</small></span></button>
+        <button type="button" onClick={onCustom}><Sparkles /><span><strong>CUSTOM</strong><small>Your rules, your lobby</small></span></button>
       </nav>
     </div>
 
     <div className="dr-home-lower-strip">
-      <article className="dr-home-news-card is-wide"><div><small>CRÓNICAS DE DAWNREACH</small><strong>Más allá del campo de batalla</strong><span>Descubre los reinos que luchan por controlar la corona.</span></div></article>
-      <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HÉROE</small><strong>Alden</strong></div></article>
-      <article className="dr-home-news-card is-update"><div><small>ACTUALIZACIÓN</small><strong>Temporada de Fundación</strong></div></article>
-      <article className="dr-home-channel-card"><header><strong>CANAL</strong><span>General&nbsp;&nbsp; · &nbsp;&nbsp;Grupo</span></header><div><p>El chat social y los mensajes privados están disponibles en el panel de amigos.</p></div><footer><input disabled placeholder="Selecciona un amigo para conversar…" /><button disabled><MessageSquare /></button></footer></article>
-      <article className="dr-home-motto-card"><Crown /><strong>DOS REINOS.<br />UN TRONO.</strong><span>DAWNREACH</span></article>
+      <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
+      <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
+      <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
+      <article className="dr-home-channel-card"><header><strong>CHANNEL</strong><span>General&nbsp;&nbsp; · &nbsp;&nbsp;Party</span></header><div><p>Social chat and direct messages are available in the friends panel.</p></div><footer><input disabled placeholder="Select a friend to start a conversation…" /><button disabled><MessageSquare /></button></footer></article>
+      <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>
     </div>
   </section>;
 }
@@ -148,15 +148,15 @@ export function DawnreachHomeRightRail({
 
   return <aside className="dr-home-right-rail">
     <section className="dr-home-party-card">
-      <header><strong>GRUPO</strong><span>{members.length}/5</span></header>
+      <header><strong>PARTY</strong><span>{members.length}/5</span></header>
       <div className="dr-home-party-slots">
         {Array.from({ length: 5 }, (_, index) => {
           const member = members[index];
           return <span key={member?.id ?? `empty-${index}`} className={member ? 'is-filled' : ''}>{member ? <><b>{member.username.slice(0, 2).toUpperCase()}</b>{activeParty?.leaderId === member.id && <Crown />}</> : <Plus />}</span>;
         })}
       </div>
-      {!activeParty ? <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.create')}>CREAR GRUPO</button> : isLeader ? <div className="dr-home-party-invite"><input value={inviteName} onChange={event => setInviteName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); invite(); } }} placeholder="Invitar por usuario" /><button type="button" onClick={invite}>INVITAR</button></div> : <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.leave')}>SALIR DEL GRUPO</button>}
-      {activeParty && isLeader && <button className="dr-home-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Salir del grupo</button>}
+      {!activeParty ? <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.create')}>CREATE PARTY</button> : isLeader ? <div className="dr-home-party-invite"><input value={inviteName} onChange={event => setInviteName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); invite(); } }} placeholder="Invite by username" /><button type="button" onClick={invite}>INVITE</button></div> : <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.leave')}>LEAVE PARTY</button>}
+      {activeParty && isLeader && <button className="dr-home-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Leave party</button>}
     </section>
     <SocialRail me={me} online={online} snapshot={snapshot} party={party} refresh={refresh} />
   </aside>;
