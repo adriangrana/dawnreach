@@ -46,6 +46,14 @@ export type ThroneDestroyedMatchEvent = MatchEventBase & Readonly<{
   winnerTeam: Exclude<MatchEventTeam, 'neutral'> | 'neutral';
 }>;
 
+export type ThroneUnderAttackMatchEvent = MatchEventBase & Readonly<{
+  type: 'throne_under_attack';
+  throne: MatchEventParticipant;
+  attacker: MatchEventParticipant;
+  currentHp: number;
+  maxHp: number;
+}>;
+
 export type FirstBloodMatchEvent = MatchEventBase & Readonly<{
   type: 'first_blood';
   killer: MatchEventParticipant;
@@ -73,15 +81,30 @@ export type ShutdownMatchEvent = MatchEventBase & Readonly<{
   endedStreak: number;
 }>;
 
+export type MatchPauseMatchEvent = MatchEventBase & Readonly<{
+  type: 'match_paused' | 'match_resumed';
+  actorPlayerId: string | null;
+}>;
+
+export type PlayerConnectionMatchEvent = MatchEventBase & Readonly<{
+  type: 'player_disconnected' | 'player_reconnected';
+  playerId: string;
+  displayName: string;
+  team: Exclude<MatchEventTeam, 'neutral'>;
+}>;
+
 export type MatchEvent =
   | HeroKilledMatchEvent
   | TowerDestroyedMatchEvent
   | ObjectiveKilledMatchEvent
   | ThroneDestroyedMatchEvent
+  | ThroneUnderAttackMatchEvent
   | FirstBloodMatchEvent
   | MultiKillMatchEvent
   | KillStreakMatchEvent
-  | ShutdownMatchEvent;
+  | ShutdownMatchEvent
+  | MatchPauseMatchEvent
+  | PlayerConnectionMatchEvent;
 
 export type MatchDeathEventContext = Readonly<{
   target: MatchEventParticipant;

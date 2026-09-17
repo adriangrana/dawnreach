@@ -3,8 +3,11 @@ import {
   type HeroKilledMatchEvent,
   type MatchEvent,
   type MatchEventParticipant,
+  type MatchPauseMatchEvent,
   type ObjectiveKilledMatchEvent,
+  type PlayerConnectionMatchEvent,
   type ThroneDestroyedMatchEvent,
+  type ThroneUnderAttackMatchEvent,
   type TowerDestroyedMatchEvent,
 } from '../game/match/matchEvents';
 
@@ -13,7 +16,13 @@ const MAX_VISIBLE_ROWS = 6;
 const ROW_LIFETIME_MS = 7_500;
 const EXIT_ANIMATION_MS = 220;
 
-type FeedSystemEvent = TowerDestroyedMatchEvent | ObjectiveKilledMatchEvent | ThroneDestroyedMatchEvent;
+type FeedSystemEvent =
+  | TowerDestroyedMatchEvent
+  | ObjectiveKilledMatchEvent
+  | ThroneDestroyedMatchEvent
+  | ThroneUnderAttackMatchEvent
+  | MatchPauseMatchEvent
+  | PlayerConnectionMatchEvent;
 
 const heroPortraits = {
   ...import.meta.glob<string>('../game/heroes/*/images/H*.webp', { eager: true, query: '?url', import: 'default' }),
@@ -94,6 +103,11 @@ function createKillRow(event: HeroKilledMatchEvent) {
   return row;
 }
 
+function localPlayerLabel(playerId: string | null) {
+  if (!playerId) return 'El sistema';
+  return playerId === 'local-player' ? 'Tú' : playerId;
+}
+
 function systemEventCopy(event: FeedSystemEvent) {
   if (event.type === 'tower_destroyed') {
     return {
@@ -109,11 +123,39 @@ function systemEventCopy(event: FeedSystemEvent) {
       team: event.killer?.team ?? 'neutral' as const,
     };
   }
-  const winner = event.winnerTeam === 'blue' ? 'Dawn' : event.winnerTeam === 'red' ? 'Dusk' : 'Un equipo';
+  if (event.type === 'throne_destroyed') {
+    const winner = event.winnerTeam === 'blue' ? 'Dawn' : event.winnerTeam === 'red' ? 'Dusk' : 'Un equipo';
+    return {
+      icon: '♛',
+      text: `${winner} destruyó ${event.throne.label}`,
+      team: event.winnerTeam,
+    };
+  }
+  if (event.type === 'throne_under_attack') {
+    return {
+      icon: '⚠',
+      text: `${event.throne.label} está bajo ataque`,
+      team: event.throne.team,
+    };
+  }
+  if (event.type === 'match_paused') {
+    return {
+      icon: 'Ⅱ',
+      text: `${localPlayerLabel(event.actorPlayerId)} pausó la partida`,
+      team: 'neutral' as const,
+    };
+  }
+  if (event.type === 'match_resumed') {
+    return {
+      icon: '▶',
+      text: `${localPlayerLabel(event.actorPlayerId)} reanudó la partida`,
+      team: 'neutral' as const,
+    };
+  }
   return {
-    icon: '♛',
-    text: `${winner} destruyó ${event.throne.label}`,
-    team: event.winnerTeam,
+    icon: event.type === 'player_reconnected' ? '↻' : '×',
+    text: `${event.displayName} ${event.type === 'player_reconnected' ? 'se reconectó' : 'se desconectó'}`,
+    team: event.team,
   };
 }
 
@@ -136,7 +178,16 @@ function createSystemRow(event: FeedSystemEvent) {
 
 function createRow(event: MatchEvent): HTMLElement | null {
   if (event.type === 'hero_killed') return createKillRow(event);
-  if (event.type === 'tower_destroyed' || event.type === 'objective_killed' || event.type === 'throne_destroyed') {
+  if (
+    event.type === 'tower_destroyed'
+    || event.type === 'objective_killed'
+    || event.type === 'throne_destroyed'
+    || event.type === 'throne_under_attack'
+    || event.type === 'match_paused'
+    || event.type === 'match_resumed'
+    || event.type === 'player_disconnected'
+    || event.type === 'player_reconnected'
+  ) {
     return createSystemRow(event);
   }
   return null;

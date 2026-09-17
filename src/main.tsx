@@ -5,6 +5,7 @@ import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilit
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installMatchEndRuntime } from './game/match/matchEndRuntime';
 import { installMatchEventAnnouncementRuntime } from './game/match/matchEventAnnouncements';
+import { installMatchEventLifecycleRuntime } from './game/match/matchEventLifecycleRuntime';
 import { installMatchEventRuntime } from './game/match/matchEventRuntime';
 import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
@@ -107,6 +108,7 @@ const disposeMatchEventRuntime = installMatchEventRuntime();
 const disposeMatchEventAnnouncementRuntime = installMatchEventAnnouncementRuntime();
 const disposeMatchEndRuntime = installMatchEndRuntime();
 const disposeMatchPauseRuntime = installMatchPauseRuntime();
+const disposeMatchEventLifecycleRuntime = installMatchEventLifecycleRuntime();
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
 const disposeShadowInvalidationBridge = installShadowInvalidationBridge();
 const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
@@ -153,6 +155,7 @@ if (import.meta.hot) {
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
+    disposeMatchEventLifecycleRuntime();
     disposeMatchPauseRuntime();
     disposeMatchEndRuntime();
     disposeMatchEventAnnouncementRuntime();

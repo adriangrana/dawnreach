@@ -6,6 +6,7 @@ import {
   type MultiKillMatchEvent,
   type ObjectiveKilledMatchEvent,
   type ShutdownMatchEvent,
+  type ThroneUnderAttackMatchEvent,
 } from '../game/match/matchEvents';
 
 const BANNER_ID = 'dawnreach-match-event-banner';
@@ -31,7 +32,7 @@ function multiKillTitle(count: number) {
   return 'PENTABAJA';
 }
 
-function killStreakTitle(count: number) {
+function streakTitle(count: number) {
   if (count <= 3) return 'EN RACHA';
   if (count === 4) return 'DOMINANDO';
   if (count === 5) return 'IMPARABLE';
@@ -57,8 +58,8 @@ function multiKillCopy(event: MultiKillMatchEvent): BannerCopy {
 
 function killStreakCopy(event: KillStreakMatchEvent): BannerCopy {
   return {
-    title: killStreakTitle(event.count),
-    subtitle: `${event.killer.label} suma ${event.count} bajas sin morir`,
+    title: streakTitle(event.count),
+    subtitle: `${event.killer.label} lleva ${event.count} bajas sin morir`,
     tone: toneForTeam(event.killer.team),
   };
 }
@@ -79,12 +80,22 @@ function objectiveCopy(event: ObjectiveKilledMatchEvent): BannerCopy {
   };
 }
 
+function throneWarningCopy(event: ThroneUnderAttackMatchEvent): BannerCopy {
+  const percent = event.maxHp > 0 ? Math.max(0, Math.min(100, Math.round(event.currentHp / event.maxHp * 100))) : 0;
+  return {
+    title: 'TRONO BAJO ATAQUE',
+    subtitle: `${event.throne.label} · ${percent}% de vida`,
+    tone: toneForTeam(event.throne.team),
+  };
+}
+
 function copyFor(event: MatchEvent): BannerCopy | null {
   if (event.type === 'first_blood') return firstBloodCopy(event);
   if (event.type === 'multi_kill') return multiKillCopy(event);
   if (event.type === 'kill_streak') return killStreakCopy(event);
   if (event.type === 'shutdown') return shutdownCopy(event);
   if (event.type === 'objective_killed') return objectiveCopy(event);
+  if (event.type === 'throne_under_attack') return throneWarningCopy(event);
   return null;
 }
 
