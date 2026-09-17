@@ -43,9 +43,9 @@ export function HomeChatPanel({
   onActiveDirectChange?: (userId: string | null) => void;
 }) {
   const [openDirectIds, setOpenDirectIds] = useState<string[]>([]);
-  const [activeChannel, setActiveChannel] = useState<string | null>(party.party ? 'party' : null);
+  const [activeChannel, setActiveChannel] = useState<string>('party');
   const [directMessages, setDirectMessages] = useState<Record<string, readonly DirectMessage[]>>({});
-  const [partyMessages, setPartyMessages] = useState<readonly PartyMessage[]>(party.messages);
+  const [partyMessages, setPartyMessages] = useState<readonly PartyMessage[]>(party.messages ?? []);
   const [draft, setDraft] = useState('');
   const [loadingDirectId, setLoadingDirectId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -62,9 +62,9 @@ export function HomeChatPanel({
   );
   const activeDirectMessages = activeDirectId ? directMessages[activeDirectId] ?? [] : [];
   const loading = Boolean(activeDirectId && loadingDirectId === activeDirectId);
+  const partyActive = activeChannel === 'party';
 
   const activateParty = () => {
-    if (!party.party) return;
     setActiveChannel('party');
     setDraft('');
     setNotice('');
@@ -81,22 +81,17 @@ export function HomeChatPanel({
   };
 
   const closeDirect = (userId: string) => {
-    setOpenDirectIds(current => current.filter(id => id !== userId));
+    const remaining = openDirectIds.filter(id => id !== userId && friendsById.has(id));
+    setOpenDirectIds(remaining);
     setDirectMessages(current => {
       const next = { ...current };
       delete next[userId];
       return next;
     });
     if (activeDirectId !== userId) return;
-    const remaining = openDirectIds.filter(id => id !== userId && friendsById.has(id));
     const fallbackId = remaining.at(-1) ?? null;
     if (fallbackId) activateDirect(fallbackId);
-    else if (party.party) activateParty();
-    else {
-      setActiveChannel(null);
-      setDraft('');
-      onActiveDirectChange?.(null);
-    }
+    else activateParty();
   };
 
   useEffect(() => {
@@ -109,28 +104,11 @@ export function HomeChatPanel({
 
   useEffect(() => {
     setOpenDirectIds(current => current.filter(id => friendsById.has(id)));
-    if (activeDirectId && !friendsById.has(activeDirectId)) {
-      if (party.party) activateParty();
-      else {
-        setActiveChannel(null);
-        onActiveDirectChange?.(null);
-      }
-    }
-  }, [activeDirectId, friendsById, party.party]);
+    if (activeDirectId && !friendsById.has(activeDirectId)) activateParty();
+  }, [activeDirectId, friendsById]);
 
   useEffect(() => {
-    setPartyMessages(party.messages);
-    if (!party.party && activeChannel === 'party') {
-      const fallbackId = openDirectIds.find(id => friendsById.has(id)) ?? null;
-      if (fallbackId) activateDirect(fallbackId);
-      else {
-        setActiveChannel(null);
-        onActiveDirectChange?.(null);
-      }
-    } else if (party.party && !activeChannel) {
-      setActiveChannel('party');
-      onActiveDirectChange?.(null);
-    }
+    setPartyMessages(party.messages ?? []);
   }, [party.party?.id, party.messages]);
 
   useEffect(() => {
@@ -188,6 +166,11 @@ export function HomeChatPanel({
     node.scrollTop = node.scrollHeight;
   }, [activeChannel, activeDirectMessages, partyMessages, loading]);
 
+  const createParty = () => {
+    setNotice('');
+    if (!platformRealtime.send('party.create')) setNotice('Realtime connection unavailable.');
+  };
+
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const text = draft.trim();
@@ -195,7 +178,7 @@ export function HomeChatPanel({
     setSending(true);
     setNotice('');
     try {
-      if (activeChannel === 'party') {
+      if (partyActive) {
         if (!party.party) return;
         if (!platformRealtime.send('party.message', { text })) throw new Error('Realtime connection unavailable.');
         setDraft('');
@@ -217,13 +200,8 @@ export function HomeChatPanel({
     }
   };
 
-  const partyActive = activeChannel === 'party';
   const canCompose = partyActive ? Boolean(party.party) : Boolean(selected) && !loading;
-  const ariaLabel = partyActive
-    ? 'Party chat'
-    : selected
-      ? `Chat with ${selected.username}`
-      : 'Chat';
+  const ariaLabel = partyActive ? 'Party chat' : selected ? `Chat with ${selected.username}` : 'Chat';
 
   return <article
     className={`dr-home-channel-card dr-home-chat-card${activeChannel ? ' is-active' : ''}`}
@@ -243,9 +221,8 @@ export function HomeChatPanel({
           role="tab"
           className={`dr-home-chat-tab is-party${partyActive ? ' is-active' : ''}`}
           aria-selected={partyActive}
-          disabled={!party.party}
           onClick={activateParty}
-          title={party.party ? 'Party channel' : 'Join or create a party to use party chat'}
+          title={party.party ? 'Party channel' : 'Open the party channel'}
         >
           <Users />
           <span>PARTY</span>
@@ -265,26 +242,24 @@ export function HomeChatPanel({
         })}
       </div>
 
-      {partyActive && party.party
-        ? <div className="dr-home-chat-party-meta"><Users /><span><strong>PARTY</strong><small>{party.party.members.length} members</small></span></div>
+      {partyActive
+        ? <div className="dr-home-chat-party-meta"><Users /><span><strong>PARTY</strong><small>{party.party ? `${party.party.members.length} members` : 'No active party'}</small></span></div>
         : selected && selectedPresence
           ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`dr-home-chat-status is-${selectedPresence.status}`}><i className={`is-${selectedPresence.status}`} />{selectedPresence.label}</small></span></div>
-          : <span className="dr-home-chat-hint">Open a friend or create a party</span>}
+          : <span className="dr-home-chat-hint">Open a friend</span>}
     </header>
 
     <div className="dr-home-chat-messages" ref={scrollRef} aria-live="polite">
-      {!activeChannel && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No channel selected</strong><small>Open a friend from the right panel or create a party.</small></span></div>}
-
-      {partyActive && !party.party && <div className="dr-home-chat-empty"><Users /><span><strong>Party chat unavailable</strong><small>Create or join a party to unlock this channel.</small></span></div>}
+      {partyActive && !party.party && <div className="dr-home-chat-empty"><Users /><span><strong>No party yet</strong><small>Create or join a party to start using this channel.</small><button className="dr-home-chat-create-party" type="button" onClick={createParty}>CREATE PARTY</button></span></div>}
       {partyActive && party.party && partyMessages.length === 0 && <div className="dr-home-chat-empty"><Users /><span><strong>Party channel ready</strong><small>Messages are visible to everyone in your current party.</small></span></div>}
       {partyActive && party.party && partyMessages.map(message => <div key={message.id} className={`dr-home-chat-message is-party${message.fromUserId === me.id ? ' is-mine' : ''}`}>
         <span className="dr-home-chat-message-copy"><b>{message.fromUserId === me.id ? 'You' : message.username}</b><span>{message.text}</span></span>
         <small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
       </div>)}
 
-      {selected && loading && <div className="dr-home-chat-empty is-loading"><span><strong>Loading conversation…</strong></span></div>}
-      {selected && !loading && activeDirectMessages.length === 0 && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No messages yet</strong><small>Send the first message to {selected.username}.</small></span></div>}
-      {selected && !loading && activeDirectMessages.map(message => <div key={message.id} className={`dr-home-chat-message${message.fromUserId === me.id ? ' is-mine' : ''}`}>
+      {!partyActive && selected && loading && <div className="dr-home-chat-empty is-loading"><span><strong>Loading conversation…</strong></span></div>}
+      {!partyActive && selected && !loading && activeDirectMessages.length === 0 && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No messages yet</strong><small>Send the first message to {selected.username}.</small></span></div>}
+      {!partyActive && selected && !loading && activeDirectMessages.map(message => <div key={message.id} className={`dr-home-chat-message${message.fromUserId === me.id ? ' is-mine' : ''}`}>
         <span>{message.text}</span>
         <small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
       </div>)}
@@ -299,7 +274,7 @@ export function HomeChatPanel({
         onChange={event => setDraft(event.target.value)}
         maxLength={500}
         disabled={!canCompose}
-        placeholder={partyActive && party.party ? 'Message party…' : selected ? `Message ${selected.username}…` : 'Select a chat channel…'}
+        placeholder={partyActive ? (party.party ? 'Message party…' : 'Create or join a party to chat…') : selected ? `Message ${selected.username}…` : 'Open a direct chat…'}
       />
       <button type="submit" disabled={!canCompose || !draft.trim() || sending} aria-label="Send message" title="Send message">
         <SendHorizontal />
