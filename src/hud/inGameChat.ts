@@ -13,6 +13,8 @@ const LOCAL_PLAYER_ID = 'local-player';
 const LOCAL_TEAM = 'blue' as const;
 const MAX_RENDERED_MESSAGES = 40;
 const COLLAPSED_VISIBLE_MESSAGES = 6;
+const MINIMAP_GAP_PX = 12;
+const VIEWPORT_EDGE_PX = 10;
 
 let localMessageSequence = 0;
 
@@ -101,12 +103,40 @@ export function mountInGameChat() {
 
   let activeChannel: InGameChatChannel = 'team';
   let open = false;
+  let minimapShell: HTMLElement | null = null;
+
+  const syncPlacement = () => {
+    minimapShell = document.querySelector<HTMLElement>('.minimap-shell');
+    if (!minimapShell) {
+      root.style.removeProperty('bottom');
+      root.style.removeProperty('left');
+      root.style.removeProperty('right');
+      return;
+    }
+
+    const rect = minimapShell.getBoundingClientRect();
+    const bottom = Math.max(
+      VIEWPORT_EDGE_PX,
+      window.innerHeight - rect.top + MINIMAP_GAP_PX,
+    );
+    root.style.bottom = `${Math.round(bottom)}px`;
+
+    const minimapOnLeft = rect.left + rect.width / 2 <= window.innerWidth / 2;
+    if (minimapOnLeft) {
+      root.style.left = `${Math.max(VIEWPORT_EDGE_PX, Math.round(rect.left))}px`;
+      root.style.right = 'auto';
+    } else {
+      root.style.right = `${Math.max(VIEWPORT_EDGE_PX, Math.round(window.innerWidth - rect.right))}px`;
+      root.style.left = 'auto';
+    }
+  };
 
   const syncOpenState = () => {
     composer.hidden = !open;
     root.classList.toggle('is-open', open);
     history.classList.toggle('is-expanded', open);
     document.body.dataset.dawnreachChatOpen = open ? 'true' : 'false';
+    syncPlacement();
   };
 
   const setChannel = (channel: InGameChatChannel) => {
@@ -124,6 +154,7 @@ export function mountInGameChat() {
     open = true;
     syncOpenState();
     requestAnimationFrame(() => {
+      syncPlacement();
       input.focus({ preventScroll: true });
       input.select();
     });
@@ -220,13 +251,40 @@ export function mountInGameChat() {
     refreshCollapsedRows();
   });
 
+  const resizeObserver = new ResizeObserver(syncPlacement);
+  const observeMinimap = () => {
+    const current = document.querySelector<HTMLElement>('.minimap-shell');
+    if (current && current !== minimapShell) {
+      if (minimapShell) resizeObserver.unobserve(minimapShell);
+      minimapShell = current;
+      resizeObserver.observe(current);
+    }
+    syncPlacement();
+  };
+  observeMinimap();
+
+  const layoutObserver = new MutationObserver(observeMinimap);
+  layoutObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['style', 'class'],
+  });
+  layoutObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['style', 'class'],
+  });
+
+  window.addEventListener('resize', syncPlacement, { passive: true });
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('pointerdown', onPointerDown, true);
   window.addEventListener('contextmenu', onContextMenu, true);
   syncOpenState();
+  requestAnimationFrame(syncPlacement);
 
   return () => {
     unsubscribe();
+    resizeObserver.disconnect();
+    layoutObserver.disconnect();
+    window.removeEventListener('resize', syncPlacement);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
     window.removeEventListener('contextmenu', onContextMenu, true);
