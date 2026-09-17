@@ -9,8 +9,8 @@ export function PartyBar({ me, snapshot }: { me: PlatformUser; snapshot: PartySn
 
   if (!party) {
     return <section className="platform-party-bar">
-      <div className="platform-party-intro"><Users size={18} /><span><strong>Juega con amigos</strong><small>Crea un grupo de hasta 5 jugadores y entrad juntos al matchmaking.</small></span></div>
-      <button className="platform-party-secondary" type="button" onClick={() => platformRealtime.send('party.create')}><Plus size={15} /> Crear grupo</button>
+      <div className="platform-party-intro"><Users size={18} /><span><strong>Play with friends</strong><small>Create a party of up to 5 players and queue together.</small></span></div>
+      <button className="platform-party-secondary" type="button" onClick={() => platformRealtime.send('party.create')}><Plus size={15} /> Create Party</button>
     </section>;
   }
 
@@ -31,9 +31,9 @@ export function PartyBar({ me, snapshot }: { me: PlatformUser; snapshot: PartySn
       </span>)}
     </div>
     {isLeader && <div className="platform-party-invite">
-      <input aria-label="Usuario que quieres invitar" value={invite} onChange={event => setInvite(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitInvite(); } }} placeholder="Invitar usuario" />
-      <button type="button" aria-label="Invitar al grupo" onClick={submitInvite}><UserPlus size={15} /></button>
+      <input aria-label="Username to invite" value={invite} onChange={event => setInvite(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitInvite(); } }} placeholder="Invite username" />
+      <button type="button" aria-label="Invite to party" onClick={submitInvite}><UserPlus size={15} /></button>
     </div>}
-    <button className="platform-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Salir</button>
+    <button className="platform-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Leave</button>
   </section>;
 }
