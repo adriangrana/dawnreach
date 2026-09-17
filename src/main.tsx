@@ -4,6 +4,7 @@ import { mountAldenAudioRuntime } from './game/heroes/alden/aldenAudioRuntime';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installMatchEndRuntime } from './game/match/matchEndRuntime';
+import { installMatchEventAnnouncementRuntime } from './game/match/matchEventAnnouncements';
 import { installMatchEventRuntime } from './game/match/matchEventRuntime';
 import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
@@ -19,6 +20,7 @@ import { mountGameplayKeybindBridge } from './hud/gameplayKeybindBridge';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInGameChat } from './hud/inGameChat';
 import { mountInventoryControls } from './hud/inventoryControls';
+import { mountMatchEventBanner } from './hud/matchEventBanner';
 import { mountMatchEventFeed } from './hud/matchEventFeed';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountPingPresentationEnhancements } from './hud/pingPresentationEnhancements';
@@ -43,6 +45,7 @@ import './game-menu-hotkeys.css';
 import './match-pause.css';
 import './match-end.css';
 import './match-event-feed.css';
+import './match-event-banner.css';
 import './in-game-chat.css';
 import './settings-runtime.css';
 import './scoreboard.css';
@@ -101,6 +104,7 @@ function dismissBootSplash() {
 }
 
 const disposeMatchEventRuntime = installMatchEventRuntime();
+const disposeMatchEventAnnouncementRuntime = installMatchEventAnnouncementRuntime();
 const disposeMatchEndRuntime = installMatchEndRuntime();
 const disposeMatchPauseRuntime = installMatchPauseRuntime();
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
@@ -110,6 +114,7 @@ const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
 const disposeMatchEventFeed = mountMatchEventFeed();
+const disposeMatchEventBanner = mountMatchEventBanner();
 // Mount chat before gameplay key handlers. Its capture listeners own keyboard/pointer input while
 // composing so typing can never leak Q/W/E/R/A/S/H or world-click orders into the simulation.
 const disposeInGameChat = mountInGameChat();
@@ -143,12 +148,14 @@ if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeAldenAudioRuntime();
     disposeInGameChat();
+    disposeMatchEventBanner();
     disposeMatchEventFeed();
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
     disposeMatchPauseRuntime();
     disposeMatchEndRuntime();
+    disposeMatchEventAnnouncementRuntime();
     disposeMatchEventRuntime();
     disposeSettingsAvailability();
     disposeSettingsSliderValueGuard();

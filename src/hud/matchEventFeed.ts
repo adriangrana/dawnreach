@@ -3,12 +3,17 @@ import {
   type HeroKilledMatchEvent,
   type MatchEvent,
   type MatchEventParticipant,
+  type ObjectiveKilledMatchEvent,
+  type ThroneDestroyedMatchEvent,
+  type TowerDestroyedMatchEvent,
 } from '../game/match/matchEvents';
 
 const FEED_ID = 'dawnreach-match-event-feed';
 const MAX_VISIBLE_ROWS = 6;
 const ROW_LIFETIME_MS = 7_500;
 const EXIT_ANIMATION_MS = 220;
+
+type FeedSystemEvent = TowerDestroyedMatchEvent | ObjectiveKilledMatchEvent | ThroneDestroyedMatchEvent;
 
 const heroPortraits = {
   ...import.meta.glob<string>('../game/heroes/*/images/H*.webp', { eager: true, query: '?url', import: 'default' }),
@@ -89,7 +94,7 @@ function createKillRow(event: HeroKilledMatchEvent) {
   return row;
 }
 
-function systemEventCopy(event: Exclude<MatchEvent, HeroKilledMatchEvent>) {
+function systemEventCopy(event: FeedSystemEvent) {
   if (event.type === 'tower_destroyed') {
     return {
       icon: '♜',
@@ -112,7 +117,7 @@ function systemEventCopy(event: Exclude<MatchEvent, HeroKilledMatchEvent>) {
   };
 }
 
-function createSystemRow(event: Exclude<MatchEvent, HeroKilledMatchEvent>) {
+function createSystemRow(event: FeedSystemEvent) {
   const row = document.createElement('div');
   const copy = systemEventCopy(event);
   row.className = `match-event-feed-row is-system ${teamClass(copy.team)} is-entering`;
@@ -129,8 +134,12 @@ function createSystemRow(event: Exclude<MatchEvent, HeroKilledMatchEvent>) {
   return row;
 }
 
-function createRow(event: MatchEvent) {
-  return event.type === 'hero_killed' ? createKillRow(event) : createSystemRow(event);
+function createRow(event: MatchEvent): HTMLElement | null {
+  if (event.type === 'hero_killed') return createKillRow(event);
+  if (event.type === 'tower_destroyed' || event.type === 'objective_killed' || event.type === 'throne_destroyed') {
+    return createSystemRow(event);
+  }
+  return null;
 }
 
 export function mountMatchEventFeed() {
@@ -159,6 +168,7 @@ export function mountMatchEventFeed() {
   const push = (event: MatchEvent) => {
     if (root.querySelector(`[data-event-id="${CSS.escape(event.eventId)}"]`)) return;
     const row = createRow(event);
+    if (!row) return;
     root.prepend(row);
     requestAnimationFrame(() => row.classList.remove('is-entering'));
 

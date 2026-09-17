@@ -1,0 +1,96 @@
+.match-event-banner {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 575;
+  width: min(520px, 54vw);
+  transform: translate(-50%, -14px) scale(0.985);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.8,.2,1);
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.46));
+}
+
+.match-event-banner[hidden] {
+  display: none;
+}
+
+.match-event-banner.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.match-event-banner.is-exiting {
+  opacity: 0;
+  transform: translate(-50%, -8px) scale(1.01);
+}
+
+.match-event-banner-frame {
+  display: grid;
+  grid-template-columns: minmax(42px, 1fr) auto minmax(42px, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.match-event-banner-wing {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(211, 183, 111, 0.76));
+  box-shadow: 0 0 9px rgba(211, 183, 111, 0.2);
+}
+
+.match-event-banner-wing.is-right {
+  background: linear-gradient(90deg, rgba(211, 183, 111, 0.76), transparent);
+}
+
+.match-event-banner-copy {
+  min-width: 210px;
+  padding: 7px 18px 6px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(23, 29, 31, 0.91), rgba(6, 9, 12, 0.82));
+  border-top: 1px solid rgba(218, 191, 121, 0.38);
+  border-bottom: 1px solid rgba(218, 191, 121, 0.24);
+  clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
+}
+
+.match-event-banner-title,
+.match-event-banner-subtitle {
+  display: block;
+}
+
+.match-event-banner-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(16px, 1.35vw, 22px);
+  line-height: 1.05;
+  letter-spacing: 0.13em;
+  color: #e4c984;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9), 0 0 11px rgba(211, 183, 111, 0.16);
+}
+
+.match-event-banner-subtitle {
+  margin-top: 4px;
+  color: rgba(229, 232, 226, 0.82);
+  font-size: 10px;
+  letter-spacing: 0.035em;
+}
+
+.match-event-banner.is-dawn .match-event-banner-title {
+  color: #90ddf7;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9), 0 0 12px rgba(85, 190, 227, 0.27);
+}
+
+.match-event-banner.is-dusk .match-event-banner-title {
+  color: #ed999d;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9), 0 0 12px rgba(213, 75, 86, 0.25);
+}
+
+@media (max-width: 900px) {
+  .match-event-banner {
+    top: 72px;
+    width: min(460px, 70vw);
+  }
+
+  .match-event-banner-copy {
+    min-width: 190px;
+    padding-inline: 14px;
+  }
+}

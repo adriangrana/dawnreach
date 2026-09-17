@@ -46,11 +46,27 @@ export type ThroneDestroyedMatchEvent = MatchEventBase & Readonly<{
   winnerTeam: Exclude<MatchEventTeam, 'neutral'> | 'neutral';
 }>;
 
+export type FirstBloodMatchEvent = MatchEventBase & Readonly<{
+  type: 'first_blood';
+  killer: MatchEventParticipant;
+  victim: MatchEventParticipant;
+}>;
+
+export type MultiKillMatchEvent = MatchEventBase & Readonly<{
+  type: 'multi_kill';
+  killer: MatchEventParticipant;
+  victim: MatchEventParticipant;
+  victims: readonly MatchEventParticipant[];
+  count: number;
+}>;
+
 export type MatchEvent =
   | HeroKilledMatchEvent
   | TowerDestroyedMatchEvent
   | ObjectiveKilledMatchEvent
-  | ThroneDestroyedMatchEvent;
+  | ThroneDestroyedMatchEvent
+  | FirstBloodMatchEvent
+  | MultiKillMatchEvent;
 
 export type MatchDeathEventContext = Readonly<{
   target: MatchEventParticipant;
