@@ -18,6 +18,34 @@ export type AuthResponse = Readonly<{
   user: PlatformUser;
 }>;
 
+export type PlatformFriend = PlatformUser & Readonly<{
+  status: 'online' | 'offline';
+  unread: number;
+}>;
+
+export type PlatformFriendRequest = Readonly<{
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: string;
+  user: PlatformUser | null;
+}>;
+
+export type SocialSnapshot = Readonly<{
+  friends: readonly PlatformFriend[];
+  incoming: readonly PlatformFriendRequest[];
+  outgoing: readonly PlatformFriendRequest[];
+}>;
+
+export type DirectMessage = Readonly<{
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  text: string;
+  createdAt: string;
+  readAt: string | null;
+}>;
+
 export type PresenceSnapshot = Readonly<{
   type: 'presence.snapshot';
   users: readonly PlatformUser[];
@@ -27,6 +55,19 @@ export type SessionReadyEvent = Readonly<{
   type: 'session.ready';
   user: PlatformUser;
   presence: readonly PlatformUser[];
+  social?: SocialSnapshot;
 }>;
 
-export type PlatformRealtimeEvent = PresenceSnapshot | SessionReadyEvent | Readonly<Record<string, unknown>>;
+export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
+export type DirectMessageEvent = Readonly<{
+  type: 'direct.message';
+  message: DirectMessage;
+  user: PlatformUser | null;
+}>;
+
+export type PlatformRealtimeEvent =
+  | PresenceSnapshot
+  | SessionReadyEvent
+  | SocialSnapshotEvent
+  | DirectMessageEvent
+  | Readonly<Record<string, unknown>>;

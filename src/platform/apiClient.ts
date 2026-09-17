@@ -1,5 +1,11 @@
 import { clearAuthToken, getAuthToken, setAuthToken } from './authToken';
-import type { AuthResponse, PlatformSession, PlatformUser } from './types';
+import type {
+  AuthResponse,
+  DirectMessage,
+  PlatformSession,
+  PlatformUser,
+  SocialSnapshot,
+} from './types';
 
 const DEFAULT_PLATFORM_URL = 'http://127.0.0.1:8790';
 
@@ -59,4 +65,38 @@ export async function logoutPlatformAccount() {
   } finally {
     await clearAuthToken();
   }
+}
+
+export function getSocialSnapshot() {
+  return request<SocialSnapshot>('/api/social/snapshot', {}, true);
+}
+
+export async function searchPlatformUsers(query: string) {
+  const result = await request<{ users: PlatformUser[] }>(`/api/users/search?q=${encodeURIComponent(query)}`, {}, true);
+  return result.users;
+}
+
+export async function sendPlatformFriendRequest(userId: string) {
+  await request('/api/friends/request', { method: 'POST', body: JSON.stringify({ userId }) }, true);
+}
+
+export async function respondPlatformFriendRequest(requestId: string, accept: boolean) {
+  await request('/api/friends/respond', { method: 'POST', body: JSON.stringify({ requestId, accept }) }, true);
+}
+
+export async function removePlatformFriend(userId: string) {
+  await request(`/api/friends?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }, true);
+}
+
+export async function getDirectConversation(userId: string) {
+  const result = await request<{ messages: DirectMessage[] }>(`/api/messages?userId=${encodeURIComponent(userId)}`, {}, true);
+  return result.messages;
+}
+
+export async function sendPlatformDirectMessage(userId: string, text: string) {
+  const result = await request<{ message: DirectMessage }>('/api/messages', {
+    method: 'POST',
+    body: JSON.stringify({ userId, text }),
+  }, true);
+  return result.message;
 }
