@@ -1,0 +1,396 @@
+/* HOME social header + live player search polish. Loaded last on purpose. */
+
+/* =========================================================
+   FRIENDS HEADER
+   ========================================================= */
+
+.dr-home-right-rail .platform-social-rail-head {
+  position: relative !important;
+  height: 64px !important;
+  min-height: 64px !important;
+  flex: 0 0 64px !important;
+  padding: 0 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border-bottom: 1px solid rgba(104, 140, 159, .22) !important;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(68, 130, 157, .15), transparent 42%),
+    linear-gradient(180deg, rgba(12, 29, 40, .86), rgba(6, 17, 25, .72)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    0 9px 18px rgba(0, 0, 0, .10) !important;
+}
+
+.dr-home-right-rail .platform-social-rail-head::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(210, 180, 94, .42), rgba(75, 153, 186, .20), transparent 78%);
+  pointer-events: none;
+}
+
+.dr-home-right-rail .platform-social-head-main {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.dr-home-right-rail .platform-social-head-icon {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(89, 162, 192, .28) !important;
+  border-radius: 50% !important;
+  background:
+    radial-gradient(circle at 38% 30%, rgba(50, 105, 130, .44), rgba(10, 31, 43, .90) 65%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    0 0 14px rgba(54, 132, 165, .08) !important;
+}
+
+.dr-home-right-rail .platform-social-head-icon svg {
+  width: 15px !important;
+  height: 15px !important;
+  stroke-width: 1.7 !important;
+  color: #79c9df !important;
+}
+
+.dr-home-right-rail .platform-social-head-copy {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 4px !important;
+}
+
+.dr-home-right-rail .platform-social-head-copy > small {
+  color: #b49a58 !important;
+  font: 800 7px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .20em !important;
+}
+
+.dr-home-right-rail .platform-social-head-copy > strong {
+  color: #eef0e9 !important;
+  font: 700 13px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .12em !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .42) !important;
+}
+
+.dr-home-right-rail .platform-social-head-summary {
+  position: relative !important;
+  min-width: 62px !important;
+  height: 38px !important;
+  padding: 0 20px 0 12px !important;
+  display: grid !important;
+  align-content: center !important;
+  justify-items: end !important;
+  gap: 3px !important;
+  border-left: 1px solid rgba(111, 142, 157, .15) !important;
+}
+
+.dr-home-right-rail .platform-social-head-summary > strong {
+  color: #dbe8ea !important;
+  font: 700 12px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .02em !important;
+}
+
+.dr-home-right-rail .platform-social-head-summary > strong span {
+  color: #687f8b !important;
+  font-weight: 600 !important;
+}
+
+.dr-home-right-rail .platform-social-head-summary > small {
+  color: #617781 !important;
+  font: 700 7px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .11em !important;
+}
+
+.dr-home-right-rail .platform-social-head-summary .platform-social-live-dot {
+  position: absolute !important;
+  right: 3px !important;
+  top: 50% !important;
+  width: 6px !important;
+  height: 6px !important;
+  transform: translateY(-50%) !important;
+  border-radius: 50% !important;
+  background: #68dc94 !important;
+  box-shadow: 0 0 8px rgba(104, 220, 148, .52) !important;
+}
+
+/* =========================================================
+   LIVE SEARCH
+   ========================================================= */
+
+.dr-home-right-rail .platform-social-search {
+  position: relative !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  flex: 0 0 42px !important;
+  margin: 12px 12px 7px !important;
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) 34px !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(89, 128, 149, .28) !important;
+  background:
+    linear-gradient(180deg, rgba(3, 12, 18, .90), rgba(2, 9, 14, .96)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .015),
+    0 6px 16px rgba(0, 0, 0, .10) !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease !important;
+}
+
+.dr-home-right-rail .platform-social-search:focus-within {
+  border-color: rgba(105, 176, 205, .50) !important;
+  background:
+    linear-gradient(180deg, rgba(5, 17, 24, .98), rgba(2, 10, 15, 1)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .02),
+    0 0 0 1px rgba(64, 134, 164, .06),
+    0 0 14px rgba(43, 114, 145, .08) !important;
+}
+
+.dr-home-right-rail .platform-social-search > svg {
+  justify-self: center !important;
+  width: 15px !important;
+  height: 15px !important;
+  color: #718b98 !important;
+  stroke-width: 1.7 !important;
+  transition: color .16s ease !important;
+}
+
+.dr-home-right-rail .platform-social-search:focus-within > svg {
+  color: #78bed8 !important;
+}
+
+.dr-home-right-rail .platform-social-search input {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: #dce6e7 !important;
+  caret-color: #d7b75e !important;
+  font: 500 10px/1 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-home-right-rail .platform-social-search input::placeholder {
+  color: #617681 !important;
+}
+
+.dr-home-right-rail .platform-social-search > button {
+  width: 34px !important;
+  height: 100% !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-left: 1px solid rgba(96, 129, 146, .10) !important;
+  background: transparent !important;
+  color: #657e8a !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+
+.dr-home-right-rail .platform-social-search > button:disabled {
+  opacity: .20 !important;
+  cursor: default !important;
+}
+
+.dr-home-right-rail .platform-social-search > button:not(:disabled):hover {
+  color: #b7d5df !important;
+  background: rgba(37, 86, 108, .12) !important;
+}
+
+.dr-home-right-rail .platform-social-search > button svg {
+  width: 13px !important;
+  height: 13px !important;
+  stroke-width: 1.7 !important;
+}
+
+/* Search results become an intentional mini-panel instead of raw rows. */
+.dr-home-right-rail .platform-social-search-results {
+  flex: 0 0 auto !important;
+  max-height: 224px !important;
+  margin: 0 12px 9px !important;
+  padding: 4px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  border: 1px solid rgba(91, 129, 149, .24) !important;
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(45, 94, 117, .11), transparent 48%),
+    rgba(3, 11, 17, .98) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.015),
+    0 10px 24px rgba(0,0,0,.20) !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 129, 149, .25) transparent;
+}
+
+.dr-home-right-rail .platform-social-search-result {
+  min-height: 48px !important;
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 9px !important;
+  padding: 5px 6px !important;
+  border-bottom: 1px solid rgba(95, 126, 141, .08) !important;
+  background: transparent !important;
+}
+
+.dr-home-right-rail .platform-social-search-result:last-child {
+  border-bottom: 0 !important;
+}
+
+.dr-home-right-rail .platform-social-search-result:hover {
+  background: linear-gradient(90deg, rgba(36, 82, 103, .15), rgba(10, 30, 41, .04)) !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 4px !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy > strong {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: #d8e0df !important;
+  font: 600 10px/1 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy > small {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  color: #697d87 !important;
+  font: 500 8px/1 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy > small > i {
+  width: 5px !important;
+  height: 5px !important;
+  flex: 0 0 5px !important;
+  border-radius: 50% !important;
+  background: #66747c !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy > small.is-online {
+  color: #65c98d !important;
+}
+
+.dr-home-right-rail .platform-social-search-copy > small.is-online > i {
+  background: #68db95 !important;
+  box-shadow: 0 0 6px rgba(104, 219, 149, .44) !important;
+}
+
+.dr-home-right-rail .platform-social-search-result > button {
+  min-width: 55px !important;
+  height: 27px !important;
+  padding: 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  border: 1px solid rgba(88, 142, 167, .30) !important;
+  background: linear-gradient(180deg, rgba(22, 59, 78, .76), rgba(10, 37, 51, .90)) !important;
+  color: #bcdbe7 !important;
+  font: 800 7px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .06em !important;
+  cursor: pointer !important;
+}
+
+.dr-home-right-rail .platform-social-search-result > button svg {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+.dr-home-right-rail .platform-social-search-result > button:hover:not(:disabled) {
+  border-color: rgba(112, 182, 211, .52) !important;
+  color: #e1f0f5 !important;
+  background: linear-gradient(180deg, rgba(30, 78, 101, .88), rgba(13, 47, 64, .98)) !important;
+}
+
+.dr-home-right-rail .platform-social-search-result > button.is-message {
+  border-color: rgba(180, 154, 82, .28) !important;
+  background: linear-gradient(180deg, rgba(75, 62, 31, .45), rgba(37, 31, 18, .72)) !important;
+  color: #d9c17c !important;
+}
+
+.dr-home-right-rail .platform-social-search-result > button.is-pending,
+.dr-home-right-rail .platform-social-search-result > button:disabled {
+  border-color: rgba(91, 112, 121, .16) !important;
+  background: rgba(12, 24, 30, .52) !important;
+  color: #60717a !important;
+  cursor: default !important;
+}
+
+.dr-home-right-rail .platform-social-search-state {
+  min-height: 48px !important;
+  margin: 0 !important;
+  padding: 8px 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  color: #78909b !important;
+  font: 500 9px/1.35 "Segoe UI", Arial, sans-serif !important;
+  text-align: center !important;
+}
+
+.dr-home-right-rail .platform-social-search-state > svg {
+  width: 13px !important;
+  height: 13px !important;
+  animation: dr-social-search-pulse 1s ease-in-out infinite alternate;
+}
+
+.dr-home-right-rail .platform-social-search-state.is-empty {
+  color: #657983 !important;
+}
+
+@keyframes dr-social-search-pulse {
+  from { opacity: .42; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1.04); }
+}
+
+/* Keep friends list visually separated from live search results. */
+.dr-home-right-rail .platform-social-friends {
+  border-top: 1px solid rgba(91, 124, 141, .08) !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-home-right-rail .platform-social-rail-head {
+    height: 58px !important;
+    min-height: 58px !important;
+    flex-basis: 58px !important;
+    padding: 0 12px !important;
+  }
+
+  .dr-home-right-rail .platform-social-head-icon {
+    width: 28px !important;
+    height: 28px !important;
+    flex-basis: 28px !important;
+  }
+
+  .dr-home-right-rail .platform-social-head-copy > strong {
+    font-size: 12px !important;
+  }
+
+  .dr-home-right-rail .platform-social-search {
+    margin-left: 10px !important;
+    margin-right: 10px !important;
+  }
+
+  .dr-home-right-rail .platform-social-search-results {
+    margin-left: 10px !important;
+    margin-right: 10px !important;
+  }
+}
