@@ -1,13 +1,6 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { hashPassword, randomToken, verifyPassword } from './security.mjs';
-
-function writeJsonAtomic(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(value, null, 2), { mode: 0o600 });
-  fs.renameSync(temp, file);
-}
+import { writeJsonAtomic } from './json-file.mjs';
 
 function readState(file) {
   if (!fs.existsSync(file)) return { users: [] };
