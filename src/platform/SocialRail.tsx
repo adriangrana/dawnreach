@@ -83,7 +83,7 @@ export function SocialRail({
   };
 
   return <aside className="platform-social-rail">
-    <header className="platform-social-rail-head"><div><Users /><span><strong>SOCIAL</strong><small>{online.length} conectados</small></span></div><span className="platform-social-live-dot" /></header>
+    <header className="platform-social-rail-head"><div><Users /><span><strong>AMIGOS</strong><small>{online.length} conectados</small></span></div><span className="platform-social-live-dot" /></header>
     <form className="platform-social-search" onSubmit={search}><Search /><input aria-label="Buscar jugador" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar jugador…" /><button aria-label="Buscar">↵</button></form>
 
     {results.length > 0 && <div className="platform-social-search-results">{results.map(user => <div key={user.id}><span className="platform-social-avatar">{user.username.slice(0, 2).toUpperCase()}</span><strong>{user.username}</strong><button type="button" onClick={() => void addFriend(user.id)}><UserPlus /></button></div>)}</div>}
