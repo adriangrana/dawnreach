@@ -3,7 +3,7 @@ import { TOWER_GAMEPLAY, getTowerTierConfig, type TowerTier } from '../game/game
 const STYLE_ID = 'dawnreach-tower-portrait-assets';
 const PORTRAIT_ATTRIBUTE = 'data-dawnreach-tower-portrait';
 
-const TOWER_PORTRAITS = {
+export const TOWER_PORTRAITS = {
   dawn: '/assets/images/blue_tower.webp',
   dusk: '/assets/images/red_tower.webp',
 } as const;
