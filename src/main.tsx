@@ -4,6 +4,7 @@ import { mountAldenAudioRuntime } from './game/heroes/alden/aldenAudioRuntime';
 import { mountAldenWorldAbilityBootstrap } from './game/heroes/alden/worldAbilityBootstrap';
 import { warmTeleportPortalGeometry } from './game/items/teleportPortalWarmup';
 import { installMatchEndRuntime } from './game/match/matchEndRuntime';
+import { installMatchEventRuntime } from './game/match/matchEventRuntime';
 import { installMatchPauseRuntime } from './game/match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './game/performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './game/performance/shadowInvalidationBridge';
@@ -17,6 +18,7 @@ import { mountGameMenuQuickKeys } from './hud/gameMenuQuickKeys';
 import { mountGameplayKeybindBridge } from './hud/gameplayKeybindBridge';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
 import { mountInventoryControls } from './hud/inventoryControls';
+import { mountMatchEventFeed } from './hud/matchEventFeed';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
 import { mountPingPresentationEnhancements } from './hud/pingPresentationEnhancements';
 import { mountPingWheel } from './hud/pingWheel';
@@ -39,6 +41,7 @@ import './game-menu.css';
 import './game-menu-hotkeys.css';
 import './match-pause.css';
 import './match-end.css';
+import './match-event-feed.css';
 import './settings-runtime.css';
 import './scoreboard.css';
 import './ping-wheel.css';
@@ -95,6 +98,9 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
+// Match events must exist before any terminal consumer. Raw world deaths are converted once into
+// semantic events, then the result screen, feed and future multiplayer/history consume the same bus.
+const disposeMatchEventRuntime = installMatchEventRuntime();
 // Register terminal-state protection before the pause controller. If the match has ended, its
 // capture listener owns the menu's resume action before pause can ever restart simulation.
 const disposeMatchEndRuntime = installMatchEndRuntime();
@@ -115,6 +121,8 @@ const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 // effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
 // doubling startup work and transient GPU/CPU pressure in tauri:dev.
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+
+const disposeMatchEventFeed = mountMatchEventFeed();
 
 // Alden's audio listens to successful ability cooldown transitions and authoritative world
 // attack-impact events, so mount it once after the HUD exists and before gameplay input starts.
@@ -154,11 +162,13 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeAldenAudioRuntime();
+    disposeMatchEventFeed();
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
     disposeRuntimePerformanceTuning();
     disposeMatchPauseRuntime();
     disposeMatchEndRuntime();
+    disposeMatchEventRuntime();
     disposeSettingsAvailability();
     disposeSettingsSliderValueGuard();
     disposeAbilityRangeSettingsGuard();

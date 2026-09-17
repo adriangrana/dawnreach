@@ -1,4 +1,4 @@
-import { subscribeWorldCombatEvents } from '../entities/worldCombatBridge';
+import { subscribeMatchEvents, type ThroneDestroyedMatchEvent } from './matchEvents';
 import { requestMatchPause } from './matchPauseRuntime';
 
 export const MATCH_FINISHED_EVENT = 'dawnreach:match-finished';
@@ -28,24 +28,16 @@ const state: MatchEndState = {
 
 let installed = false;
 
-function throneResult(entityId: string, finishedAtMs: number): MatchFinishedDetail | null {
-  if (entityId === 'red-throne') {
-    return {
-      winner: 'dawn',
-      loser: 'dusk',
-      destroyedThroneId: 'red-throne',
-      finishedAtMs,
-    };
-  }
-  if (entityId === 'blue-throne') {
-    return {
-      winner: 'dusk',
-      loser: 'dawn',
-      destroyedThroneId: 'blue-throne',
-      finishedAtMs,
-    };
-  }
-  return null;
+function throneResult(event: ThroneDestroyedMatchEvent): MatchFinishedDetail | null {
+  if (event.throne.entityId !== 'blue-throne' && event.throne.entityId !== 'red-throne') return null;
+  const winner = event.winnerTeam === 'blue' ? 'dawn' : event.winnerTeam === 'red' ? 'dusk' : null;
+  if (!winner) return null;
+  return {
+    winner,
+    loser: winner === 'dawn' ? 'dusk' : 'dawn',
+    destroyedThroneId: event.throne.entityId,
+    finishedAtMs: event.atMs,
+  };
 }
 
 export function getMatchEndSnapshot(): Readonly<MatchEndState> {
@@ -111,9 +103,6 @@ function finishMatch(detail: MatchFinishedDetail) {
   document.body.dataset.dawnreachMatchFinished = 'true';
   document.body.dataset.dawnreachMatchWinner = detail.winner;
 
-  // Reuse Dawnreach's authoritative pause clock. This freezes Three.js clocks and the
-  // pause-aware match timestamp, so creeps, cooldowns, regeneration and the HUD clock stop
-  // on the exact terminal state instead of continuing behind the result screen.
   requestMatchPause(true, 'match-end');
   renderResult(detail);
 
@@ -129,22 +118,20 @@ function isResumeAction(target: EventTarget | null) {
 
 /**
  * Owns the terminal local-match state until MatchState itself becomes server-authoritative.
- * The source of truth is an authoritative world combat death event from one of the two thrones,
- * never DOM inspection or HP polling.
+ * Match end consumes the same semantic throne_destroyed event as the rest of the product instead
+ * of independently reinterpreting raw HP/death state.
  */
 export function installMatchEndRuntime() {
   if (installed) return () => undefined;
   installed = true;
   document.body.dataset.dawnreachMatchFinished = 'false';
 
-  const unsubscribeCombat = subscribeWorldCombatEvents((event) => {
-    if (state.finished || event.reason !== 'death' || event.currentHp > 0 || event.alive) return;
-    const result = throneResult(event.entityId, event.atMs);
+  const unsubscribeEvents = subscribeMatchEvents((event) => {
+    if (state.finished || event.type !== 'throne_destroyed') return;
+    const result = throneResult(event);
     if (result) finishMatch(result);
   });
 
-  // The global pause overlay normally allows F10 -> Resume. Once a throne is destroyed that
-  // action must never restart simulation; the result is terminal for the current match.
   const blockResumeAfterFinish = (event: MouseEvent) => {
     if (!state.finished || !isResumeAction(event.target)) return;
     event.preventDefault();
@@ -154,7 +141,7 @@ export function installMatchEndRuntime() {
 
   return () => {
     installed = false;
-    unsubscribeCombat();
+    unsubscribeEvents();
     window.removeEventListener('click', blockResumeAfterFinish, true);
     document.getElementById(OVERLAY_ID)?.remove();
     delete document.body.dataset.dawnreachMatchWinner;

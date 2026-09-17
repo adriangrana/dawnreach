@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "tsc src/game/heroes/alden/buildAlden.ts src/game/heroes/alden/animateAlden.ts src/game/characters/buildHumanoidBody.ts src/game/match/index.ts src/game/navigation/navigationWorld.ts --module commonjs --target es2022 --skipLibCheck --rootDir src/game --outDir node_modules/.cache/alden-test && node --test tests/alden.test.mjs tests/gameplay-data.test.mjs tests/navigation.test.mjs",
+    "test": "tsc src/game/heroes/alden/buildAlden.ts src/game/heroes/alden/animateAlden.ts src/game/characters/buildHumanoidBody.ts src/game/match/index.ts src/game/match/matchEvents.ts src/game/navigation/navigationWorld.ts --module commonjs --target es2022 --skipLibCheck --rootDir src/game --outDir node_modules/.cache/alden-test && node --test tests/alden.test.mjs tests/gameplay-data.test.mjs tests/navigation.test.mjs tests/match-events.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
