@@ -34,6 +34,7 @@ import './platform-home-events-reference.css';
 import './platform-home-mode-ribbon-reference.css';
 import './platform-home-social-reference.css';
 import './platform-home-social-integration.css';
+import './platform-home-lower-strip-legibility.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
