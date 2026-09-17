@@ -12,8 +12,16 @@ export class PartyManager {
     this.messages = new Map();
   }
 
-  partyForUser(userId) {
+  findPartyForUser(userId) {
     return [...this.parties.values()].find(party => party.members.includes(userId)) || null;
+  }
+
+  partyForUser(userId) {
+    const existing = this.findPartyForUser(userId);
+    if (existing) return existing;
+    const user = this.options.store.publicUser(this.options.store.getUser(userId));
+    if (!user) return null;
+    return this.create(user);
   }
 
   snapshotFor(userId) {
@@ -32,7 +40,7 @@ export class PartyManager {
   }
 
   create(leader) {
-    const existing = this.partyForUser(leader.id);
+    const existing = this.findPartyForUser(leader.id);
     if (existing) return existing;
     let code = this.code();
     while ([...this.parties.values()].some(party => party.code === code)) code = this.code();
@@ -51,7 +59,7 @@ export class PartyManager {
 
   invite(fromUserId, username) {
     const party = this.partyForUser(fromUserId);
-    if (!party) throw new Error('Crea un grupo primero.');
+    if (!party) throw new Error('Jugador no encontrado.');
     if (party.leaderId !== fromUserId) throw new Error('Solo el líder puede invitar jugadores.');
     const target = this.options.store.findByUsername(username);
     if (!target) throw new Error('Jugador no encontrado.');
@@ -89,7 +97,7 @@ export class PartyManager {
     if (!party) throw new Error('Ese grupo ya no existe.');
     if (party.members.length >= 5) throw new Error('El grupo ya está completo.');
 
-    this.leave(userId);
+    this.leave(userId, { createReplacement: false, emitLeavingSnapshot: false });
     party.members.push(userId);
     this.invites.delete(invite.id);
     this.emitParty(party);
@@ -103,9 +111,16 @@ export class PartyManager {
     this.emitSnapshot(userId);
   }
 
-  leave(userId) {
-    const party = this.partyForUser(userId);
-    if (!party) return;
+  leave(userId, { createReplacement = true, emitLeavingSnapshot = true } = {}) {
+    const party = this.findPartyForUser(userId);
+    if (!party) return createReplacement ? this.partyForUser(userId) : null;
+
+    // A solo party is the player's default state. Leaving it is therefore a no-op.
+    if (createReplacement && party.members.length === 1) {
+      if (emitLeavingSnapshot) this.emitSnapshot(userId);
+      return party;
+    }
+
     party.members = party.members.filter(id => id !== userId);
     if (!party.members.length) {
       this.parties.delete(party.id);
@@ -113,17 +128,23 @@ export class PartyManager {
       for (const [id, invite] of this.invites) {
         if (invite.partyId === party.id) this.invites.delete(id);
       }
-      this.emitSnapshot(userId);
-      return;
+    } else {
+      if (party.leaderId === userId) party.leaderId = party.members[0];
+      this.emitParty(party);
     }
-    if (party.leaderId === userId) party.leaderId = party.members[0];
-    this.emitParty(party);
-    this.emitSnapshot(userId);
+
+    if (!createReplacement) {
+      if (emitLeavingSnapshot) this.options.onEvent({ type: 'party.snapshot', party: null, invites: [], messages: [] }, [userId]);
+      return null;
+    }
+
+    const user = this.options.store.publicUser(this.options.store.getUser(userId));
+    return user ? this.create(user) : null;
   }
 
   sendMessage(userId, text) {
     const party = this.partyForUser(userId);
-    if (!party) throw new Error('Debes estar en un grupo para usar el chat de grupo.');
+    if (!party) throw new Error('Jugador no encontrado.');
     const clean = cleanPartyMessage(text);
     if (!clean) throw new Error('El mensaje está vacío.');
     const sender = this.options.store.publicUser(this.options.store.getUser(userId));
