@@ -1,10 +1,12 @@
-import { MessageSquare, SendHorizontal } from 'lucide-react';
+import { MessageSquare, SendHorizontal, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   getDirectConversation,
   platformRealtime,
   sendPlatformDirectMessage,
   type DirectMessage,
+  type PartyMessage,
+  type PartySnapshot,
   type PlatformRealtimeEvent,
   type PlatformUser,
   type SocialSnapshot,
@@ -15,51 +17,131 @@ function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
 }
 
+function directChannel(userId: string) {
+  return `direct:${userId}`;
+}
+
+function directIdFromChannel(channel: string | null) {
+  return channel?.startsWith('direct:') ? channel.slice('direct:'.length) : null;
+}
+
 export function HomeChatPanel({
   me,
   online,
   snapshot,
+  party,
   selectedFriendId,
   refreshSocial,
+  onActiveDirectChange,
 }: {
   me: PlatformUser;
   online: readonly PlatformUser[];
   snapshot: SocialSnapshot;
+  party: PartySnapshot;
   selectedFriendId: string | null;
   refreshSocial: () => Promise<void>;
+  onActiveDirectChange?: (userId: string | null) => void;
 }) {
-  const [messages, setMessages] = useState<readonly DirectMessage[]>([]);
+  const [openDirectIds, setOpenDirectIds] = useState<string[]>([]);
+  const [activeChannel, setActiveChannel] = useState<string | null>(party.party ? 'party' : null);
+  const [directMessages, setDirectMessages] = useState<Record<string, readonly DirectMessage[]>>({});
+  const [partyMessages, setPartyMessages] = useState<readonly PartyMessage[]>(party.messages);
   const [draft, setDraft] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingDirectId, setLoadingDirectId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const selected = useMemo(
-    () => snapshot.friends.find(friend => friend.id === selectedFriendId) ?? null,
-    [snapshot.friends, selectedFriendId],
-  );
+
+  const friendsById = useMemo(() => new Map(snapshot.friends.map(friend => [friend.id, friend])), [snapshot.friends]);
   const onlineIds = useMemo(() => new Set(online.map(user => user.id)), [online]);
+  const activeDirectId = directIdFromChannel(activeChannel);
+  const selected = activeDirectId ? friendsById.get(activeDirectId) ?? null : null;
   const selectedPresence = useMemo(
     () => selected ? resolveFriendPresence(selected, onlineIds) : null,
     [selected, onlineIds],
   );
+  const activeDirectMessages = activeDirectId ? directMessages[activeDirectId] ?? [] : [];
+  const loading = Boolean(activeDirectId && loadingDirectId === activeDirectId);
+
+  const activateParty = () => {
+    if (!party.party) return;
+    setActiveChannel('party');
+    setDraft('');
+    setNotice('');
+    onActiveDirectChange?.(null);
+  };
+
+  const activateDirect = (userId: string) => {
+    if (!friendsById.has(userId)) return;
+    setOpenDirectIds(current => current.includes(userId) ? current : [...current, userId]);
+    setActiveChannel(directChannel(userId));
+    setDraft('');
+    setNotice('');
+    onActiveDirectChange?.(userId);
+  };
+
+  const closeDirect = (userId: string) => {
+    setOpenDirectIds(current => current.filter(id => id !== userId));
+    setDirectMessages(current => {
+      const next = { ...current };
+      delete next[userId];
+      return next;
+    });
+    if (activeDirectId !== userId) return;
+    const remaining = openDirectIds.filter(id => id !== userId && friendsById.has(id));
+    const fallbackId = remaining.at(-1) ?? null;
+    if (fallbackId) activateDirect(fallbackId);
+    else if (party.party) activateParty();
+    else {
+      setActiveChannel(null);
+      setDraft('');
+      onActiveDirectChange?.(null);
+    }
+  };
 
   useEffect(() => {
-    if (!selectedFriendId) {
-      setMessages([]);
-      setDraft('');
-      setNotice('');
-      setLoading(false);
-      return;
-    }
-
-    let active = true;
-    setLoading(true);
+    if (!selectedFriendId || !friendsById.has(selectedFriendId)) return;
+    setOpenDirectIds(current => current.includes(selectedFriendId) ? current : [...current, selectedFriendId]);
+    setActiveChannel(directChannel(selectedFriendId));
+    setDraft('');
     setNotice('');
-    void getDirectConversation(selectedFriendId)
+  }, [selectedFriendId, friendsById]);
+
+  useEffect(() => {
+    setOpenDirectIds(current => current.filter(id => friendsById.has(id)));
+    if (activeDirectId && !friendsById.has(activeDirectId)) {
+      if (party.party) activateParty();
+      else {
+        setActiveChannel(null);
+        onActiveDirectChange?.(null);
+      }
+    }
+  }, [activeDirectId, friendsById, party.party]);
+
+  useEffect(() => {
+    setPartyMessages(party.messages);
+    if (!party.party && activeChannel === 'party') {
+      const fallbackId = openDirectIds.find(id => friendsById.has(id)) ?? null;
+      if (fallbackId) activateDirect(fallbackId);
+      else {
+        setActiveChannel(null);
+        onActiveDirectChange?.(null);
+      }
+    } else if (party.party && !activeChannel) {
+      setActiveChannel('party');
+      onActiveDirectChange?.(null);
+    }
+  }, [party.party?.id, party.messages]);
+
+  useEffect(() => {
+    if (!activeDirectId) return;
+    let active = true;
+    setLoadingDirectId(activeDirectId);
+    setNotice('');
+    void getDirectConversation(activeDirectId)
       .then(next => {
         if (!active) return;
-        setMessages(next);
+        setDirectMessages(current => ({ ...current, [activeDirectId]: next }));
         void refreshSocial().catch(() => undefined);
       })
       .catch(error => {
@@ -67,40 +149,66 @@ export function HomeChatPanel({
         setNotice(error instanceof Error ? error.message : 'Could not load the conversation.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLoadingDirectId(current => current === activeDirectId ? null : current);
       });
-
     return () => { active = false; };
-  }, [selectedFriendId, refreshSocial]);
+  }, [activeDirectId, refreshSocial]);
 
   useEffect(() => platformRealtime.subscribe(event => {
-    if (eventType(event) !== 'direct.message' || !('message' in event)) return;
-    const incoming = event.message as DirectMessage;
-    if (!selectedFriendId || (incoming.fromUserId !== selectedFriendId && incoming.toUserId !== selectedFriendId)) return;
-    setMessages(previous => previous.some(item => item.id === incoming.id) ? previous : [...previous, incoming]);
-    if (incoming.fromUserId === selectedFriendId) {
-      void getDirectConversation(selectedFriendId)
-        .then(next => setMessages(next))
-        .then(() => refreshSocial())
-        .catch(() => undefined);
+    const type = eventType(event);
+    if (type === 'direct.message' && 'message' in event) {
+      const incoming = event.message as DirectMessage;
+      const otherUserId = incoming.fromUserId === me.id ? incoming.toUserId : incoming.fromUserId;
+      if (!friendsById.has(otherUserId)) return;
+      setOpenDirectIds(current => current.includes(otherUserId) ? current : [...current, otherUserId]);
+      setDirectMessages(current => {
+        const previous = current[otherUserId] ?? [];
+        return previous.some(item => item.id === incoming.id)
+          ? current
+          : { ...current, [otherUserId]: [...previous, incoming] };
+      });
+      if (incoming.fromUserId === activeDirectId) {
+        void getDirectConversation(activeDirectId)
+          .then(next => setDirectMessages(current => ({ ...current, [activeDirectId]: next })))
+          .then(() => refreshSocial())
+          .catch(() => undefined);
+      }
+      return;
     }
-  }), [selectedFriendId, refreshSocial]);
+    if (type === 'party.message' && 'message' in event) {
+      const incoming = event.message as PartyMessage;
+      if (!party.party || incoming.partyId !== party.party.id) return;
+      setPartyMessages(current => current.some(item => item.id === incoming.id) ? current : [...current, incoming]);
+    }
+  }), [activeDirectId, friendsById, me.id, party.party?.id, refreshSocial]);
 
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-  }, [messages, loading]);
+  }, [activeChannel, activeDirectMessages, partyMessages, loading]);
 
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!selected || !text || sending) return;
+    if (!text || sending) return;
     setSending(true);
     setNotice('');
     try {
+      if (activeChannel === 'party') {
+        if (!party.party) return;
+        if (!platformRealtime.send('party.message', { text })) throw new Error('Realtime connection unavailable.');
+        setDraft('');
+        return;
+      }
+      if (!selected) return;
       const sent = await sendPlatformDirectMessage(selected.id, text);
-      setMessages(previous => previous.some(item => item.id === sent.id) ? previous : [...previous, sent]);
+      setDirectMessages(current => {
+        const previous = current[selected.id] ?? [];
+        return previous.some(item => item.id === sent.id)
+          ? current
+          : { ...current, [selected.id]: [...previous, sent] };
+      });
       setDraft('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not send the message.');
@@ -109,10 +217,18 @@ export function HomeChatPanel({
     }
   };
 
+  const partyActive = activeChannel === 'party';
+  const canCompose = partyActive ? Boolean(party.party) : Boolean(selected) && !loading;
+  const ariaLabel = partyActive
+    ? 'Party chat'
+    : selected
+      ? `Chat with ${selected.username}`
+      : 'Chat';
+
   return <article
-    className={`dr-home-channel-card dr-home-chat-card${selected ? ' is-active' : ''}`}
+    className={`dr-home-channel-card dr-home-chat-card${activeChannel ? ' is-active' : ''}`}
     tabIndex={0}
-    aria-label={selected ? `Chat with ${selected.username}` : 'Direct chat'}
+    aria-label={ariaLabel}
     onMouseDown={event => {
       const target = event.target as HTMLElement;
       if (target.closest('input, button')) return;
@@ -120,33 +236,72 @@ export function HomeChatPanel({
     }}
   >
     <header className="dr-home-chat-head">
-      <div className="dr-home-chat-channel"><strong>CHAT</strong><span>Direct</span></div>
-      {selected && selectedPresence
-        ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`dr-home-chat-status is-${selectedPresence.status}`}><i className={`is-${selectedPresence.status}`} />{selectedPresence.label}</small></span></div>
-        : <span className="dr-home-chat-hint">Select a friend</span>}
+      <div className="dr-home-chat-tabs" role="tablist" aria-label="Chat channels">
+        <strong className="dr-home-chat-title">CHAT</strong>
+        <button
+          type="button"
+          role="tab"
+          className={`dr-home-chat-tab is-party${partyActive ? ' is-active' : ''}`}
+          aria-selected={partyActive}
+          disabled={!party.party}
+          onClick={activateParty}
+          title={party.party ? 'Party channel' : 'Join or create a party to use party chat'}
+        >
+          <Users />
+          <span>PARTY</span>
+          <em>{party.party?.members.length ?? 0}/5</em>
+        </button>
+        {openDirectIds.map(userId => {
+          const friend = friendsById.get(userId);
+          if (!friend) return null;
+          const active = activeDirectId === userId;
+          return <span key={userId} className={`dr-home-chat-direct-tab${active ? ' is-active' : ''}`}>
+            <button type="button" role="tab" aria-selected={active} onClick={() => activateDirect(userId)}>
+              <span>{friend.username}</span>
+              {friend.unread > 0 && !active && <em>{friend.unread}</em>}
+            </button>
+            <button type="button" className="dr-home-chat-tab-close" aria-label={`Close ${friend.username} chat`} onClick={() => closeDirect(userId)}><X /></button>
+          </span>;
+        })}
+      </div>
+
+      {partyActive && party.party
+        ? <div className="dr-home-chat-party-meta"><Users /><span><strong>PARTY</strong><small>{party.party.members.length} members</small></span></div>
+        : selected && selectedPresence
+          ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`dr-home-chat-status is-${selectedPresence.status}`}><i className={`is-${selectedPresence.status}`} />{selectedPresence.label}</small></span></div>
+          : <span className="dr-home-chat-hint">Open a friend or create a party</span>}
     </header>
 
     <div className="dr-home-chat-messages" ref={scrollRef} aria-live="polite">
-      {!selected && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>Start a conversation</strong><small>Select a friend from the right panel.</small></span></div>}
+      {!activeChannel && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No channel selected</strong><small>Open a friend from the right panel or create a party.</small></span></div>}
+
+      {partyActive && !party.party && <div className="dr-home-chat-empty"><Users /><span><strong>Party chat unavailable</strong><small>Create or join a party to unlock this channel.</small></span></div>}
+      {partyActive && party.party && partyMessages.length === 0 && <div className="dr-home-chat-empty"><Users /><span><strong>Party channel ready</strong><small>Messages are visible to everyone in your current party.</small></span></div>}
+      {partyActive && party.party && partyMessages.map(message => <div key={message.id} className={`dr-home-chat-message is-party${message.fromUserId === me.id ? ' is-mine' : ''}`}>
+        <span className="dr-home-chat-message-copy"><b>{message.fromUserId === me.id ? 'You' : message.username}</b><span>{message.text}</span></span>
+        <small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+      </div>)}
+
       {selected && loading && <div className="dr-home-chat-empty is-loading"><span><strong>Loading conversation…</strong></span></div>}
-      {selected && !loading && messages.length === 0 && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No messages yet</strong><small>Send the first message to {selected.username}.</small></span></div>}
-      {!loading && messages.map(message => <div key={message.id} className={`dr-home-chat-message${message.fromUserId === me.id ? ' is-mine' : ''}`}>
+      {selected && !loading && activeDirectMessages.length === 0 && <div className="dr-home-chat-empty"><MessageSquare /><span><strong>No messages yet</strong><small>Send the first message to {selected.username}.</small></span></div>}
+      {selected && !loading && activeDirectMessages.map(message => <div key={message.id} className={`dr-home-chat-message${message.fromUserId === me.id ? ' is-mine' : ''}`}>
         <span>{message.text}</span>
         <small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
       </div>)}
+
       {notice && <p className="dr-home-chat-notice" role="status">{notice}</p>}
     </div>
 
     <form className="dr-home-chat-compose" onSubmit={sendMessage}>
       <input
-        aria-label={selected ? `Message ${selected.username}` : 'Select a friend to start a conversation'}
+        aria-label={partyActive ? 'Message party' : selected ? `Message ${selected.username}` : 'Select a chat channel'}
         value={draft}
         onChange={event => setDraft(event.target.value)}
         maxLength={500}
-        disabled={!selected || loading}
-        placeholder={selected ? `Message ${selected.username}…` : 'Select a friend to start a conversation…'}
+        disabled={!canCompose}
+        placeholder={partyActive && party.party ? 'Message party…' : selected ? `Message ${selected.username}…` : 'Select a chat channel…'}
       />
-      <button type="submit" disabled={!selected || !draft.trim() || loading || sending} aria-label="Send message" title="Send message">
+      <button type="submit" disabled={!canCompose || !draft.trim() || sending} aria-label="Send message" title="Send message">
         <SendHorizontal />
       </button>
     </form>
