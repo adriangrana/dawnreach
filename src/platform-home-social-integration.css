@@ -6,7 +6,7 @@
   grid-template-columns: minmax(0, 1fr) !important;
 }
 
-.platform-home-grid:has(.dr-home-overview) > .platform-main-workspace {
+.platform-home-grid:has(.dr-home-overview)>.platform-main-workspace {
   grid-column: 1 !important;
   min-width: 0 !important;
   width: 100% !important;
@@ -23,12 +23,12 @@
  * PARTY / FRIENDS float over the right side of the hero stage.
  * The rail itself is the dark translucent mother card from the reference.
  */
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
   position: absolute !important;
-  z-index: 6 !important;
-  top: 10px !important;
-  right: 14px !important;
-  bottom: calc(clamp(176px, 18vh, 206px) + 132px) !important;
+  z-index: 2 !important;
+  top: 16px !important;
+  right: 0px !important;
+  bottom: calc(clamp(176px, 18vh, 206px)) !important;
   width: clamp(318px, 17.5vw, 388px) !important;
   min-height: 0 !important;
 
@@ -41,20 +41,14 @@
   margin: 0 !important;
 
   border: 1px solid rgba(101, 132, 149, .28) !important;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(57, 91, 111, .14), transparent 38%),
-    linear-gradient(180deg, rgba(5, 17, 26, .78) 0%, rgba(4, 12, 19, .88) 57%, rgba(3, 8, 13, .94) 100%) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .028),
-    inset 0 0 34px rgba(1, 7, 11, .22),
-    0 18px 44px rgba(0, 0, 0, .34) !important;
-  backdrop-filter: blur(10px) saturate(112%) !important;
+  background: radial-gradient(ellipse at 50% 0%, rgba(57, 91, 111, .14), transparent 38%), linear-gradient(180deg, rgb(5 17 26) 0%, rgba(4, 12, 19, .88) 57%, rgb(3 8 13 / 2%) 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .028), inset 0 0 34px rgba(1, 7, 11, .22), 0 18px 44px rgb(0 0 0 / 13%) !important;
   -webkit-backdrop-filter: blur(10px) saturate(112%) !important;
   overflow: hidden !important;
 }
 
 /* Subtle rim/highlight so the mother card reads as one premium surface. */
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail::before {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -66,7 +60,7 @@
 }
 
 /* PARTY is an inner section of the shared mother card. */
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .dr-home-party-card {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail .dr-home-party-card {
   position: relative !important;
   z-index: 1 !important;
   flex: 0 0 auto !important;
@@ -83,7 +77,7 @@
 }
 
 /* FRIENDS is the second inner section of the same shell. */
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail > .platform-social-rail {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail>.platform-social-rail {
   position: relative !important;
   z-index: 1 !important;
   flex: 1 1 auto !important;
@@ -91,6 +85,7 @@
   min-height: 0 !important;
   max-height: none !important;
   margin: 0 !important;
+  margin-bottom: 120px !important;
 
   border: 1px solid rgba(80, 112, 132, .24) !important;
   background:
@@ -102,13 +97,13 @@
   overflow: hidden !important;
 }
 
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .platform-social-friends {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail .platform-social-friends {
   flex: 1 1 auto !important;
   min-height: 0 !important;
   overflow: hidden !important;
 }
 
-.platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail .platform-social-friends > div {
+.platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail .platform-social-friends>div {
   height: 100% !important;
   max-height: none !important;
   overflow-y: auto !important;
@@ -131,16 +126,16 @@
   grid-template-columns: minmax(0, 1fr) clamp(360px, 18vw, 410px) !important;
 }
 
-.platform-home-grid:not(:has(.dr-home-overview)) > .dr-home-right-rail {
+.platform-home-grid:not(:has(.dr-home-overview))>.dr-home-right-rail {
   position: relative !important;
   inset: auto !important;
   width: auto !important;
 }
 
 @media (max-width: 1500px) {
-  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
-    right: 10px !important;
-    bottom: calc(clamp(176px, 18vh, 206px) + 116px) !important;
+  .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
+    right: 0px !important;
+    bottom: calc(clamp(176px, 18vh, 206px)) !important;
     width: 330px !important;
     padding: 10px !important;
   }
@@ -152,15 +147,16 @@
 }
 
 @media (max-height: 850px) {
-  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+  .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
     top: 8px !important;
     bottom: 258px !important;
   }
 }
 
 @media (max-width: 1100px) {
+
   /* Preserve the existing compact/mobile behavior instead of covering the hero. */
-  .platform-home-grid:has(.dr-home-overview) > .dr-home-right-rail {
+  .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
     display: none !important;
   }
 
