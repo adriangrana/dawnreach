@@ -324,6 +324,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
           else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
           else if (type === 'party.decline') parties.decline(user.id, String(message.inviteId || ''));
+          else if (type === 'party.message') parties.sendMessage(user.id, message.text);
           else if (type === 'party.leave') {
             parties.leave(user.id);
             matchmaker.leave(user.id);
