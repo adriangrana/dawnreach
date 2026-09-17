@@ -182,6 +182,77 @@
     drop-shadow(0 30px 56px rgba(0, 0, 0, .24));
 }
 
+/* =========================================================
+   FEATURED HERO COPY LEGIBILITY
+   Keep the reference's open composition, but add a local dark scrim
+   and stronger type contrast over bright scenery.
+   ========================================================= */
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy {
+  isolation: isolate !important;
+  z-index: 4 !important;
+  padding: 18px 22px 20px !important;
+  text-shadow: none !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -28px -38px -30px -38px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 48% 48%, rgba(3, 9, 14, .74) 0%, rgba(3, 9, 14, .48) 42%, rgba(3, 9, 14, .18) 64%, transparent 78%);
+  filter: blur(8px);
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy>span {
+  color: #e3bf67 !important;
+  text-shadow:
+    0 2px 7px rgba(0, 0, 0, .92),
+    0 0 12px rgba(0, 0, 0, .45) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy h1 {
+  color: #fff2d4 !important;
+  text-shadow:
+    0 3px 12px rgba(0, 0, 0, .98),
+    0 0 24px rgba(0, 0, 0, .62),
+    0 1px 0 rgba(255, 255, 255, .12) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy h3 {
+  color: #d7b85f !important;
+  text-shadow:
+    0 3px 10px rgba(0, 0, 0, .96),
+    0 0 18px rgba(0, 0, 0, .48) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy p {
+  color: #e0e9ec !important;
+  font-weight: 500 !important;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 1),
+    0 0 14px rgba(0, 0, 0, .65) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy button {
+  border-color: rgba(133, 196, 225, .72) !important;
+  background:
+    linear-gradient(180deg, rgba(19, 60, 82, .88), rgba(10, 38, 55, .93)) !important;
+  color: #eef8fc !important;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, .8) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(214, 241, 250, .08),
+    0 8px 20px rgba(0, 0, 0, .30) !important;
+}
+
+.platform-home-grid:has(.dr-home-overview) .dr-home-feature-copy button:hover {
+  border-color: rgba(157, 216, 239, .86) !important;
+  background:
+    linear-gradient(180deg, rgba(27, 78, 105, .94), rgba(13, 48, 68, .97)) !important;
+}
+
 @media (max-width: 1500px) {
   .platform-home-grid:has(.dr-home-overview)>.dr-home-right-rail {
     right: 0px !important;
