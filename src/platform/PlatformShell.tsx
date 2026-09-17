@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { LogIn, Shield, Swords, UserPlus } from 'lucide-react';
+import { LogIn, Shield, UserPlus } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar } from './DawnreachHome';
-import { MatchmakingPanel, ReadyCheckOverlay } from './MatchmakingPanel';
-import { PartyBar } from './PartyBar';
+import { ReadyCheckOverlay } from './MatchmakingPanel';
+import { DawnreachPlayScreen } from './DawnreachPlay';
 import {
   getAuthToken,
   getCurrentPlatformUser,
@@ -185,11 +185,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
-          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
-            <header className="platform-play-heading"><div><p className="platform-eyebrow">PLAY</p><h1>Prepare for your next battle</h1><p>Matchmaking and custom lobbies share the same session, party, and presence.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Custom</button></div></header>
-            <PartyBar me={user} snapshot={party} />
-            {playSection === 'matchmaking' ? <MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /> : <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />}
-            <div className="platform-dev-entry"><span>DEVELOPMENT</span><p>The local map remains available for gameplay testing without an online session.</p><button className="platform-local-button" type="button" onClick={onLocalPlay}><Swords /> Enter Local Match</button></div>
+          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : playSection === 'matchmaking' ? <>
+            <DawnreachPlayScreen me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
+            {notice && <p className="platform-workspace-notice dr-play-notice" role="status">{notice}</p>}
+          </> : <section className="platform-play-custom-shell">
+            <header><div><p className="platform-eyebrow">PLAY · CUSTOM</p><h1>Create your own battle</h1></div><div className="platform-play-tabs"><button onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className="is-active" onClick={openCustom}>Custom</button></div></header>
+            <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />
             {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
           </section>}
         </section>
