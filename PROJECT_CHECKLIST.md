@@ -1,7 +1,7 @@
 # Dawnreach — Checklist de desarrollo
 
 > Auditoría realizada el **2026-09-17** sobre la rama `game/dawnreach-core`.
-> HEAD auditado antes de crear este documento: `52c7014187a8a1afc77b18187a265014eb0fc925` (`add audios`).
+> Auditoría base creada sobre `52c7014187a8a1afc77b18187a265014eb0fc925` (`add audios`). Actualizada el **2026-09-17** tras integrar la plataforma prepartida nativa (Auth, Social, Party, Matchmaking, Ready Check, Custom Lobby y primera versión de la pantalla PLAY).
 >
 > Este archivo pretende ser la fuente de verdad rápida para saber qué existe realmente en código, qué está parcial y qué falta. El `README.md` conserva información útil, pero varias de sus secciones de estado quedaron por detrás del runtime actual.
 
@@ -19,6 +19,8 @@
 Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en este orden aproximado.
 
 > **Decisión de diseño cerrada:** el layout actual de torres es definitivo. Dawnreach tendrá **2 torres por equipo en cada carril** (6 por equipo en total). No se añadirán más torres ni se ampliará ese layout.
+>
+> **Prioridad de plataforma actual:** cerrar el flujo prepartida `PLAY → cola → Ready Check → Hero Select → Loading → MatchState`, manteniendo la identidad visual Dawnreach de las pantallas de referencia.
 
 - [x] **HECHO · Reloj real de partida en el HUD**, usando `nowMs - match.createdAtMs` y la fuente de tiempo pause-aware. El JSX conserva `00:00` solo como valor inicial antes de que el runtime sincronice el reloj.
 - [x] **HECHO · Marcador superior sincronizado con las kills disponibles del scoreboard.**
@@ -45,8 +47,8 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Ajustes de rendimiento de renderer y actualización de sombras.
 - [x] Invalidación de sombras tras cambios destructivos del mundo.
 - [x] Limpieza/HMR de buena parte de los runtimes montados desde `main.tsx`.
-- [ ] **PARCIAL · Ciclo de vida completo de partida.** El modelo conoce `lobby`, `hero_select`, `loading`, `in_progress` y `finished`, pero el flujo visible actual arranca directamente en una partida local.
-- [ ] **PENDIENTE · Pantalla/flujo real de lobby.**
+- [ ] **PARCIAL · Ciclo de vida completo de partida.** Ya existe shell prepartida con Auth, Home, PLAY, Party, Matchmaking, Ready Check y Custom Lobby; todavía falta encadenar `match.found` con `hero_select → loading → in_progress` y terminar el cierre `finished → postmatch`.
+- [x] **HECHO · Pantalla/flujo de lobby personalizada 5v5** con salas públicas/privadas, código, owner, equipos y slots.
 - [ ] **PENDIENTE · Pantalla/flujo real de selección de héroe.**
 - [ ] **PENDIENTE · Flujo de loading de 10 jugadores/héroes.**
 - [ ] **PARCIAL · Resultado/cierre de partida.** El trono ya termina funcionalmente la simulación y muestra victoria/derrota, pero todavía falta integrarlo declarativamente con `MatchState` y postpartida.
@@ -68,7 +70,7 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [ ] **PARCIAL · Asistencia y atribución de kills multi-héroe.** La asistencia local existe; falta resolverlo de forma autoritativa para todos los héroes.
 - [ ] **PENDIENTE · Autoridad multiplayer/networking.** Actualmente el juego es esencialmente un runtime local.
 - [ ] **PENDIENTE · Reconexión real a partida.**
-- [ ] **PENDIENTE · Matchmaking/party/lobby online.**
+- [x] **HECHO · Matchmaking/party/lobby prepartida online.** Party de hasta 5, Normal/Ranked, Ready Check y Custom Lobby funcionan sobre HTTP/WebSocket; la simulación multiplayer autoritativa sigue pendiente.
 
 # 3. Mapa de Dawnreach
 
@@ -441,7 +443,7 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [ ] **PENDIENTE · Prediction/reconciliation/interpolation.**
 - [ ] **PENDIENTE · Team vision/fog autoritativo.**
 - [ ] **PENDIENTE · Transporte de pings/chat por red.** La UI y contrato local del chat deben existir antes.
-- [ ] **PENDIENTE · Matchmaking/party.** Se migrará desde TCL en vez de reimplementarlo desde cero.
+- [x] **HECHO · Matchmaking/party de plataforma.** Ya existe nativamente en Dawnreach con parties 1–5, Normal/Ranked, Ready Check y coordinación por WebSocket. Falta conectarlo a la sesión de gameplay autoritativa.
 - [ ] **PENDIENTE · Reconnect.** La recuperación de sesión de TCL será una base, pero el rejoin de gameplay necesitará lógica propia de Dawnreach.
 - [ ] **PENDIENTE · Protección mínima contra manipulación del cliente.**
 - [ ] **PENDIENTE · Métricas de red/ping/packet loss reales.**
@@ -472,25 +474,25 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 ## 23.1 Reutilizar casi directamente
 
-- [ ] **P1 · Portar servidor TypeScript y estructura HTTP/WebSocket de TCL** a `server/` de Dawnreach.
-- [ ] **P1 · Portar registro/login/logout y modelo de cuentas.**
-- [ ] **P1 · Portar `AuthManager`: sesiones con TTL absoluto/idle, revocación, auditoría y recovery.**
-- [ ] **P1 · Portar password policy y auth rate limiting.**
-- [ ] **P1 · Portar almacenamiento seguro de bearer token en Tauri/Windows Credential Manager**, renombrando namespace TCL → Dawnreach.
-- [ ] **P1 · Portar presence online/offline/queue/ready/lobby/in-game.**
-- [ ] **P1 · Portar sistema social: búsqueda, solicitudes de amistad, amistades y mensajes privados.**
-- [ ] **P1 · Portar parties de hasta 5 jugadores**, líder, invitaciones y mantener party unida en matchmaking.
-- [ ] **P1 · Portar matchmaking Normal/Ranked**, ready-check, ventana MMR expandible y balance 5v5 respetando parties.
-- [ ] **P1 · Portar lobbies personalizados públicos/privados**, código de invitación, owner, equipos y slots 5v5.
-- [ ] **P1 · Portar calibración/MMR/ranking/historial de partidas**, adaptando nombres, reglas y telemetría a Dawnreach.
+- [x] **HECHO · Servidor de plataforma nativo HTTP/WebSocket** en `server/` (Node/ESM), integrado en Dawnreach.
+- [x] **HECHO · Registro/login/logout y modelo de cuentas.**
+- [x] **HECHO · Sesiones con TTL absoluto/idle, revocación, límite de sesiones y restauración de sesión.**
+- [x] **HECHO · Password policy y auth rate limiting.**
+- [x] **HECHO · Bearer token seguro en Tauri/almacenamiento nativo**, con namespace Dawnreach y retirada del token del `localStorage` desktop.
+- [ ] **PARCIAL · Presence.** Online/offline y estados visuales sociales están integrados; falta consolidar como estado autoritativo único `online/queue/ready/lobby/in-game/away`.
+- [x] **HECHO · Social:** búsqueda live de jugadores, solicitudes de amistad, amistades, presencia, mensajes directos y tabs de chat.
+- [x] **HECHO · Parties de hasta 5 jugadores**, party 1/5 automática, líder, invitaciones, chat PARTY y matchmaking manteniendo el grupo unido.
+- [x] **HECHO · Matchmaking Normal/Ranked**, Ready Check, ventana MMR expandible y balance 5v5 respetando parties.
+- [x] **HECHO · Custom Lobbies públicos/privados**, código, owner, equipos y slots 5v5.
+- [ ] **PARCIAL · Calibración/MMR.** Rating, wins/losses, calibración y matches creados ya existen; faltan ranking completo, historial final y telemetría nativa postpartida.
 - [ ] **P1 · Portar persistencia competitiva/PostgreSQL y migraciones útiles.**
 - [ ] **P2 · Portar updater/release policy de Tauri** una vez estabilizada la plataforma.
 
 ## 23.2 Adaptar a conceptos propios de Dawnreach
 
 - [ ] **P1 · Sustituir teams `red/blue` de TCL por el naming canónico Dawn/Dusk** sin romper la abstracción interna de equipos.
-- [ ] **P1 · Sustituir el callback `onLaunch(match)` que antes lanzaba GHost/Warcraft por `DawnreachMatchCoordinator`.**
-- [ ] **P1 · Flujo de matchmaking:** cola → ready check → match creado → `hero_select` → `loading` → `in_progress`.
+- [ ] **PARCIAL · Sustituir `onLaunch(match)` por `DawnreachMatchCoordinator`.** La plataforma ya crea el match y publica `match.found`/`match.session.pending`; falta coordinar Hero Select, Loading y servidor de gameplay.
+- [ ] **PARCIAL · Flujo de matchmaking:** `cola → Ready Check → match creado` ya funciona; faltan `hero_select → loading → in_progress`.
 - [ ] **P1 · Conectar los 10 jugadores/slots del backend con el `MatchState` 5v5 ya existente en Dawnreach.**
 - [ ] **P1 · Implementar selección real de héroes usando el hero catalog de Dawnreach.**
 - [ ] **P1 · Implementar loading de los 10 clientes y readiness antes de comenzar la simulación.**
@@ -512,10 +514,10 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 ## 23.4 UI / identidad
 
-- [ ] **P1 · No copiar visualmente la UI TCL.** Reutilizar lógica/estado/componentes útiles, pero rehacer presentación con identidad Dawnreach.
-- [ ] **P1 · Shell prepartida Dawnreach:** Login, Home, Jugar, Social, Ranking, Perfil.
-- [ ] **P1 · Superficie Party/Matchmaking/Ready.**
-- [ ] **P1 · Lobby personalizada Dawn/Dusk.**
+- [x] **HECHO · Identidad visual Dawnreach propia.** La plataforma reutiliza conceptos/estado, no la presentación visual TCL.
+- [ ] **PARCIAL · Shell prepartida Dawnreach.** Login, Home, PLAY y Social funcionan; Ranking y Perfil siguen pendientes.
+- [x] **HECHO · Superficie Party/Matchmaking/Ready**, integrada en Home/PLAY con rail social persistente.
+- [ ] **PARCIAL · Lobby personalizada 5v5.** Funciona con equipos internos `blue/red`; falta migrar naming/capa visible a Dawn/Dusk y terminar el acabado visual de referencia.
 - [ ] **P1 · Hero Select.**
 - [ ] **P1 · Loading screen multiplayer.**
 - [ ] **P1 · PostMatch.**
@@ -523,13 +525,26 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 ## 23.5 Orden recomendado de migración
 
-- [ ] **Fase A · Auth + servidor + WebSocket + shell Dawnreach.**
-- [ ] **Fase B · Presence + Social + Party.**
-- [ ] **Fase C · Matchmaking Normal/Ranked + Ready Check.**
-- [ ] **Fase D · Custom Lobbies 5v5.**
+- [x] **HECHO · Fase A · Auth + servidor + WebSocket + shell Dawnreach.**
+- [x] **HECHO · Fase B · Presence + Social + Party.**
+- [x] **HECHO · Fase C · Matchmaking Normal/Ranked + Ready Check.**
+- [x] **HECHO · Fase D · Custom Lobbies 5v5.**
 - [ ] **Fase E · Hero Select + Loading conectados a `MatchState`.**
 - [ ] **Fase F · Game session multiplayer / authoritative networking.**
 - [ ] **Fase G · Resultado nativo → historial/MMR/postpartida/reconnect.**
+
+## 23.6 Pantallas de plataforma / referencias UI
+
+- [x] **HECHO · Login/Auth.** Flujo funcional y persistencia de sesión.
+- [x] **HECHO · HOME.** Composición cinematográfica, hero feature, rail PARTY/FRIENDS, búsqueda social y chat directo/PARTY.
+- [ ] **PARCIAL · PLAY.** Primera versión de la pantalla de referencia ya integrada: selector Normal/Ranked/VS AI/Training/Custom, panel de modo, preferencias Primary/Secondary y botón `FIND MATCH`; Normal/Ranked conservan el matchmaking real existente. Falta refinado visual, persistir/enviar role preferences y cerrar navegación de todos los modos.
+- [ ] **PENDIENTE · HEROES.** Catálogo, filtros/roles y detalle visual según referencia; solo Alden tiene gameplay real hoy.
+- [ ] **PENDIENTE · COLLECTION.** Inventario cosmético/skins y panel de preview según referencia.
+- [ ] **PENDIENTE · STORE.** Catálogo cosmético, bundles y economía premium; las monedas del header existen visualmente pero todavía no tienen backend de compras/balance persistente.
+- [ ] **PENDIENTE · PROFILE.** Overview, historial, ranked progression, mastery y achievements con datos reales.
+- [ ] **PENDIENTE · HERO SELECT / DRAFT.** Debe consumir los 10 slots de match y el hero catalog, y preceder al Loading multiplayer.
+- [ ] **PENDIENTE · Loading multiplayer.** Readiness de los 10 clientes antes de `in_progress`.
+- [ ] **PENDIENTE · PostMatch.** Resultado, estadísticas, MMR/historial y acciones de nueva partida.
 
 ---
 
