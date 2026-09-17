@@ -102,7 +102,7 @@ export function DawnreachHomeOverview({
           <header><strong>ACTIVITY</strong><button type="button" disabled>SEE ALL</button></header>
           <div><span className="dr-home-event-icon"><Swords /></span><p><strong>Open Frontier</strong><small>Normal Matchmaking available</small></p><em>NOW</em></div>
           <div><span className="dr-home-event-icon"><Trophy /></span><p><strong>Ranked</strong><small>{user.calibrated ? 'Defend your position' : 'Complete your calibration'}</small></p><em>{games} G.</em></div>
-          <div><span className="dr-home-event-icon"><Users /></span><p><strong>War Council</strong><small>{party.party ? `Party ${party.party.members.length}/5` : 'Form a party'}</small></p><em>{online.length} ON</em></div>
+          <div><span className="dr-home-event-icon"><Users /></span><p><strong>War Council</strong><small>{party.party ? `Party ${party.party.members.length}/5` : 'Party 1/5'}</small></p><em>{online.length} ON</em></div>
         </article>
       </aside>
 
@@ -157,10 +157,11 @@ export function DawnreachHomeRightRail({
   const [inviteName, setInviteName] = useState('');
   const activeParty = party.party;
   const members = activeParty?.members ?? [me];
-  const isLeader = !activeParty || activeParty.leaderId === me.id;
+  const leaderId = activeParty?.leaderId ?? me.id;
+  const isLeader = leaderId === me.id;
   const invite = () => {
     const username = inviteName.trim();
-    if (!username || !activeParty || !isLeader) return;
+    if (!username || !isLeader) return;
     if (platformRealtime.send('party.invite', { username })) setInviteName('');
   };
 
@@ -170,11 +171,11 @@ export function DawnreachHomeRightRail({
       <div className="dr-home-party-slots">
         {Array.from({ length: 5 }, (_, index) => {
           const member = members[index];
-          return <span key={member?.id ?? `empty-${index}`} className={member ? 'is-filled' : ''}>{member ? <><b>{member.username.slice(0, 2).toUpperCase()}</b>{activeParty?.leaderId === member.id && <Crown />}</> : <Plus />}</span>;
+          return <span key={member?.id ?? `empty-${index}`} className={member ? 'is-filled' : ''}>{member ? <><b>{member.username.slice(0, 2).toUpperCase()}</b>{leaderId === member.id && <Crown />}</> : <Plus />}</span>;
         })}
       </div>
-      {!activeParty ? <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.create')}>CREATE PARTY</button> : isLeader ? <div className="dr-home-party-invite"><input value={inviteName} onChange={event => setInviteName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); invite(); } }} placeholder="Invite by username" /><button type="button" onClick={invite}>INVITE</button></div> : <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.leave')}>LEAVE PARTY</button>}
-      {activeParty && isLeader && <button className="dr-home-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Leave party</button>}
+      {isLeader ? <div className="dr-home-party-invite"><input value={inviteName} onChange={event => setInviteName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); invite(); } }} placeholder="Invite by username" /><button type="button" onClick={invite}>INVITE</button></div> : <button className="dr-home-party-main" type="button" onClick={() => platformRealtime.send('party.leave')}>LEAVE PARTY</button>}
+      {activeParty && activeParty.members.length > 1 && isLeader && <button className="dr-home-party-leave" type="button" onClick={() => platformRealtime.send('party.leave')}>Leave party</button>}
     </section>
     <SocialRail me={me} online={online} snapshot={snapshot} party={party} refresh={refresh} activeConversationId={activeConversationId} onOpenConversation={onOpenConversation} />
   </aside>;
