@@ -1,0 +1,86 @@
+/* Improve readability of the three cinematic news cards in the HOME lower strip. */
+
+.dr-home-lower-strip .dr-home-news-card {
+  isolation: isolate;
+}
+
+/* Add a subtle local dark scrim behind the copy without flattening the artwork. */
+.dr-home-lower-strip .dr-home-news-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 34%, rgba(3, 8, 13, .08) 52%, rgba(3, 8, 13, .66) 100%),
+    linear-gradient(90deg, rgba(3, 8, 13, .20) 0%, transparent 54%);
+}
+
+.dr-home-lower-strip .dr-home-news-card.is-wide::after {
+  background:
+    linear-gradient(90deg, rgba(3, 8, 13, .58) 0%, rgba(3, 8, 13, .28) 31%, rgba(3, 8, 13, .03) 68%),
+    linear-gradient(180deg, transparent 38%, rgba(3, 8, 13, .20) 62%, rgba(3, 8, 13, .68) 100%);
+}
+
+.dr-home-lower-strip .dr-home-news-card > div {
+  z-index: 2 !important;
+  isolation: isolate;
+}
+
+.dr-home-lower-strip .dr-home-news-card > div::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -14px -18px -12px -16px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 24% 58%, rgba(2, 7, 11, .62) 0%, rgba(2, 7, 11, .35) 46%, transparent 78%);
+  filter: blur(5px);
+}
+
+.dr-home-lower-strip .dr-home-news-card small {
+  position: relative;
+  color: #e2bf67 !important;
+  font-weight: 700 !important;
+  letter-spacing: .14em !important;
+  text-shadow:
+    0 2px 6px rgba(0, 0, 0, .96),
+    0 0 11px rgba(0, 0, 0, .58) !important;
+}
+
+.dr-home-lower-strip .dr-home-news-card strong {
+  position: relative;
+  color: #fff3dc !important;
+  font-weight: 500 !important;
+  text-shadow:
+    0 3px 10px rgba(0, 0, 0, 1),
+    0 0 18px rgba(0, 0, 0, .70),
+    0 1px 0 rgba(255, 255, 255, .08) !important;
+}
+
+.dr-home-lower-strip .dr-home-news-card.is-wide span {
+  position: relative;
+  color: #d8e4e9 !important;
+  font-weight: 500 !important;
+  text-shadow:
+    0 2px 7px rgba(0, 0, 0, 1),
+    0 0 12px rgba(0, 0, 0, .68) !important;
+}
+
+/* The portrait card needs a little extra separation from Alden's bright armor. */
+.dr-home-lower-strip .dr-home-news-card.is-hero::after {
+  background:
+    linear-gradient(180deg, transparent 28%, rgba(3, 8, 13, .10) 46%, rgba(3, 8, 13, .76) 100%),
+    linear-gradient(90deg, rgba(3, 8, 13, .20), transparent 68%);
+}
+
+.dr-home-lower-strip .dr-home-news-card.is-hero img {
+  filter: saturate(.92) brightness(.86) contrast(1.05) !important;
+}
+
+/* Keep the update card readable over the bright castle/sky area. */
+.dr-home-lower-strip .dr-home-news-card.is-update::after {
+  background:
+    linear-gradient(180deg, rgba(3, 8, 13, .02) 18%, rgba(3, 8, 13, .16) 48%, rgba(3, 8, 13, .72) 100%),
+    linear-gradient(90deg, rgba(3, 8, 13, .18), transparent 74%);
+}
