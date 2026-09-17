@@ -1,0 +1,670 @@
+/* PLAY surface — cinematic matchmaking reference. Loaded after the legacy matchmaking styles. */
+
+.platform-main-workspace:has(.dr-play-screen) {
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 64% 10%, rgba(55, 104, 135, .10), transparent 38%),
+    linear-gradient(180deg, rgba(4, 12, 18, .72), rgba(3, 9, 14, .96)) !important;
+}
+
+.dr-play-screen {
+  min-height: 100%;
+  height: calc(100vh - 70px);
+  display: grid;
+  grid-template-columns: clamp(250px, 22vw, 330px) minmax(0, 1fr);
+  overflow: hidden;
+  color: #dce5e6;
+  background:
+    linear-gradient(180deg, rgba(5, 15, 22, .12), rgba(1, 7, 11, .42)),
+    url('/assets/images/dawnreach_loading_splash.webp') center / cover no-repeat;
+}
+
+.dr-play-modes {
+  position: relative;
+  z-index: 2;
+  padding: 24px 16px 20px 18px;
+  display: grid;
+  grid-template-rows: auto repeat(5, minmax(76px, 1fr)) auto;
+  gap: 10px;
+  border-right: 1px solid rgba(102, 134, 151, .22);
+  background:
+    linear-gradient(90deg, rgba(4, 12, 18, .98), rgba(5, 16, 24, .93) 72%, rgba(5, 15, 22, .76));
+  box-shadow: 18px 0 44px rgba(0, 0, 0, .24);
+}
+
+.dr-play-modes::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(217, 185, 95, .22), rgba(75, 142, 171, .12), transparent 82%);
+}
+
+.dr-play-modes-heading {
+  padding: 0 8px 4px;
+  display: grid;
+  gap: 5px;
+}
+
+.dr-play-modes-heading small {
+  color: #b69b58;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .2em;
+}
+
+.dr-play-modes-heading strong {
+  color: #e8e8df;
+  font: 600 13px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .11em;
+}
+
+.dr-play-mode-card {
+  position: relative;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 136, 154, .32);
+  background:
+    linear-gradient(90deg, rgba(7, 20, 29, .95), rgba(7, 18, 27, .76)),
+    url('/assets/images/dawnreach_loading_splash.webp') center / cover no-repeat;
+  color: #cdd9dc;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+
+.dr-play-mode-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(2, 9, 14, .82) 0%, rgba(3, 11, 17, .46) 56%, rgba(3, 10, 15, .70) 100%);
+}
+
+.dr-play-mode-card.is-ranked { background-position: center 31%; }
+.dr-play-mode-card.is-vs_ai { background-position: center 64%; }
+.dr-play-mode-card.is-training { background-position: 38% 42%; }
+.dr-play-mode-card.is-custom { background-position: 72% 58%; }
+
+.dr-play-mode-card:hover:not(:disabled) {
+  border-color: rgba(117, 175, 198, .50);
+  transform: translateX(2px);
+  filter: brightness(1.07);
+}
+
+.dr-play-mode-card.is-selected {
+  border-color: rgba(235, 202, 113, .88);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 227, 146, .28),
+    inset 0 0 28px rgba(220, 174, 69, .10),
+    0 0 16px rgba(219, 173, 65, .18);
+}
+
+.dr-play-mode-card.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-left: 3px solid #e2bd63;
+  background: linear-gradient(90deg, rgba(215, 171, 67, .09), transparent 42%);
+}
+
+.dr-play-mode-card:disabled { cursor: default; opacity: .48; }
+
+.dr-play-mode-icon,
+.dr-play-mode-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.dr-play-mode-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  color: #b8d0dc;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,.45));
+}
+
+.dr-play-mode-icon svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.35;
+}
+
+.dr-play-mode-card.is-selected .dr-play-mode-icon { color: #e4c36f; }
+
+.dr-play-mode-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.dr-play-mode-copy small {
+  color: #6f8794;
+  font: 800 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .16em;
+}
+
+.dr-play-mode-copy strong {
+  color: #edf0eb;
+  font: 500 clamp(17px, 1.28vw, 22px)/1 Georgia, "Times New Roman", serif;
+  letter-spacing: .05em;
+}
+
+.dr-play-mode-copy em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #91a6b1;
+  font: normal 9px/1.2 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-modes blockquote {
+  margin: 4px 0 0;
+  padding: 11px 8px 0;
+  border-top: 1px solid rgba(99, 129, 144, .13);
+  color: #a7b1b2;
+  font: 500 10px/1.6 Georgia, serif;
+  letter-spacing: .14em;
+  text-align: center;
+}
+
+.dr-play-modes blockquote span {
+  display: block;
+  margin-top: 5px;
+  color: #697e88;
+  font: 700 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .18em;
+}
+
+.dr-play-center {
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 18px 22px 10px;
+  display: grid;
+  grid-template-rows: minmax(250px, 1fr) auto auto;
+  gap: 0;
+  overflow: hidden;
+}
+
+.dr-play-hero {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(101, 135, 155, .26);
+  border-bottom: 0;
+  background:
+    linear-gradient(90deg, rgba(4, 13, 20, .24), rgba(4, 13, 20, .02) 55%, rgba(3, 11, 17, .23)),
+    url('/assets/images/dawnreach_loading_splash.webp') 54% 42% / cover no-repeat;
+  box-shadow: inset 0 0 80px rgba(0,0,0,.18);
+}
+
+.dr-play-hero.is-ranked {
+  background-position: 48% 36%;
+  filter: saturate(.92) contrast(1.04);
+}
+
+.dr-play-hero.is-vs_ai { background-position: 43% 54%; }
+.dr-play-hero.is-training { background-position: 63% 48%; }
+
+.dr-play-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(3, 10, 16, .88) 0%, rgba(4, 12, 18, .52) 27%, rgba(4, 12, 18, .04) 58%, rgba(3, 9, 14, .22) 100%),
+    linear-gradient(0deg, rgba(3, 10, 15, .78) 0%, transparent 38%);
+  pointer-events: none;
+}
+
+.dr-play-hero-copy {
+  position: absolute;
+  left: clamp(28px, 3vw, 52px);
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-55%);
+  display: grid;
+}
+
+.dr-play-hero-copy > small {
+  color: #dcc274;
+  font: 700 15px/1 Georgia, serif;
+  letter-spacing: .12em;
+}
+
+.dr-play-hero-copy h1 {
+  margin: 8px 0 10px;
+  color: #f4efe1;
+  font: 500 clamp(48px, 5vw, 76px)/.94 Georgia, "Times New Roman", serif;
+  letter-spacing: .025em;
+  text-shadow: 0 5px 24px rgba(0,0,0,.72);
+}
+
+.dr-play-hero-copy p {
+  margin: 0;
+  display: grid;
+  gap: 3px;
+  color: #bad0db;
+  font: 600 clamp(13px, 1.05vw, 17px)/1.2 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .17em;
+  text-shadow: 0 2px 10px rgba(0,0,0,.74);
+}
+
+.dr-play-ranked-note {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  right: 24px;
+  min-width: 150px;
+  height: 54px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(215, 181, 91, .32);
+  background: rgba(4, 13, 19, .72);
+  backdrop-filter: blur(6px);
+}
+
+.dr-play-ranked-note > svg {
+  width: 22px;
+  color: #dfbb62;
+}
+
+.dr-play-ranked-note > span {
+  display: grid;
+  gap: 4px;
+}
+
+.dr-play-ranked-note small {
+  color: #7e929d;
+  font: 700 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .13em;
+}
+
+.dr-play-ranked-note strong {
+  color: #e9dfc4;
+  font: 600 12px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-match-facts {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 82px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid rgba(112, 145, 162, .19);
+  background: linear-gradient(180deg, rgba(5, 16, 24, .72), rgba(4, 13, 20, .94));
+  backdrop-filter: blur(6px);
+}
+
+.dr-play-match-facts > div {
+  min-width: 0;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border-right: 1px solid rgba(100, 130, 145, .15);
+}
+
+.dr-play-match-facts > div:last-child { border-right: 0; }
+
+.dr-play-match-facts svg {
+  width: 31px;
+  height: 31px;
+  color: #bcd2dc;
+  stroke-width: 1.4;
+}
+
+.dr-play-match-facts span {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.dr-play-match-facts small {
+  color: #8095a1;
+  font: 500 10px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-match-facts strong {
+  color: #e1e7e5;
+  font: 500 clamp(15px, 1.25vw, 19px)/1 Georgia, serif;
+}
+
+.dr-play-role-panel {
+  border: 1px solid rgba(116, 146, 159, .23);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(55, 101, 124, .08), transparent 52%),
+    rgba(4, 14, 21, .96);
+}
+
+.dr-play-role-panel > header {
+  min-height: 42px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(98, 128, 143, .14);
+}
+
+.dr-play-role-panel > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.dr-play-role-panel > header strong {
+  color: #dbe2df;
+  font: 700 11px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .12em;
+}
+
+.dr-play-role-panel > header span,
+.dr-play-role-panel > header small {
+  color: #6d8290;
+  font: 500 9px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-role-grid {
+  min-height: 146px;
+  padding: 12px 18px 14px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dr-play-role-grid > button {
+  position: relative;
+  min-width: 0;
+  min-height: 118px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 119, 137, .24);
+  background: linear-gradient(180deg, rgba(8, 24, 34, .74), rgba(4, 14, 21, .94));
+  color: #7892a0;
+  cursor: pointer;
+}
+
+.dr-play-role-grid > button::before {
+  content: "";
+  position: absolute;
+  width: 62px;
+  height: 62px;
+  top: 13px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  border: 1px solid rgba(93, 130, 151, .22);
+  background: rgba(8, 25, 36, .54);
+}
+
+.dr-play-role-grid > button:hover:not(:disabled) {
+  border-color: rgba(104, 162, 188, .42);
+  color: #a8c2ce;
+}
+
+.dr-play-role-grid > button.is-selected {
+  border-color: rgba(213, 181, 92, .62);
+  background:
+    radial-gradient(circle at 50% 35%, rgba(214, 174, 67, .14), transparent 46%),
+    linear-gradient(180deg, rgba(41, 39, 27, .84), rgba(12, 22, 26, .96));
+  color: #e0bf69;
+  box-shadow: inset 0 0 24px rgba(210, 171, 69, .07);
+}
+
+.dr-play-role-grid > button.is-secondary {
+  border-color: rgba(74, 166, 219, .66);
+  background:
+    radial-gradient(circle at 50% 35%, rgba(52, 157, 219, .15), transparent 46%),
+    linear-gradient(180deg, rgba(12, 32, 43, .88), rgba(7, 19, 28, .97));
+  color: #69c4f2;
+}
+
+.dr-play-role-grid > button:disabled { cursor: default; }
+
+.dr-play-role-gem {
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+
+.dr-play-role-gem svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.5;
+}
+
+.dr-play-role-grid strong {
+  position: relative;
+  z-index: 1;
+  color: #dce4e5;
+  font: 600 12px/1 Georgia, serif;
+  letter-spacing: .08em;
+}
+
+.dr-play-role-grid small {
+  position: relative;
+  z-index: 1;
+  min-height: 10px;
+  color: #657d8a;
+  font: 600 8px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-role-grid > button.is-primary small { color: #d2b160; }
+.dr-play-role-grid > button.is-secondary small { color: #60bde9; }
+
+.dr-play-role-grid > button > i {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid rgba(95, 126, 143, .46);
+  border-radius: 50%;
+  background: #031017;
+}
+
+.dr-play-role-grid > button.is-selected > i::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.dr-play-action-row {
+  min-height: 84px;
+  padding: 10px 18px 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(180px, .34fr);
+  gap: 14px;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(2, 9, 14, .90), rgba(2, 7, 11, .98));
+}
+
+.dr-play-find-match {
+  position: relative;
+  height: 64px;
+  overflow: hidden;
+  border: 0;
+  clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 218, 119, .18), transparent 52%),
+    linear-gradient(180deg, rgba(126, 95, 48, .97), rgba(70, 53, 31, .99));
+  color: #fff6dd;
+  font: 500 clamp(24px, 2.1vw, 34px)/1 Georgia, serif;
+  letter-spacing: .055em;
+  text-shadow: 0 2px 8px rgba(0,0,0,.66);
+  cursor: pointer;
+  filter:
+    drop-shadow(0 0 1px rgba(255,246,207,.9))
+    drop-shadow(0 0 6px rgba(234,193,91,.58))
+    drop-shadow(0 0 16px rgba(218,166,54,.26));
+}
+
+.dr-play-find-match::before {
+  content: "";
+  position: absolute;
+  inset: 5px 7px;
+  pointer-events: none;
+  clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%);
+  border: 1px solid rgba(247, 213, 124, .76);
+}
+
+.dr-play-find-match:hover {
+  filter:
+    drop-shadow(0 0 2px rgba(255,250,226,1))
+    drop-shadow(0 0 9px rgba(246,207,111,.78))
+    drop-shadow(0 0 21px rgba(226,174,57,.42));
+}
+
+.dr-play-find-match.is-searching {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(74, 47, 43, .96), rgba(43, 28, 29, .99));
+  color: #efc2bb;
+  filter: drop-shadow(0 0 9px rgba(177, 77, 65, .24));
+  font-size: 22px;
+}
+
+.dr-play-find-match.is-searching svg { width: 21px; }
+
+.dr-play-ready-card {
+  position: relative;
+  height: 56px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(72, 146, 113, .36);
+  background: rgba(7, 30, 26, .70);
+}
+
+.dr-play-ready-card > svg {
+  width: 24px;
+  color: #69d79b;
+}
+
+.dr-play-ready-card > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.dr-play-ready-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #76d7a1;
+  font: 650 10px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-ready-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #66897c;
+  font: 500 8px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-ready-card.is-searching {
+  border-color: rgba(80, 153, 185, .38);
+  background: rgba(6, 23, 32, .82);
+}
+
+.dr-play-ready-card.is-searching > svg,
+.dr-play-ready-card.is-searching strong { color: #70c7e8; }
+
+.dr-play-ready-card > i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #62bedd var(--dr-queue-progress), rgba(84, 116, 131, .12) var(--dr-queue-progress));
+}
+
+.platform-play-custom-shell {
+  min-height: calc(100vh - 70px);
+  padding: 26px;
+  background: linear-gradient(180deg, rgba(4, 14, 21, .88), rgba(2, 8, 12, .98));
+}
+
+.platform-play-custom-shell > header {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.platform-play-custom-shell h1 {
+  margin: 4px 0 0;
+  color: #eee7d8;
+  font: 500 36px/1 Georgia, serif;
+}
+
+.platform-play-custom-shell .platform-play-tabs {
+  align-self: center;
+}
+
+@media (max-width: 1320px) {
+  .dr-play-screen { grid-template-columns: 238px minmax(0, 1fr); }
+  .dr-play-modes { padding-left: 12px; padding-right: 10px; }
+  .dr-play-mode-card { grid-template-columns: 48px minmax(0,1fr); padding-left: 8px; }
+  .dr-play-mode-icon { width: 44px; }
+  .dr-play-mode-icon svg { width: 29px; height: 29px; }
+  .dr-play-role-grid { gap: 7px; padding-left: 12px; padding-right: 12px; }
+  .dr-play-role-panel > header { padding: 0 12px; }
+  .dr-play-role-panel > header > small { display: none; }
+  .dr-play-action-row { padding-left: 12px; padding-right: 12px; grid-template-columns: minmax(240px,1fr) 190px; }
+}
+
+@media (max-width: 1120px) {
+  .dr-play-screen { grid-template-columns: 210px minmax(0, 1fr); }
+  .dr-play-mode-copy small { display: none; }
+  .dr-play-mode-copy strong { font-size: 16px; }
+  .dr-play-mode-copy em { font-size: 8px; }
+  .dr-play-hero-copy h1 { font-size: 48px; }
+  .dr-play-match-facts > div { padding: 0 12px; gap: 8px; }
+  .dr-play-match-facts svg { width: 24px; height: 24px; }
+  .dr-play-role-grid > button { min-height: 105px; }
+}
+
+@media (max-height: 820px) {
+  .dr-play-modes { padding-top: 14px; gap: 7px; grid-template-rows: auto repeat(5, minmax(64px, 1fr)) auto; }
+  .dr-play-mode-card { min-height: 64px; }
+  .dr-play-mode-icon { height: 42px; }
+  .dr-play-mode-icon svg { width: 27px; height: 27px; }
+  .dr-play-modes blockquote { display: none; }
+  .dr-play-center { padding-top: 10px; padding-bottom: 10px; grid-template-rows: minmax(220px, 1fr) auto auto; }
+  .dr-play-match-facts { height: 70px; }
+  .dr-play-role-grid { min-height: 122px; padding-top: 8px; padding-bottom: 9px; }
+  .dr-play-role-grid > button { min-height: 96px; }
+  .dr-play-role-grid > button::before { width: 50px; height: 50px; }
+  .dr-play-role-gem { width: 40px; height: 40px; }
+  .dr-play-role-gem svg { width: 22px; height: 22px; }
+  .dr-play-action-row { min-height: 72px; padding-top: 6px; }
+  .dr-play-find-match { height: 56px; }
+  .dr-play-ready-card { height: 50px; }
+}
