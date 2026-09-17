@@ -1,0 +1,154 @@
+.dr-home-left-column{
+  grid-template-rows:248px 112px auto!important;
+  align-content:start!important;
+}
+
+.dr-home-events-card{
+  height:260px!important;
+  min-height:0!important;
+  align-self:start!important;
+  display:grid!important;
+  grid-template-rows:48px repeat(3,68px)!important;
+  padding:0 16px 7px!important;
+  border:1px solid rgba(205,181,116,.48)!important;
+  border-radius:6px!important;
+  background:linear-gradient(180deg,rgba(10,25,35,.94),rgba(5,15,23,.97))!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.24),inset 0 1px rgba(255,255,255,.035)!important;
+  backdrop-filter:blur(6px)!important;
+  overflow:hidden!important;
+}
+
+.dr-home-events-card>header{
+  height:48px!important;
+  border-bottom:1px solid rgba(154,179,191,.18)!important;
+  padding:0 2px!important;
+}
+
+.dr-home-events-card>header strong{
+  color:#d8e1e3!important;
+  font-size:14px!important;
+  font-weight:600!important;
+  letter-spacing:.08em!important;
+}
+
+.dr-home-events-card>header strong::after{
+  content:'›';
+  margin-left:5px;
+  color:#7894a4;
+  font-size:15px;
+}
+
+.dr-home-events-card>header button{
+  color:#69c7ea!important;
+  font-size:10px!important;
+  letter-spacing:.05em!important;
+  opacity:1!important;
+}
+
+.dr-home-events-card>div{
+  min-height:0!important;
+  grid-template-columns:72px minmax(0,1fr) auto!important;
+  gap:12px!important;
+  padding:7px 0!important;
+  border-bottom:1px solid rgba(151,174,186,.15)!important;
+}
+
+.dr-home-events-card>div:last-child{
+  border-bottom:0!important;
+}
+
+.dr-home-event-icon{
+  position:relative!important;
+  width:68px!important;
+  height:50px!important;
+  overflow:hidden!important;
+  border:1px solid rgba(155,184,199,.34)!important;
+  border-radius:2px!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.035),0 2px 8px rgba(0,0,0,.34)!important;
+}
+
+.dr-home-events-card>div:nth-of-type(1) .dr-home-event-icon{
+  background-image:linear-gradient(135deg,rgba(9,31,43,.06),rgba(5,15,22,.35)),url('/assets/images/dawnreach_loading_splash.webp')!important;
+  background-position:34% 38%!important;
+}
+
+.dr-home-events-card>div:nth-of-type(2) .dr-home-event-icon{
+  background-image:linear-gradient(135deg,rgba(111,81,23,.08),rgba(4,13,20,.32)),url('/assets/images/dawnreach_home_background.webp')!important;
+  background-position:52% 31%!important;
+}
+
+.dr-home-events-card>div:nth-of-type(3) .dr-home-event-icon{
+  background-image:linear-gradient(135deg,rgba(30,68,108,.05),rgba(4,12,19,.38)),url('/assets/images/dawnreach_loading_splash.webp')!important;
+  background-position:73% 46%!important;
+}
+
+.dr-home-event-icon::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 46%,rgba(1,7,11,.24));
+  pointer-events:none;
+}
+
+.dr-home-event-icon svg{
+  display:none!important;
+}
+
+.dr-home-events-card p{
+  min-width:0!important;
+  gap:4px!important;
+}
+
+.dr-home-events-card p strong{
+  color:#e0e7e7!important;
+  font-size:13px!important;
+  font-weight:600!important;
+  line-height:1.1!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+
+.dr-home-events-card p small{
+  color:#8ba0ad!important;
+  font-size:10px!important;
+  line-height:1.2!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+
+.dr-home-events-card em{
+  align-self:center!important;
+  color:#91a4af!important;
+  font-size:10px!important;
+  font-style:normal!important;
+  white-space:nowrap!important;
+}
+
+@media(max-height:850px){
+  .dr-home-left-column{
+    grid-template-rows:210px 94px auto!important;
+  }
+  .dr-home-events-card{
+    height:220px!important;
+    grid-template-rows:40px repeat(3,58px)!important;
+    padding:0 14px 6px!important;
+  }
+  .dr-home-events-card>header{
+    height:40px!important;
+  }
+  .dr-home-events-card>div{
+    grid-template-columns:62px minmax(0,1fr) auto!important;
+    gap:10px!important;
+    padding:5px 0!important;
+  }
+  .dr-home-event-icon{
+    width:58px!important;
+    height:44px!important;
+  }
+  .dr-home-events-card p strong{font-size:12px!important}
+  .dr-home-events-card p small,.dr-home-events-card em{font-size:9px!important}
+}
