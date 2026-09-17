@@ -1,0 +1,2 @@
+export const CALIBRATION_MATCHES = 5;
+export const INITIAL_PROVISIONAL_RATING = 2700;

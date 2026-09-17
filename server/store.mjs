@@ -1,19 +1,34 @@
 import fs from 'node:fs';
+import { CALIBRATION_MATCHES, INITIAL_PROVISIONAL_RATING } from './competitive.mjs';
 import { hashPassword, randomToken, verifyPassword } from './security.mjs';
 import { writeJsonAtomic } from './json-file.mjs';
 
+function hydrateUser(raw) {
+  const user = { ...raw };
+  user.rating = Number.isFinite(user.rating) ? user.rating : INITIAL_PROVISIONAL_RATING;
+  user.wins = Number.isFinite(user.wins) ? user.wins : 0;
+  user.losses = Number.isFinite(user.losses) ? user.losses : 0;
+  user.calibrated = typeof user.calibrated === 'boolean' ? user.calibrated : false;
+  user.calibrationGames = Number.isFinite(user.calibrationGames) ? user.calibrationGames : (user.calibrated ? CALIBRATION_MATCHES : 0);
+  user.calibrationTarget = CALIBRATION_MATCHES;
+  user.rankedGames = Number.isFinite(user.rankedGames) ? user.rankedGames : user.calibrationGames;
+  if (!user.calibrated && user.calibrationGames >= CALIBRATION_MATCHES) user.calibrated = true;
+  return user;
+}
+
 function readState(file) {
-  if (!fs.existsSync(file)) return { users: [], friendRequests: [], friendships: [], messages: [] };
+  if (!fs.existsSync(file)) return { users: [], friendRequests: [], friendships: [], messages: [], matches: [] };
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
-      users: Array.isArray(parsed.users) ? parsed.users : [],
+      users: Array.isArray(parsed.users) ? parsed.users.map(hydrateUser) : [],
       friendRequests: Array.isArray(parsed.friendRequests) ? parsed.friendRequests : [],
       friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+      matches: Array.isArray(parsed.matches) ? parsed.matches : [],
     };
   } catch {
-    return { users: [], friendRequests: [], friendships: [], messages: [] };
+    return { users: [], friendRequests: [], friendships: [], messages: [], matches: [] };
   }
 }
 
@@ -48,7 +63,23 @@ export class PlatformStore {
 
   publicUser(user) {
     if (!user) return null;
-    return { id: user.id, username: user.username, createdAt: user.createdAt };
+    return {
+      id: user.id,
+      username: user.username,
+      createdAt: user.createdAt,
+      rating: user.calibrated ? user.rating : 0,
+      wins: user.wins,
+      losses: user.losses,
+      calibrated: user.calibrated,
+      calibrationGames: user.calibrationGames,
+      calibrationTarget: user.calibrationTarget,
+      rankedGames: user.rankedGames,
+    };
+  }
+
+  competitiveUser(user) {
+    const safe = this.publicUser(user);
+    return safe ? { ...safe, rating: user.rating } : null;
   }
 
   getUser(id) {
@@ -78,7 +109,19 @@ export class PlatformStore {
     const clean = normalizeUsername(username);
     validateUsername(clean);
     if (this.findByUsername(clean)) throw new Error('Ese nombre de usuario ya está registrado.');
-    const user = { id: randomToken(12), username: clean, passwordHash, createdAt: new Date().toISOString() };
+    const user = {
+      id: randomToken(12),
+      username: clean,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+      rating: INITIAL_PROVISIONAL_RATING,
+      wins: 0,
+      losses: 0,
+      calibrated: false,
+      calibrationGames: 0,
+      calibrationTarget: CALIBRATION_MATCHES,
+      rankedGames: 0,
+    };
     this.#state.users.push(user);
     this.#persist();
     return this.publicUser(user);
@@ -195,5 +238,14 @@ export class PlatformStore {
     }
     if (changed) this.#persist();
     return changed;
+  }
+
+  addMatch(match) {
+    this.#state.matches.push({ ...match });
+    this.#persist();
+  }
+
+  matches() {
+    return this.#state.matches.map(match => ({ ...match }));
   }
 }

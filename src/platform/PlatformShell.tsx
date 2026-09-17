@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { LogIn, Search, Shield, Swords, UserPlus, Users } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
+import { MatchmakingPanel, ReadyCheckOverlay } from './MatchmakingPanel';
 import { PartyBar } from './PartyBar';
 import {
   getAuthToken,
@@ -20,6 +21,9 @@ import {
   type PartySnapshot,
   type PlatformRealtimeEvent,
   type PlatformUser,
+  type QueueMode,
+  type QueueState,
+  type ReadyState,
   type SocialSnapshot,
 } from './index';
 
@@ -27,6 +31,7 @@ const LOADING_SPLASH = '/assets/images/dawnreach_loading_splash.webp';
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const EMPTY_SOCIAL: SocialSnapshot = { friends: [], incoming: [], outgoing: [] };
 const EMPTY_PARTY: PartySnapshot = { party: null, invites: [] };
+const EMPTY_QUEUE: QueueState = { joined: false, mode: 'ranked', count: 0, target: 10 };
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
@@ -147,6 +152,8 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
   const [online, setOnline] = useState<readonly PlatformUser[]>([user]);
   const [social, setSocial] = useState<SocialSnapshot>(EMPTY_SOCIAL);
   const [party, setParty] = useState<PartySnapshot>(EMPTY_PARTY);
+  const [queue, setQueue] = useState<QueueState>(EMPTY_QUEUE);
+  const [ready, setReady] = useState<ReadyState | null>(null);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
   const refreshSocial = async () => { setSocial(await getSocialSnapshot()); };
@@ -159,12 +166,49 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
       if (type === 'social.snapshot' && 'friends' in event && 'incoming' in event && 'outgoing' in event) setSocial(event as unknown as SocialSnapshot);
       if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({ party: event.party as PartySnapshot['party'], invites: event.invites as PartySnapshot['invites'] });
       if (type === 'party.invite') setNotice('Tienes una nueva invitación de grupo.');
+      if (type === 'queue.update' && 'mode' in event && 'count' in event && 'target' in event) {
+        const mode = event.mode === 'normal' ? 'normal' : 'ranked';
+        setQueue(current => ({ ...current, mode: current.joined ? current.mode : mode, count: Number(event.count || 0), target: Number(event.target || current.target) }));
+      }
+      if (type === 'ready.start' && 'readyId' in event && 'players' in event && 'expiresAt' in event) {
+        setReady({
+          readyId: String(event.readyId),
+          mode: event.mode === 'normal' ? 'normal' : 'ranked',
+          players: Array.isArray(event.players) ? event.players as ReadyState['players'] : [],
+          expiresAt: Number(event.expiresAt),
+          acceptedUserIds: [],
+          declinedUserIds: [],
+        });
+      }
+      if (type === 'ready.progress' && 'readyId' in event) {
+        setReady(current => current && current.readyId === event.readyId ? {
+          ...current,
+          acceptedUserIds: Array.isArray(event.acceptedUserIds) ? event.acceptedUserIds as string[] : [],
+          declinedUserIds: Array.isArray(event.declinedUserIds) ? event.declinedUserIds as string[] : [],
+        } : current);
+      }
+      if (type === 'ready.cancelled') {
+        const declinedUserId = 'declinedUserId' in event ? String(event.declinedUserId || '') : '';
+        setReady(null);
+        setQueue(current => ({ ...current, joined: !declinedUserId || declinedUserId !== user.id }));
+        setNotice(declinedUserId === user.id ? 'Has rechazado el ready check y saliste de la cola.' : 'Ready check cancelado. Sigues en la cola.');
+      }
+      if (type === 'match.found') {
+        setReady(null);
+        setQueue(current => ({ ...current, joined: false }));
+        setNotice('Partida confirmada. La sesión de juego se conectará sobre este match en la siguiente fase.');
+      }
+      if (type === 'match.session.pending') setNotice('Los 10 jugadores están confirmados. Pendiente conectar el transporte de la partida Dawnreach.');
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'No se pudo completar la acción.'));
       if (type === 'session.ready') {
         setRealtime('online');
         if ('presence' in event && Array.isArray(event.presence)) setOnline(event.presence as readonly PlatformUser[]);
         if ('social' in event && event.social) setSocial(event.social as SocialSnapshot);
         if ('party' in event && event.party) setParty(event.party as PartySnapshot);
+        if ('queue' in event && event.queue && typeof event.queue === 'object') {
+          const snapshot = event.queue as { joined?: boolean; target?: number };
+          setQueue(current => ({ ...current, joined: Boolean(snapshot.joined), target: Number(snapshot.target || current.target) }));
+        }
       }
     });
     let socket: WebSocket | null = null;
@@ -173,10 +217,24 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
     return () => { unsubscribe(); platformRealtime.disconnect(); };
   }, [user.id]);
 
-  return <main className="platform-home-surface">
-    <header className="platform-topbar"><div className="platform-wordmark"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong></div><nav aria-label="Navegación principal"><button className={section === 'play' ? 'is-active' : ''} onClick={() => setSection('play')}>JUGAR</button><button className={section === 'social' ? 'is-active' : ''} onClick={() => setSection('social')}>SOCIAL{social.incoming.length + party.invites.length > 0 && <em>{social.incoming.length + party.invites.length}</em>}</button><button disabled>RANKING</button><button disabled>PERFIL</button></nav><div className="platform-account"><span className={`platform-presence is-${realtime}`} /><strong>{user.username}</strong><button onClick={onLogout}>Salir</button></div></header>
-    {section === 'play' ? <section className="platform-play-hero"><div className="platform-play-copy"><p className="platform-eyebrow">PLATAFORMA DAWNREACH · ARQUITECTURA TCL</p><h2>Elige cómo entrar en batalla</h2><p>Cuenta, presencia, social y grupos comparten ya el mismo flujo realtime que TCL. El matchmaking se conectará sobre esta party sin crear una segunda arquitectura.</p><button className="platform-primary-button platform-play-button" onClick={onPlay}><Swords /> Entrar en partida local</button><PartyBar me={user} snapshot={party} />{notice && <p className="platform-auth-message" role="status">{notice}</p>}</div><aside className="platform-online-card"><div><Users /><span><strong>{online.length}</strong> conectados</span></div><small>{realtime === 'online' ? 'Servidor realtime conectado' : realtime === 'connecting' ? 'Conectando realtime…' : 'Realtime desconectado'}</small><ul>{online.slice(0, 6).map(player => <li key={player.id}><span />{player.username}</li>)}</ul></aside></section> : <SocialSurface currentUser={user} snapshot={social} party={party} refresh={refreshSocial} />}
-  </main>;
+  const chooseMode = (mode: QueueMode) => setQueue(current => current.joined ? current : { ...current, mode });
+  const joinQueue = (mode: QueueMode) => {
+    if (!platformRealtime.send('queue.join', { mode })) { setNotice('Sin conexión realtime.'); return; }
+    setQueue(current => ({ ...current, joined: true, mode }));
+    setNotice('');
+  };
+  const leaveQueue = () => {
+    if (!platformRealtime.send('queue.leave')) { setNotice('Sin conexión realtime.'); return; }
+    setQueue(current => ({ ...current, joined: false }));
+  };
+
+  return <>
+    <main className="platform-home-surface">
+      <header className="platform-topbar"><div className="platform-wordmark"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong></div><nav aria-label="Navegación principal"><button className={section === 'play' ? 'is-active' : ''} onClick={() => setSection('play')}>JUGAR</button><button className={section === 'social' ? 'is-active' : ''} onClick={() => setSection('social')}>SOCIAL{social.incoming.length + party.invites.length > 0 && <em>{social.incoming.length + party.invites.length}</em>}</button><button disabled>RANKING</button><button disabled>PERFIL</button></nav><div className="platform-account"><span className={`platform-presence is-${realtime}`} /><strong>{user.username}</strong><button onClick={onLogout}>Salir</button></div></header>
+      {section === 'play' ? <section className="platform-play-hero"><div className="platform-play-copy platform-play-copy--matchmaking"><p className="platform-eyebrow">PLATAFORMA DAWNREACH · ARQUITECTURA TCL</p><h2>Elige cómo entrar en batalla</h2><p>Party, matchmaking y ready check comparten ya el flujo competitivo de TCL.</p><PartyBar me={user} snapshot={party} /><MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /><button className="platform-local-button platform-local-play-button" type="button" onClick={onPlay}><Swords /> Partida local · desarrollo</button>{notice && <p className="platform-auth-message" role="status">{notice}</p>}</div><aside className="platform-online-card"><div><Users /><span><strong>{online.length}</strong> conectados</span></div><small>{realtime === 'online' ? 'Servidor realtime conectado' : realtime === 'connecting' ? 'Conectando realtime…' : 'Realtime desconectado'}</small><ul>{online.slice(0, 6).map(player => <li key={player.id}><span />{player.username}</li>)}</ul></aside></section> : <SocialSurface currentUser={user} snapshot={social} party={party} refresh={refreshSocial} />}
+    </main>
+    {ready && <ReadyCheckOverlay ready={ready} me={user} />}
+  </>;
 }
 
 export default function PlatformShell() {

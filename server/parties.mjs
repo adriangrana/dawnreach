@@ -110,6 +110,12 @@ export class PartyManager {
     this.emitSnapshot(userId);
   }
 
+  membersAsUsers(party) {
+    return party.members
+      .map(id => this.options.store.competitiveUser(this.options.store.getUser(id)))
+      .filter(Boolean);
+  }
+
   emitSnapshot(userId) {
     this.options.onEvent({ type: 'party.snapshot', ...this.snapshotFor(userId) }, [userId]);
   }

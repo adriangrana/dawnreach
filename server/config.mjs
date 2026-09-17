@@ -10,6 +10,8 @@ export function loadPlatformConfig(root = process.cwd(), env = process.env) {
     host: String(env.DAWNREACH_PLATFORM_HOST || '127.0.0.1'),
     port: positiveInt(env.DAWNREACH_PLATFORM_PORT, 8790),
     dataDir: path.resolve(root, String(env.DAWNREACH_PLATFORM_DATA_DIR || 'data/platform')),
+    queueSize: positiveInt(env.DAWNREACH_QUEUE_SIZE, 10),
+    readyTimeoutSeconds: positiveInt(env.DAWNREACH_READY_TIMEOUT_SECONDS, 30),
     auth: {
       minPasswordLength: positiveInt(env.DAWNREACH_AUTH_MIN_PASSWORD_LENGTH, 10),
       sessionAbsoluteTtlHours: positiveInt(env.DAWNREACH_AUTH_SESSION_ABSOLUTE_TTL_HOURS, 24 * 14),

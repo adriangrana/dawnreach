@@ -1,7 +1,16 @@
+export type QueueMode = 'ranked' | 'normal';
+
 export type PlatformUser = Readonly<{
   id: string;
   username: string;
   createdAt: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  calibrated: boolean;
+  calibrationGames: number;
+  calibrationTarget: number;
+  rankedGames: number;
 }>;
 
 export type PlatformSession = Readonly<{
@@ -69,6 +78,46 @@ export type PartySnapshot = Readonly<{
   invites: readonly PlatformPartyInvite[];
 }>;
 
+export type QueuePlayer = Readonly<{
+  userId: string;
+  username: string;
+  rating: number;
+  joinedAt: number;
+  partyId?: string;
+}>;
+
+export type QueueState = Readonly<{
+  joined: boolean;
+  mode: QueueMode;
+  count: number;
+  target: number;
+}>;
+
+export type ReadyState = Readonly<{
+  readyId: string;
+  mode: QueueMode;
+  players: readonly QueuePlayer[];
+  expiresAt: number;
+  acceptedUserIds: readonly string[];
+  declinedUserIds: readonly string[];
+}>;
+
+export type MatchPlayer = QueuePlayer & Readonly<{
+  team: 'red' | 'blue';
+  slot: number;
+}>;
+
+export type MatchSummary = Readonly<{
+  id: string;
+  mode: QueueMode;
+  source: 'matchmaking';
+  rated: boolean;
+  status: 'launching';
+  createdAt: string;
+  players: readonly MatchPlayer[];
+  mapSha256: string | null;
+}>;
+
 export type PresenceSnapshot = Readonly<{
   type: 'presence.snapshot';
   users: readonly PlatformUser[];
@@ -80,6 +129,7 @@ export type SessionReadyEvent = Readonly<{
   presence: readonly PlatformUser[];
   social?: SocialSnapshot;
   party?: PartySnapshot;
+  queue?: Readonly<{ joined: boolean; target: number }>;
 }>;
 
 export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
@@ -93,6 +143,34 @@ export type PartyInviteEvent = Readonly<{
   type: 'party.invite';
   invite: PlatformPartyInvite;
 }>;
+export type QueueUpdateEvent = Readonly<{
+  type: 'queue.update';
+  mode: QueueMode;
+  count: number;
+  target: number;
+}>;
+export type ReadyStartEvent = Readonly<{
+  type: 'ready.start';
+  readyId: string;
+  mode: QueueMode;
+  players: readonly QueuePlayer[];
+  expiresAt: number;
+}>;
+export type ReadyProgressEvent = Readonly<{
+  type: 'ready.progress';
+  readyId: string;
+  acceptedUserIds: readonly string[];
+  declinedUserIds: readonly string[];
+}>;
+export type ReadyCancelledEvent = Readonly<{
+  type: 'ready.cancelled';
+  readyId: string;
+  declinedUserId: string | null;
+}>;
+export type MatchFoundEvent = Readonly<{
+  type: 'match.found';
+  match: MatchSummary;
+}>;
 
 export type PlatformRealtimeEvent =
   | PresenceSnapshot
@@ -101,4 +179,9 @@ export type PlatformRealtimeEvent =
   | DirectMessageEvent
   | PartySnapshotEvent
   | PartyInviteEvent
+  | QueueUpdateEvent
+  | ReadyStartEvent
+  | ReadyProgressEvent
+  | ReadyCancelledEvent
+  | MatchFoundEvent
   | Readonly<Record<string, unknown>>;

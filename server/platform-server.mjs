@@ -9,6 +9,7 @@ import { validatePassword } from './auth/password-policy.mjs';
 import { hashPassword } from './security.mjs';
 import { PlatformStore } from './store.mjs';
 import { PartyManager } from './parties.mjs';
+import { Matchmaker } from './matchmaking.mjs';
 import { acceptWebSocket } from './websocket.mjs';
 
 export function createPlatformServer(options = {}) {
@@ -43,6 +44,42 @@ export function createPlatformServer(options = {}) {
     store,
     onEvent: (event, userIds) => broadcast(event, userIds),
   });
+
+  function launchMatch(match) {
+    const { resultToken: _secret, ...safe } = match;
+    broadcast({
+      type: 'match.session.pending',
+      match: safe,
+      note: 'Matchmaking completado. El transporte de la sesión de juego se conectará en la siguiente fase.',
+    }, match.players.map(player => player.userId));
+  }
+
+  const matchmaker = new Matchmaker({
+    queueSize: config.queueSize,
+    readyTimeoutSeconds: config.readyTimeoutSeconds,
+    store,
+    onEvent: (event, userIds) => broadcast(event, userIds),
+    onLaunch: launchMatch,
+  });
+
+  function queueParty(user, mode) {
+    const party = parties.partyForUser(user.id);
+    if (!party) {
+      const competitor = store.competitiveUser(store.getUser(user.id));
+      if (!competitor) throw new Error('Jugador no encontrado.');
+      matchmaker.join(competitor, mode);
+      return;
+    }
+    if (party.leaderId !== user.id) throw new Error('Solo el líder del grupo puede iniciar matchmaking.');
+    const members = parties.membersAsUsers(party);
+    matchmaker.joinMany(members, mode, party.id);
+  }
+
+  function leaveQueue(user) {
+    const party = parties.partyForUser(user.id);
+    if (party && party.leaderId === user.id) parties.membersAsUsers(party).forEach(member => matchmaker.leave(member.id));
+    else matchmaker.leave(user.id);
+  }
 
   function socialSnapshot(userId) {
     const incoming = store.incomingFriendRequests(userId).map(request => ({
@@ -129,6 +166,9 @@ export function createPlatformServer(options = {}) {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/api/health') {
         return json(req, res, 200, { ok: true, service: 'dawnreach-platform', now: new Date().toISOString() });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/config') {
+        return json(req, res, 200, { queueSize: config.queueSize, readyTimeoutSeconds: config.readyTimeoutSeconds });
       }
       if (req.method === 'POST' && url.pathname === '/api/register') {
         const source = sourceFor(req);
@@ -245,9 +285,7 @@ export function createPlatformServer(options = {}) {
       if (url.pathname !== '/ws') return socket.destroy();
       const token = String(url.searchParams.get('token') || '');
       const user = userFromToken(token);
-      if (!user) {
-        return socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-      }
+      if (!user) return socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       const existing = peersByUser.get(user.id);
       if (existing) existing.close();
       const peer = acceptWebSocket(req, socket, user.id);
@@ -256,13 +294,19 @@ export function createPlatformServer(options = {}) {
       peer.onMessage = message => {
         try {
           const type = String(message?.type || '');
-          if (type === 'party.create') parties.create(user);
+          if (type === 'queue.join' || type === 'party.queue') queueParty(user, message.mode === 'normal' ? 'normal' : 'ranked');
+          else if (type === 'queue.leave') leaveQueue(user);
+          else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
+          else if (type === 'party.create') parties.create(user);
           else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
           else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
           else if (type === 'party.decline') parties.decline(user.id, String(message.inviteId || ''));
-          else if (type === 'party.leave') parties.leave(user.id);
+          else if (type === 'party.leave') {
+            parties.leave(user.id);
+            matchmaker.leave(user.id);
+          }
         } catch (error) {
-          peer.send({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo actualizar el grupo.' });
+          peer.send({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo completar la acción.' });
         }
       };
       peer.onClose = () => {
@@ -275,6 +319,7 @@ export function createPlatformServer(options = {}) {
         presence: publicPresence(),
         social: socialSnapshot(user.id),
         party: parties.snapshotFor(user.id),
+        queue: { joined: Boolean(matchmaker.statusFor(user.id)), target: config.queueSize },
       });
       broadcastPresence();
     } catch {
@@ -303,5 +348,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, start, close };
+  return { config, server, store, sessions, parties, matchmaker, start, close };
 }
