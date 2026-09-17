@@ -13,6 +13,7 @@ import {
   type PlatformUser,
   type SocialSnapshot,
 } from './index';
+import { resolveFriendPresence } from './presence';
 
 function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
@@ -43,6 +44,10 @@ export function SocialRail({
   const [notice, setNotice] = useState('');
   const selected = useMemo(() => snapshot.friends.find(friend => friend.id === selectedId) ?? null, [snapshot.friends, selectedId]);
   const onlineIds = useMemo(() => new Set(online.map(user => user.id)), [online]);
+  const availableFriendCount = useMemo(
+    () => snapshot.friends.filter(friend => resolveFriendPresence(friend, onlineIds).status !== 'offline').length,
+    [snapshot.friends, onlineIds],
+  );
 
   useEffect(() => {
     if (onOpenConversation) setSelectedId(null);
@@ -101,7 +106,7 @@ export function SocialRail({
   };
 
   return <aside className="platform-social-rail">
-    <header className="platform-social-rail-head"><div><Users /><span><strong>FRIENDS</strong><small>{online.length} online</small></span></div><span className="platform-social-live-dot" /></header>
+    <header className="platform-social-rail-head"><div><Users /><span><strong>FRIENDS</strong><small>{availableFriendCount} online</small></span></div><span className="platform-social-live-dot" /></header>
     <form className="platform-social-search" onSubmit={search}><Search /><input aria-label="Search player" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search player…" /><button aria-label="Search">↵</button></form>
 
     {results.length > 0 && <div className="platform-social-search-results">{results.map(user => <div key={user.id}><span className="platform-social-avatar">{user.username.slice(0, 2).toUpperCase()}</span><strong>{user.username}</strong><button type="button" onClick={() => void addFriend(user.id)}><UserPlus /></button></div>)}</div>}
@@ -113,17 +118,21 @@ export function SocialRail({
 
     <section className="platform-social-friends"><h4>FRIENDS · {snapshot.friends.length}</h4><div>{snapshot.friends.map(friend => {
       const isActive = selectedId === friend.id || activeConversationId === friend.id;
-      return <button type="button" key={friend.id} className={isActive ? 'is-selected' : ''} onClick={() => selectConversation(friend.id)}><span className="platform-social-avatar">{friend.username.slice(0, 2).toUpperCase()}</span><span><strong>{friend.username}</strong><small>{onlineIds.has(friend.id) ? 'Online' : 'Offline'}</small></span><i className={onlineIds.has(friend.id) ? 'is-online' : ''} />{friend.unread > 0 && <em>{friend.unread}</em>}</button>;
+      const presence = resolveFriendPresence(friend, onlineIds);
+      return <button type="button" key={friend.id} className={isActive ? 'is-selected' : ''} onClick={() => selectConversation(friend.id)}><span className="platform-social-avatar">{friend.username.slice(0, 2).toUpperCase()}</span><span><strong>{friend.username}</strong><small className={`platform-social-status is-${presence.status}`}>{presence.label}</small></span><i className={`is-${presence.status}`} />{friend.unread > 0 && <em>{friend.unread}</em>}</button>;
     })}{snapshot.friends.length === 0 && <p className="platform-social-empty">Search for players to start your friends list.</p>}</div></section>
 
     {snapshot.outgoing.length > 0 && <section className="platform-social-pending"><h4>PENDING</h4>{snapshot.outgoing.map(request => <p key={request.id}>{request.user?.username ?? 'Player'}</p>)}</section>}
 
     {notice && <p className="platform-social-notice">{notice}</p>}
 
-    {selected && <section className="platform-social-drawer" aria-label={`Conversation with ${selected.username}`}>
-      <header><div><span className="platform-social-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small>{onlineIds.has(selected.id) ? 'Online' : 'Offline'}</small></span></div><button type="button" onClick={() => setSelectedId(null)}><X /></button></header>
-      <div className="platform-social-messages">{messages.length === 0 && <p>No messages yet.</p>}{messages.map(message => <div key={message.id} className={message.fromUserId === me.id ? 'is-mine' : ''}><span>{message.text}</span><small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div>)}</div>
-      <form onSubmit={sendMessage}><MessageCircle /><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={500} placeholder={`Message ${selected.username}`} /><button>Send</button></form>
-    </section>}
+    {selected && (() => {
+      const presence = resolveFriendPresence(selected, onlineIds);
+      return <section className="platform-social-drawer" aria-label={`Conversation with ${selected.username}`}>
+        <header><div><span className="platform-social-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`platform-social-status is-${presence.status}`}>{presence.label}</small></span></div><button type="button" onClick={() => setSelectedId(null)}><X /></button></header>
+        <div className="platform-social-messages">{messages.length === 0 && <p>No messages yet.</p>}{messages.map(message => <div key={message.id} className={message.fromUserId === me.id ? 'is-mine' : ''}><span>{message.text}</span><small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div>)}</div>
+        <form onSubmit={sendMessage}><MessageCircle /><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={500} placeholder={`Message ${selected.username}`} /><button>Send</button></form>
+      </section>;
+    })()}
   </aside>;
 }
