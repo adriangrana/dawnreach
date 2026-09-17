@@ -10,6 +10,7 @@ import {
   type ThroneUnderAttackMatchEvent,
   type TowerDestroyedMatchEvent,
 } from '../game/match/matchEvents';
+import { TOWER_PORTRAITS } from './towerPortraitAssets';
 
 const FEED_ID = 'dawnreach-match-event-feed';
 const MAX_VISIBLE_ROWS = 6;
@@ -35,6 +36,10 @@ function teamClass(team: MatchEventParticipant['team']) {
   return 'is-neutral';
 }
 
+function participantLabel(participant: MatchEventParticipant) {
+  return participant.kind === 'tower' ? 'Torre' : participant.label;
+}
+
 function heroSlug(entityId: string) {
   const marker = '-hero-';
   const index = entityId.indexOf(marker);
@@ -43,6 +48,11 @@ function heroSlug(entityId: string) {
 }
 
 function portraitFor(participant: MatchEventParticipant) {
+  if (participant.kind === 'tower') {
+    if (participant.team === 'blue') return TOWER_PORTRAITS.dawn;
+    if (participant.team === 'red') return TOWER_PORTRAITS.dusk;
+    return '';
+  }
   if (participant.kind !== 'hero') return '';
   const slug = heroSlug(participant.entityId);
   if (!slug) return '';
@@ -66,7 +76,7 @@ function createPortrait(participant: MatchEventParticipant) {
     image.draggable = false;
     root.appendChild(image);
   } else {
-    root.textContent = participant.label.charAt(0).toUpperCase() || '?';
+    root.textContent = participantLabel(participant).charAt(0).toUpperCase() || '?';
   }
   return root;
 }
@@ -76,7 +86,7 @@ function createParticipant(participant: MatchEventParticipant, align: 'left' | '
   root.className = `match-event-feed-participant ${teamClass(participant.team)} is-${align}`;
   const name = document.createElement('span');
   name.className = 'match-event-feed-name';
-  name.textContent = participant.label;
+  name.textContent = participantLabel(participant);
   if (align === 'left') root.append(createPortrait(participant), name);
   else root.append(name, createPortrait(participant));
   return root;
@@ -99,7 +109,7 @@ function createKillRow(event: HeroKilledMatchEvent) {
   icon.textContent = '⚔';
 
   row.append(createParticipant(killer, 'left'), icon, createParticipant(event.victim, 'right'));
-  row.setAttribute('aria-label', `${killer.label} eliminó a ${event.victim.label}`);
+  row.setAttribute('aria-label', `${participantLabel(killer)} eliminó a ${participantLabel(event.victim)}`);
   return row;
 }
 
