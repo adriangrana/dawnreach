@@ -9,6 +9,7 @@ import {
   type PlatformUser,
   type SocialSnapshot,
 } from './index';
+import { resolveFriendPresence } from './presence';
 
 function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
@@ -38,7 +39,10 @@ export function HomeChatPanel({
     [snapshot.friends, selectedFriendId],
   );
   const onlineIds = useMemo(() => new Set(online.map(user => user.id)), [online]);
-  const isSelectedOnline = Boolean(selected && onlineIds.has(selected.id));
+  const selectedPresence = useMemo(
+    () => selected ? resolveFriendPresence(selected, onlineIds) : null,
+    [selected, onlineIds],
+  );
 
   useEffect(() => {
     if (!selectedFriendId) {
@@ -117,8 +121,8 @@ export function HomeChatPanel({
   >
     <header className="dr-home-chat-head">
       <div className="dr-home-chat-channel"><strong>CHAT</strong><span>Direct</span></div>
-      {selected
-        ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small><i className={isSelectedOnline ? 'is-online' : ''} />{isSelectedOnline ? 'Online' : 'Offline'}</small></span></div>
+      {selected && selectedPresence
+        ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`dr-home-chat-status is-${selectedPresence.status}`}><i className={`is-${selectedPresence.status}`} />{selectedPresence.label}</small></span></div>
         : <span className="dr-home-chat-hint">Select a friend</span>}
     </header>
 
