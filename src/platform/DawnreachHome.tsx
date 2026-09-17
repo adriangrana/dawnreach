@@ -131,14 +131,42 @@ export function DawnreachHomeOverview({
       </nav>
     </div>
 
-    <div className="dr-home-lower-strip">
-      <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
-      <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
-      <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
-      <HomeChatPanel me={user} online={online} snapshot={social} party={party} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} onActiveDirectChange={onActiveChatFriendChange} />
-      <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>
-    </div>
+    <DawnreachSharedFooter
+      user={user}
+      online={online}
+      social={social}
+      party={party}
+      selectedChatFriendId={selectedChatFriendId}
+      refreshSocial={refreshSocial}
+      onActiveChatFriendChange={onActiveChatFriendChange}
+    />
   </section>;
+}
+
+export function DawnreachSharedFooter({
+  user,
+  online,
+  social,
+  party,
+  selectedChatFriendId,
+  refreshSocial,
+  onActiveChatFriendChange,
+}: {
+  user: PlatformUser;
+  online: readonly PlatformUser[];
+  social: SocialSnapshot;
+  party: PartySnapshot;
+  selectedChatFriendId: string | null;
+  refreshSocial: () => Promise<void>;
+  onActiveChatFriendChange?: (userId: string | null) => void;
+}) {
+  return <div className="dr-home-lower-strip">
+    <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
+    <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
+    <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
+    <HomeChatPanel me={user} online={online} snapshot={social} party={party} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} onActiveDirectChange={onActiveChatFriendChange} />
+    <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>
+  </div>;
 }
 
 export function DawnreachHomeRightRail({
