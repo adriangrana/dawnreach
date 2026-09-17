@@ -155,7 +155,7 @@ export function HomeChatPanel({
     }
     if (type === 'party.message' && 'message' in event) {
       const incoming = event.message as PartyMessage;
-      if (!party.party || incoming.partyId !== party.party.id) return;
+      if (party.party && incoming.partyId !== party.party.id) return;
       setPartyMessages(current => current.some(item => item.id === incoming.id) ? current : [...current, incoming]);
     }
   }), [activeDirectId, friendsById, me.id, party.party?.id, refreshSocial]);
@@ -166,11 +166,6 @@ export function HomeChatPanel({
     node.scrollTop = node.scrollHeight;
   }, [activeChannel, activeDirectMessages, partyMessages, loading]);
 
-  const createParty = () => {
-    setNotice('');
-    if (!platformRealtime.send('party.create')) setNotice('Realtime connection unavailable.');
-  };
-
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const text = draft.trim();
@@ -179,7 +174,6 @@ export function HomeChatPanel({
     setNotice('');
     try {
       if (partyActive) {
-        if (!party.party) return;
         if (!platformRealtime.send('party.message', { text })) throw new Error('Realtime connection unavailable.');
         setDraft('');
         return;
@@ -200,8 +194,9 @@ export function HomeChatPanel({
     }
   };
 
-  const canCompose = partyActive ? Boolean(party.party) : Boolean(selected) && !loading;
+  const canCompose = partyActive ? true : Boolean(selected) && !loading;
   const ariaLabel = partyActive ? 'Party chat' : selected ? `Chat with ${selected.username}` : 'Chat';
+  const partyMemberCount = party.party?.members.length ?? 1;
 
   return <article
     className={`dr-home-channel-card dr-home-chat-card${activeChannel ? ' is-active' : ''}`}
@@ -222,11 +217,11 @@ export function HomeChatPanel({
           className={`dr-home-chat-tab is-party${partyActive ? ' is-active' : ''}`}
           aria-selected={partyActive}
           onClick={activateParty}
-          title={party.party ? 'Party channel' : 'Open the party channel'}
+          title="Party channel"
         >
           <Users />
           <span>PARTY</span>
-          <em>{party.party?.members.length ?? 0}/5</em>
+          <em>{partyMemberCount}/5</em>
         </button>
         {openDirectIds.map(userId => {
           const friend = friendsById.get(userId);
@@ -243,16 +238,15 @@ export function HomeChatPanel({
       </div>
 
       {partyActive
-        ? <div className="dr-home-chat-party-meta"><Users /><span><strong>PARTY</strong><small>{party.party ? `${party.party.members.length} members` : 'No active party'}</small></span></div>
+        ? <div className="dr-home-chat-party-meta"><Users /><span><strong>PARTY</strong><small>{partyMemberCount} {partyMemberCount === 1 ? 'member' : 'members'}</small></span></div>
         : selected && selectedPresence
           ? <div className="dr-home-chat-peer"><span className="dr-home-chat-avatar">{selected.username.slice(0, 2).toUpperCase()}</span><span><strong>{selected.username}</strong><small className={`dr-home-chat-status is-${selectedPresence.status}`}><i className={`is-${selectedPresence.status}`} />{selectedPresence.label}</small></span></div>
           : <span className="dr-home-chat-hint">Open a friend</span>}
     </header>
 
     <div className="dr-home-chat-messages" ref={scrollRef} aria-live="polite">
-      {partyActive && !party.party && <div className="dr-home-chat-empty"><Users /><span><strong>No party yet</strong><small>Create or join a party to start using this channel.</small><button className="dr-home-chat-create-party" type="button" onClick={createParty}>CREATE PARTY</button></span></div>}
-      {partyActive && party.party && partyMessages.length === 0 && <div className="dr-home-chat-empty"><Users /><span><strong>Party channel ready</strong><small>Messages are visible to everyone in your current party.</small></span></div>}
-      {partyActive && party.party && partyMessages.map(message => <div key={message.id} className={`dr-home-chat-message is-party${message.fromUserId === me.id ? ' is-mine' : ''}`}>
+      {partyActive && partyMessages.length === 0 && <div className="dr-home-chat-empty"><Users /><span><strong>Party channel ready</strong><small>Invite players from the party panel. Messages here are shared with your current group.</small></span></div>}
+      {partyActive && partyMessages.map(message => <div key={message.id} className={`dr-home-chat-message is-party${message.fromUserId === me.id ? ' is-mine' : ''}`}>
         <span className="dr-home-chat-message-copy"><b>{message.fromUserId === me.id ? 'You' : message.username}</b><span>{message.text}</span></span>
         <small>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
       </div>)}
@@ -274,7 +268,7 @@ export function HomeChatPanel({
         onChange={event => setDraft(event.target.value)}
         maxLength={500}
         disabled={!canCompose}
-        placeholder={partyActive ? (party.party ? 'Message party…' : 'Create or join a party to chat…') : selected ? `Message ${selected.username}…` : 'Open a direct chat…'}
+        placeholder={partyActive ? 'Message party…' : selected ? `Message ${selected.username}…` : 'Open a direct chat…'}
       />
       <button type="submit" disabled={!canCompose || !draft.trim() || sending} aria-label="Send message" title="Send message">
         <SendHorizontal />
