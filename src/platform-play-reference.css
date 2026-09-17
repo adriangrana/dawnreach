@@ -1,6 +1,7 @@
 /* PLAY surface — cinematic matchmaking reference. Loaded after the legacy matchmaking styles. */
 
 .platform-main-workspace:has(.dr-play-screen) {
+  position: relative !important;
   overflow: hidden !important;
   background:
     radial-gradient(circle at 64% 10%, rgba(55, 104, 135, .10), transparent 38%),
