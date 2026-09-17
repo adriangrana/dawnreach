@@ -214,19 +214,23 @@
   overflow: hidden;
   border: 1px solid rgba(101, 135, 155, .26);
   border-bottom: 0;
-  background:
+  background-image:
     linear-gradient(90deg, rgba(4, 13, 20, .24), rgba(4, 13, 20, .02) 55%, rgba(3, 11, 17, .23)),
-    url('/assets/images/dawnreach_home_background.webp') 54% 42% / cover no-repeat;
+    url('/assets/images/dawnreach_home_background.webp');
+  background-size: 100% 100%, cover;
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 0, 54% 42%;
   box-shadow: inset 0 0 80px rgba(0,0,0,.18);
 }
 
+/*
+ * Mientras todos los modos reutilicen el mismo artwork central, el encuadre
+ * debe ser idéntico. Las clases de modo solo cambian el contenido/tono, nunca
+ * la posición del background: así NORMAL, RANKED, VS AI y TRAINING no "saltan".
+ */
 .dr-play-hero.is-ranked {
-  background-position: 48% 36%;
   filter: saturate(.92) contrast(1.04);
 }
-
-.dr-play-hero.is-vs_ai { background-position: 43% 54%; }
-.dr-play-hero.is-training { background-position: 63% 48%; }
 
 .dr-play-hero-shade {
   position: absolute;
