@@ -22,6 +22,7 @@ import { mountPingWheel } from './hud/pingWheel';
 import { mountResponsiveHudScale } from './hud/responsiveHudScale';
 import { mountSelectionHudNameLayout } from './hud/selectionHudNameLayout';
 import { mountSettingsAvailability } from './hud/settingsAvailability';
+import { mountSettingsSliderValueGuard } from './hud/settingsSliderValueGuard';
 import { mountTowerPortraitAssets } from './hud/towerPortraitAssets';
 import './styles.css';
 import './hud-overrides.css';
@@ -121,6 +122,9 @@ const disposeGameMenuQuickKeys = mountGameMenuQuickKeys();
 // Register the F10 menu before gameplay hotkeys so an open menu owns keyboard input and
 // never leaks commands to the world underneath it.
 const disposeGameMenu = mountGameMenu();
+// Range sliders are handled numerically by the menu's input path. Block their redundant native
+// change event from being reinterpreted as text before settings persistence sees the value.
+const disposeSettingsSliderValueGuard = mountSettingsSliderValueGuard();
 const disposeSettingsAvailability = mountSettingsAvailability();
 const disposeAbilityRangeSettingsGuard = mountAbilityRangeSettingsGuard();
 const disposeBrowserInteractionGuards = mountBrowserInteractionGuards();
@@ -150,6 +154,7 @@ if (import.meta.hot) {
     disposeRuntimePerformanceTuning();
     disposeMatchPauseRuntime();
     disposeSettingsAvailability();
+    disposeSettingsSliderValueGuard();
     disposeAbilityRangeSettingsGuard();
     disposeGameMenu();
     disposeGameMenuQuickKeys();
