@@ -76,6 +76,15 @@ function heroCombatStats(hero: MatchHeroState | null, localStats: CombatHudStats
   };
 }
 
+function teamKills(match: MatchState, team: TeamId, localStats: CombatHudStats) {
+  return match.slots
+    .filter(slot => slot.team === team)
+    .reduce((total, slot) => {
+      const hero = slot.heroEntityId ? match.heroes[slot.heroEntityId] ?? null : null;
+      return total + heroCombatStats(hero, localStats).kills;
+    }, 0);
+}
+
 function heroNetWorth(hero: MatchHeroState | null) {
   if (!hero) return 0;
   const inventoryValue = hero.inventory.reduce((total, slot) => {
@@ -224,6 +233,16 @@ export default function ScoreboardOverlay({
     if (!clock) return;
     clock.textContent = formatClock(Math.max(0, nowMs - match.createdAtMs));
   }, [match.createdAtMs, nowMs]);
+
+  // Keep the always-visible 0-0 header sourced from the same combat snapshot as the detailed
+  // scoreboard. The local hero currently publishes live K/D/A through CombatHudStats while
+  // future/non-local heroes already have reserved scoreboard counters on MatchState.
+  useEffect(() => {
+    const dawnScore = document.querySelector<HTMLElement>('.game-hud .score--dawn');
+    const duskScore = document.querySelector<HTMLElement>('.game-hud .score--dusk');
+    if (dawnScore) dawnScore.textContent = String(teamKills(match, 'dawn', localStats));
+    if (duskScore) duskScore.textContent = String(teamKills(match, 'dusk', localStats));
+  }, [match, localStats]);
 
   useEffect(() => {
     const onSettingsChanged = (event: Event) => {
