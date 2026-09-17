@@ -3,7 +3,7 @@ import { LogIn, Shield, UserPlus } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
-import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar } from './DawnreachHome';
+import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
 import { DawnreachPlayScreen } from './DawnreachPlay';
 import {
@@ -185,16 +185,19 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
-          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : playSection === 'matchmaking' ? <>
-            <DawnreachPlayScreen me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
-            {notice && <p className="platform-workspace-notice dr-play-notice" role="status">{notice}</p>}
-          </> : <section className="platform-play-custom-shell">
-            <header><div><p className="platform-eyebrow">PLAY · CUSTOM</p><h1>Create your own battle</h1></div><div className="platform-play-tabs"><button onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className="is-active" onClick={openCustom}>Custom</button></div></header>
-            <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />
-            {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
+          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="dr-play-overview">
+            {playSection === 'matchmaking' ? <>
+              <DawnreachPlayScreen me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
+              {notice && <p className="platform-workspace-notice dr-play-notice" role="status">{notice}</p>}
+            </> : <section className="platform-play-custom-shell">
+              <header><div><p className="platform-eyebrow">PLAY · CUSTOM</p><h1>Create your own battle</h1></div><div className="platform-play-tabs"><button onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className="is-active" onClick={openCustom}>Custom</button></div></header>
+              <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />
+              {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
+            </section>}
+            <DawnreachSharedFooter user={user} online={online} social={social} party={party} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} />
           </section>}
         </section>
-        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={section === 'home' ? chatFriendId : null} onOpenConversation={section === 'home' ? setChatFriendId : undefined} />
+        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={chatFriendId} onOpenConversation={setChatFriendId} />
       </div>
     </main>
     {ready && <ReadyCheckOverlay ready={ready} me={user} />}
