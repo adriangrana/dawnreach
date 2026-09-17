@@ -65,6 +65,7 @@ export function DawnreachHomeOverview({
   social,
   selectedChatFriendId,
   refreshSocial,
+  onActiveChatFriendChange,
   onPlay,
   onLocalPlay,
   onNormal,
@@ -77,6 +78,7 @@ export function DawnreachHomeOverview({
   social: SocialSnapshot;
   selectedChatFriendId: string | null;
   refreshSocial: () => Promise<void>;
+  onActiveChatFriendChange?: (userId: string | null) => void;
   onPlay: () => void;
   onLocalPlay: () => void;
   onNormal: () => void;
@@ -129,7 +131,7 @@ export function DawnreachHomeOverview({
       <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
       <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
       <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
-      <HomeChatPanel me={user} online={online} snapshot={social} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} />
+      <HomeChatPanel me={user} online={online} snapshot={social} party={party} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} onActiveDirectChange={onActiveChatFriendChange} />
       <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>
     </div>
   </section>;
