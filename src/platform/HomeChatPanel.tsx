@@ -74,7 +74,12 @@ export function HomeChatPanel({
     const incoming = event.message as DirectMessage;
     if (!selectedFriendId || (incoming.fromUserId !== selectedFriendId && incoming.toUserId !== selectedFriendId)) return;
     setMessages(previous => previous.some(item => item.id === incoming.id) ? previous : [...previous, incoming]);
-    if (incoming.fromUserId === selectedFriendId) void refreshSocial().catch(() => undefined);
+    if (incoming.fromUserId === selectedFriendId) {
+      void getDirectConversation(selectedFriendId)
+        .then(next => setMessages(next))
+        .then(() => refreshSocial())
+        .catch(() => undefined);
+    }
   }), [selectedFriendId, refreshSocial]);
 
   useEffect(() => {
