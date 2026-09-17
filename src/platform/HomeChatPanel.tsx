@@ -105,7 +105,16 @@ export function HomeChatPanel({
     }
   };
 
-  return <article className={`dr-home-channel-card dr-home-chat-card${selected ? ' is-active' : ''}`}>
+  return <article
+    className={`dr-home-channel-card dr-home-chat-card${selected ? ' is-active' : ''}`}
+    tabIndex={0}
+    aria-label={selected ? `Chat with ${selected.username}` : 'Direct chat'}
+    onMouseDown={event => {
+      const target = event.target as HTMLElement;
+      if (target.closest('input, button')) return;
+      event.currentTarget.focus({ preventScroll: true });
+    }}
+  >
     <header className="dr-home-chat-head">
       <div className="dr-home-chat-channel"><strong>CHAT</strong><span>Direct</span></div>
       {selected
