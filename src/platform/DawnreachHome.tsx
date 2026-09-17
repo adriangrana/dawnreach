@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import {
   ChevronDown,
+  Coins,
   Crown,
   Gamepad2,
+  Gem,
   MessageSquare,
   Plus,
   Settings,
@@ -20,6 +22,8 @@ import { SocialRail } from './SocialRail';
 import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
 
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
+const HOME_CURRENCY = { gold: 12_480, crystals: 2_350 } as const;
+const CURRENCY_NUMBER = new Intl.NumberFormat('en-US');
 
 export function DawnreachHomeTopbar({
   section,
@@ -47,8 +51,8 @@ export function DawnreachHomeTopbar({
       <button disabled>PROFILE</button>
     </nav>
     <div className="dr-home-top-actions">
-      <span className="dr-home-top-stat"><Trophy /> <strong>{user.calibrated ? user.rating : user.calibrationGames}</strong><small>{user.calibrated ? 'MMR' : 'CAL.'}</small></span>
-      <span className="dr-home-top-stat"><Shield /> <strong>{user.wins}</strong><small>WINS</small></span>
+      <span className="dr-home-currency is-gold" title="Gold"><span className="dr-home-currency-icon" aria-hidden="true"><Coins /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.gold)}</strong></span>
+      <span className="dr-home-currency is-crystal" title="Crystals"><span className="dr-home-currency-icon" aria-hidden="true"><Gem /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.crystals)}</strong></span>
       <button className="dr-home-icon-button" type="button" disabled aria-label="Messages"><MessageSquare /></button>
       <button className="dr-home-icon-button" type="button" disabled aria-label="Settings"><Settings /></button>
       <span className="dr-home-account-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
