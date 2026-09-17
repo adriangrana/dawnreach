@@ -668,3 +668,26 @@
   .dr-play-find-match { height: 56px; }
   .dr-play-ready-card { height: 50px; }
 }
+
+
+.dr-play-notice {
+  position: absolute !important;
+  z-index: 15 !important;
+  left: clamp(270px, 23vw, 350px) !important;
+  right: 24px !important;
+  bottom: 12px !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+  border-left-color: rgba(214, 180, 86, .78) !important;
+  background: rgba(8, 18, 24, .88) !important;
+  backdrop-filter: blur(5px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .24);
+}
+
+@media (max-width: 1320px) {
+  .dr-play-notice { left: 256px !important; }
+}
+
+@media (max-width: 1120px) {
+  .dr-play-notice { left: 228px !important; right: 16px !important; }
+}
