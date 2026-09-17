@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { LogIn, Shield, Swords, UserPlus, Users } from 'lucide-react';
+import { LogIn, Shield, Swords, UserPlus } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
+import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar } from './DawnreachHome';
 import { MatchmakingPanel, ReadyCheckOverlay } from './MatchmakingPanel';
 import { PartyBar } from './PartyBar';
-import { SocialRail } from './SocialRail';
 import {
   getAuthToken,
   getCurrentPlatformUser,
@@ -87,16 +87,6 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
   </main>;
 }
 
-function HomeOverview({ user, party, online, onPlay }: { user: PlatformUser; party: PartySnapshot; online: readonly PlatformUser[]; onPlay: () => void }) {
-  const games = user.wins + user.losses;
-  const winrate = games > 0 ? Math.round(user.wins / games * 100) : 0;
-  return <section className="platform-home-overview">
-    <div className="platform-home-hero-card"><div><p className="platform-eyebrow">TEMPORADA DE FUNDACIÓN</p><h1>El frente vuelve a abrirse</h1><p>Forma tu escuadra, elige tu modo y entra en la disputa entre Dawn y Dusk. Todo el estado competitivo vive ya en la plataforma de Dawnreach.</p><button className="platform-primary-button" type="button" onClick={onPlay}><Swords /> Jugar</button></div></div>
-    <div className="platform-home-stats"><article><small>ESTADO</small><strong>{party.party ? `Grupo ${party.party.members.length}/5` : 'Disponible'}</strong><span>{party.party ? `Código ${party.party.code}` : 'Puedes crear grupo desde Jugar'}</span></article><article><small>PARTIDAS</small><strong>{games}</strong><span>{user.wins} victorias · {user.losses} derrotas</span></article><article><small>WINRATE</small><strong>{winrate}%</strong><span>{user.calibrated ? `${user.rating} MMR` : `Calibración ${user.calibrationGames}/${user.calibrationTarget}`}</span></article><article><small>EN LÍNEA</small><strong>{online.length}</strong><span>jugadores conectados</span></article></div>
-    <div className="platform-home-lower"><section><small>DESARROLLO ACTUAL</small><h3>Plataforma competitiva</h3><p>Party, matchmaking, ready check y salas personalizadas reutilizan la arquitectura de TCL; el siguiente boundary es conectar la selección de héroe y la sesión compartida del mapa.</p></section><section><small>DAWNREACH</small><h3>Dos reinos. Un trono.</h3><p>La interfaz mantiene su propia identidad: metal oscuro, piedra, oro viejo y energía cian, sin reproducir el layout visual de otros MOBAs.</p></section></div>
-  </section>;
-}
-
 function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: () => void; onLogout: () => void }) {
   const [section, setSection] = useState<HomeSection>('home');
   const [playSection, setPlaySection] = useState<PlaySection>('matchmaking');
@@ -176,19 +166,17 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     if (!platformRealtime.send('queue.leave')) { setNotice('Sin conexión realtime.'); return; }
     setQueue(current => ({ ...current, joined: false }));
   };
-  const openPlay = () => setSection('play');
+  const openPlay = () => { setSection('play'); setPlaySection('matchmaking'); };
+  const openNormal = () => { chooseMode('normal'); setSection('play'); setPlaySection('matchmaking'); };
+  const openRanked = () => { chooseMode('ranked'); setSection('play'); setPlaySection('matchmaking'); };
   const openCustom = () => { setSection('play'); setPlaySection('custom'); platformRealtime.send('lobby.list'); };
 
   return <>
     <main className="platform-home-surface platform-home-shell">
-      <header className="platform-topbar">
-        <div className="platform-wordmark"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong></div>
-        <nav aria-label="Navegación principal"><button className={section === 'home' ? 'is-active' : ''} onClick={() => setSection('home')}>INICIO</button><button className={section === 'play' ? 'is-active' : ''} onClick={openPlay}>JUGAR</button><button disabled>HÉROES</button><button disabled>RANKING</button></nav>
-        <div className="platform-account"><span className={`platform-presence is-${realtime}`} /><strong>{user.username}</strong><button onClick={onLogout}>Salir</button></div>
-      </header>
+      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
-          {section === 'home' ? <HomeOverview user={user} party={party} online={online} onPlay={openPlay} /> : <section className="platform-play-workspace">
+          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
             <header className="platform-play-heading"><div><p className="platform-eyebrow">JUGAR</p><h1>Prepara tu próxima batalla</h1><p>Matchmaking y salas comparten la misma sesión, party y presencia.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Personalizadas</button></div></header>
             <PartyBar me={user} snapshot={party} />
             {playSection === 'matchmaking' ? <MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /> : <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />}
@@ -196,7 +184,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
             {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
           </section>}
         </section>
-        <SocialRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} />
+        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} />
       </div>
     </main>
     {ready && <ReadyCheckOverlay ready={ready} me={user} />}
