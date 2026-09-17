@@ -3,13 +3,16 @@ import {
   subscribeMatchEvents,
   type FirstBloodMatchEvent,
   type HeroKilledMatchEvent,
+  type KillStreakMatchEvent,
   type MatchEvent,
   type MatchEventParticipant,
   type MultiKillMatchEvent,
+  type ShutdownMatchEvent,
 } from './matchEvents';
 
 export const MULTI_KILL_WINDOW_MS = 10_000;
 export const MAX_MULTI_KILL_COUNT = 5;
+export const KILL_STREAK_THRESHOLD = 3;
 
 type KillSeries = {
   lastKillAtMs: number;
@@ -29,9 +32,20 @@ function validEnemyKill(event: HeroKilledMatchEvent) {
 export class MatchAnnouncementTracker {
   private firstBloodEmitted = false;
   private readonly killSeries = new Map<string, KillSeries>();
+  private readonly killStreaks = new Map<string, number>();
 
   consume(event: MatchEvent): readonly MatchEvent[] {
-    if (event.type !== 'hero_killed' || !validEnemyKill(event) || !event.killer) return [];
+    if (event.type !== 'hero_killed') return [];
+
+    const victimStreak = this.killStreaks.get(event.victim.entityId) ?? 0;
+    if (event.victim.kind === 'hero') {
+      // Death always ends both a long-form kill streak and any rapid multi-kill chain, even when
+      // the death is environmental or self-inflicted. Only a valid enemy killer earns derived credit.
+      this.killStreaks.delete(event.victim.entityId);
+      this.killSeries.delete(event.victim.entityId);
+    }
+
+    if (!validEnemyKill(event) || !event.killer) return [];
 
     const derived: MatchEvent[] = [];
     if (!this.firstBloodEmitted) {
@@ -47,6 +61,31 @@ export class MatchAnnouncementTracker {
     }
 
     if (event.killer.kind !== 'hero') return derived;
+
+    if (victimStreak >= KILL_STREAK_THRESHOLD) {
+      const shutdown: ShutdownMatchEvent = {
+        type: 'shutdown',
+        eventId: `shutdown:${event.victim.entityId}:${event.eventId}`,
+        atMs: event.atMs,
+        killer: event.killer,
+        victim: event.victim,
+        endedStreak: victimStreak,
+      };
+      derived.push(shutdown);
+    }
+
+    const nextKillStreak = (this.killStreaks.get(event.killer.entityId) ?? 0) + 1;
+    this.killStreaks.set(event.killer.entityId, nextKillStreak);
+    if (nextKillStreak >= KILL_STREAK_THRESHOLD) {
+      const killStreak: KillStreakMatchEvent = {
+        type: 'kill_streak',
+        eventId: `kill_streak:${event.killer.entityId}:${nextKillStreak}:${event.eventId}`,
+        atMs: event.atMs,
+        killer: event.killer,
+        count: nextKillStreak,
+      };
+      derived.push(killStreak);
+    }
 
     const previous = this.killSeries.get(event.killer.entityId);
     const withinWindow = Boolean(
@@ -82,6 +121,7 @@ export class MatchAnnouncementTracker {
   reset() {
     this.firstBloodEmitted = false;
     this.killSeries.clear();
+    this.killStreaks.clear();
   }
 }
 

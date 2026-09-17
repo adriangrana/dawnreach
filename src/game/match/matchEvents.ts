@@ -60,13 +60,28 @@ export type MultiKillMatchEvent = MatchEventBase & Readonly<{
   count: number;
 }>;
 
+export type KillStreakMatchEvent = MatchEventBase & Readonly<{
+  type: 'kill_streak';
+  killer: MatchEventParticipant;
+  count: number;
+}>;
+
+export type ShutdownMatchEvent = MatchEventBase & Readonly<{
+  type: 'shutdown';
+  killer: MatchEventParticipant;
+  victim: MatchEventParticipant;
+  endedStreak: number;
+}>;
+
 export type MatchEvent =
   | HeroKilledMatchEvent
   | TowerDestroyedMatchEvent
   | ObjectiveKilledMatchEvent
   | ThroneDestroyedMatchEvent
   | FirstBloodMatchEvent
-  | MultiKillMatchEvent;
+  | MultiKillMatchEvent
+  | KillStreakMatchEvent
+  | ShutdownMatchEvent;
 
 export type MatchDeathEventContext = Readonly<{
   target: MatchEventParticipant;
