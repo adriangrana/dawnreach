@@ -1,5 +1,6 @@
 export type QueueMode = 'ranked' | 'normal';
 export type Team = 'blue' | 'red';
+export type FriendPresenceStatus = 'in_match' | 'in_queue' | 'online' | 'away' | 'offline';
 
 export type PlatformUser = Readonly<{
   id: string;
@@ -25,7 +26,7 @@ export type PlatformSession = Readonly<{
 
 export type AuthResponse = Readonly<{ token: string; user: PlatformUser }>;
 
-export type PlatformFriend = PlatformUser & Readonly<{ status: 'online' | 'offline'; unread: number }>;
+export type PlatformFriend = PlatformUser & Readonly<{ status: FriendPresenceStatus; unread: number }>;
 
 export type PlatformFriendRequest = Readonly<{
   id: string;
