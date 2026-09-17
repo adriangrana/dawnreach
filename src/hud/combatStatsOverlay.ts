@@ -1,5 +1,5 @@
 import {
-  getMostRecentAttackOnTarget,
+  getWorldAttackEventsAfter,
   subscribeWorldCombatEvents,
 } from '../game/entities/worldCombatBridge';
 
@@ -20,6 +20,7 @@ type MutableCombatHudStats = {
 };
 
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
+const HERO_ASSIST_WINDOW_MS = 10_000;
 const PANEL_ID = 'dawnreach-combat-stats';
 const SETTINGS_BUTTON_ID = 'dawnreach-combat-settings-button';
 const listeners = new Set<(stats: CombatHudStats) => void>();
@@ -32,6 +33,7 @@ const stats: MutableCombatHudStats = {
 };
 let lastRecordedDeathAtMs = -1;
 let lastRecordedKillKey = '';
+let lastRecordedAssistKey = '';
 let worldSubscriptionStarted = false;
 
 function snapshot(): CombatHudStats {
@@ -66,6 +68,21 @@ export function setCombatHudStats(next: Partial<MutableCombatHudStats>) {
   publish();
 }
 
+function localHeroParticipatedInHeroKill(targetId: string, atMs: number) {
+  const attacks = getWorldAttackEventsAfter(0);
+  for (let index = attacks.length - 1; index >= 0; index--) {
+    const attack = attacks[index];
+    const ageMs = atMs - attack.atMs;
+    if (ageMs > HERO_ASSIST_WINDOW_MS) break;
+    if (ageMs < -4 || attack.targetId !== targetId) continue;
+    if (attack.targetKind !== 'hero' || attack.attackerKind !== 'hero') continue;
+    if (attack.attackerId !== LOCAL_WORLD_HERO_ENTITY_ID) continue;
+    if (attack.attackerTeam === attack.targetTeam) continue;
+    return true;
+  }
+  return false;
+}
+
 function startWorldCombatSubscription() {
   if (worldSubscriptionStarted) return;
   worldSubscriptionStarted = true;
@@ -79,14 +96,19 @@ function startWorldCombatSubscription() {
       return;
     }
 
-    if (event.sourceEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
-    const recentAttack = getMostRecentAttackOnTarget(event.entityId, event.atMs, 3_500);
-    if (!recentAttack || recentAttack.attackerId !== LOCAL_WORLD_HERO_ENTITY_ID || recentAttack.targetKind !== 'hero') return;
+    if (!localHeroParticipatedInHeroKill(event.entityId, event.atMs)) return;
+    const participationKey = `${event.entityId}:${event.atMs}`;
 
-    const killKey = `${event.entityId}:${event.atMs}`;
-    if (killKey === lastRecordedKillKey) return;
-    lastRecordedKillKey = killKey;
-    recordCombatHudStat('kills');
+    if (event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID) {
+      if (participationKey === lastRecordedKillKey) return;
+      lastRecordedKillKey = participationKey;
+      recordCombatHudStat('kills');
+      return;
+    }
+
+    if (participationKey === lastRecordedAssistKey) return;
+    lastRecordedAssistKey = participationKey;
+    recordCombatHudStat('assists');
   });
 }
 
