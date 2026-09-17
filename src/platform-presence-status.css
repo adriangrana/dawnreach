@@ -1,0 +1,123 @@
+/* Unified Dawnreach presence colors used by the friends rail and direct chat. */
+
+:root {
+  --dr-presence-match: #37b9f2;
+  --dr-presence-queue: #45c7f5;
+  --dr-presence-online: #69d86f;
+  --dr-presence-away: #e9b832;
+  --dr-presence-offline: #71808c;
+}
+
+/* FRIENDS rail status copy */
+.dr-home-right-rail .platform-social-friends button .platform-social-status,
+.platform-social-drawer .platform-social-status {
+  font-weight: 500 !important;
+  letter-spacing: .01em !important;
+  transition: color .16s ease !important;
+}
+
+.dr-home-right-rail .platform-social-friends button .platform-social-status.is-in_match,
+.platform-social-drawer .platform-social-status.is-in_match,
+.dr-home-chat-status.is-in_match {
+  color: var(--dr-presence-match) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button .platform-social-status.is-in_queue,
+.platform-social-drawer .platform-social-status.is-in_queue,
+.dr-home-chat-status.is-in_queue {
+  color: var(--dr-presence-queue) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button .platform-social-status.is-online,
+.platform-social-drawer .platform-social-status.is-online,
+.dr-home-chat-status.is-online {
+  color: var(--dr-presence-online) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button .platform-social-status.is-away,
+.platform-social-drawer .platform-social-status.is-away,
+.dr-home-chat-status.is-away {
+  color: var(--dr-presence-away) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button .platform-social-status.is-offline,
+.platform-social-drawer .platform-social-status.is-offline,
+.dr-home-chat-status.is-offline {
+  color: var(--dr-presence-offline) !important;
+}
+
+/* FRIENDS rail colored status dots */
+.dr-home-right-rail .platform-social-friends button > i {
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34) !important;
+  transition: background .16s ease, box-shadow .16s ease !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-in_match {
+  background: var(--dr-presence-match) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 8px rgba(55, 185, 242, .42) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-in_queue {
+  background: var(--dr-presence-queue) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 8px rgba(69, 199, 245, .40) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-online {
+  background: var(--dr-presence-online) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 8px rgba(105, 216, 111, .42) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-away {
+  background: var(--dr-presence-away) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 7px rgba(233, 184, 50, .36) !important;
+}
+
+.dr-home-right-rail .platform-social-friends button > i.is-offline {
+  background: var(--dr-presence-offline) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34) !important;
+}
+
+/* Direct-chat peer status */
+.dr-home-chat-status {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  font-size: 7px !important;
+  font-weight: 500 !important;
+}
+
+.dr-home-chat-status > i {
+  width: 6px !important;
+  height: 6px !important;
+  flex: 0 0 6px !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34) !important;
+}
+
+.dr-home-chat-status > i.is-in_match {
+  background: var(--dr-presence-match) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 7px rgba(55, 185, 242, .44) !important;
+}
+
+.dr-home-chat-status > i.is-in_queue {
+  background: var(--dr-presence-queue) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 7px rgba(69, 199, 245, .42) !important;
+}
+
+.dr-home-chat-status > i.is-online {
+  background: var(--dr-presence-online) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 7px rgba(105, 216, 111, .42) !important;
+}
+
+.dr-home-chat-status > i.is-away {
+  background: var(--dr-presence-away) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34), 0 0 7px rgba(233, 184, 50, .34) !important;
+}
+
+.dr-home-chat-status > i.is-offline {
+  background: var(--dr-presence-offline) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .34) !important;
+}
