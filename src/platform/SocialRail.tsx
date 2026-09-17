@@ -1,5 +1,5 @@
 import { Check, MessageCircle, Search, UserPlus, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   getDirectConversation,
   platformRealtime,
@@ -38,12 +38,19 @@ export function SocialRail({
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly PlatformUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchAttempted, setSearchAttempted] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<readonly DirectMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState('');
+  const searchSequence = useRef(0);
+
   const selected = useMemo(() => snapshot.friends.find(friend => friend.id === selectedId) ?? null, [snapshot.friends, selectedId]);
   const onlineIds = useMemo(() => new Set(online.map(user => user.id)), [online]);
+  const friendIds = useMemo(() => new Set(snapshot.friends.map(friend => friend.id)), [snapshot.friends]);
+  const outgoingIds = useMemo(() => new Set(snapshot.outgoing.map(request => request.toUserId)), [snapshot.outgoing]);
+  const incomingIds = useMemo(() => new Set(snapshot.incoming.map(request => request.fromUserId)), [snapshot.incoming]);
   const availableFriendCount = useMemo(
     () => snapshot.friends.filter(friend => resolveFriendPresence(friend, onlineIds).status !== 'offline').length,
     [snapshot.friends, onlineIds],
@@ -59,6 +66,42 @@ export function SocialRail({
     if (!selectedId || (incoming.fromUserId !== selectedId && incoming.toUserId !== selectedId)) return;
     setMessages(previous => previous.some(item => item.id === incoming.id) ? previous : [...previous, incoming]);
   }), [selectedId]);
+
+  useEffect(() => {
+    const term = query.trim();
+    const sequence = ++searchSequence.current;
+
+    if (term.length < 2) {
+      setResults([]);
+      setSearching(false);
+      setSearchAttempted(false);
+      return;
+    }
+
+    setSearching(true);
+    setSearchAttempted(false);
+    setNotice('');
+
+    const timer = window.setTimeout(() => {
+      void searchPlatformUsers(term)
+        .then(users => {
+          if (sequence !== searchSequence.current) return;
+          setResults(users);
+          setSearchAttempted(true);
+        })
+        .catch(error => {
+          if (sequence !== searchSequence.current) return;
+          setResults([]);
+          setSearchAttempted(true);
+          setNotice(error instanceof Error ? error.message : 'Search failed.');
+        })
+        .finally(() => {
+          if (sequence === searchSequence.current) setSearching(false);
+        });
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   const openConversation = async (userId: string) => {
     setSelectedId(userId);
@@ -77,17 +120,14 @@ export function SocialRail({
     void openConversation(userId);
   };
 
-  const search = async (event: FormEvent) => {
-    event.preventDefault();
-    if (query.trim().length < 2) return;
-    setNotice('');
-    try { setResults(await searchPlatformUsers(query)); }
-    catch (error) { setNotice(error instanceof Error ? error.message : 'Search failed.'); }
-  };
-
   const addFriend = async (userId: string) => {
-    try { await sendPlatformFriendRequest(userId); setResults(current => current.filter(user => user.id !== userId)); await refresh(); }
-    catch (error) { setNotice(error instanceof Error ? error.message : 'Could not send friend request.'); }
+    try {
+      await sendPlatformFriendRequest(userId);
+      setResults(current => current.filter(user => user.id !== userId));
+      await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not send friend request.');
+    }
   };
 
   const respondFriend = async (requestId: string, accept: boolean) => {
@@ -106,10 +146,52 @@ export function SocialRail({
   };
 
   return <aside className="platform-social-rail">
-    <header className="platform-social-rail-head"><div><Users /><span><strong>FRIENDS</strong><small>{availableFriendCount} online</small></span></div><span className="platform-social-live-dot" /></header>
-    <form className="platform-social-search" onSubmit={search}><Search /><input aria-label="Search player" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search player…" /><button aria-label="Search">↵</button></form>
+    <header className="platform-social-rail-head">
+      <div className="platform-social-head-main">
+        <span className="platform-social-head-icon"><Users /></span>
+        <span className="platform-social-head-copy"><small>SOCIAL</small><strong>FRIENDS</strong></span>
+      </div>
+      <div className="platform-social-head-summary" aria-label={`${availableFriendCount} of ${snapshot.friends.length} friends online`}>
+        <strong>{availableFriendCount}<span>/{snapshot.friends.length}</span></strong>
+        <small>ONLINE</small>
+        <i className="platform-social-live-dot" />
+      </div>
+    </header>
 
-    {results.length > 0 && <div className="platform-social-search-results">{results.map(user => <div key={user.id}><span className="platform-social-avatar">{user.username.slice(0, 2).toUpperCase()}</span><strong>{user.username}</strong><button type="button" onClick={() => void addFriend(user.id)}><UserPlus /></button></div>)}</div>}
+    <form className={`platform-social-search${query.trim().length >= 2 ? ' has-query' : ''}`} onSubmit={event => event.preventDefault()}>
+      <Search />
+      <input
+        aria-label="Search player"
+        value={query}
+        onChange={event => setQuery(event.target.value)}
+        placeholder="Search players…"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <button type="button" aria-label="Clear search" title="Clear search" disabled={!query} onClick={() => { setQuery(''); setResults([]); }}><X /></button>
+    </form>
+
+    {query.trim().length >= 2 && <div className="platform-social-search-results" aria-live="polite">
+      {searching && <p className="platform-social-search-state"><Search /><span>Searching players…</span></p>}
+      {!searching && searchAttempted && results.length === 0 && <p className="platform-social-search-state is-empty"><span>No players found for “{query.trim()}”.</span></p>}
+      {!searching && results.map(user => {
+        const isFriend = friendIds.has(user.id);
+        const outgoing = outgoingIds.has(user.id);
+        const incoming = incomingIds.has(user.id);
+        const isOnline = onlineIds.has(user.id);
+        return <div className="platform-social-search-result" key={user.id}>
+          <span className="platform-social-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
+          <span className="platform-social-search-copy"><strong>{user.username}</strong><small className={isOnline ? 'is-online' : 'is-offline'}><i />{isOnline ? 'Online' : 'Offline'}</small></span>
+          {isFriend
+            ? <button className="is-message" type="button" onClick={() => { selectConversation(user.id); setQuery(''); setResults([]); }}>MESSAGE</button>
+            : outgoing
+              ? <button className="is-pending" type="button" disabled>SENT</button>
+              : incoming
+                ? <button className="is-pending" type="button" disabled>REQUEST</button>
+                : <button className="is-add" type="button" onClick={() => void addFriend(user.id)}><UserPlus /> ADD</button>}
+        </div>;
+      })}
+    </div>}
 
     {(party.invites.length > 0 || snapshot.incoming.length > 0) && <section className="platform-social-requests"><h4>INVITES</h4>
       {party.invites.map(invite => <div key={invite.id} className="platform-social-request"><span className="platform-social-avatar is-party"><Users /></span><span><strong>{invite.from?.username ?? 'Player'}</strong><small>Party invite</small></span><button type="button" onClick={() => platformRealtime.send('party.accept', { inviteId: invite.id })}><Check /></button><button type="button" onClick={() => platformRealtime.send('party.decline', { inviteId: invite.id })}><X /></button></div>)}
