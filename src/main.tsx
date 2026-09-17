@@ -17,6 +17,7 @@ import { mountGameMenu } from './hud/gameMenu';
 import { mountGameMenuQuickKeys } from './hud/gameMenuQuickKeys';
 import { mountGameplayKeybindBridge } from './hud/gameplayKeybindBridge';
 import { mountHeroFunctionKeyControls } from './hud/heroFunctionKeyControls';
+import { mountInGameChat } from './hud/inGameChat';
 import { mountInventoryControls } from './hud/inventoryControls';
 import { mountMatchEventFeed } from './hud/matchEventFeed';
 import { mountMinimapDragCamera } from './hud/minimapDragCamera';
@@ -42,6 +43,7 @@ import './game-menu-hotkeys.css';
 import './match-pause.css';
 import './match-end.css';
 import './match-event-feed.css';
+import './in-game-chat.css';
 import './settings-runtime.css';
 import './scoreboard.css';
 import './ping-wheel.css';
@@ -98,45 +100,23 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
-// Match events must exist before any terminal consumer. Raw world deaths are converted once into
-// semantic events, then the result screen, feed and future multiplayer/history consume the same bus.
 const disposeMatchEventRuntime = installMatchEventRuntime();
-// Register terminal-state protection before the pause controller. If the match has ended, its
-// capture listener owns the menu's resume action before pause can ever restart simulation.
 const disposeMatchEndRuntime = installMatchEndRuntime();
-// Install the match-wide pause clock before any Three.js Clock is constructed. F10 itself does
-// not pause; only an explicit pause request freezes simulation time for the entire match.
 const disposeMatchPauseRuntime = installMatchPauseRuntime();
-// Install renderer/lighting scheduling before the Dawnreach scene is constructed.
 const disposeRuntimePerformanceTuning = installRuntimePerformanceTuning();
-// Destructive world-state changes can happen between scheduled shadow passes. Track the main
-// renderer and force a short refresh burst after deaths so removed structures cannot leave a
-// stale silhouette in the reused shadow atlas.
 const disposeShadowInvalidationBridge = installShadowInvalidationBridge();
-// Three r180 creates render as an instance method. Install the Alden bootstrap before React
-// constructs the game renderer so live ability effects bind to the actual renderer instance.
 const disposeAldenWorldAbilityRuntime = mountAldenWorldAbilityBootstrap();
 
-// The Three.js world is intentionally mounted once. React StrictMode's development-only
-// effect replay would otherwise build and warm the complete Dawnreach scene twice in parallel,
-// doubling startup work and transient GPU/CPU pressure in tauri:dev.
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
 const disposeMatchEventFeed = mountMatchEventFeed();
-
-// Alden's audio listens to successful ability cooldown transitions and authoritative world
-// attack-impact events, so mount it once after the HUD exists and before gameplay input starts.
+// Mount chat before gameplay key handlers. Its capture listeners own keyboard/pointer input while
+// composing so typing can never leak Q/W/E/R/A/S/H or world-click orders into the simulation.
+const disposeInGameChat = mountInGameChat();
 const disposeAldenAudioRuntime = mountAldenAudioRuntime();
 
-// Main-menu accelerators must be registered before mountGameMenu because the menu itself owns
-// gameplay keys such as A/S/H while open. The accelerator layer converts those keys into menu
-// actions first, then the regular menu/input guards keep them from leaking into gameplay.
 const disposeGameMenuQuickKeys = mountGameMenuQuickKeys();
-// Register the F10 menu before gameplay hotkeys so an open menu owns keyboard input and
-// never leaks commands to the world underneath it.
 const disposeGameMenu = mountGameMenu();
-// Range sliders are handled numerically by the menu's input path. Block their redundant native
-// change event from being reinterpreted as text before settings persistence sees the value.
 const disposeSettingsSliderValueGuard = mountSettingsSliderValueGuard();
 const disposeSettingsAvailability = mountSettingsAvailability();
 const disposeAbilityRangeSettingsGuard = mountAbilityRangeSettingsGuard();
@@ -162,6 +142,7 @@ void Promise.all([waitForDawnreachReady(), portalWarmup]).then(dismissBootSplash
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     disposeAldenAudioRuntime();
+    disposeInGameChat();
     disposeMatchEventFeed();
     disposeAldenWorldAbilityRuntime();
     disposeShadowInvalidationBridge();
