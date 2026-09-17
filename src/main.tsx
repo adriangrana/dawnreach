@@ -25,6 +25,9 @@ import './ping-presentation-enhancements.css';
 import './platform-shell.css';
 import './platform-party.css';
 import './platform-matchmaking.css';
+import './platform-home.css';
+import './platform-social-rail.css';
+import './platform-lobby.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
