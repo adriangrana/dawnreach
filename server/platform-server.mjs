@@ -19,16 +19,46 @@ export function createPlatformServer(options = {}) {
   const rateLimiter = new AuthRateLimiter(config.auth);
   const peersByUser = new Map();
 
+  function isOnline(userId) {
+    return peersByUser.has(userId);
+  }
+
   function publicPresence() {
     return [...peersByUser.keys()].map(id => store.publicUser(store.getUser(id))).filter(Boolean);
+  }
+
+  function send(userId, payload) {
+    peersByUser.get(userId)?.send(payload);
   }
 
   function broadcast(payload) {
     for (const peer of peersByUser.values()) peer.send(payload);
   }
 
+  function socialSnapshot(userId) {
+    const incoming = store.incomingFriendRequests(userId).map(request => ({
+      ...request,
+      user: store.publicUser(store.getUser(request.fromUserId)),
+    }));
+    const outgoing = store.outgoingFriendRequests(userId).map(request => ({
+      ...request,
+      user: store.publicUser(store.getUser(request.toUserId)),
+    }));
+    const friends = store.friendsOf(userId).map(friend => ({
+      ...friend,
+      status: isOnline(friend.id) ? 'online' : 'offline',
+      unread: store.unreadCount(userId, friend.id),
+    })).sort((a, b) => Number(b.status === 'online') - Number(a.status === 'online') || a.username.localeCompare(b.username));
+    return { friends, incoming, outgoing };
+  }
+
+  function pushSocial(userIds) {
+    for (const userId of new Set(userIds)) send(userId, { type: 'social.snapshot', ...socialSnapshot(userId) });
+  }
+
   function broadcastPresence() {
     broadcast({ type: 'presence.snapshot', users: publicPresence() });
+    pushSocial([...peersByUser.keys()]);
   }
 
   function cors(req, res) {
@@ -38,7 +68,7 @@ export function createPlatformServer(options = {}) {
     }
     res.setHeader('vary', 'origin');
     res.setHeader('access-control-allow-headers', 'content-type, authorization');
-    res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+    res.setHeader('access-control-allow-methods', 'GET,POST,DELETE,OPTIONS');
     res.setHeader('x-content-type-options', 'nosniff');
   }
 
@@ -125,30 +155,76 @@ export function createPlatformServer(options = {}) {
         const issued = sessions.issue(user.id, Date.now(), sessionLabel(req));
         return json(req, res, 200, { token: issued.token, user });
       }
+
+      const token = bearerToken(req);
+      const user = token ? userFromToken(token) : null;
       if (req.method === 'GET' && url.pathname === '/api/me') {
-        const user = userFromToken(bearerToken(req));
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });
         return json(req, res, 200, { user });
       }
       if (req.method === 'GET' && url.pathname === '/api/auth/sessions') {
-        const token = bearerToken(req);
-        const user = userFromToken(token);
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });
         return json(req, res, 200, { sessions: sessions.sessionsFor(user.id, token) });
       }
       if (req.method === 'POST' && url.pathname === '/api/logout') {
-        const token = bearerToken(req);
-        const user = userFromToken(token);
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });
         sessions.revoke(token);
         const peer = peersByUser.get(user.id);
         if (peer) peer.close();
         return json(req, res, 200, { ok: true });
       }
+      if (req.method === 'GET' && url.pathname === '/api/social/snapshot') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        return json(req, res, 200, socialSnapshot(user.id));
+      }
+      if (req.method === 'GET' && url.pathname === '/api/users/search') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        return json(req, res, 200, { users: store.searchUsers(url.searchParams.get('q') || '', user.id) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/friends/request') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        const body = await readJson(req);
+        const request = store.createFriendRequest(user.id, String(body.userId || ''));
+        pushSocial([request.fromUserId, request.toUserId]);
+        return json(req, res, 201, { request });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/friends/respond') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        const body = await readJson(req);
+        const request = store.respondFriendRequest(user.id, String(body.requestId || ''), Boolean(body.accept));
+        pushSocial([request.fromUserId, request.toUserId]);
+        return json(req, res, 200, { ok: true });
+      }
+      if (req.method === 'DELETE' && url.pathname === '/api/friends') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        const friendUserId = String(url.searchParams.get('userId') || '');
+        const removed = store.removeFriendship(user.id, friendUserId);
+        if (removed) pushSocial([user.id, friendUserId]);
+        return json(req, res, 200, { ok: true, removed });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/messages') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        const friendUserId = String(url.searchParams.get('userId') || '');
+        const messages = store.conversation(user.id, friendUserId);
+        store.markConversationRead(user.id, friendUserId);
+        pushSocial([user.id]);
+        return json(req, res, 200, { messages });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/messages') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        const body = await readJson(req);
+        const friendUserId = String(body.userId || '');
+        const message = store.sendDirectMessage(user.id, friendUserId, body.text);
+        send(friendUserId, { type: 'direct.message', message, user: store.publicUser(store.getUser(user.id)) });
+        send(user.id, { type: 'direct.message', message, user: store.publicUser(store.getUser(friendUserId)) });
+        pushSocial([user.id, friendUserId]);
+        return json(req, res, 201, { message });
+      }
       return json(req, res, 404, { error: 'Not found' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected server error';
-      const status = /registrado|contraseña|nombre de usuario|caracteres|tipos/i.test(message) ? 400 : 500;
+      const clientFault = /registrado|contraseña|nombre de usuario|caracteres|tipos|solicitud|amistad|amigos|mensaje|usuario solicitado|lista de amigos/i.test(message);
+      const status = clientFault ? 400 : 500;
       if (status === 500) logger.error?.('[platform] request failed', error);
       return json(req, res, status, { error: status === 500 ? 'Error interno del servidor.' : message });
     }
@@ -161,8 +237,7 @@ export function createPlatformServer(options = {}) {
       const token = String(url.searchParams.get('token') || '');
       const user = userFromToken(token);
       if (!user) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-        return socket.destroy();
+        return socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       }
       const existing = peersByUser.get(user.id);
       if (existing) existing.close();
@@ -173,7 +248,7 @@ export function createPlatformServer(options = {}) {
         if (peersByUser.get(user.id) === peer) peersByUser.delete(user.id);
         broadcastPresence();
       };
-      peer.send({ type: 'session.ready', user, presence: publicPresence() });
+      peer.send({ type: 'session.ready', user, presence: publicPresence(), social: socialSnapshot(user.id) });
       broadcastPresence();
     } catch {
       socket.destroy();
