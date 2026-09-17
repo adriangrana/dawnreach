@@ -24,12 +24,16 @@ export function SocialRail({
   snapshot,
   party,
   refresh,
+  activeConversationId = null,
+  onOpenConversation,
 }: {
   me: PlatformUser;
   online: readonly PlatformUser[];
   snapshot: SocialSnapshot;
   party: PartySnapshot;
   refresh: () => Promise<void>;
+  activeConversationId?: string | null;
+  onOpenConversation?: (userId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly PlatformUser[]>([]);
@@ -39,6 +43,10 @@ export function SocialRail({
   const [notice, setNotice] = useState('');
   const selected = useMemo(() => snapshot.friends.find(friend => friend.id === selectedId) ?? null, [snapshot.friends, selectedId]);
   const onlineIds = useMemo(() => new Set(online.map(user => user.id)), [online]);
+
+  useEffect(() => {
+    if (onOpenConversation) setSelectedId(null);
+  }, [onOpenConversation]);
 
   useEffect(() => platformRealtime.subscribe(event => {
     if (eventType(event) !== 'direct.message' || !('message' in event)) return;
@@ -52,6 +60,16 @@ export function SocialRail({
     setNotice('');
     try { setMessages(await getDirectConversation(userId)); await refresh(); }
     catch (error) { setNotice(error instanceof Error ? error.message : 'Could not load the conversation.'); }
+  };
+
+  const selectConversation = (userId: string) => {
+    setNotice('');
+    if (onOpenConversation) {
+      setSelectedId(null);
+      onOpenConversation(userId);
+      return;
+    }
+    void openConversation(userId);
   };
 
   const search = async (event: FormEvent) => {
@@ -93,7 +111,10 @@ export function SocialRail({
       {snapshot.incoming.map(request => <div key={request.id} className="platform-social-request"><span className="platform-social-avatar">{request.user?.username.slice(0, 2).toUpperCase() ?? 'DR'}</span><span><strong>{request.user?.username ?? 'Player'}</strong><small>Friend request</small></span><button type="button" onClick={() => void respondFriend(request.id, true)}><Check /></button><button type="button" onClick={() => void respondFriend(request.id, false)}><X /></button></div>)}
     </section>}
 
-    <section className="platform-social-friends"><h4>FRIENDS · {snapshot.friends.length}</h4><div>{snapshot.friends.map(friend => <button type="button" key={friend.id} className={selectedId === friend.id ? 'is-selected' : ''} onClick={() => void openConversation(friend.id)}><span className="platform-social-avatar">{friend.username.slice(0, 2).toUpperCase()}</span><span><strong>{friend.username}</strong><small>{onlineIds.has(friend.id) ? 'Online' : 'Offline'}</small></span><i className={onlineIds.has(friend.id) ? 'is-online' : ''} />{friend.unread > 0 && <em>{friend.unread}</em>}</button>)}{snapshot.friends.length === 0 && <p className="platform-social-empty">Search for players to start your friends list.</p>}</div></section>
+    <section className="platform-social-friends"><h4>FRIENDS · {snapshot.friends.length}</h4><div>{snapshot.friends.map(friend => {
+      const isActive = selectedId === friend.id || activeConversationId === friend.id;
+      return <button type="button" key={friend.id} className={isActive ? 'is-selected' : ''} onClick={() => selectConversation(friend.id)}><span className="platform-social-avatar">{friend.username.slice(0, 2).toUpperCase()}</span><span><strong>{friend.username}</strong><small>{onlineIds.has(friend.id) ? 'Online' : 'Offline'}</small></span><i className={onlineIds.has(friend.id) ? 'is-online' : ''} />{friend.unread > 0 && <em>{friend.unread}</em>}</button>;
+    })}{snapshot.friends.length === 0 && <p className="platform-social-empty">Search for players to start your friends list.</p>}</div></section>
 
     {snapshot.outgoing.length > 0 && <section className="platform-social-pending"><h4>PENDING</h4>{snapshot.outgoing.map(request => <p key={request.id}>{request.user?.username ?? 'Player'}</p>)}</section>}
 
