@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { LogIn, Search, Shield, Swords, UserPlus, Users } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
+import { PartyBar } from './PartyBar';
 import {
   getAuthToken,
   getCurrentPlatformUser,
@@ -16,6 +17,7 @@ import {
   sendPlatformDirectMessage,
   sendPlatformFriendRequest,
   type DirectMessage,
+  type PartySnapshot,
   type PlatformRealtimeEvent,
   type PlatformUser,
   type SocialSnapshot,
@@ -24,6 +26,7 @@ import {
 const LOADING_SPLASH = '/assets/images/dawnreach_loading_splash.webp';
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const EMPTY_SOCIAL: SocialSnapshot = { friends: [], incoming: [], outgoing: [] };
+const EMPTY_PARTY: PartySnapshot = { party: null, invites: [] };
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
@@ -81,7 +84,7 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
   </main>;
 }
 
-function SocialSurface({ currentUser, snapshot, refresh }: { currentUser: PlatformUser; snapshot: SocialSnapshot; refresh: () => Promise<void> }) {
+function SocialSurface({ currentUser, snapshot, party, refresh }: { currentUser: PlatformUser; snapshot: SocialSnapshot; party: PartySnapshot; refresh: () => Promise<void> }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<readonly PlatformUser[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -127,6 +130,7 @@ function SocialSurface({ currentUser, snapshot, refresh }: { currentUser: Platfo
     <aside className="platform-social-sidebar">
       <form className="platform-user-search" onSubmit={search}><Search /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar jugador…" minLength={2} /><button>Buscar</button></form>
       {results.length > 0 && <div className="platform-search-results">{results.map(user => <div key={user.id}><span>{user.username}</span><button onClick={() => void requestFriend(user.id)}>Añadir</button></div>)}</div>}
+      {party.invites.length > 0 && <div className="platform-party-invites"><h4>INVITACIONES DE GRUPO</h4>{party.invites.map(invite => <div className="platform-party-invite-row" key={invite.id}><span><strong>{invite.from?.username ?? 'Jugador'}</strong><small>Te invita a su grupo</small></span><button type="button" onClick={() => platformRealtime.send('party.accept', { inviteId: invite.id })}>Aceptar</button><button type="button" onClick={() => platformRealtime.send('party.decline', { inviteId: invite.id })}>Rechazar</button></div>)}</div>}
       {snapshot.incoming.length > 0 && <div className="platform-social-group"><h3>Solicitudes</h3>{snapshot.incoming.map(request => <div className="platform-request-row" key={request.id}><span>{request.user?.username ?? 'Jugador'}</span><div><button onClick={() => void respond(request.id, true)}>Aceptar</button><button onClick={() => void respond(request.id, false)}>×</button></div></div>)}</div>}
       <div className="platform-social-group"><h3>Amigos · {snapshot.friends.length}</h3>{snapshot.friends.length === 0 && <p>Aún no tienes amigos añadidos.</p>}{snapshot.friends.map(friend => <button className={`platform-friend-row${selectedId === friend.id ? ' is-selected' : ''}`} key={friend.id} onClick={() => void loadConversation(friend.id)}><span className={`platform-friend-dot is-${friend.status}`} /><strong>{friend.username}</strong>{friend.unread > 0 && <em>{friend.unread}</em>}</button>)}</div>
       {snapshot.outgoing.length > 0 && <div className="platform-social-group platform-social-pending"><h3>Pendientes</h3>{snapshot.outgoing.map(request => <p key={request.id}>{request.user?.username ?? 'Jugador'}</p>)}</div>}
@@ -142,7 +146,9 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
   const [section, setSection] = useState<HomeSection>('play');
   const [online, setOnline] = useState<readonly PlatformUser[]>([user]);
   const [social, setSocial] = useState<SocialSnapshot>(EMPTY_SOCIAL);
+  const [party, setParty] = useState<PartySnapshot>(EMPTY_PARTY);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [notice, setNotice] = useState('');
   const refreshSocial = async () => { setSocial(await getSocialSnapshot()); };
 
   useEffect(() => {
@@ -151,10 +157,14 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
       const type = eventType(event);
       if (type === 'presence.snapshot' && 'users' in event && Array.isArray(event.users)) setOnline(event.users as readonly PlatformUser[]);
       if (type === 'social.snapshot' && 'friends' in event && 'incoming' in event && 'outgoing' in event) setSocial(event as unknown as SocialSnapshot);
+      if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({ party: event.party as PartySnapshot['party'], invites: event.invites as PartySnapshot['invites'] });
+      if (type === 'party.invite') setNotice('Tienes una nueva invitación de grupo.');
+      if (type === 'error' && 'message' in event) setNotice(String(event.message || 'No se pudo completar la acción.'));
       if (type === 'session.ready') {
         setRealtime('online');
         if ('presence' in event && Array.isArray(event.presence)) setOnline(event.presence as readonly PlatformUser[]);
         if ('social' in event && event.social) setSocial(event.social as SocialSnapshot);
+        if ('party' in event && event.party) setParty(event.party as PartySnapshot);
       }
     });
     let socket: WebSocket | null = null;
@@ -164,8 +174,8 @@ function HomeSurface({ user, onPlay, onLogout }: { user: PlatformUser; onPlay: (
   }, [user.id]);
 
   return <main className="platform-home-surface">
-    <header className="platform-topbar"><div className="platform-wordmark"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong></div><nav aria-label="Navegación principal"><button className={section === 'play' ? 'is-active' : ''} onClick={() => setSection('play')}>JUGAR</button><button className={section === 'social' ? 'is-active' : ''} onClick={() => setSection('social')}>SOCIAL{social.incoming.length > 0 && <em>{social.incoming.length}</em>}</button><button disabled>RANKING</button><button disabled>PERFIL</button></nav><div className="platform-account"><span className={`platform-presence is-${realtime}`} /><strong>{user.username}</strong><button onClick={onLogout}>Salir</button></div></header>
-    {section === 'play' ? <section className="platform-play-hero"><div className="platform-play-copy"><p className="platform-eyebrow">FASE A · PLATAFORMA NATIVA</p><h2>Elige cómo entrar en batalla</h2><p>La cuenta y presencia realtime ya pertenecen a Dawnreach. Matchmaking, party y salas se conectarán sobre esta misma sesión.</p><button className="platform-primary-button platform-play-button" onClick={onPlay}><Swords /> Entrar en partida local</button></div><aside className="platform-online-card"><div><Users /><span><strong>{online.length}</strong> conectados</span></div><small>{realtime === 'online' ? 'Servidor realtime conectado' : realtime === 'connecting' ? 'Conectando realtime…' : 'Realtime desconectado'}</small><ul>{online.slice(0, 6).map(player => <li key={player.id}><span />{player.username}</li>)}</ul></aside></section> : <SocialSurface currentUser={user} snapshot={social} refresh={refreshSocial} />}
+    <header className="platform-topbar"><div className="platform-wordmark"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong></div><nav aria-label="Navegación principal"><button className={section === 'play' ? 'is-active' : ''} onClick={() => setSection('play')}>JUGAR</button><button className={section === 'social' ? 'is-active' : ''} onClick={() => setSection('social')}>SOCIAL{social.incoming.length + party.invites.length > 0 && <em>{social.incoming.length + party.invites.length}</em>}</button><button disabled>RANKING</button><button disabled>PERFIL</button></nav><div className="platform-account"><span className={`platform-presence is-${realtime}`} /><strong>{user.username}</strong><button onClick={onLogout}>Salir</button></div></header>
+    {section === 'play' ? <section className="platform-play-hero"><div className="platform-play-copy"><p className="platform-eyebrow">PLATAFORMA DAWNREACH · ARQUITECTURA TCL</p><h2>Elige cómo entrar en batalla</h2><p>Cuenta, presencia, social y grupos comparten ya el mismo flujo realtime que TCL. El matchmaking se conectará sobre esta party sin crear una segunda arquitectura.</p><button className="platform-primary-button platform-play-button" onClick={onPlay}><Swords /> Entrar en partida local</button><PartyBar me={user} snapshot={party} />{notice && <p className="platform-auth-message" role="status">{notice}</p>}</div><aside className="platform-online-card"><div><Users /><span><strong>{online.length}</strong> conectados</span></div><small>{realtime === 'online' ? 'Servidor realtime conectado' : realtime === 'connecting' ? 'Conectando realtime…' : 'Realtime desconectado'}</small><ul>{online.slice(0, 6).map(player => <li key={player.id}><span />{player.username}</li>)}</ul></aside></section> : <SocialSurface currentUser={user} snapshot={social} party={party} refresh={refreshSocial} />}
   </main>;
 }
 

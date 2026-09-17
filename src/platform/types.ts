@@ -46,6 +46,29 @@ export type DirectMessage = Readonly<{
   readAt: string | null;
 }>;
 
+export type PlatformParty = Readonly<{
+  id: string;
+  code: string;
+  leaderId: string;
+  members: readonly PlatformUser[];
+  createdAt: string;
+}>;
+
+export type PlatformPartyInvite = Readonly<{
+  id: string;
+  partyId: string;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: string;
+  from: PlatformUser | null;
+  party?: PlatformParty;
+}>;
+
+export type PartySnapshot = Readonly<{
+  party: PlatformParty | null;
+  invites: readonly PlatformPartyInvite[];
+}>;
+
 export type PresenceSnapshot = Readonly<{
   type: 'presence.snapshot';
   users: readonly PlatformUser[];
@@ -56,6 +79,7 @@ export type SessionReadyEvent = Readonly<{
   user: PlatformUser;
   presence: readonly PlatformUser[];
   social?: SocialSnapshot;
+  party?: PartySnapshot;
 }>;
 
 export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
@@ -64,10 +88,17 @@ export type DirectMessageEvent = Readonly<{
   message: DirectMessage;
   user: PlatformUser | null;
 }>;
+export type PartySnapshotEvent = PartySnapshot & Readonly<{ type: 'party.snapshot' }>;
+export type PartyInviteEvent = Readonly<{
+  type: 'party.invite';
+  invite: PlatformPartyInvite;
+}>;
 
 export type PlatformRealtimeEvent =
   | PresenceSnapshot
   | SessionReadyEvent
   | SocialSnapshotEvent
   | DirectMessageEvent
+  | PartySnapshotEvent
+  | PartyInviteEvent
   | Readonly<Record<string, unknown>>;

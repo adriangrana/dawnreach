@@ -8,6 +8,7 @@ import { SessionManager } from './auth/session-manager.mjs';
 import { validatePassword } from './auth/password-policy.mjs';
 import { hashPassword } from './security.mjs';
 import { PlatformStore } from './store.mjs';
+import { PartyManager } from './parties.mjs';
 import { acceptWebSocket } from './websocket.mjs';
 
 export function createPlatformServer(options = {}) {
@@ -31,9 +32,17 @@ export function createPlatformServer(options = {}) {
     peersByUser.get(userId)?.send(payload);
   }
 
-  function broadcast(payload) {
-    for (const peer of peersByUser.values()) peer.send(payload);
+  function broadcast(payload, userIds) {
+    const targets = userIds
+      ? userIds.map(userId => peersByUser.get(userId)).filter(Boolean)
+      : [...peersByUser.values()];
+    for (const peer of targets) peer.send(payload);
   }
+
+  const parties = new PartyManager({
+    store,
+    onEvent: (event, userIds) => broadcast(event, userIds),
+  });
 
   function socialSnapshot(userId) {
     const incoming = store.incomingFriendRequests(userId).map(request => ({
@@ -244,11 +253,29 @@ export function createPlatformServer(options = {}) {
       const peer = acceptWebSocket(req, socket, user.id);
       if (!peer) return socket.destroy();
       peersByUser.set(user.id, peer);
+      peer.onMessage = message => {
+        try {
+          const type = String(message?.type || '');
+          if (type === 'party.create') parties.create(user);
+          else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
+          else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
+          else if (type === 'party.decline') parties.decline(user.id, String(message.inviteId || ''));
+          else if (type === 'party.leave') parties.leave(user.id);
+        } catch (error) {
+          peer.send({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo actualizar el grupo.' });
+        }
+      };
       peer.onClose = () => {
         if (peersByUser.get(user.id) === peer) peersByUser.delete(user.id);
         broadcastPresence();
       };
-      peer.send({ type: 'session.ready', user, presence: publicPresence(), social: socialSnapshot(user.id) });
+      peer.send({
+        type: 'session.ready',
+        user,
+        presence: publicPresence(),
+        social: socialSnapshot(user.id),
+        party: parties.snapshotFor(user.id),
+      });
       broadcastPresence();
     } catch {
       socket.destroy();
@@ -276,5 +303,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, start, close };
+  return { config, server, store, sessions, parties, start, close };
 }

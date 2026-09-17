@@ -23,6 +23,7 @@ import './scoreboard.css';
 import './ping-wheel.css';
 import './ping-presentation-enhancements.css';
 import './platform-shell.css';
+import './platform-party.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;

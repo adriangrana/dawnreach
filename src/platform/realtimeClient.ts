@@ -40,6 +40,13 @@ export class PlatformRealtimeClient {
     return socket;
   }
 
+  send(type: string, data: Record<string, unknown> = {}) {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify({ type, ...data }));
+    return true;
+  }
+
   disconnect() {
     const socket = this.socket;
     this.socket = null;
