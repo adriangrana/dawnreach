@@ -1,0 +1,280 @@
+/* Final HOME party + chat interaction polish. Loaded last on purpose. */
+
+/* =========================================================
+   PARTY CARD
+   ========================================================= */
+
+.dr-home-party-card {
+  position: relative !important;
+  overflow: hidden !important;
+  padding: 13px 13px 12px !important;
+  border: 1px solid rgba(105, 141, 161, .30) !important;
+  background:
+    radial-gradient(ellipse at 50% -20%, rgba(52, 96, 119, .15), transparent 48%),
+    linear-gradient(180deg, rgba(8, 22, 32, .94), rgba(4, 13, 20, .985)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    inset 0 0 30px rgba(0,0,0,.15),
+    0 10px 26px rgba(0,0,0,.18) !important;
+}
+
+.dr-home-party-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 13px;
+  right: 13px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(215,181,94,.48), transparent);
+}
+
+.dr-home-party-card > header {
+  height: 26px !important;
+  min-height: 26px !important;
+  margin: 0 0 9px !important;
+  padding: 0 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border: 0 !important;
+}
+
+.dr-home-party-card > header strong {
+  color: #e3e8e6 !important;
+  font-family: "Segoe UI", Arial, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .13em !important;
+  line-height: 1 !important;
+  text-shadow: 0 1px 7px rgba(0,0,0,.55) !important;
+}
+
+.dr-home-party-card > header span {
+  min-width: 31px !important;
+  height: 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid rgba(100, 139, 160, .20) !important;
+  background: rgba(4, 13, 20, .66) !important;
+  color: #91a8b4 !important;
+  font: 700 9px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .04em !important;
+}
+
+.dr-home-party-slots {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  margin: 0 0 10px !important;
+}
+
+.dr-home-party-slots > span {
+  position: relative !important;
+  isolation: isolate !important;
+  height: 52px !important;
+  min-width: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(82, 120, 142, .31) !important;
+  background:
+    linear-gradient(180deg, rgba(16, 38, 51, .86), rgba(7, 22, 31, .96)) !important;
+  color: #58798b !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.022),
+    inset 0 -10px 20px rgba(0,0,0,.10) !important;
+}
+
+.dr-home-party-slots > span::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  pointer-events: none;
+  border: 1px solid rgba(121, 158, 176, .06);
+}
+
+.dr-home-party-slots > span:not(.is-filled) > svg {
+  width: 16px !important;
+  height: 16px !important;
+  stroke-width: 1.35 !important;
+  color: #557487 !important;
+  opacity: .84 !important;
+}
+
+.dr-home-party-slots > span.is-filled {
+  border-color: rgba(211, 180, 93, .58) !important;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(72, 137, 173, .22), transparent 48%),
+    linear-gradient(180deg, rgba(18, 47, 64, .98), rgba(7, 23, 33, .99)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    inset 0 0 18px rgba(38,105,137,.10),
+    0 0 12px rgba(205,171,83,.06) !important;
+}
+
+.dr-home-party-slots b {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(102, 181, 215, .45) !important;
+  border-radius: 50% !important;
+  background:
+    radial-gradient(circle at 38% 28%, #315e79 0%, #183b50 48%, #0e2636 100%) !important;
+  color: #eef5f5 !important;
+  font: 700 8px/1 "Segoe UI", Arial, sans-serif !important;
+  box-shadow:
+    0 0 0 2px rgba(4,15,22,.72),
+    0 0 12px rgba(70,157,196,.12) !important;
+}
+
+.dr-home-party-slots > span.is-filled > svg {
+  position: absolute !important;
+  top: 3px !important;
+  right: 3px !important;
+  width: 11px !important;
+  height: 11px !important;
+  padding: 1px !important;
+  border-radius: 50% !important;
+  background: rgba(8, 20, 27, .88) !important;
+  color: #e0bc57 !important;
+  filter: drop-shadow(0 0 4px rgba(224,188,87,.25)) !important;
+}
+
+.dr-home-party-main {
+  position: relative !important;
+  width: 100% !important;
+  height: 38px !important;
+  border: 1px solid rgba(92, 158, 188, .52) !important;
+  background:
+    linear-gradient(180deg, rgba(27, 72, 96, .90), rgba(13, 47, 66, .96)) !important;
+  color: #e2eef2 !important;
+  font: 800 9px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .075em !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,.48) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(181, 225, 242, .08),
+    inset 0 -1px 0 rgba(0,0,0,.16),
+    0 4px 12px rgba(0,0,0,.16) !important;
+}
+
+.dr-home-party-main::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(221,190,105,.48), transparent);
+  pointer-events: none;
+}
+
+.dr-home-party-main:hover {
+  border-color: rgba(126, 195, 224, .74) !important;
+  background:
+    linear-gradient(180deg, rgba(34, 89, 117, .96), rgba(15, 56, 77, 1)) !important;
+  color: #f3fbfd !important;
+}
+
+.dr-home-party-invite {
+  height: 38px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 72px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(90, 139, 163, .34) !important;
+  background: rgba(2, 9, 14, .78) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.015) !important;
+}
+
+.dr-home-party-invite:focus-within {
+  border-color: rgba(110, 174, 203, .56) !important;
+  box-shadow: 0 0 0 1px rgba(63,133,163,.08), 0 0 12px rgba(40,109,140,.06) !important;
+}
+
+.dr-home-party-invite input {
+  min-width: 0 !important;
+  height: 100% !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: #dbe7ea !important;
+  font: 500 9px/1 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-home-party-invite input::placeholder {
+  color: #607784 !important;
+}
+
+.dr-home-party-invite button {
+  height: 100% !important;
+  border: 0 !important;
+  border-left: 1px solid rgba(94, 148, 172, .30) !important;
+  background: linear-gradient(180deg, rgba(28, 73, 97, .82), rgba(14, 48, 67, .94)) !important;
+  color: #d7eaf1 !important;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .07em !important;
+}
+
+.dr-home-party-invite button:hover {
+  background: linear-gradient(180deg, rgba(37, 92, 119, .94), rgba(17, 59, 80, 1)) !important;
+  color: #f3fbfd !important;
+}
+
+.dr-home-party-leave {
+  height: 22px !important;
+  margin: 6px 0 -3px auto !important;
+  padding: 0 3px !important;
+  display: block !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #6f828c !important;
+  font: 600 8px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .025em !important;
+  text-align: right !important;
+}
+
+.dr-home-party-leave:hover {
+  color: #cf8d7f !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+}
+
+/* Active party gets a slightly richer shell without becoming visually loud. */
+.dr-home-party-card:has(.dr-home-party-invite) {
+  border-color: rgba(122, 151, 162, .34) !important;
+  background:
+    radial-gradient(ellipse at 50% -18%, rgba(72, 111, 126, .16), transparent 48%),
+    linear-gradient(180deg, rgba(9, 23, 32, .96), rgba(4, 13, 20, .99)) !important;
+}
+
+/* =========================================================
+   CHAT EXPANSION
+   Only the composer input may expand the chat. Clicking tabs,
+   channel buttons, send, empty state, or the card itself must not.
+   ========================================================= */
+
+.dr-home-chat-card:focus-within,
+.dr-home-chat-card:focus {
+  height: 100% !important;
+  z-index: 2 !important;
+  border-color: rgba(105,154,179,.42) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.028),
+    inset 0 0 26px rgba(0,0,0,.20),
+    0 0 16px rgba(48,116,150,.06) !important;
+}
+
+.dr-home-chat-card:has(.dr-home-chat-compose input:focus) {
+  height: 200% !important;
+  z-index: 50 !important;
+  border-color: rgba(126,183,210,.58) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    inset 0 0 32px rgba(0,0,0,.22),
+    0 -18px 42px rgba(0,0,0,.34),
+    0 0 22px rgba(45,119,153,.12) !important;
+}
