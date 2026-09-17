@@ -1,133 +1,425 @@
+/* =========================================================
+   DAWNREACH - HOME MODE RIBBON
+   ========================================================= */
+
 .dr-home-mode-ribbon {
   left: clamp(56px, 3.4vw, 76px) !important;
   right: clamp(56px, 3.4vw, 76px) !important;
+
   height: 96px !important;
-  grid-template-columns: 1.08fr 1.08fr 1.12fr 1.08fr 1.08fr !important;
+
+  grid-template-columns:
+    1.08fr
+    1.08fr
+    1.12fr
+    1.08fr
+    1.08fr !important;
+
   align-items: end !important;
+
   overflow: visible !important;
-  filter: drop-shadow(0 -5px 16px rgba(0, 0, 0, .4)) !important;
+
+  filter:
+    drop-shadow(0 -5px 16px rgba(0, 0, 0, .40)) !important;
+
   margin-bottom: 30px !important;
 }
 
 
+/* =========================================================
+   BOTONES SECUNDARIOS - BASE
+   ========================================================= */
 
 .dr-home-mode-ribbon button {
   position: relative;
+
   height: 84px !important;
   margin-bottom: 7px !important;
+
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+
   gap: 20px !important;
-  border: 1px solid rgba(164, 145, 96, .38) !important;
-  border-right: 0 !important;
-  background: linear-gradient(180deg, rgba(9, 22, 32, .96), rgba(5, 15, 24, .985)) !important;
-  clip-path: polygon(0% 0%, 10% 100%, 100% 100%, 90% 0%) !important;
 
-  &:nth-last-child(even) {
-    margin-left: -30px !important;
-  }
+  /*
+   * Quitamos border real.
+   * El contorno se dibuja con SVG porque debe
+   * seguir exactamente las diagonales.
+   */
+  border: 0 !important;
 
-  &.invert {
-    clip-path: polygon(8% 0%, 0% 100%, 90% 100%, 100% 0%) !important;
-    margin-left: 0px !important;
-    margin-right: -30px !important;
-  }
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 25, 36, .97) 0%,
+      rgba(7, 19, 29, .985) 58%,
+      rgba(4, 14, 22, .995) 100%
+    ) !important;
 
-  box-shadow:inset 0 1px 0 rgba(255, 255, 255, .025),
-  inset 0 -1px 0 rgba(81, 111, 127, .12) !important;
+  clip-path: polygon(
+    0% 0%,
+    10% 100%,
+    100% 100%,
+    90% 0%
+  ) !important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    inset 0 -1px 0 rgba(81, 111, 127, .16) !important;
+
+  transition:
+    background .18s ease,
+    filter .18s ease;
 }
+
+
+/* =========================================================
+   SOLAPE ENTRE PIEZAS
+   ========================================================= */
+
+.dr-home-mode-ribbon button:nth-child(2) {
+  margin-left: -20px !important;
+}
+
+
+/* =========================================================
+   BOTONES SECUNDARIOS
+   El borde es una SILUETA dorada exterior,
+   no un stroke SVG.
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary) {
+  position: relative;
+  isolation: isolate;
+
+  height: 84px !important;
+  margin-bottom: 7px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  gap: 20px !important;
+
+  border: 0 !important;
+
+  /*
+   * El botón en sí NO pinta fondo.
+   * ::before = borde dorado
+   * ::after  = interior azul
+   */
+  background: transparent !important;
+
+  --dr-shape: polygon(
+    0% 0%,
+    90% 0%,
+    100% 100%,
+    10% 100%
+  );
+
+  clip-path: var(--dr-shape) !important;
+
+  overflow: hidden !important;
+
+  box-shadow: none !important;
+
+  transition:
+    filter .18s ease !important;
+}
+
+
+/* =========================================================
+   CAPA EXTERIOR = BORDE DORADO
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary)::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  z-index: 0;
+  pointer-events: none;
+
+  clip-path: var(--dr-shape);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(214, 187, 118, .70) 0%,
+      rgba(154, 126, 67, .56) 42%,
+      rgba(100, 81, 45, .72) 100%
+    );
+
+  opacity: .82;
+}
+
+
+/* =========================================================
+   CAPA INTERIOR = FONDO DEL BOTÓN
+
+   Al estar inset 1px, TODO el fondo queda
+   contenido dentro de la silueta dorada.
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary)::after {
+  content: "";
+
+  position: absolute;
+
+  inset: 1px;
+
+  z-index: 1;
+  pointer-events: none;
+
+  clip-path: var(--dr-shape);
+
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(53, 91, 111, .055) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(9, 23, 34, .985) 0%,
+      rgba(6, 18, 28, .992) 55%,
+      rgba(4, 13, 21, 1) 100%
+    );
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    inset 0 -1px 0 rgba(93, 126, 143, .12);
+}
+
+
+/* =========================================================
+   PRIMER BOTÓN - ENTRENAMIENTO
+   ========================================================= */
 
 .dr-home-mode-ribbon button:first-child {
-  /* clip-path:polygon(4% 0,95% 0,100% 50%,95% 100%,4% 100%,0 50%)!important; */
-  clip-path: polygon(10% 0%, 89% 0%, 100% 100%, 10% 100%, 0% 37%) !important;
+  --dr-shape: polygon(
+    10% 0%,
+    89% 0%,
+    100% 100%,
+    10% 100%,
+    0% 37%
+  );
 }
+
+
+/* =========================================================
+   SEGUNDO BOTÓN - NORMAL
+   ========================================================= */
+
+.dr-home-mode-ribbon button:nth-child(2) {
+  --dr-shape: polygon(
+    0% 0%,
+    90% 0%,
+    100% 100%,
+    10% 100%
+  );
+
+  margin-left: -20px !important;
+}
+
+
+/* =========================================================
+   RANKED
+   ========================================================= */
+
+.dr-home-mode-ribbon button.invert {
+  --dr-shape: polygon(
+    8% 0%,
+    100% 0%,
+    90% 100%,
+    0% 100%
+  );
+
+  margin-left: 0 !important;
+  margin-right: -20px !important;
+}
+
+
+/* =========================================================
+   ÚLTIMO BOTÓN - PERSONALIZADA
+   ========================================================= */
 
 .dr-home-mode-ribbon button:last-child {
-  border-right: 1px solid rgba(164, 145, 96, .38) !important;
-  clip-path: polygon(11% 0%, 90% 0%, 100% 37%, 87% 100%, 0% 100%) !important;
+  --dr-shape: polygon(
+    11% 0%,
+    90% 0%,
+    100% 37%,
+    87% 100%,
+    0% 100%
+  );
 }
 
-.dr-home-mode-ribbon button svg {
+
+/* =========================================================
+   ICONOS
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary) svg {
+  position: relative;
+  z-index: 3;
+
   width: 36px !important;
   height: 36px !important;
+
   stroke-width: 1.5 !important;
+
   color: #c5d9e4 !important;
+
   flex: 0 0 auto !important;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .45));
+
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, .45));
 }
 
-.dr-home-mode-ribbon button span {
+
+/* =========================================================
+   CONTENIDO
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary) span {
+  position: relative;
+  z-index: 3;
+
   display: grid !important;
   gap: 5px !important;
+
   text-align: left !important;
 }
 
-.dr-home-mode-ribbon button strong {
+.dr-home-mode-ribbon button:not(.is-primary) strong {
   font-family: "Segoe UI", Arial, sans-serif !important;
+
   font-size: 15px !important;
   font-weight: 500 !important;
+
   letter-spacing: .055em !important;
   line-height: 1 !important;
+
   color: #e7ecef !important;
 }
 
-.dr-home-mode-ribbon button small {
+.dr-home-mode-ribbon button:not(.is-primary) small {
   font-family: "Segoe UI", Arial, sans-serif !important;
+
   font-size: 10px !important;
   line-height: 1 !important;
+
   color: #8fa3b0 !important;
+}
+
+
+/* =========================================================
+   HOVER SECUNDARIOS
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary):hover {
+  background: transparent !important;
+
+  filter:
+    drop-shadow(0 0 3px rgba(193, 164, 95, .14))
+    !important;
+}
+
+
+/* Borde un poco más dorado en hover */
+
+.dr-home-mode-ribbon button:not(.is-primary):hover::before {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(228, 201, 130, .84) 0%,
+      rgba(176, 145, 76, .72) 45%,
+      rgba(116, 92, 47, .82) 100%
+    );
+
+  opacity: .94;
+}
+
+
+/* Interior ligeramente más claro */
+
+.dr-home-mode-ribbon button:not(.is-primary):hover::after {
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(79, 121, 143, .09) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(12, 30, 42, .99) 0%,
+      rgba(7, 21, 31, .995) 57%,
+      rgba(5, 15, 23, 1) 100%
+    );
+}
+
+
+/* Icono algo más vivo en hover */
+
+.dr-home-mode-ribbon button:not(.is-primary):hover svg {
+  color: #d9e8ee !important;
+
+  filter:
+    drop-shadow(0 0 4px rgba(166, 208, 225, .13))
+    drop-shadow(0 1px 1px rgba(0, 0, 0, .45));
 }
 
 /* =========================================================
    BOTÓN PRINCIPAL - JUGAR
    ========================================================= */
 
-.dr-home-mode-ribbon {
-  overflow: visible !important;
-}
-
 .dr-home-mode-ribbon button.is-primary {
   position: relative;
-  z-index: 3;
+  z-index: 5;
 
   height: 86px !important;
   margin-bottom: 7px !important;
 
   border: 0 !important;
+
   overflow: visible !important;
 
-  clip-path: polygon(7% 0,
-      93% 0,
-      100% 27%,
-      93% 100%,
-      7% 100%,
-      0 27%) !important;
+  clip-path: polygon(
+    7% 0,
+    93% 0,
+    100% 27%,
+    93% 100%,
+    7% 100%,
+    0 27%
+  ) !important;
 
-  /*
-   * IMPORTANTE:
-   * El SVG va PRIMERO porque la primera capa
-   * de background es la que queda arriba.
-   *
-   * Así dibujamos el borde exterior sin
-   * aclarar todo el interior.
-   */
+
+  /* =======================================================
+     CAPAS:
+     1. borde exterior
+     2. iluminación superior
+     3. fondo marrón oscuro
+     ======================================================= */
+
   background-image:
 
-    /* BORDE EXTERIOR */
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpolygon points='7,1 93,1 99,27 93,99 7,99 1,27' fill='none' stroke='%23efd080' stroke-opacity='.98' stroke-width='1.7' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"),
 
-    /* LUZ SUAVE CENTRAL */
-    radial-gradient(ellipse at 50% 0%,
+    radial-gradient(
+      ellipse at 50% 0%,
       rgba(240, 196, 92, .15) 0%,
       rgba(240, 196, 92, .07) 25%,
-      transparent 52%),
+      transparent 52%
+    ),
 
-    /* FONDO OSCURO */
-    linear-gradient(180deg,
+    linear-gradient(
+      180deg,
       rgba(89, 69, 42, .96) 0%,
       rgba(65, 51, 34, .97) 42%,
-      rgba(42, 35, 28, .99) 100%) !important;
+      rgba(42, 35, 28, .99) 100%
+    ) !important;
 
   background-size:
     100% 100%,
@@ -140,12 +432,15 @@
     inset 0 1px 0 rgba(255, 241, 196, .16),
     inset 0 -1px 0 rgba(221, 178, 73, .16) !important;
 
-  /*
-   * ESTE es el glow exterior.
-   * drop-shadow sigue el contorno del clip-path.
-   */
+
+  /* Glow exterior */
   filter:
-    drop-shadow(0 0 1px rgba(255, 249, 218, 1)) drop-shadow(0 0 3px rgba(255, 225, 139, .95)) drop-shadow(0 0 7px rgba(246, 202, 92, .72)) drop-shadow(0 0 14px rgba(236, 187, 65, .50)) drop-shadow(0 0 25px rgba(220, 163, 42, .28)) !important;
+    drop-shadow(0 0 1px rgba(255, 249, 218, 1))
+    drop-shadow(0 0 3px rgba(255, 225, 139, .95))
+    drop-shadow(0 0 7px rgba(246, 202, 92, .72))
+    drop-shadow(0 0 14px rgba(236, 187, 65, .50))
+    drop-shadow(0 0 25px rgba(220, 163, 42, .28))
+    !important;
 
   transition:
     filter .18s ease,
@@ -154,37 +449,37 @@
 
 
 /* =========================================================
-   LÍNEA INTERIOR
+   JUGAR - LÍNEA INTERIOR
+
+   Mantiene las cuatro esquinas paralelas
+   y mete un poco más hacia dentro las
+   dos puntas laterales.
    ========================================================= */
 
-.dr-home-mode-ribbon button.is-primary::before{
-  content:"";
-  position:absolute;
-  inset:0;
+.dr-home-mode-ribbon button.is-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
 
-  pointer-events:none;
-  z-index:1;
+  pointer-events: none;
+  z-index: 1;
 
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpolygon points='7.62,7.98 92.38,7.98 97.2,28.85 91.94,92.02 8.06,92.02 2.8,28.85' fill='none' stroke='%23d8b55e' stroke-opacity='.88' stroke-width='1.05' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpolygon points='7.62,7.98 92.38,7.98 97.4,28.85 91.94,92.02 8.06,92.02 2.6,28.85' fill='none' stroke='%23d8b55e' stroke-opacity='.88' stroke-width='1.05' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
 
-  background-size:100% 100%;
-  background-repeat:no-repeat;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
 
 
-/*
- * NO rellenamos el botón con ::after.
- * Lo dejamos libre para que no vuelva a aparecer
- * esa capa amarilla sobre todo el botón.
- */
+/* No necesitamos segunda capa */
 .dr-home-mode-ribbon button.is-primary::after {
   content: none !important;
 }
 
 
 /* =========================================================
-   ICONOS / SUBTEXTO
+   JUGAR - OCULTAR ICONO Y SUBTÍTULO
    ========================================================= */
 
 .dr-home-mode-ribbon button.is-primary svg,
@@ -194,7 +489,7 @@
 
 
 /* =========================================================
-   CENTRADO DEL TEXTO
+   JUGAR - TEXTO
    ========================================================= */
 
 .dr-home-mode-ribbon button.is-primary span {
@@ -202,6 +497,7 @@
   z-index: 2;
 
   display: flex !important;
+
   align-items: center !important;
   justify-content: center !important;
 
@@ -211,20 +507,20 @@
   text-align: center !important;
 }
 
-
-/* =========================================================
-   JUGAR
-   ========================================================= */
-
 .dr-home-mode-ribbon button.is-primary strong {
   position: relative;
   z-index: 2;
 
-  font-family: Georgia, "Times New Roman", serif !important;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif !important;
+
   font-size: 29px !important;
   font-weight: 500 !important;
 
   letter-spacing: .035em !important;
+
   line-height: 1 !important;
 
   color: #f6efe0 !important;
@@ -232,58 +528,54 @@
   text-shadow:
     0 1px 0 rgba(255, 255, 255, .13),
     0 2px 7px rgba(0, 0, 0, .72),
-    0 0 10px rgba(255, 223, 137, .12) !important;
+    0 0 10px rgba(255, 223, 137, .12)
+    !important;
 }
 
 
 /* =========================================================
-   HOVER
+   JUGAR - HOVER
    ========================================================= */
 
 .dr-home-mode-ribbon button.is-primary:hover {
-
   background-image:
 
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpolygon points='7,1 93,1 99,27 93,99 7,99 1,27' fill='none' stroke='%23ffe09a' stroke-opacity='1' stroke-width='1.8' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"),
 
-    radial-gradient(ellipse at 50% 0%,
+    radial-gradient(
+      ellipse at 50% 0%,
       rgba(255, 214, 113, .21) 0%,
       rgba(255, 214, 113, .09) 27%,
-      transparent 53%),
+      transparent 53%
+    ),
 
-    linear-gradient(180deg,
+    linear-gradient(
+      180deg,
       rgba(101, 78, 45, .97) 0%,
       rgba(72, 55, 35, .98) 42%,
-      rgba(44, 36, 28, 1) 100%) !important;
+      rgba(44, 36, 28, 1) 100%
+    ) !important;
 
   filter:
-    drop-shadow(0 0 2px rgba(255, 252, 227, 1)) drop-shadow(0 0 5px rgba(255, 230, 151, 1)) drop-shadow(0 0 11px rgba(250, 207, 101, .90)) drop-shadow(0 0 21px rgba(239, 188, 66, .62)) drop-shadow(0 0 36px rgba(226, 166, 39, .34)) !important;
+    drop-shadow(0 0 2px rgba(255, 252, 227, 1))
+    drop-shadow(0 0 5px rgba(255, 230, 151, 1))
+    drop-shadow(0 0 11px rgba(250, 207, 101, .90))
+    drop-shadow(0 0 21px rgba(239, 188, 66, .62))
+    drop-shadow(0 0 36px rgba(226, 166, 39, .34))
+    !important;
 }
 
 
 /* =========================================================
-   BOTONES SECUNDARIOS
+   RESPONSIVE - <= 1500px
    ========================================================= */
 
-.dr-home-mode-ribbon button:not(.is-primary):hover {
-  background:
-    linear-gradient(180deg,
-      rgba(13, 31, 43, .985),
-      rgba(7, 20, 30, .995)) !important;
-
-  border-color: rgba(181, 158, 99, .52) !important;
-}
-
-
-/* =========================================================
-   RESPONSIVE
-   ========================================================= */
-
-@media(max-width:1500px) {
+@media (max-width: 1500px) {
 
   .dr-home-mode-ribbon {
     left: 38px !important;
     right: 38px !important;
+
     height: 88px !important;
   }
 
@@ -313,13 +605,14 @@
     font-size: 25px !important;
   }
 
-  .dr-home-mode-ribbon button.is-primary::before {
-    inset: 5px 7px;
-  }
 }
 
 
-@media(max-height:850px) {
+/* =========================================================
+   RESPONSIVE - ALTURA <= 850px
+   ========================================================= */
+
+@media (max-height: 850px) {
 
   .dr-home-mode-ribbon {
     height: 82px !important;
@@ -340,7 +633,4 @@
     margin-bottom: 1px !important;
   }
 
-  .dr-home-mode-ribbon button.is-primary::before {
-    inset: 5px 7px;
-  }
 }
