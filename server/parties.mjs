@@ -1,10 +1,15 @@
 import { randomToken } from './security.mjs';
 
+function cleanPartyMessage(value) {
+  return String(value || '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, 500);
+}
+
 export class PartyManager {
   constructor(options) {
     this.options = options;
     this.parties = new Map();
     this.invites = new Map();
+    this.messages = new Map();
   }
 
   partyForUser(userId) {
@@ -19,7 +24,11 @@ export class PartyManager {
         ...invite,
         from: this.options.store.publicUser(this.options.store.getUser(invite.fromUserId)),
       }));
-    return { party: party ? this.publicParty(party) : null, invites };
+    return {
+      party: party ? this.publicParty(party) : null,
+      invites,
+      messages: party ? this.messagesForParty(party.id) : [],
+    };
   }
 
   create(leader) {
@@ -35,6 +44,7 @@ export class PartyManager {
       createdAt: new Date().toISOString(),
     };
     this.parties.set(party.id, party);
+    this.messages.set(party.id, []);
     this.emitParty(party);
     return party;
   }
@@ -99,6 +109,7 @@ export class PartyManager {
     party.members = party.members.filter(id => id !== userId);
     if (!party.members.length) {
       this.parties.delete(party.id);
+      this.messages.delete(party.id);
       for (const [id, invite] of this.invites) {
         if (invite.partyId === party.id) this.invites.delete(id);
       }
@@ -108,6 +119,34 @@ export class PartyManager {
     if (party.leaderId === userId) party.leaderId = party.members[0];
     this.emitParty(party);
     this.emitSnapshot(userId);
+  }
+
+  sendMessage(userId, text) {
+    const party = this.partyForUser(userId);
+    if (!party) throw new Error('Debes estar en un grupo para usar el chat de grupo.');
+    const clean = cleanPartyMessage(text);
+    if (!clean) throw new Error('El mensaje está vacío.');
+    const sender = this.options.store.publicUser(this.options.store.getUser(userId));
+    if (!sender) throw new Error('Jugador no encontrado.');
+
+    const message = {
+      id: randomToken(12),
+      partyId: party.id,
+      fromUserId: userId,
+      username: sender.username,
+      text: clean,
+      createdAt: new Date().toISOString(),
+    };
+    const history = this.messages.get(party.id) || [];
+    history.push(message);
+    if (history.length > 100) history.splice(0, history.length - 100);
+    this.messages.set(party.id, history);
+    this.options.onEvent({ type: 'party.message', message: { ...message } }, party.members);
+    return { ...message };
+  }
+
+  messagesForParty(partyId) {
+    return (this.messages.get(partyId) || []).map(message => ({ ...message }));
   }
 
   membersAsUsers(party) {
