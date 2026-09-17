@@ -1,8 +1,28 @@
 import { spawn } from 'node:child_process';
 
+function spawnNode(args) {
+  return spawn(process.execPath, args, {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+    env: process.env,
+  });
+}
+
+function spawnNpm(args) {
+  // When this script is launched through `npm run`, npm exposes the absolute
+  // path to its JS CLI in npm_execpath. Running that CLI through the current
+  // Node executable avoids spawning npm.cmd directly, which can fail with
+  // EINVAL on Windows/Node 22 (notably from Git Bash).
+  const npmExecPath = process.env.npm_execpath;
+  if (!npmExecPath) {
+    throw new Error('npm_execpath is missing. Launch this script with `npm run platform:dev`.');
+  }
+  return spawnNode([npmExecPath, ...args]);
+}
+
 const children = [
-  spawn(process.execPath, ['--watch', 'server/index.mjs'], { stdio: 'inherit' }),
-  spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev'], { stdio: 'inherit' }),
+  spawnNode(['--watch', 'server/index.mjs']),
+  spawnNpm(['run', 'dev']),
 ];
 
 let closing = false;
@@ -15,6 +35,13 @@ function shutdown(signal = 'SIGTERM') {
 }
 
 for (const child of children) {
+  child.on('error', error => {
+    console.error('[platform:dev] child process failed to start:', error);
+    if (!closing) {
+      shutdown();
+      process.exitCode = 1;
+    }
+  });
   child.on('exit', code => {
     if (!closing && code !== 0) {
       shutdown();
