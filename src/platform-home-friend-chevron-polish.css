@@ -1,0 +1,30 @@
+/* Replace the raw text glyph used on friend rows with a clean, subtle chevron. */
+
+.dr-home-right-rail .platform-social-friends > div > button::after {
+  content: "" !important;
+  grid-column: 5 !important;
+  justify-self: end !important;
+  align-self: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  background-color: #647f8d !important;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 18l6-6-6-6' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 18l6-6-6-6' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  -webkit-mask-size: 11px 11px !important;
+  mask-size: 11px 11px !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  opacity: .58 !important;
+  transform: none !important;
+  transition: opacity .16s ease, background-color .16s ease, transform .16s ease !important;
+}
+
+.dr-home-right-rail .platform-social-friends > div > button:hover::after,
+.dr-home-right-rail .platform-social-friends > div > button.is-selected::after {
+  background-color: #a8cfdf !important;
+  opacity: .95 !important;
+  transform: translateX(1px) !important;
+}
