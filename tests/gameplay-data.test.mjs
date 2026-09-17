@@ -5,9 +5,19 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const game = require('../node_modules/.cache/alden-test/match/index.js');
 
-test('playable HUD uses definition ranks, costs and cooldowns without duplicate casts', () => {
-  const state = game.createPlayableMatch();
+function learnAbilities(state, heroId, keys) {
+  let next = state;
+  for (const key of keys) next = game.upgradeHeroAbility(next, heroId, key);
+  return next;
+}
+
+test('playable HUD uses learned definition ranks, costs and cooldowns without duplicate casts', () => {
   const heroId = game.LOCAL_HERO_ENTITY_ID;
+  const state = learnAbilities(
+    game.createPlayableMatch('H001', 6),
+    heroId,
+    ['Q', 'W', 'E', 'Q', 'W', 'R'],
+  );
   assert.deepEqual(state.heroes[heroId].abilityRanks, { Q: 2, W: 2, E: 1, R: 1 });
   for (const key of game.ABILITY_KEYS) {
     const control = game.getAbilityControl(state, heroId, key, 1000);
@@ -24,19 +34,27 @@ test('ability controls block locked, resource-starved, dead and inactive heroes'
   const heroId = game.LOCAL_HERO_ENTITY_ID;
   const locked = game.createPlayableMatch('H001', 1);
   assert.equal(game.useHeroAbility(locked, heroId, 'W', 0), locked);
-  const empty = game.createPlayableMatch();
+
+  const empty = game.upgradeHeroAbility(game.createPlayableMatch(), heroId, 'Q');
   empty.heroes[heroId].currentResource = 0;
+  assert.equal(game.getAbilityControl(empty, heroId, 'Q', 0).blockedReason, 'Maná insuficiente');
   assert.equal(game.useHeroAbility(empty, heroId, 'Q', 0), empty);
-  const dead = game.createPlayableMatch();
+
+  const dead = game.upgradeHeroAbility(game.createPlayableMatch(), heroId, 'Q');
   dead.heroes[heroId].currentHp = 0;
+  assert.equal(game.getAbilityControl(dead, heroId, 'Q', 0).blockedReason, 'Heroe derrotado');
   assert.equal(game.useHeroAbility(dead, heroId, 'Q', 0), dead);
-  const paused = game.setMatchPhase(game.createPlayableMatch(), 'finished');
+
+  const learned = game.upgradeHeroAbility(game.createPlayableMatch(), heroId, 'Q');
+  const paused = game.setMatchPhase(learned, 'finished');
+  assert.equal(game.getAbilityControl(paused, heroId, 'Q', 0).blockedReason, 'Partida inactiva');
   assert.equal(game.useHeroAbility(paused, heroId, 'Q', 0), paused);
 });
 
 test('resource recovery follows gameplay stats and never exceeds capacity', () => {
   const heroId = game.LOCAL_HERO_ENTITY_ID;
-  const state = game.useHeroAbility(game.createPlayableMatch(), heroId, 'Q', 0);
+  let state = game.upgradeHeroAbility(game.createPlayableMatch(), heroId, 'Q');
+  state = game.useHeroAbility(state, heroId, 'Q', 0);
   const stats = game.calculateHeroStats(state, heroId);
   const recovered = game.recoverHeroResource(state, heroId, 1000, 1000);
   assert.equal(recovered.heroes[heroId].currentResource, state.heroes[heroId].currentResource + stats.resourceRegenPerSecond);
@@ -44,9 +62,9 @@ test('resource recovery follows gameplay stats and never exceeds capacity', () =
   assert.equal(game.recoverHeroResource(state, heroId, -1000, 0), state);
 });
 
-test('pure passives cannot cast but active-with-passive abilities can', () => {
+test('pure passives cannot cast but learned active-with-passive abilities can', () => {
   const heroId = game.LOCAL_HERO_ENTITY_ID;
-  const state = game.createPlayableMatch();
+  const state = game.upgradeHeroAbility(game.createPlayableMatch(), heroId, 'E');
   assert.equal(game.getAbilityControl(state, heroId, 'E', 0).canUse, true);
   const originalType = game.ALDEN.abilities.E.type;
   try {
@@ -127,7 +145,7 @@ test('level growth is driven by STR, AGI and INT formulas and stops at level 30'
   assert.ok(Math.abs(l1.attackSpeed - 0.72416) < 1e-9);
   assert.equal(l1.hpRegenPerSecond, 3.3);
   assert.equal(l1.resourceRegenPerSecond, 4.2);
-  assert.equal(l1.abilityPowerPercent, 9.6);
+  assert.ok(Math.abs(l1.abilityPowerPercent - 9.6) < 1e-9);
 
   assert.equal(l30.maxHp, 2612);
   assert.ok(Math.abs(l30.maxResource - 886.4) < 1e-9);
