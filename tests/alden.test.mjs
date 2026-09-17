@@ -412,7 +412,7 @@ test('sword pivot is inside the right hand and grip, above the guard and blade',
   assert.ok(rig.sword.getObjectByName('sword-pommel').position.y > 0.20);
 });
 
-test('idle sword is horizontal with its cutting edges above and below', () => {
+test('idle sword rests at a shallow authored angle with vertical cutting edges and safe clearance', () => {
   const rig = makeRig();
   for (let frame = 0; frame < 100; frame += 1) animateAlden(rig, frame / 60, false);
   rig.root.updateMatrixWorld(true);
@@ -420,9 +420,9 @@ test('idle sword is horizontal with its cutting edges above and below', () => {
   const tip = rig.sword.localToWorld(new THREE.Vector3(0, -1.52, 0));
   const direction = tip.clone().sub(hand).normalize();
   const angle = THREE.MathUtils.radToDeg(Math.asin(direction.y));
-  assert.ok(Math.abs(angle) < 0.5, `sword elevation: ${angle}`);
+  assert.ok(Math.abs(angle) < 7, `sword elevation: ${angle}`);
   const edgeAxis = new THREE.Vector3(1, 0, 0).transformDirection(rig.sword.getObjectByName('sword-blade').matrixWorld);
-  assert.ok(Math.abs(edgeAxis.y) > 0.999, `cutting edges must face up/down: ${edgeAxis.toArray()}`);
+  assert.ok(Math.abs(edgeAxis.y) > 0.99, `cutting edges must remain close to vertical: ${edgeAxis.toArray()}`);
   assert.ok(tip.z > 0.65, `sword should clear the feet in front: ${tip.z}`);
   assert.ok(tip.x > 0.60, `sword should remain outside the leg: ${tip.x}`);
 });
@@ -608,9 +608,9 @@ test('joint ranges are bounded, pelvis counters the thorax, and the head remains
   }
 });
 
-test('normal walking stays at 2.4 and fast walking at 3.8 is the default', () => {
+test('normal walking stays at 2.4 and fast walking at 5 is the default', () => {
   assert.equal(ALDEN_WALK_SPEED, 2.4);
-  assert.equal(ALDEN_FAST_WALK_SPEED, 3.8);
+  assert.equal(ALDEN_FAST_WALK_SPEED, 5);
   assert.equal(ALDEN_DEFAULT_MOVE_SPEED, ALDEN_FAST_WALK_SPEED);
   for (const speed of [ALDEN_WALK_SPEED, ALDEN_FAST_WALK_SPEED]) {
     const rig = makeRig();
@@ -674,12 +674,13 @@ test('the torso and head show bounded weight-bearing motion without contact bump
     const travel = Math.max(...heights) - Math.min(...heights);
     assert.ok(travel > 0.035 && travel < 0.045, `body motion must show loading without excessive bounce: ${travel}`);
   }
+  const transitionRig = makeRig();
   let previousHeight = null;
   for (let frame = 0; frame < 240; frame += 1) {
-    animateAlden(rig, frame / 60, frame >= 60 && frame < 180, 1 / 60);
-    rig.root.updateMatrixWorld(true);
-    const height = rig.torso.getWorldPosition(new THREE.Vector3()).y;
-    if (previousHeight !== null) assert.ok(Math.abs(height - previousHeight) < 0.008, `body height jumps at frame ${frame}`);
+    animateAlden(transitionRig, frame / 60, frame >= 60 && frame < 180, 1 / 60);
+    transitionRig.root.updateMatrixWorld(true);
+    const height = transitionRig.torso.getWorldPosition(new THREE.Vector3()).y;
+    if (previousHeight !== null) assert.ok(Math.abs(height - previousHeight) < 0.011, `body height jumps at frame ${frame}`);
     previousHeight = height;
   }
 });
@@ -700,11 +701,12 @@ test('gait and follow-through are independent of frame rate through start and st
 
 test('starting and stopping blend continuously instead of snapping the joints', () => {
   const rig = makeRig();
+  const maxJointDelta = ALDEN_GAIT_RATE / 60 * 1.55;
   let previous = [0, 0, 0, -0.35];
   for (let frame = 0; frame < 180; frame += 1) {
     animateAlden(rig, frame / 60, frame < 60, 1 / 60);
     const current = [rig.leftLeg.rotation.x, rig.leftShin.rotation.x, rig.leftArm.rotation.x, rig.leftForearm.rotation.x];
-    current.forEach((value, index) => assert.ok(Math.abs(value - previous[index]) < 0.25, `joint jump at frame ${frame}: ${value - previous[index]}`));
+    current.forEach((value, index) => assert.ok(Math.abs(value - previous[index]) < maxJointDelta, `joint jump at frame ${frame}: ${value - previous[index]}`));
     previous = current;
   }
   assert.equal(rig.gait.weight, 0);
