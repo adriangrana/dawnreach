@@ -57,7 +57,7 @@ function LocalGameScreen() {
     requestAnimationFrame(inspect);
     return () => { disposed = true; };
   }, []);
-  return <div className="platform-local-game"><GameApp />{!ready && <div className="platform-game-loading" role="status" aria-label="Cargando partida"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparando el campo de batalla…</span></div></div>}</div>;
+  return <div className="platform-local-game"><GameApp />{!ready && <div className="platform-game-loading" role="status" aria-label="Loading match"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparing the battlefield…</span></div></div>}</div>;
 }
 
 function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; onAuthenticated: (user: PlatformUser) => void; onLocalGame: () => void }) {
@@ -74,15 +74,15 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
     try {
       const user = mode === 'register' ? await registerPlatformAccount(username, password) : await loginPlatformAccount(username, password);
       onAuthenticated(user);
-    } catch (authError) { setMessage(authError instanceof Error ? authError.message : 'No se pudo iniciar sesión.'); }
+    } catch (authError) { setMessage(authError instanceof Error ? authError.message : 'Could not sign in.'); }
     finally { setBusy(false); }
   };
   return <main className="platform-auth-surface">
-    <section className="platform-brand-panel"><img className="platform-brand-icon" src={DAWNREACH_ICON} alt="" draggable={false} /><p className="platform-eyebrow">EL CONFLICTO DE DOS REINOS</p><h1>DAWNREACH</h1><p className="platform-brand-copy">Forma tu grupo, entra en cola y lucha por derribar el trono enemigo.</p><div className="platform-brand-rule"><span /><Shield /><span /></div></section>
-    <section className="platform-auth-card" aria-label={mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}>
-      <div className="platform-auth-tabs" role="tablist"><button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}><LogIn /> Iniciar sesión</button><button type="button" className={mode === 'register' ? 'is-active' : ''} onClick={() => setMode('register')}><UserPlus /> Crear cuenta</button></div>
-      <form onSubmit={submit}><label>Nombre de usuario<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={24} required /></label><label>Contraseña<input type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} minLength={10} required /></label>{mode === 'register' && <p className="platform-password-hint">10+ caracteres y al menos tres tipos entre mayúsculas, minúsculas, números y símbolos.</p>}{message && <p className="platform-auth-message" role="alert">{message}</p>}<button className="platform-primary-button" type="submit" disabled={busy}>{busy ? 'Conectando…' : mode === 'login' ? 'Entrar en Dawnreach' : 'Crear cuenta'}</button></form>
-      <button className="platform-local-button" type="button" onClick={onLocalGame}>Partida local · desarrollo</button>
+    <section className="platform-brand-panel"><img className="platform-brand-icon" src={DAWNREACH_ICON} alt="" draggable={false} /><p className="platform-eyebrow">THE CONFLICT OF TWO REALMS</p><h1>DAWNREACH</h1><p className="platform-brand-copy">Form your party, queue up, and fight to bring down the enemy throne.</p><div className="platform-brand-rule"><span /><Shield /><span /></div></section>
+    <section className="platform-auth-card" aria-label={mode === 'login' ? 'Sign in' : 'Create account'}>
+      <div className="platform-auth-tabs" role="tablist"><button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}><LogIn /> Sign in</button><button type="button" className={mode === 'register' ? 'is-active' : ''} onClick={() => setMode('register')}><UserPlus /> Create account</button></div>
+      <form onSubmit={submit}><label>Username<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={24} required /></label><label>Password<input type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} minLength={10} required /></label>{mode === 'register' && <p className="platform-password-hint">10+ characters and at least three types among uppercase letters, lowercase letters, numbers, and symbols.</p>}{message && <p className="platform-auth-message" role="alert">{message}</p>}<button className="platform-primary-button" type="submit" disabled={busy}>{busy ? 'Connecting…' : mode === 'login' ? 'Enter Dawnreach' : 'Create account'}</button></form>
+      <button className="platform-local-button" type="button" onClick={onLocalGame}>Local match · development</button>
     </section>
   </main>;
 }
@@ -108,7 +108,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       if (type === 'presence.snapshot' && 'users' in event && Array.isArray(event.users)) setOnline(event.users as readonly PlatformUser[]);
       if (type === 'social.snapshot' && 'friends' in event && 'incoming' in event && 'outgoing' in event) setSocial(event as unknown as SocialSnapshot);
       if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({ party: event.party as PartySnapshot['party'], invites: event.invites as PartySnapshot['invites'] });
-      if (type === 'party.invite') setNotice('Tienes una nueva invitación de grupo.');
+      if (type === 'party.invite') setNotice('You have a new party invite.');
       if (type === 'lobbies.update' && 'lobbies' in event && Array.isArray(event.lobbies)) setLobbies(event.lobbies as readonly CustomLobby[]);
       if (type === 'lobby.update' && 'lobby' in event && event.lobby) { setCurrentLobby(event.lobby as CustomLobby); setPlaySection('custom'); setSection('play'); }
       if (type === 'lobby.left' || type === 'lobby.closed') setCurrentLobby(null);
@@ -128,15 +128,15 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         const declinedUserId = 'declinedUserId' in event ? String(event.declinedUserId || '') : '';
         setReady(null);
         setQueue(current => ({ ...current, joined: !declinedUserId || declinedUserId !== user.id }));
-        setNotice(declinedUserId === user.id ? 'Has rechazado el ready check y saliste de la cola.' : 'Ready check cancelado. Sigues en la cola.');
+        setNotice(declinedUserId === user.id ? 'You declined the Ready Check and left the queue.' : 'Ready Check cancelled. You are still in queue.');
       }
       if (type === 'match.found') {
         setReady(null);
         setQueue(current => ({ ...current, joined: false }));
-        setNotice('Partida confirmada. La plataforma ya conserva sus jugadores y equipos.');
+        setNotice('Match confirmed. The platform is preserving its players and teams.');
       }
-      if (type === 'match.session.pending') setNotice('Partida creada. Pendiente conectar el servidor compartido del mapa Dawnreach.');
-      if (type === 'error' && 'message' in event) setNotice(String(event.message || 'No se pudo completar la acción.'));
+      if (type === 'match.session.pending') setNotice('Match created. Waiting to connect the shared Dawnreach game server.');
+      if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
         setRealtime('online');
         if ('presence' in event && Array.isArray(event.presence)) setOnline(event.presence as readonly PlatformUser[]);
@@ -158,12 +158,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
 
   const chooseMode = (mode: QueueMode) => setQueue(current => current.joined ? current : { ...current, mode });
   const joinQueue = (mode: QueueMode) => {
-    if (!platformRealtime.send('queue.join', { mode })) { setNotice('Sin conexión realtime.'); return; }
+    if (!platformRealtime.send('queue.join', { mode })) { setNotice('Realtime connection unavailable.'); return; }
     setQueue(current => ({ ...current, joined: true, mode }));
     setNotice('');
   };
   const leaveQueue = () => {
-    if (!platformRealtime.send('queue.leave')) { setNotice('Sin conexión realtime.'); return; }
+    if (!platformRealtime.send('queue.leave')) { setNotice('Realtime connection unavailable.'); return; }
     setQueue(current => ({ ...current, joined: false }));
   };
   const openPlay = () => { setSection('play'); setPlaySection('matchmaking'); };
@@ -177,10 +177,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
           {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
-            <header className="platform-play-heading"><div><p className="platform-eyebrow">JUGAR</p><h1>Prepara tu próxima batalla</h1><p>Matchmaking y salas comparten la misma sesión, party y presencia.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Personalizadas</button></div></header>
+            <header className="platform-play-heading"><div><p className="platform-eyebrow">PLAY</p><h1>Prepare for your next battle</h1><p>Matchmaking and custom lobbies share the same session, party, and presence.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Custom</button></div></header>
             <PartyBar me={user} snapshot={party} />
             {playSection === 'matchmaking' ? <MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /> : <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />}
-            <div className="platform-dev-entry"><span>DESARROLLO</span><p>El mapa local sigue disponible para probar gameplay sin depender de una sesión online.</p><button className="platform-local-button" type="button" onClick={onLocalPlay}><Swords /> Entrar en partida local</button></div>
+            <div className="platform-dev-entry"><span>DEVELOPMENT</span><p>The local map remains available for gameplay testing without an online session.</p><button className="platform-local-button" type="button" onClick={onLocalPlay}><Swords /> Enter Local Match</button></div>
             {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
           </section>}
         </section>
@@ -195,9 +195,9 @@ export default function PlatformShell() {
   const [surface, setSurface] = useState<Surface>('booting');
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [error, setError] = useState('');
-  useEffect(() => { let active = true; const restore = async () => { if (!getAuthToken()) { if (active) setSurface('auth'); return; } try { const restored = await getCurrentPlatformUser(); if (!active) return; setUser(restored); setSurface('home'); } catch (restoreError) { if (!active) return; setError(restoreError instanceof Error ? restoreError.message : 'No se pudo restaurar la sesión.'); setSurface('auth'); } }; void restore(); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; const restore = async () => { if (!getAuthToken()) { if (active) setSurface('auth'); return; } try { const restored = await getCurrentPlatformUser(); if (!active) return; setUser(restored); setSurface('home'); } catch (restoreError) { if (!active) return; setError(restoreError instanceof Error ? restoreError.message : 'Could not restore the session.'); setSurface('auth'); } }; void restore(); return () => { active = false; }; }, []);
   const authenticated = (nextUser: PlatformUser) => { setUser(nextUser); setError(''); setSurface('home'); };
   const logout = async () => { platformRealtime.disconnect(); try { await logoutPlatformAccount(); } catch { /* token is cleared in client */ } setUser(null); setSurface('auth'); };
   if (surface === 'game') return <div className="platform-shell platform-shell--game" data-dawnreach-platform-ready="true"><LocalGameScreen /></div>;
-  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restaurando sesión…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={() => setSurface('game')} onLogout={() => void logout()} />}</div>;
+  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restoring session…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={() => setSurface('game')} onLogout={() => void logout()} />}</div>;
 }
