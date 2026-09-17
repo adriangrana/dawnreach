@@ -1,0 +1,152 @@
+/* HOME shop currencies: premium gold + crystal display matching the header reference. */
+
+.dr-home-currency {
+  position: relative !important;
+  height: 42px !important;
+  min-width: 92px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  padding: 0 15px 0 11px !important;
+  color: #edf2f5 !important;
+  background: transparent !important;
+  white-space: nowrap !important;
+}
+
+.dr-home-currency + .dr-home-currency::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(115, 147, 168, .34), transparent);
+}
+
+.dr-home-currency.is-crystal {
+  margin-right: 8px !important;
+}
+
+.dr-home-currency strong {
+  color: #e7edf1 !important;
+  font-family: "Segoe UI", Arial, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  letter-spacing: .015em !important;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, .72) !important;
+}
+
+.dr-home-currency-icon {
+  position: relative !important;
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.dr-home-currency-icon::before,
+.dr-home-currency-icon::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.dr-home-currency-icon svg {
+  position: relative !important;
+  z-index: 2 !important;
+  width: 16px !important;
+  height: 16px !important;
+  stroke-width: 1.9 !important;
+}
+
+/* Gold currency: compact embossed medallion. */
+.dr-home-currency.is-gold .dr-home-currency-icon::before {
+  inset: 2px !important;
+  border: 1px solid rgba(255, 222, 128, .72) !important;
+  clip-path: polygon(50% 0, 86% 17%, 100% 50%, 84% 84%, 50% 100%, 16% 84%, 0 50%, 16% 17%) !important;
+  background:
+    radial-gradient(circle at 42% 32%, rgba(255, 242, 187, .72), transparent 24%),
+    linear-gradient(145deg, #f2cd6c 0%, #a8731d 54%, #5d3d11 100%) !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(98, 58, 8, .35),
+    0 0 7px rgba(227, 177, 57, .28) !important;
+}
+
+.dr-home-currency.is-gold .dr-home-currency-icon::after {
+  inset: 6px !important;
+  clip-path: polygon(50% 0, 84% 24%, 78% 72%, 50% 100%, 22% 72%, 16% 24%) !important;
+  background: linear-gradient(180deg, rgba(255, 242, 174, .96), rgba(181, 121, 26, .94)) !important;
+  opacity: .82 !important;
+}
+
+.dr-home-currency.is-gold .dr-home-currency-icon svg {
+  width: 12px !important;
+  height: 12px !important;
+  color: #68400b !important;
+  filter: drop-shadow(0 1px 0 rgba(255, 239, 175, .42)) !important;
+}
+
+/* Premium currency: luminous faceted blue crystal. */
+.dr-home-currency.is-crystal .dr-home-currency-icon::before {
+  left: 5px !important;
+  right: 5px !important;
+  top: 1px !important;
+  bottom: 1px !important;
+  clip-path: polygon(50% 0, 86% 39%, 72% 78%, 50% 100%, 28% 78%, 14% 39%) !important;
+  background:
+    linear-gradient(110deg, rgba(172, 231, 255, .96) 0 16%, transparent 17% 38%, rgba(59, 145, 255, .84) 39% 62%, transparent 63%),
+    linear-gradient(180deg, #8cdbff 0%, #2c88f3 42%, #1150c6 72%, #0a2773 100%) !important;
+  box-shadow: 0 0 9px rgba(66, 147, 255, .46) !important;
+}
+
+.dr-home-currency.is-crystal .dr-home-currency-icon::after {
+  left: 9px !important;
+  right: 9px !important;
+  top: 5px !important;
+  bottom: 7px !important;
+  clip-path: polygon(50% 0, 100% 44%, 50% 100%, 0 44%) !important;
+  background: rgba(192, 237, 255, .66) !important;
+  filter: blur(.2px) !important;
+}
+
+.dr-home-currency.is-crystal .dr-home-currency-icon svg {
+  width: 11px !important;
+  height: 11px !important;
+  color: rgba(221, 247, 255, .9) !important;
+  filter: drop-shadow(0 0 3px rgba(156, 221, 255, .72)) !important;
+}
+
+.dr-home-currency:hover {
+  background: linear-gradient(180deg, rgba(34, 61, 79, .10), rgba(11, 27, 38, .03)) !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-home-currency {
+    min-width: 78px !important;
+    gap: 7px !important;
+    padding: 0 11px 0 8px !important;
+  }
+
+  .dr-home-currency strong {
+    font-size: 13px !important;
+  }
+
+  .dr-home-currency-icon {
+    width: 21px !important;
+    height: 21px !important;
+    flex-basis: 21px !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .dr-home-currency {
+    min-width: 68px !important;
+    padding-inline: 7px !important;
+  }
+
+  .dr-home-currency strong {
+    font-size: 12px !important;
+  }
+}
