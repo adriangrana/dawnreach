@@ -51,6 +51,15 @@ export type DirectMessage = Readonly<{
   readAt: string | null;
 }>;
 
+export type PartyMessage = Readonly<{
+  id: string;
+  partyId: string;
+  fromUserId: string;
+  username: string;
+  text: string;
+  createdAt: string;
+}>;
+
 export type PlatformParty = Readonly<{
   id: string;
   code: string;
@@ -69,7 +78,11 @@ export type PlatformPartyInvite = Readonly<{
   party?: PlatformParty;
 }>;
 
-export type PartySnapshot = Readonly<{ party: PlatformParty | null; invites: readonly PlatformPartyInvite[] }>;
+export type PartySnapshot = Readonly<{
+  party: PlatformParty | null;
+  invites: readonly PlatformPartyInvite[];
+  messages: readonly PartyMessage[];
+}>;
 
 export type QueuePlayer = Readonly<{
   userId: string;
@@ -141,6 +154,7 @@ export type SessionReadyEvent = Readonly<{
 export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
 export type DirectMessageEvent = Readonly<{ type: 'direct.message'; message: DirectMessage; user: PlatformUser | null }>;
 export type PartySnapshotEvent = PartySnapshot & Readonly<{ type: 'party.snapshot' }>;
+export type PartyMessageEvent = Readonly<{ type: 'party.message'; message: PartyMessage }>;
 export type PartyInviteEvent = Readonly<{ type: 'party.invite'; invite: PlatformPartyInvite }>;
 export type QueueUpdateEvent = Readonly<{ type: 'queue.update'; mode: QueueMode; count: number; target: number }>;
 export type ReadyStartEvent = Readonly<{ type: 'ready.start'; readyId: string; mode: QueueMode; players: readonly QueuePlayer[]; expiresAt: number }>;
@@ -158,6 +172,7 @@ export type PlatformRealtimeEvent =
   | SocialSnapshotEvent
   | DirectMessageEvent
   | PartySnapshotEvent
+  | PartyMessageEvent
   | PartyInviteEvent
   | QueueUpdateEvent
   | ReadyStartEvent
