@@ -27,7 +27,7 @@ import {
 const LOADING_SPLASH = '/assets/images/dawnreach_loading_splash.webp';
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const EMPTY_SOCIAL: SocialSnapshot = { friends: [], incoming: [], outgoing: [] };
-const EMPTY_PARTY: PartySnapshot = { party: null, invites: [] };
+const EMPTY_PARTY: PartySnapshot = { party: null, invites: [], messages: [] };
 const EMPTY_QUEUE: QueueState = { joined: false, mode: 'ranked', count: 0, target: 10 };
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
@@ -112,7 +112,11 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       const type = eventType(event);
       if (type === 'presence.snapshot' && 'users' in event && Array.isArray(event.users)) setOnline(event.users as readonly PlatformUser[]);
       if (type === 'social.snapshot' && 'friends' in event && 'incoming' in event && 'outgoing' in event) setSocial(event as unknown as SocialSnapshot);
-      if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({ party: event.party as PartySnapshot['party'], invites: event.invites as PartySnapshot['invites'] });
+      if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({
+        party: event.party as PartySnapshot['party'],
+        invites: event.invites as PartySnapshot['invites'],
+        messages: 'messages' in event && Array.isArray(event.messages) ? event.messages as PartySnapshot['messages'] : [],
+      });
       if (type === 'party.invite') setNotice('You have a new party invite.');
       if (type === 'lobbies.update' && 'lobbies' in event && Array.isArray(event.lobbies)) setLobbies(event.lobbies as readonly CustomLobby[]);
       if (type === 'lobby.update' && 'lobby' in event && event.lobby) { setCurrentLobby(event.lobby as CustomLobby); setPlaySection('custom'); setSection('play'); }
@@ -181,7 +185,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
-          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
+          {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="platform-play-workspace">
             <header className="platform-play-heading"><div><p className="platform-eyebrow">PLAY</p><h1>Prepare for your next battle</h1><p>Matchmaking and custom lobbies share the same session, party, and presence.</p></div><div className="platform-play-tabs"><button className={playSection === 'matchmaking' ? 'is-active' : ''} onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className={playSection === 'custom' ? 'is-active' : ''} onClick={openCustom}>Custom</button></div></header>
             <PartyBar me={user} snapshot={party} />
             {playSection === 'matchmaking' ? <MatchmakingPanel me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} /> : <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />}
