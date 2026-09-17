@@ -152,11 +152,16 @@ function systemEventCopy(event: FeedSystemEvent) {
       team: 'neutral' as const,
     };
   }
-  return {
-    icon: event.type === 'player_reconnected' ? '↻' : '×',
-    text: `${event.displayName} ${event.type === 'player_reconnected' ? 'se reconectó' : 'se desconectó'}`,
-    team: event.team,
-  };
+  if (event.type === 'player_disconnected' || event.type === 'player_reconnected') {
+    return {
+      icon: event.type === 'player_reconnected' ? '↻' : '×',
+      text: `${event.displayName} ${event.type === 'player_reconnected' ? 'se reconectó' : 'se desconectó'}`,
+      team: event.team,
+    };
+  }
+
+  const exhaustive: never = event;
+  return exhaustive;
 }
 
 function createSystemRow(event: FeedSystemEvent) {
