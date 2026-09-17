@@ -12,8 +12,12 @@ import {
   publishMatchEvent,
   type MatchEventEntityKind,
   type MatchEventParticipant,
-  type MatchEventTeam,
 } from './matchEvents';
+import {
+  matchEventKindFromEntityId,
+  matchEventLabelForEntityId,
+  matchEventTeamFromEntityId,
+} from './matchEventParticipants';
 import {
   MATCH_PAUSE_STATE_EVENT,
   toMatchGameTimeMs,
@@ -21,20 +25,6 @@ import {
 } from './matchPauseRuntime';
 
 let installed = false;
-
-function titleCase(value: string) {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function teamFromEntityId(entityId: string): MatchEventTeam {
-  if (entityId.startsWith('blue-')) return 'blue';
-  if (entityId.startsWith('red-')) return 'red';
-  return 'neutral';
-}
 
 function kindFromAttack(entityId: string, attack: WorldAttackEvent | undefined): MatchEventEntityKind {
   if (attack) {
@@ -44,26 +34,16 @@ function kindFromAttack(entityId: string, attack: WorldAttackEvent | undefined):
     if (attack.attackerKind === 'building') return 'building';
     if (attack.attackerKind === 'shop') return 'shop';
   }
-  if (entityId.includes('-hero-') || entityId.startsWith('hero-')) return 'hero';
-  if (entityId.includes('-tower-') || entityId.startsWith('tower-')) return 'tower';
-  if (entityId.includes('-creep-') || entityId.startsWith('creep-')) return 'creep';
-  return 'unknown';
-}
-
-function labelFor(entityId: string, kind: MatchEventEntityKind) {
-  const heroMarker = '-hero-';
-  const heroIndex = entityId.indexOf(heroMarker);
-  if (kind === 'hero' && heroIndex >= 0) return titleCase(entityId.slice(heroIndex + heroMarker.length));
-  return titleCase(entityId.replace(/^(blue|red|neutral)-/, '')) || 'Entidad';
+  return matchEventKindFromEntityId(entityId);
 }
 
 function attackerParticipant(entityId: string, attack: WorldAttackEvent | undefined): MatchEventParticipant {
   const kind = kindFromAttack(entityId, attack);
   return {
     entityId,
-    team: attack?.attackerTeam ?? teamFromEntityId(entityId),
+    team: attack?.attackerTeam ?? matchEventTeamFromEntityId(entityId),
     kind,
-    label: labelFor(entityId, kind),
+    label: matchEventLabelForEntityId(entityId, kind),
   };
 }
 
@@ -72,7 +52,7 @@ function throneParticipant(entityId: 'blue-throne' | 'red-throne'): MatchEventPa
     entityId,
     team: entityId === 'blue-throne' ? 'blue' : 'red',
     kind: 'building',
-    label: entityId === 'blue-throne' ? 'Trono del Alba' : 'Trono del Ocaso',
+    label: matchEventLabelForEntityId(entityId, 'building'),
   };
 }
 
