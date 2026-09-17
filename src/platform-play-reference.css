@@ -8,16 +8,29 @@
     linear-gradient(180deg, rgba(4, 12, 18, .72), rgba(3, 9, 14, .96)) !important;
 }
 
+.dr-play-overview {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) clamp(176px, 18vh, 206px);
+  overflow: hidden;
+}
+
 .dr-play-screen {
-  min-height: 100%;
-  height: calc(100vh - 70px);
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: clamp(250px, 22vw, 330px) minmax(0, 1fr);
+  padding-right: calc(clamp(318px, 17.5vw, 388px) + 14px);
   overflow: hidden;
   color: #dce5e6;
   background:
     linear-gradient(180deg, rgba(5, 15, 22, .12), rgba(1, 7, 11, .42)),
-    url('/assets/images/dawnreach_loading_splash.webp') center / cover no-repeat;
+    url('/assets/images/dawnreach_home_background.webp') center / cover no-repeat;
 }
 
 .dr-play-modes {
@@ -73,7 +86,7 @@
   border: 1px solid rgba(103, 136, 154, .32);
   background:
     linear-gradient(90deg, rgba(7, 20, 29, .95), rgba(7, 18, 27, .76)),
-    url('/assets/images/dawnreach_loading_splash.webp') center / cover no-repeat;
+    url('/assets/images/dawnreach_home_background.webp') center / cover no-repeat;
   color: #cdd9dc;
   text-align: left;
   cursor: pointer;
@@ -203,7 +216,7 @@
   border-bottom: 0;
   background:
     linear-gradient(90deg, rgba(4, 13, 20, .24), rgba(4, 13, 20, .02) 55%, rgba(3, 11, 17, .23)),
-    url('/assets/images/dawnreach_loading_splash.webp') 54% 42% / cover no-repeat;
+    url('/assets/images/dawnreach_home_background.webp') 54% 42% / cover no-repeat;
   box-shadow: inset 0 0 80px rgba(0,0,0,.18);
 }
 
@@ -606,8 +619,11 @@
 }
 
 .platform-play-custom-shell {
-  min-height: calc(100vh - 70px);
-  padding: 26px;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 26px calc(clamp(318px, 17.5vw, 388px) + 30px) 26px 26px;
   background: linear-gradient(180deg, rgba(4, 14, 21, .88), rgba(2, 8, 12, .98));
 }
 
@@ -675,8 +691,8 @@
   position: absolute !important;
   z-index: 15 !important;
   left: clamp(270px, 23vw, 350px) !important;
-  right: 24px !important;
-  bottom: 12px !important;
+  right: calc(clamp(318px, 17.5vw, 388px) + 28px) !important;
+  bottom: calc(clamp(176px, 18vh, 206px) + 12px) !important;
   margin: 0 !important;
   pointer-events: none !important;
   border-left-color: rgba(214, 180, 86, .78) !important;
@@ -691,4 +707,163 @@
 
 @media (max-width: 1120px) {
   .dr-play-notice { left: 228px !important; right: 16px !important; }
+}
+
+
+/* =========================================================
+   SHARED HOME / PLAY CHROME
+   PLAY reuses the exact HOME social mother-card and lower strip.
+   ========================================================= */
+
+.platform-home-grid:has(.dr-play-overview) {
+  position: relative !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .platform-main-workspace {
+  grid-column: 1 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) .dr-play-overview,
+.platform-home-grid:has(.dr-play-overview) .dr-home-lower-strip {
+  width: 100% !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail {
+  position: absolute !important;
+  z-index: 20 !important;
+  top: 16px !important;
+  right: 0 !important;
+  bottom: calc(clamp(176px, 18vh, 206px)) !important;
+  width: clamp(318px, 17.5vw, 388px) !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  box-sizing: border-box !important;
+  padding: 12px !important;
+  margin: 0 !important;
+  border: 1px solid rgba(101, 132, 149, .28) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(57, 91, 111, .14), transparent 38%),
+    linear-gradient(180deg, rgb(5 17 26) 0%, rgba(4, 12, 19, .88) 57%, rgb(3 8 13 / 2%) 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .028),
+    inset 0 0 34px rgba(1, 7, 11, .22),
+    0 18px 44px rgb(0 0 0 / 13%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(112%) !important;
+  backdrop-filter: blur(10px) saturate(112%) !important;
+  overflow: hidden !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .03), transparent 46%),
+    linear-gradient(90deg, rgba(205, 174, 95, .08), transparent 18%, transparent 82%, rgba(205, 174, 95, .04));
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail .dr-home-party-card {
+  position: relative !important;
+  z-index: 1 !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  margin: 0 !important;
+  border: 1px solid rgba(82, 116, 136, .28) !important;
+  background: linear-gradient(180deg, rgba(8, 23, 34, .74), rgba(5, 14, 21, .84)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .022),
+    0 8px 18px rgba(0, 0, 0, .17) !important;
+  backdrop-filter: blur(3px) !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail > .platform-social-rail {
+  position: relative !important;
+  z-index: 1 !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 0 120px !important;
+  border: 1px solid rgba(80, 112, 132, .24) !important;
+  background: linear-gradient(180deg, rgba(7, 19, 29, .72), rgba(4, 11, 17, .84)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .018),
+    0 8px 18px rgba(0, 0, 0, .15) !important;
+  backdrop-filter: blur(3px) !important;
+  overflow: hidden !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail .platform-social-friends {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail .platform-social-friends > div {
+  height: 100% !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+
+@media (max-width: 1500px) {
+  .dr-play-screen {
+    padding-right: 342px;
+  }
+
+  .platform-play-custom-shell {
+    padding-right: 352px;
+  }
+
+  .platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail {
+    right: 0 !important;
+    bottom: calc(clamp(176px, 18vh, 206px)) !important;
+    width: 330px !important;
+    padding: 10px !important;
+  }
+
+  .dr-play-notice {
+    right: 348px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-overview {
+    grid-template-rows: minmax(0, 1fr) 154px;
+  }
+
+  .platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail {
+    top: 8px !important;
+    bottom: 258px !important;
+  }
+
+  .dr-play-notice {
+    bottom: 166px !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .dr-play-screen {
+    padding-right: 0;
+  }
+
+  .platform-play-custom-shell {
+    padding-right: 26px;
+  }
+
+  .platform-home-grid:has(.dr-play-overview) > .dr-home-right-rail {
+    display: none !important;
+  }
+
+  .dr-play-notice {
+    right: 16px !important;
+  }
 }
