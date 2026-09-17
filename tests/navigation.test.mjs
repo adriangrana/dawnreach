@@ -49,18 +49,18 @@ test('A* routes around an obstacle instead of intersecting it', () => {
 
 test('bounded partial A* can move away from the target to escape a U-shaped pocket', () => {
   const navigation = createTestWorld({
-    bounds: { minX: 0, maxX: 10, minZ: 0, maxZ: 8 },
+    bounds: { minX: 0, maxX: 30, minZ: 0, maxZ: 8 },
     cellSize: 0.5,
     blocked: point => {
-      const top = point.x > 1 && point.x < 5 && point.z > 2 && point.z < 3;
-      const bottom = point.x > 1 && point.x < 5 && point.z > 5 && point.z < 6;
-      const closedEnd = point.x > 4 && point.x < 5 && point.z > 2 && point.z < 6;
+      const top = point.x > 1 && point.x < 12 && point.z > 2 && point.z < 3;
+      const bottom = point.x > 1 && point.x < 12 && point.z > 5 && point.z < 6;
+      const closedEnd = point.x > 11 && point.x < 12 && point.z > 2 && point.z < 6;
       return top || bottom || closedEnd;
     },
   });
-  const start = { x: 3.5, z: 4 };
-  const target = { x: 8.5, z: 4 };
-  const path = navigation.findPath(start, target, { allowPartial: true, maxExpandedNodes: 20 });
+  const start = { x: 10.5, z: 4 };
+  const target = { x: 28.5, z: 4 };
+  const path = navigation.findPath(start, target, { allowPartial: true, maxExpandedNodes: 64 });
 
   assert.ok(path);
   assert.equal(path.partial, true);
