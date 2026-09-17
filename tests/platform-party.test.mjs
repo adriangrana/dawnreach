@@ -65,3 +65,24 @@ test('TCL party rules cap groups at five and move an accepter out of the previou
   assert.notEqual(parties.snapshotFor(users[5].id).party.id, oldPartyId);
   assert.equal(parties.parties.has(oldPartyId), false);
 }));
+
+test('TCL party chat broadcasts to the current group and keeps recent history', () => withParty(({ store, parties, events }) => {
+  const leader = addUser(store, 'ChatLead');
+  const friend = addUser(store, 'ChatMate');
+  const outsider = addUser(store, 'Outsider');
+  parties.create(leader);
+  const invite = parties.invite(leader.id, friend.username);
+  parties.accept(friend.id, invite.id);
+
+  const message = parties.sendMessage(friend.id, 'Ready for battle?');
+  assert.equal(message.username, friend.username);
+  assert.equal(message.text, 'Ready for battle?');
+  assert.deepEqual(parties.snapshotFor(leader.id).messages.map(item => item.id), [message.id]);
+  assert.deepEqual(parties.snapshotFor(friend.id).messages.map(item => item.id), [message.id]);
+
+  const emitted = events.find(item => item.event.type === 'party.message' && item.event.message.id === message.id);
+  assert.ok(emitted);
+  assert.deepEqual(new Set(emitted.userIds), new Set([leader.id, friend.id]));
+  assert.throws(() => parties.sendMessage(outsider.id, 'Hello?'), /grupo/);
+  assert.throws(() => parties.sendMessage(friend.id, '   '), /vacío/);
+}));
