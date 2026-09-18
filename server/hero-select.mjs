@@ -111,6 +111,30 @@ export class HeroSelectManager {
     return this.snapshotForUser(userId);
   }
 
+  cancel(userId) {
+    const session = this.requireSessionForUser(userId);
+    const player = session.match.players.find(candidate => candidate.userId === userId);
+    if (!player) throw new Error('No participas en esta selección.');
+
+    if (session.timer) clearTimeout(session.timer);
+    const participantIds = session.match.players.map(candidate => candidate.userId);
+    const event = {
+      type: 'hero_select.cancelled',
+      matchId: session.matchId,
+      cancelledByUserId: player.userId,
+      cancelledByUsername: player.username,
+      source: session.match.source,
+      mode: session.match.mode,
+    };
+
+    this.sessions.delete(session.matchId);
+    for (const participant of session.match.players) this.byUser.delete(participant.userId);
+
+    this.options.onEvent(event, participantIds);
+    this.options.onCancel?.(session.match, player);
+    return event;
+  }
+
   sendMessage(userId, text) {
     const session = this.requireSessionForUser(userId);
     const player = session.match.players.find(candidate => candidate.userId === userId);
