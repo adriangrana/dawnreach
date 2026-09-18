@@ -1735,6 +1735,10 @@ export async function createDawnreachGame(
     isCreepNetworkAuthority() {
       return laneCreepSystem.isNetworkAuthority();
     },
+    setNetworkAuthority(authority: boolean) {
+      laneCreepSystem.setNetworkAuthority(authority);
+      scene.userData.laneCreepNetworkMode = authority ? 'authority' : 'replica';
+    },
     getCreepNetworkSnapshot() {
       return laneCreepSystem.getNetworkSnapshot();
     },
