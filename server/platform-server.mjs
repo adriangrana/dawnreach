@@ -191,6 +191,7 @@ export function createPlatformServer(options = {}) {
     let requestedAlive = rawAlive;
     let deathIncrement = 0;
     let creditedKillerState = null;
+    let confirmedHeroKillEvent = null;
 
     if (combatLock?.deadUntil && now < combatLock.deadUntil) {
       requestedCurrentHp = 0;
@@ -211,11 +212,16 @@ export function createPlatformServer(options = {}) {
           combatLock.deadUntil = now + respawnSeconds * 1000;
           combatLock.until = Math.max(combatLock.until, combatLock.deadUntil);
 
-          if (
-            combatLock.sourceEntityId === `player:${combatLock.sourceUserId}:hero`
-            && combatLock.sourceUserId
-          ) {
-            const killerRuntime = runtimeRoom(active.id).get(combatLock.sourceUserId);
+          const killerPlayer = combatLock.sourceUserId
+            ? active.players.find(candidate => candidate.userId === combatLock.sourceUserId) ?? null
+            : null;
+          const heroKiller = Boolean(
+            killerPlayer
+            && combatLock.sourceEntityId === `player:${combatLock.sourceUserId}:hero`,
+          );
+
+          if (heroKiller && killerPlayer) {
+            const killerRuntime = runtimeRoom(active.id).get(killerPlayer.userId);
             if (killerRuntime) {
               creditedKillerState = {
                 ...killerRuntime,
@@ -223,9 +229,35 @@ export function createPlatformServer(options = {}) {
                 sequence: killerRuntime.sequence + 1,
                 sentAt: now,
               };
-              runtimeRoom(active.id).set(combatLock.sourceUserId, creditedKillerState);
+              runtimeRoom(active.id).set(killerPlayer.userId, creditedKillerState);
             }
           }
+
+          const killerTeam = heroKiller && killerPlayer
+            ? killerPlayer.team
+            : String(combatLock.sourceEntityId || '').includes(':red:')
+              ? 'red'
+              : String(combatLock.sourceEntityId || '').includes(':blue:')
+                ? 'blue'
+                : 'neutral';
+          const nextDeaths = Number(previous?.deaths || 0) + 1;
+          confirmedHeroKillEvent = {
+            type: 'match.runtime.hero.kill',
+            matchId: active.id,
+            eventId: `hero-kill:${active.id}:${userId}:${nextDeaths}`,
+            victimUserId: userId,
+            victimUsername: player.username,
+            victimTeam: player.team,
+            victimHeroId: active.heroSelections?.[userId]?.heroId || 'H001',
+            killerUserId: heroKiller && killerPlayer ? killerPlayer.userId : null,
+            killerUsername: heroKiller && killerPlayer ? killerPlayer.username : null,
+            killerTeam,
+            killerHeroId: heroKiller && killerPlayer
+              ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
+              : null,
+            killerEntityId: String(combatLock.sourceEntityId || '') || null,
+            at: now,
+          };
         } else if (requestedAlive) {
           combatLocks.delete(userId);
         }
@@ -286,6 +318,7 @@ export function createPlatformServer(options = {}) {
         state: creditedKillerState,
       }, recipients);
     }
+    if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);
     return state;
   }
 
