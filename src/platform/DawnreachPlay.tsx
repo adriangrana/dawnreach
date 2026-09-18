@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import type { PartySnapshot, PlatformUser, QueueMode, QueueState } from './types';
 
-type PlayMode = QueueMode | 'vs_ai' | 'training' | 'custom';
+export type PlayMode = QueueMode | 'vs_ai' | 'training' | 'custom';
 type DeploymentId = 'north' | 'mid' | 'south';
 
 type ModeDefinition = Readonly<{
@@ -128,6 +128,44 @@ const MODE_COPY: Record<PlayMode, Readonly<{
   },
 };
 
+export function DawnreachPlayModeRail({
+  selectedMode,
+  onSelect,
+  disabled = false,
+}: {
+  selectedMode: PlayMode;
+  onSelect: (mode: PlayMode) => void;
+  disabled?: boolean;
+}) {
+  return <aside className="dr-play-modes" aria-label="Game modes">
+    <div className="dr-play-modes-heading"><small>PLAY</small><strong>CHOOSE YOUR BATTLE</strong></div>
+    {MODES.map(mode => {
+      const active = selectedMode === mode.id;
+      const cardStyle = {
+        '--dr-play-card-background': `url("${mode.background}")`,
+      } as CSSProperties;
+      return <button
+        type="button"
+        key={mode.id}
+        className={`dr-play-mode-card is-${mode.id}${active ? ' is-selected' : ''}`}
+        style={cardStyle}
+        disabled={disabled && !active}
+        onClick={() => onSelect(mode.id)}
+        aria-pressed={active}
+      >
+        <span className="dr-play-mode-icon">
+          <img src={active ? mode.activeIcon : mode.icon} alt="" draggable={false} />
+        </span>
+        <span className="dr-play-mode-copy">
+          <strong>{mode.title}</strong>
+          <em>{mode.subtitle}</em>
+        </span>
+      </button>;
+    })}
+    <blockquote>“GREAT PLAYERS<br />BUILD A BRIGHTER WORLD.”<span>— DAWNREACH</span></blockquote>
+  </aside>;
+}
+
 function selectedDeploymentLabel(deployment: DeploymentId, primary: DeploymentId | null, secondary: DeploymentId | null) {
   if (deployment === primary) return 'Primary';
   if (deployment === secondary) return 'Secondary';
@@ -138,6 +176,7 @@ export function DawnreachPlayScreen({
   me,
   party,
   queue,
+  initialMode,
   onMode,
   onJoin,
   onLeave,
@@ -147,20 +186,25 @@ export function DawnreachPlayScreen({
   me: PlatformUser;
   party: PartySnapshot;
   queue: QueueState;
+  initialMode?: PlayMode;
   onMode: (mode: QueueMode) => void;
   onJoin: (mode: QueueMode) => void;
   onLeave: () => void;
   onLocalPlay: () => void;
   onCustom: () => void;
 }) {
-  const [selectedMode, setSelectedMode] = useState<PlayMode>(queue.mode);
+  const [selectedMode, setSelectedMode] = useState<PlayMode>(initialMode ?? queue.mode);
   const [primaryDeployment, setPrimaryDeployment] = useState<DeploymentId | null>('mid');
   const [secondaryDeployment, setSecondaryDeployment] = useState<DeploymentId | null>('south');
   const [fillIfNeeded, setFillIfNeeded] = useState(true);
 
   useEffect(() => {
-    if (queue.joined) setSelectedMode(queue.mode);
-  }, [queue.joined, queue.mode]);
+    if (queue.joined) {
+      setSelectedMode(queue.mode);
+      return;
+    }
+    if (initialMode) setSelectedMode(initialMode);
+  }, [initialMode, queue.joined, queue.mode]);
 
   const copy = MODE_COPY[selectedMode];
   const selectedModeDefinition = MODES.find(mode => mode.id === selectedMode) ?? MODES[0];
@@ -225,33 +269,7 @@ export function DawnreachPlayScreen({
   };
 
   return <section className="dr-play-screen">
-    <aside className="dr-play-modes" aria-label="Game modes">
-      <div className="dr-play-modes-heading"><small>PLAY</small><strong>CHOOSE YOUR BATTLE</strong></div>
-      {MODES.map(mode => {
-        const active = selectedMode === mode.id;
-        const cardStyle = {
-          '--dr-play-card-background': `url("${mode.background}")`,
-        } as CSSProperties;
-        return <button
-          type="button"
-          key={mode.id}
-          className={`dr-play-mode-card is-${mode.id}${active ? ' is-selected' : ''}`}
-          style={cardStyle}
-          disabled={queue.joined && !active}
-          onClick={() => selectMode(mode.id)}
-          aria-pressed={active}
-        >
-          <span className="dr-play-mode-icon">
-            <img src={active ? mode.activeIcon : mode.icon} alt="" draggable={false} />
-          </span>
-          <span className="dr-play-mode-copy">
-            <strong>{mode.title}</strong>
-            <em>{mode.subtitle}</em>
-          </span>
-        </button>;
-      })}
-      <blockquote>“GREAT PLAYERS<br />BUILD A BRIGHTER WORLD.”<span>— DAWNREACH</span></blockquote>
-    </aside>
+    <DawnreachPlayModeRail selectedMode={selectedMode} disabled={queue.joined} onSelect={selectMode} />
 
     <div className="dr-play-center">
       <section
