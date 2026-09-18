@@ -44,7 +44,7 @@ function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
 }
 
-function LocalGameScreen() {
+function LocalGameScreen({ activeMatch, user }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null } = {}) {
   const [ready, setReady] = useState(false);
   useEffect(() => mountGameClientRuntime(), []);
   useEffect(() => {
@@ -62,7 +62,7 @@ function LocalGameScreen() {
     requestAnimationFrame(inspect);
     return () => { disposed = true; };
   }, []);
-  return <div className="platform-local-game"><GameApp />{!ready && <div className="platform-game-loading" role="status" aria-label="Loading match"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparing the battlefield…</span></div></div>}</div>;
+  return <div className="platform-local-game"><GameApp onlineMatch={activeMatch?.match ?? null} localUser={user ?? null} />{!ready && <div className="platform-game-loading" role="status" aria-label="Loading match"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparing the battlefield…</span></div></div>}</div>;
 }
 
 function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; onAuthenticated: (user: PlatformUser) => void; onLocalGame: () => void }) {
@@ -337,7 +337,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
 
   if (activeMatch?.stage === 'loading' || (activeMatch?.stage === 'in_game' && sharedGameVisible)) {
     return <div className={`platform-shared-match-runtime${activeMatch.stage === 'loading' ? ' is-loading' : ''}`}>
-      <LocalGameScreen />
+      <LocalGameScreen activeMatch={activeMatch} user={user} />
       {activeMatch.stage === 'loading' && <MatchLoadingScreen session={activeMatch} me={user} />}
     </div>;
   }
