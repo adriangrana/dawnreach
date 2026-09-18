@@ -286,6 +286,9 @@ function synchronizeWorldRuntime(
     }
 
     if (entity.kind === 'hero') {
+      // Remote network heroes are rendered through createDawnreachGame + VisionSystem.
+      // Never force their root visible here or fog-of-war is bypassed every world-sync tick.
+      if (entity.root.userData.networkRemoteHero === true) continue;
       if (entity.alive) {
         setHeroRenderVisible(entity);
         setHeroStatusOverlayVisible(entity, true);
@@ -312,7 +315,7 @@ function updateHeroDeathPresentationOnce(
   worldRoot.userData[LAST_HERO_DEATH_PRESENTATION_KEY] = elapsed;
 
   for (const entity of registry.values()) {
-    if (entity.kind !== 'hero') continue;
+    if (entity.kind !== 'hero' || entity.root.userData.networkRemoteHero === true) continue;
     if (!entity.alive) {
       holdDeadHeroAtDeathPosition(entity);
       setHeroRenderVisible(entity);
