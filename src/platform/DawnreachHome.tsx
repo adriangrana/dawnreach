@@ -16,7 +16,7 @@ import aldenFullArt from '../game/heroes/alden/images/H001F.png';
 import { HomeChatPanel } from './HomeChatPanel';
 import { platformRealtime } from './realtimeClient';
 import { SocialRail } from './SocialRail';
-import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
+import type { ActiveMatchSession, PartySnapshot, PlatformUser, SocialSnapshot } from './types';
 
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const HOME_CURRENCY = { gold: 12_480, crystals: 2_350 } as const;
@@ -26,6 +26,8 @@ export function DawnreachHomeTopbar({
   section,
   user,
   realtime,
+  activeMatch,
+  onReturnToMatch,
   onHome,
   onPlay,
   onLogout,
@@ -33,6 +35,8 @@ export function DawnreachHomeTopbar({
   section: 'home' | 'play';
   user: PlatformUser;
   realtime: 'connecting' | 'online' | 'offline';
+  activeMatch?: ActiveMatchSession | null;
+  onReturnToMatch?: () => void;
   onHome: () => void;
   onPlay: () => void;
   onLogout: () => void;
@@ -48,6 +52,10 @@ export function DawnreachHomeTopbar({
       <button disabled>PROFILE</button>
     </nav>
     <div className="dr-home-top-actions">
+      {activeMatch && onReturnToMatch && <button className="dr-home-return-match" type="button" onClick={onReturnToMatch}>
+        <Swords />
+        <span><small>{activeMatch.stage === 'hero_select' ? 'HERO SELECT' : activeMatch.stage === 'loading' ? 'MATCH LOADING' : 'MATCH IN PROGRESS'}</small><strong>RETURN TO MATCH</strong></span>
+      </button>}
       <span className="dr-home-currency is-gold" title="Gold"><span className="dr-home-currency-icon" aria-hidden="true"><Coins /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.gold)}</strong></span>
       <span className="dr-home-currency is-crystal" title="Crystals"><span className="dr-home-currency-icon" aria-hidden="true"><Gem /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.crystals)}</strong></span>
       <button className="dr-home-icon-button" type="button" disabled aria-label="Messages"><MessageSquare /></button>
