@@ -258,6 +258,7 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
     const nextHero = {
       ...hero,
       level: Math.max(1, Math.floor(action.state.level)),
+      experience: Math.max(0, Number(action.state.experience ?? hero.experience)),
       currentHp: Math.max(0, action.state.currentHp),
       currentResource: Math.max(0, action.state.currentResource),
       gold: Math.max(0, Math.floor(action.state.gold ?? hero.gold)),
@@ -1375,6 +1376,7 @@ export default function App({
         matchId: onlineMatch.id,
         sequence: networkSequenceRef.current,
         ...state,
+        experience: hero.experience,
         kills: combat.kills,
         deaths: combat.deaths,
         assists: combat.assists,
