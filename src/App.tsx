@@ -1163,7 +1163,6 @@ export default function App({
       const structureTarget = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/.test(event.entityId);
       if (
         structureTarget
-        && authorityUserId !== localUser.id
         && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID
         && amount > 0
       ) {
@@ -1175,8 +1174,7 @@ export default function App({
       }
 
       if (
-        authorityUserId !== localUser.id
-        && event.entityId.startsWith('lane-creep:')
+        event.entityId.startsWith('lane-creep:')
         && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID
         && amount > 0
       ) {
