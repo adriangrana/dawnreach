@@ -792,7 +792,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
           </div>
           <div className="hero-identity">
             <strong>{definition.displayName}</strong>
-            <span>{definition.className}</span>
+            <span>{definition.className}{readOnly ? ' · INSPECCIÓN' : ''}</span>
             <div className="hero-attributes">
               <div className="hero-combat-stats">
                 <b className="hero-combat-stat hero-combat-stat--damage" title="Daño base + daño directo de objetos">
@@ -827,7 +827,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
               const control = getAbilityControl(runtime.match, hero.heroEntityId, key, runtime.nowMs);
               const ability = control.ability;
               const nextLevel = ability.unlockLevels[control.rank];
-              const canUpgrade = unspentAbilityPoints > 0 && nextLevel !== undefined && hero.level >= nextLevel;
+              const canUpgrade = !readOnly && unspentAbilityPoints > 0 && nextLevel !== undefined && hero.level >= nextLevel;
               return <AbilityButton
                 key={key} hotkey={key} name={ability.name} kind={ability.type}
                 description={ability.technicalDescription} lore={ability.lore}
@@ -839,6 +839,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
                 canUpgrade={canUpgrade}
                 onUpgrade={() => dispatch({ type: 'upgrade', key, nowMs: performance.now() })}
+                readOnly={readOnly}
               ><HudArt name={abilityArt[key]} /></AbilityButton>;
             })}
           </div>
@@ -882,6 +883,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
                 nowMs={runtime.nowMs}
                 onUse={slotIndex => dispatch({ type: 'item-use', slot: slotIndex, nowMs: performance.now() })}
                 onMove={(fromSlot, toSlot) => dispatch({ type: 'inventory-move', fromSlot, toSlot, nowMs: performance.now() })}
+                readOnly={readOnly}
               />
             ))}
           </div>
