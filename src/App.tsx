@@ -946,6 +946,7 @@ export default function App({
     hero: getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID),
     stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
   });
+  const [inspectedHeroOwnerUserId, setInspectedHeroOwnerUserId] = useState<string | null>(null);
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
@@ -957,6 +958,23 @@ export default function App({
   const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const localHeroDead = localHero.currentHp <= 0;
   const inventoryFull = !localHero.inventory.some(slot => slot.item === null);
+
+  useEffect(() => {
+    const onHeroSelectionChanged = (event: Event) => {
+      const detail = (event as CustomEvent<HeroSelectionChangedDetail>).detail;
+      if (!detail || detail.local || !detail.ownerUserId) {
+        setInspectedHeroOwnerUserId(null);
+        return;
+      }
+      setInspectedHeroOwnerUserId(
+        runtimeStateRef.current.match.players[detail.ownerUserId]
+          ? detail.ownerUserId
+          : null,
+      );
+    };
+    window.addEventListener(HERO_SELECTION_CHANGED_EVENT, onHeroSelectionChanged as EventListener);
+    return () => window.removeEventListener(HERO_SELECTION_CHANGED_EVENT, onHeroSelectionChanged as EventListener);
+  }, []);
 
   useEffect(() => {
     const online = Boolean(onlineMatch && localUser && onlineMatch.status === 'in_game');
@@ -1414,7 +1432,14 @@ export default function App({
   return (
     <main className="app-shell">
       <div ref={hostRef} className="game-host" onDragOver={onWorldDragOver} onDrop={onWorldDrop} />
-      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} onlineStartedAt={onlineMatch?.startedAt} />
+      <GameHud
+        minimapRef={minimapRef}
+        minimapHeroRef={minimapHeroRef}
+        runtime={runtime}
+        dispatch={dispatch}
+        onlineStartedAt={onlineMatch?.startedAt}
+        inspectedHeroOwnerUserId={inspectedHeroOwnerUserId}
+      />
       <ScoreboardOverlay
         match={runtime.match}
         nowMs={runtime.nowMs}
