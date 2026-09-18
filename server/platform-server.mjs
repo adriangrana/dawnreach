@@ -25,6 +25,8 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeStates = new Map();
   const matchRuntimeCreepStates = new Map();
   const matchRuntimeCombatLocks = new Map();
+  const matchRuntimeHeroDamageCredits = new Map();
+  const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
   let matchChatSequence = 0;
 
   function isOnline(userId) {
@@ -144,6 +146,15 @@ export function createPlatformServer(options = {}) {
       matchRuntimeCombatLocks.set(matchId, locks);
     }
     return locks;
+  }
+
+  function runtimeHeroDamageCredits(matchId) {
+    let credits = matchRuntimeHeroDamageCredits.get(matchId);
+    if (!credits) {
+      credits = new Map();
+      matchRuntimeHeroDamageCredits.set(matchId, credits);
+    }
+    return credits;
   }
 
   function runtimeCreepSnapshot(matchId) {
