@@ -1657,12 +1657,21 @@ export function createPlatformServer(options = {}) {
     }
 
     if (active.source === 'custom') lobbies.removeParticipantFromInGame(active.id, userId);
+    const remainingUserIds = remainingPlayers.map(candidate => candidate.userId);
     broadcast({
       type: 'match.player.abandoned',
       match: publicMatch(updated),
       userId,
       username: player.username,
-    }, remainingPlayers.map(candidate => candidate.userId));
+    }, remainingUserIds);
+    const idleAbandonedState = runtimeRoom(active.id).get(userId) || null;
+    if (idleAbandonedState) {
+      broadcast({
+        type: 'match.runtime.state',
+        matchId: active.id,
+        state: idleAbandonedState,
+      }, remainingUserIds);
+    }
 
     // The game session is independent of the lobby owner. If the custom-lobby creator
     // abandons, ownership may migrate, but every remaining player stays in the same match.
