@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
+import { toMatchGameTimeMs } from '../match/matchPauseRuntime';
 import { TEAM_START_BASE_LAYOUT, getTeamStartSpawnPosition } from '../map/mapLayout';
 import { getGameEntity, type GameEntity, type GameEntityRegistry, type TeamId } from './gameEntities';
 import { calculateTowerAuraAdjustedDamage, updateTowerGameplayAuras } from './towerAuras';
@@ -931,5 +932,6 @@ function planarDistanceSquared(ax: number, az: number, bx: number, bz: number): 
 }
 
 function worldNowMs(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return toMatchGameTimeMs(now);
 }
