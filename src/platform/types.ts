@@ -370,6 +370,12 @@ export type MatchRuntimeStructureDamageEvent = Readonly<{
   at: number;
 }>;
 
+export type MatchRuntimeAuthorityEvent = Readonly<{
+  type: 'match.runtime.authority';
+  matchId: string;
+  authorityUserId: string | null;
+}>;
+
 export type MatchConnectionGraceEvent = Readonly<{
   type: 'match.connection.grace';
   matchId: string;
@@ -464,6 +470,7 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeCreepDamageEvent
   | MatchRuntimeStructureSnapshotEvent
   | MatchRuntimeStructureDamageEvent
+  | MatchRuntimeAuthorityEvent
   | MatchConnectionGraceEvent
   | MatchRuntimePauseStateEvent
   | MatchRuntimeHeroKillEvent
