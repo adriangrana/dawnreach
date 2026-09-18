@@ -2208,3 +2208,35 @@
     padding-right: 0 !important;
   }
 }
+
+
+/* =========================================================
+   CUSTOM LOBBY · full workspace pass
+   The canonical custom-lobby screen owns the full PLAY canvas:
+   no HOME footer strip and no social rail reservation.
+   ========================================================= */
+
+.dr-play-overview:has(.platform-play-custom-shell) {
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.platform-play-custom-shell {
+  padding-right: 0 !important;
+}
+
+.dr-play-overview:has(.platform-play-custom-shell) .dr-custom-notice {
+  right: 18px !important;
+  bottom: 14px !important;
+}
+
+@media (max-width: 1500px) {
+  .platform-play-custom-shell {
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-overview:has(.platform-play-custom-shell) {
+    grid-template-rows: minmax(0, 1fr) !important;
+  }
+}
