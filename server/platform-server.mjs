@@ -24,6 +24,7 @@ export function createPlatformServer(options = {}) {
   const peersByUser = new Map();
   const matchRuntimeStates = new Map();
   const matchRuntimeCreepStates = new Map();
+  const matchRuntimeStructureStates = new Map();
   const matchRuntimeCombatLocks = new Map();
   const matchRuntimeHeroDamageCredits = new Map();
   const matchRuntimePauseStates = new Map();
@@ -261,6 +262,15 @@ export function createPlatformServer(options = {}) {
     return {
       ...snapshot,
       creeps: snapshot.creeps.map(creep => ({ ...creep, position: { ...creep.position } })),
+    };
+  }
+
+  function runtimeStructureSnapshot(matchId) {
+    const snapshot = matchRuntimeStructureStates.get(matchId);
+    if (!snapshot) return null;
+    return {
+      ...snapshot,
+      structures: snapshot.structures.map(structure => ({ ...structure })),
     };
   }
 
