@@ -124,6 +124,18 @@ export type LobbyPlayer = Readonly<{
   joinedAt: number;
   team: Team;
   slot: number;
+  ready: boolean;
+}>;
+
+export type LobbyMessage = Readonly<{
+  id: string;
+  lobbyId: string;
+  fromUserId: string | null;
+  username: string;
+  channel: 'system' | 'all' | 'team';
+  team: Team | null;
+  text: string;
+  createdAt: string;
 }>;
 
 export type CustomLobby = Readonly<{
@@ -137,6 +149,7 @@ export type CustomLobby = Readonly<{
   status: 'open' | 'launching' | 'in_game';
   createdAt: string;
   players: readonly LobbyPlayer[];
+  messages: readonly LobbyMessage[];
   matchId?: string;
 }>;
 
