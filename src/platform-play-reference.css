@@ -1344,7 +1344,8 @@
 }
 
 .dr-play-modes {
-  grid-template-rows: repeat(5, clamp(72px, 8.2vh, 86px)) auto !important;
+  padding-top: 22px !important;
+  grid-template-rows: repeat(5, clamp(80px, 9vh, 94px)) auto !important;
   align-content: start !important;
   gap: 9px !important;
 }
@@ -1393,13 +1394,14 @@
   }
 
   .dr-play-modes {
-    grid-template-rows: repeat(5, 68px) auto !important;
+    padding-top: 17px !important;
+    grid-template-rows: repeat(5, 76px) auto !important;
     gap: 8px !important;
   }
 
   .dr-play-mode-card {
     min-height: 0 !important;
-    height: 68px !important;
+    height: 76px !important;
     grid-template-columns: 54px minmax(0, 1fr) !important;
     padding: 6px 13px 6px 8px !important;
   }
@@ -1420,12 +1422,13 @@
 
 @media (max-height: 850px) {
   .dr-play-modes {
-    grid-template-rows: repeat(5, 60px) auto !important;
+    padding-top: 12px !important;
+    grid-template-rows: repeat(5, 66px) auto !important;
     gap: 6px !important;
   }
 
   .dr-play-mode-card {
-    height: 60px !important;
+    height: 66px !important;
     min-height: 0 !important;
     grid-template-columns: 48px minmax(0, 1fr) !important;
     padding: 5px 12px 5px 7px !important;
