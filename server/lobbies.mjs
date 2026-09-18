@@ -146,6 +146,33 @@ export class LobbyManager {
     return copyLobby(lobby, user.id);
   }
 
+  joinSpectator(user, codeOrId) {
+    const raw = String(codeOrId || '').trim();
+    const key = raw.toUpperCase();
+    const lobby = [...this.lobbies.values()].find(candidate => candidate.id === raw || candidate.code === key);
+    if (!lobby || lobby.status !== 'open') throw new Error('La sala personalizada no está disponible.');
+    if (!lobby.settings.allowSpectators) throw new Error('El host no permite espectadores.');
+    if (lobby.spectators.length >= lobby.maxSpectators) throw new Error('No quedan plazas de espectador.');
+
+    const current = this.findLobbyForUser(user.id);
+    if (current?.id === lobby.id) {
+      if (current.spectators.some(candidate => candidate.userId === user.id)) return copyLobby(current, user.id);
+      return this.spectate(user.id);
+    }
+    this.leave(user.id);
+
+    lobby.spectators.push({
+      userId: user.id,
+      username: user.username,
+      rating: user.rating,
+      joinedAt: Date.now(),
+    });
+    this.addSystemMessage(lobby, `${user.username} joined as a spectator.`);
+    this.emitLobby(lobby);
+    this.emitList();
+    return copyLobby(lobby, user.id);
+  }
+
   move(userId, team, slot) {
     const lobby = this.findLobbyForUser(userId);
     if (!lobby || lobby.status !== 'open') throw new Error('Solo puedes cambiar de posición antes de iniciar la partida.');
