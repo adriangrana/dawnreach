@@ -15,6 +15,7 @@ import {
   logoutPlatformAccount,
   platformRealtime,
   registerPlatformAccount,
+  type ActiveMatchSession,
   type CustomLobby,
   type HeroSelectState,
   type PartySnapshot,
@@ -101,6 +102,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [lobbies, setLobbies] = useState<readonly CustomLobby[]>([]);
   const [currentLobby, setCurrentLobby] = useState<CustomLobby | null>(null);
   const [heroSelect, setHeroSelect] = useState<HeroSelectState | null>(null);
+  const [activeMatch, setActiveMatch] = useState<ActiveMatchSession | null>(null);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
@@ -152,10 +154,16 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       if (type === 'match.found') {
         setReady(null);
         setQueue(current => ({ ...current, joined: false }));
+        if ('match' in event && event.match) setActiveMatch({ stage: 'hero_select', match: event.match as ActiveMatchSession['match'] });
         setNotice('');
       }
       if ((type === 'hero_select.start' || type === 'hero_select.update' || type === 'hero_select.complete') && 'heroSelect' in event && event.heroSelect) {
-        setHeroSelect(event.heroSelect as HeroSelectState);
+        const nextHeroSelect = event.heroSelect as HeroSelectState;
+        setHeroSelect(nextHeroSelect);
+        setActiveMatch({
+          stage: nextHeroSelect.phase === 'complete' ? 'loading' : 'hero_select',
+          match: nextHeroSelect.match,
+        });
         setNotice('');
       }
       if (type === 'hero_select.cancelled') {
@@ -163,6 +171,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         const cancelledByUsername = 'cancelledByUsername' in event ? String(event.cancelledByUsername || 'A player') : 'A player';
         const source = 'source' in event && event.source === 'custom' ? 'custom' : 'matchmaking';
         setHeroSelect(null);
+        setActiveMatch(null);
         setReady(null);
         setQueue(current => ({ ...current, joined: false }));
         setSection('play');
@@ -173,7 +182,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
           : `${cancelledByUsername} left Hero Select. The match was cancelled.`);
       }
       if (type === 'match.session.pending') {
+        if ('match' in event && event.match) setActiveMatch({ stage: 'loading', match: event.match as ActiveMatchSession['match'] });
         setNotice('');
+      }
+      if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
+        setActiveMatch(event.activeMatch as ActiveMatchSession);
+        setNotice('Match session restored.');
       }
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
@@ -184,6 +198,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         if ('lobbies' in event && Array.isArray(event.lobbies)) setLobbies(event.lobbies as readonly CustomLobby[]);
         if ('lobby' in event) setCurrentLobby((event.lobby as CustomLobby | null) ?? null);
         if ('heroSelect' in event) setHeroSelect((event.heroSelect as HeroSelectState | null) ?? null);
+        if ('activeMatch' in event) setActiveMatch((event.activeMatch as ActiveMatchSession | null) ?? null);
         if ('queue' in event && event.queue && typeof event.queue === 'object') {
           const snapshot = event.queue as { joined?: boolean; target?: number };
           setQueue(current => ({ ...current, joined: Boolean(snapshot.joined), target: Number(snapshot.target || current.target) }));
@@ -206,6 +221,14 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     if (!platformRealtime.send('queue.leave')) { setNotice('Realtime connection unavailable.'); return; }
     setQueue(current => ({ ...current, joined: false }));
   };
+  const returnToMatch = () => {
+    if (!activeMatch) return;
+    if (!platformRealtime.send('match.rejoin')) {
+      setNotice('Realtime connection unavailable. Could not return to the match.');
+      return;
+    }
+    setNotice('Reconnecting to your active match…');
+  };
   const openPlay = () => { setRequestedPlayMode(null); setSection('play'); setPlaySection('matchmaking'); };
   const openNormal = () => { chooseMode('normal'); setRequestedPlayMode('normal'); setSection('play'); setPlaySection('matchmaking'); };
   const openRanked = () => { chooseMode('ranked'); setRequestedPlayMode('ranked'); setSection('play'); setPlaySection('matchmaking'); };
@@ -227,7 +250,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
 
   return <>
     <main className="platform-home-surface platform-home-shell">
-      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
+      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} activeMatch={activeMatch} onReturnToMatch={returnToMatch} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
           {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="dr-play-overview">
