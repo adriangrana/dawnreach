@@ -1144,7 +1144,7 @@ export default function App({
     setMatchEnd(null);
     if (matchEndedRef.current) {
       matchEndedRef.current = false;
-      applyAuthoritativeMatchPause(false, null, performance.now());
+      applyAuthoritativeMatchPause(false, null, performance.now(), undefined, null, false);
     }
   }, [onlineMatch?.id]);
 
@@ -1540,7 +1540,7 @@ export default function App({
           disconnectedUserIds: [],
           disconnectedPlayers: [],
         });
-        applyAuthoritativeMatchPause(true, null, performance.now());
+        applyAuthoritativeMatchPause(true, null, performance.now(), undefined, null, false);
         gameRef.current?.setNetworkAuthority(false);
       } else if (
         type === 'match.connection.grace'
