@@ -1099,7 +1099,17 @@ export default function App({
     if (!onlineMatch || !localUser || onlineMatch.status !== 'in_game') return;
 
     const applyRemote = (state: MatchRuntimePlayerState) => {
-      if (state.userId === localUser.id) return;
+      if (state.userId === localUser.id) {
+        // K/D is server-authoritative in online matches. Reconcile the local overlay from
+        // the same state that every other client receives instead of trusting duplicate
+        // world death events on this client.
+        setCombatHudStats({
+          kills: state.kills,
+          deaths: state.deaths,
+          assists: state.assists,
+        });
+        return;
+      }
       dispatch({ type: 'remote-player-sync', state, nowMs: performance.now() });
       const game = gameRef.current;
       if (game) game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
@@ -1156,6 +1166,9 @@ export default function App({
           amount: Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
           sourceEntityId: 'sourceEntityId' in event ? String(event.sourceEntityId || '') : undefined,
+          respawnSeconds: 'respawnSeconds' in event && Number.isFinite(Number(event.respawnSeconds))
+            ? Number(event.respawnSeconds)
+            : undefined,
         });
       }
     });
