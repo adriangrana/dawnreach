@@ -847,6 +847,7 @@ export function createPlatformServer(options = {}) {
         sourceUserId: existingDeathLock?.sourceUserId ?? null,
         sourceEntityId: existingDeathLock?.sourceEntityId ?? null,
       });
+      scheduleServerHeroRespawn(active.id, userId);
 
       const damageCredits = runtimeHeroDamageCredits(active.id);
       const recentCredit = damageCredits.get(userId) || null;
@@ -1145,6 +1146,7 @@ export function createPlatformServer(options = {}) {
         sourceEntityId,
         serverResolved: true,
       });
+      if (lethal) scheduleServerHeroRespawn(active.id, target.userId);
     }
 
     const event = {
