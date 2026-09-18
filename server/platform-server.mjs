@@ -760,7 +760,7 @@ export function createPlatformServer(options = {}) {
 
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
-    const structureIdPattern = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/;
+    const structureIdPattern = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/;
     const previous = matchRuntimeStructureStates.get(active.id);
     const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
 
@@ -808,7 +808,7 @@ export function createPlatformServer(options = {}) {
     if (!authorityUserId || authorityUserId === userId) return null;
 
     const structureId = String(payload?.structureId || '');
-    const match = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/.exec(structureId);
+    const match = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/.exec(structureId);
     if (!match) throw new Error('Estructura de destino inválida.');
     if (match[1] === source.team) throw new Error('No se permite daño aliado a estructuras.');
 
