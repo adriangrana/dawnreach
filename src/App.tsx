@@ -1218,7 +1218,7 @@ export default function App({
           matchId: onlineMatch.id,
           targetUserId: localUser.id,
           reason: 'damage',
-          amount: Number(event.amount || 0),
+          amount: Number(event.rawAmount ?? event.amount ?? 0),
           sourceEntityId,
         });
       }
