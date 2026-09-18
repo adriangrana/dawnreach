@@ -1429,6 +1429,12 @@ export default function App({
       ) {
         const snapshot = event as unknown as DawnreachCreepNetworkSnapshot;
         const game = gameRef.current;
+        if ('authorityUserId' in event) {
+          const authorityUserId = event.authorityUserId ? String(event.authorityUserId) : null;
+          runtimeAuthorityUserIdRef.current = authorityUserId;
+          if (game) game.setNetworkAuthority(authorityUserId === localUser.id);
+          else pendingAuthorityUserIdRef.current = authorityUserId;
+        }
         if (game) game.applyRemoteCreepNetworkSnapshot(snapshot);
         else pendingCreepSnapshotRef.current = snapshot;
       } else if (
