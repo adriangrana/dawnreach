@@ -49,6 +49,7 @@ export type LaneCreepNetworkUnit = Readonly<{
 export type LaneCreepNetworkSnapshot = Readonly<{
   sequence: number;
   sentAt: number;
+  elapsedSeconds?: number;
   creeps: readonly LaneCreepNetworkUnit[];
 }>;
 
@@ -260,6 +261,8 @@ class LaneCreepManager {
   }>();
   private readonly startedAtMs = toMatchGameTimeMs(performance.now());
   private lastFrameMs = this.startedAtMs;
+  private elapsedOffsetSeconds = 0;
+  private lastReplicaElapsedSeconds = 0;
   private nextWaveIndex = 0;
   private lastAttackSequence = 0;
   private animationFrame = 0;
@@ -332,7 +335,12 @@ class LaneCreepManager {
     if (this.networkMode === nextMode) return;
 
     const gameNowMs = toMatchGameTimeMs(performance.now());
-    const elapsed = Math.max(0, (gameNowMs - this.startedAtMs) / 1000);
+    const rawElapsed = Math.max(0, (gameNowMs - this.startedAtMs) / 1000);
+    const inheritedElapsed = Math.max(
+      0,
+      rawElapsed + this.elapsedOffsetSeconds,
+      this.lastReplicaElapsedSeconds,
+    );
     this.networkMode = nextMode;
     this.scene.userData.laneCreepNetworkMode = nextMode;
     this.lastFrameMs = gameNowMs;
@@ -350,20 +358,20 @@ class LaneCreepManager {
         creep.target = null;
         creep.targetAcquiredAt = 0;
         creep.state = 'ATTACK_MOVE';
-        creep.nextAttackAt = elapsed;
-        creep.nextScanAt = elapsed;
+        creep.nextAttackAt = inheritedElapsed;
+        creep.nextScanAt = inheritedElapsed;
         creep.aggroLockUntil = 0;
-        creep.spawnedAt = elapsed;
+        creep.spawnedAt = inheritedElapsed;
         creep.moving = false;
         this.clearNavigation(creep);
         this.writeState(creep);
       }
       this.replicaTargets.clear();
       this.serial = Math.max(this.serial, highestSeed + 1);
-      this.nextWaveIndex = Math.max(
-        highestWave + 1,
-        Math.floor(elapsed / LANE_CREEP_TUNING.waveIntervalSeconds) + 1,
-      );
+      this.elapsedOffsetSeconds = Math.max(0, inheritedElapsed - rawElapsed);
+      this.nextWaveIndex = highestWave >= 0
+        ? highestWave + 1
+        : Math.floor(inheritedElapsed / LANE_CREEP_TUNING.waveIntervalSeconds) + 1;
       this.lastReplicaSequence = -1;
       this.refreshStaticCandidates();
       this.rebalanceVisionLeaders();
@@ -392,6 +400,10 @@ class LaneCreepManager {
     return {
       sequence: this.networkSequence,
       sentAt: Date.now(),
+      elapsedSeconds: Math.max(
+        0,
+        (toMatchGameTimeMs(performance.now()) - this.startedAtMs) / 1000 + this.elapsedOffsetSeconds,
+      ),
       creeps: this.creeps.map(creep => ({
         id: creep.entity.id,
         team: creep.team,
@@ -418,6 +430,12 @@ class LaneCreepManager {
     if (this.networkMode !== 'replica' || this.disposed) return;
     if (!Number.isFinite(snapshot.sequence) || snapshot.sequence <= this.lastReplicaSequence) return;
     this.lastReplicaSequence = snapshot.sequence;
+    if (Number.isFinite(snapshot.elapsedSeconds)) {
+      this.lastReplicaElapsedSeconds = Math.max(
+        this.lastReplicaElapsedSeconds,
+        Number(snapshot.elapsedSeconds),
+      );
+    }
 
     const present = new Set<string>();
     for (const unit of snapshot.creeps) {
@@ -516,7 +534,10 @@ class LaneCreepManager {
     const gameNowMs = toMatchGameTimeMs(nowMs);
     const dt = Math.min(0.05, Math.max(0, (gameNowMs - this.lastFrameMs) / 1000));
     this.lastFrameMs = gameNowMs;
-    const elapsed = Math.max(0, (gameNowMs - this.startedAtMs) / 1000);
+    const elapsed = Math.max(
+      0,
+      (gameNowMs - this.startedAtMs) / 1000 + this.elapsedOffsetSeconds,
+    );
 
     if (this.networkMode === 'replica') {
       this.updateReplicaCreeps(gameNowMs / 1000, dt);
