@@ -20,7 +20,14 @@ import {
 const HERO_ASSIST_WINDOW_MS = 10_000;
 const KILL_SOURCE_LOOKBACK_MS = 3_000;
 const processedDeaths = new Set<string>();
+const deadHeroEntities = new Set<string>();
+let serverAuthoritativeHeroDeaths = false;
 let installed = false;
+
+export function setMatchEventHeroDeathServerAuthority(enabled: boolean) {
+  serverAuthoritativeHeroDeaths = enabled;
+  if (!enabled) deadHeroEntities.clear();
+}
 
 function participant(
   entityId: string,
@@ -82,7 +89,22 @@ export function installMatchEventRuntime() {
   installed = true;
 
   const unsubscribe = subscribeWorldCombatEvents((event) => {
-    if (event.reason !== 'death' || event.alive || event.currentHp > 0) return;
+    if (event.reason === 'respawn' || event.alive || event.currentHp > 0) {
+      deadHeroEntities.delete(event.entityId);
+      return;
+    }
+    if (event.reason !== 'death') return;
+
+    const recentAttackForKind = getMostRecentAttackOnTarget(event.entityId, event.atMs, KILL_SOURCE_LOOKBACK_MS);
+    const targetKind = recentAttackForKind?.targetKind ?? matchEventKindFromEntityId(event.entityId);
+    if (targetKind === 'hero') {
+      if (serverAuthoritativeHeroDeaths) return;
+      // A hero can emit several death events while the corpse/respawn systems converge.
+      // Treat the entire dead lifecycle as one semantic death, not one row per timestamp.
+      if (deadHeroEntities.has(event.entityId)) return;
+      deadHeroEntities.add(event.entityId);
+    }
+
     const deathKey = `${event.entityId}:${event.atMs.toFixed(3)}`;
     if (processedDeaths.has(deathKey)) return;
     processedDeaths.add(deathKey);
@@ -91,7 +113,7 @@ export function installMatchEventRuntime() {
       if (oldest) processedDeaths.delete(oldest);
     }
 
-    const recentAttack = getMostRecentAttackOnTarget(event.entityId, event.atMs, KILL_SOURCE_LOOKBACK_MS);
+    const recentAttack = recentAttackForKind;
     const target = participantFromAttack(event.entityId, recentAttack, 'target');
     const killerId = event.sourceEntityId ?? recentAttack?.attackerId ?? null;
     const killer = killerId
@@ -107,6 +129,7 @@ export function installMatchEventRuntime() {
   return () => {
     unsubscribe();
     processedDeaths.clear();
+    deadHeroEntities.clear();
     installed = false;
   };
 }
