@@ -824,7 +824,10 @@ function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntit
   } else {
     target.root.visible = false;
   }
-  const respawnSeconds = target.kind === 'hero' ? scheduleHeroRespawn(target, elapsed) : undefined;
+  const networkSession = getWorldRoot(target.root).userData.dawnreachNetworkSession === true;
+  const respawnSeconds = target.kind === 'hero' && !networkSession
+    ? scheduleHeroRespawn(target, elapsed)
+    : undefined;
 
   emitWorldCombatEvent({
     entityId: target.id,
