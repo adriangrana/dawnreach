@@ -48,11 +48,13 @@ export function createPlatformServer(options = {}) {
   });
 
   function handoffToGameSession(match, heroSelections) {
+    const loadingProgress = Object.fromEntries(match.players.map(player => [player.userId, 0]));
     const updated = store.updateMatch(match.id, {
       status: 'loading',
       heroSelections,
+      loadingProgress,
       heroSelectCompletedAt: new Date().toISOString(),
-    }) || { ...match, status: 'loading', heroSelections };
+    }) || { ...match, status: 'loading', heroSelections, loadingProgress };
     const { resultToken: _secret, ...safe } = updated;
     broadcast({
       type: 'match.session.pending',
@@ -127,6 +129,40 @@ export function createPlatformServer(options = {}) {
     return persistent
       ? { stage: persistent.status === 'in_game' ? 'in_game' : 'loading', match: publicMatch(persistent) }
       : null;
+  }
+
+  function reportMatchLoadingProgress(userId, value) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'loading') throw new Error('No tienes una partida cargando.');
+
+    const progress = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    const loadingProgress = { ...(active.loadingProgress || {}) };
+    loadingProgress[userId] = Math.max(Number(loadingProgress[userId] || 0), progress);
+
+    let updated = store.updateMatch(active.id, { loadingProgress });
+    if (!updated) throw new Error('No se pudo actualizar la carga de la partida.');
+
+    const participants = updated.players.map(player => player.userId);
+    broadcast({
+      type: 'match.loading.update',
+      match: publicMatch(updated),
+    }, participants);
+
+    const everyoneReady = updated.players.every(player => Number(loadingProgress[player.userId] || 0) >= 100);
+    if (!everyoneReady || updated.status !== 'loading') return;
+
+    updated = store.updateMatch(updated.id, {
+      status: 'in_game',
+      loadingProgress,
+      startedAt: new Date().toISOString(),
+    }) || { ...updated, status: 'in_game', loadingProgress };
+
+    if (updated.source === 'custom') lobbies.markInGame(updated.id);
+
+    broadcast({
+      type: 'match.start',
+      match: publicMatch(updated),
+    }, participants);
   }
 
   function requireNoActiveSession(userId) {
@@ -410,6 +446,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'queue.leave') leaveQueue(user);
           else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
           else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
+          else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
           else if (type === 'lobby.create') {
             requireNoActiveSession(user.id);
             leaveQueue(user);
