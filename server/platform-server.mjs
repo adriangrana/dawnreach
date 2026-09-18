@@ -1485,6 +1485,8 @@ export function createPlatformServer(options = {}) {
       const peer = acceptWebSocket(req, socket, user.id);
       if (!peer) return socket.destroy();
       peersByUser.set(user.id, peer);
+      const connectedMatch = store.activeMatchForUser(user.id);
+      if (connectedMatch?.status === 'in_game') evaluateMatchConnectivity(connectedMatch.id);
       peer.onMessage = message => {
         try {
           const type = String(message?.type || '');
@@ -1548,7 +1550,13 @@ export function createPlatformServer(options = {}) {
         }
       };
       peer.onClose = () => {
-        if (peersByUser.get(user.id) === peer) peersByUser.delete(user.id);
+        if (peersByUser.get(user.id) === peer) {
+          peersByUser.delete(user.id);
+          const disconnectedMatch = store.activeMatchForUser(user.id);
+          if (disconnectedMatch?.status === 'in_game' && !shuttingDown) {
+            evaluateMatchConnectivity(disconnectedMatch.id);
+          }
+        }
         broadcastPresence();
       };
       peer.send({
@@ -1571,6 +1579,7 @@ export function createPlatformServer(options = {}) {
 
   async function start({ host = config.host, port = config.port } = {}) {
     if (server.listening) throw new Error('Dawnreach platform server is already listening.');
+    shuttingDown = false;
     await new Promise((resolve, reject) => {
       const onError = error => { server.off('listening', onListening); reject(error); };
       const onListening = () => { server.off('error', onError); resolve(); };
@@ -1584,6 +1593,8 @@ export function createPlatformServer(options = {}) {
   }
 
   async function close() {
+    shuttingDown = true;
+    for (const matchId of [...matchDisconnectGraceStates.keys()]) clearMatchDisconnectGrace(matchId);
     for (const peer of [...peersByUser.values()]) peer.close();
     peersByUser.clear();
     if (!server.listening) return;
