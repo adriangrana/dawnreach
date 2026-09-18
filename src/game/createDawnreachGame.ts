@@ -1978,6 +1978,7 @@ export async function createDawnreachGame(
     applyLocalNetworkCombat(input: {
       reason: 'damage' | 'heal';
       amount: number;
+      rawAmount?: number;
       sourceUserId: string;
       sourceEntityId?: string;
       respawnSeconds?: number;
@@ -2012,6 +2013,8 @@ export async function createDawnreachGame(
           ? Math.max(0, Number(input.respawnSeconds))
           : undefined,
         amount: input.amount,
+        rawAmount: Number.isFinite(input.rawAmount) ? Math.max(0, Number(input.rawAmount)) : input.amount,
+        serverResolved: true,
         sourceEntityId: input.sourceEntityId || `player:${input.sourceUserId}:hero`,
         damageType: 'physical',
         isDirect: true,
