@@ -331,7 +331,9 @@ export function registerGameEntity(root: THREE.Object3D, definition: GameEntityD
     maxResource: Math.max(0, definition.maxResource ?? 0),
     currentResource: Math.max(0, definition.currentResource ?? 0),
     alive: definition.alive ?? true,
-    revealed: definition.team !== 'red',
+    // Revelation is perspective-dependent and is owned by VisionSystem. Do not bake an
+    // absolute Dawn/blue bias into newly registered entities.
+    revealed: false,
   };
 
   root.userData[ENTITY_KEY] = entity;
