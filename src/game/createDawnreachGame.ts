@@ -343,6 +343,9 @@ export async function createDawnreachGame(
   const vision = createVisionSystem(entityRegistry, localTeam);
   scene.userData.entityRegistry = entityRegistry;
   scene.userData.visionSystem = vision;
+  scene.userData.localHeroEntityId = localWorldEntityId;
+  scene.userData.localPlayerId = localPlayerId;
+  scene.userData.localTeam = localTeam;
 
   const targetMarker = buildTargetMarker('move', 0x79ff71, 0xc3ffab);
   targetMarker.visible = false;
@@ -357,6 +360,7 @@ export async function createDawnreachGame(
     scene,
     entityRegistry,
     entity => entity.team === localTeam || entity.revealed,
+    localTeam,
   );
   vision.updateEntityVisibility();
   const surfaceRay = new THREE.Raycaster();
