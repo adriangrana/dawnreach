@@ -126,6 +126,7 @@ function startSpawnFromCenter(center: Readonly<{ x: number; z: number }>) {
 const scaledBlueBase = scalePosition(layout.blueBase);
 const scaledRedBase = scalePosition(layout.redBase);
 const blueStartBaseCenter = shopPositionFromBase(scaledBlueBase);
+const redStartBaseCenter = shopPositionFromBase(scaledRedBase);
 
 export const DAWNREACH_LAYOUT = {
   ...layout,
@@ -134,10 +135,7 @@ export const DAWNREACH_LAYOUT = {
   blueBase: scaledBlueBase,
   redBase: scaledRedBase,
   blueSpawn: startSpawnFromCenter(blueStartBaseCenter),
-  redSpawn: {
-    x: layout.redBase.x * MAP_LAYOUT_SCALE + layout.redSpawn.x - layout.redBase.x,
-    z: layout.redBase.z * MAP_LAYOUT_SCALE + layout.redSpawn.z - layout.redBase.z,
-  },
+  redSpawn: startSpawnFromCenter(redStartBaseCenter),
   lanes: {
     top: scalePoints(layout.lanes.top),
     mid: scalePoints(layout.lanes.mid),
@@ -156,8 +154,9 @@ export function getTeamBaseShopPosition(team: 'blue' | 'red') {
 }
 
 export function getTeamStartSpawnPosition(team: 'blue' | 'red') {
-  if (team === 'blue') return { ...DAWNREACH_LAYOUT.blueSpawn };
-  return startSpawnFromCenter(getTeamBaseShopPosition(team));
+  return {
+    ...(team === 'blue' ? DAWNREACH_LAYOUT.blueSpawn : DAWNREACH_LAYOUT.redSpawn),
+  };
 }
 
 export function getTeamStartBaseServiceOpening(
