@@ -39,8 +39,16 @@ export function getLaneTowerSites() {
       const point = curve.getPointAt(fraction);
       const tangent = curve.getTangentAt(fraction);
       point.add(new THREE.Vector3(-tangent.z, 0, tangent.x).multiplyScalar(index < 2 ? 1.1 : -1.1));
-      return { x: point.x, z: point.z, team: index < 2 ? 'blue' as const : 'red' as const, lane,
-        distanceAlongLane: fraction * curve.getLength() };
+      const team = index < 2 ? 'blue' as const : 'red' as const;
+      const towerIndex = team === 'blue' ? index + 1 : index - 1;
+      return {
+        x: point.x,
+        z: point.z,
+        team,
+        lane,
+        towerIndex,
+        distanceAlongLane: fraction * curve.getLength(),
+      };
     });
   });
 }
