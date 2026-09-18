@@ -1356,3 +1356,268 @@
     width: 260px;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · detailed Dota-style ability tooltip pass
+   ========================================================= */
+
+.dr-hero-select-ability-tooltip {
+  width: 470px !important;
+  max-width: min(470px, 42vw) !important;
+  max-height: min(620px, 72vh);
+  padding: 15px 16px 14px !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(202, 166, 74, .35) rgba(6, 18, 26, .65);
+  border-color: rgba(210, 174, 78, .56) !important;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(218, 177, 72, .10), transparent 34%),
+    linear-gradient(180deg, rgba(8, 22, 31, .995), rgba(3, 12, 18, .998)) !important;
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, .52),
+    inset 0 1px 0 rgba(255,255,255,.028) !important;
+}
+
+.dr-hero-select-ability-tooltip-header {
+  margin-bottom: 10px;
+  padding-bottom: 9px;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between;
+  gap: 14px !important;
+  border-bottom: 1px solid rgba(87, 119, 135, .24);
+}
+
+.dr-hero-select-ability-tooltip-header > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dr-hero-select-ability-tooltip-header em {
+  flex: 0 0 auto;
+  color: #e4bd59 !important;
+  font: normal 800 11px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .11em !important;
+}
+
+.dr-hero-select-ability-tooltip-header strong {
+  min-width: 0;
+  color: #f0f3f2 !important;
+  font: 700 17px/1.15 Georgia, "Times New Roman", serif !important;
+  letter-spacing: .015em;
+}
+
+.dr-hero-select-ability-tooltip-header > span {
+  flex: 0 0 145px;
+  color: #7190a0;
+  font: 700 8px/1.35 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .055em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.dr-hero-select-ability-tooltip-description {
+  margin: 0 0 12px !important;
+  color: #bdcbd0 !important;
+  font: 500 12px/1.55 "Segoe UI", Arial, sans-serif !important;
+}
+
+.dr-hero-select-ability-rank-head {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid rgba(81, 115, 132, .24);
+  background: rgba(5, 17, 25, .62);
+}
+
+.dr-hero-select-ability-rank-head > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #708895;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .12em;
+}
+
+.dr-hero-select-ability-rank-head > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dr-hero-select-ability-rank-head > div > span {
+  min-width: 0;
+  padding: 7px 5px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  border: 1px solid rgba(96, 129, 145, .20);
+  background: rgba(8, 25, 35, .72);
+  text-align: center;
+}
+
+.dr-hero-select-ability-rank-head > div > span b {
+  color: #e0be64;
+  font: 800 10px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-hero-select-ability-rank-head > div > span small {
+  color: #657e8a;
+  font: 700 6.5px/1.25 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .045em;
+}
+
+.dr-hero-select-ability-tooltip-sections {
+  display: grid;
+  gap: 12px;
+}
+
+.dr-hero-select-ability-tooltip-sections > section {
+  display: grid;
+  gap: 7px;
+}
+
+.dr-hero-select-ability-tooltip-sections h4 {
+  margin: 0;
+  color: #d2ae57;
+  font: 800 9px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .11em;
+}
+
+.dr-hero-select-ability-stat-table {
+  display: grid;
+  border-top: 1px solid rgba(80, 112, 129, .18);
+}
+
+.dr-hero-select-ability-stat-row {
+  min-height: 38px;
+  padding: 7px 0;
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(80, 112, 129, .14);
+}
+
+.dr-hero-select-ability-stat-row > strong {
+  color: #8ea4ae;
+  font: 700 9px/1.25 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-hero-select-ability-stat-row > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dr-hero-select-ability-stat-row > div > span {
+  min-width: 0;
+  padding: 4px 5px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(84, 117, 134, .16);
+  background: rgba(7, 22, 31, .54);
+  text-align: center;
+}
+
+.dr-hero-select-ability-stat-row > div > span small {
+  color: #667e89;
+  font: 700 6.5px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-hero-select-ability-stat-row > div > span b {
+  overflow-wrap: anywhere;
+  color: #d4dee1;
+  font: 700 9px/1.25 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-hero-select-ability-stat-row.is-fixed > div {
+  grid-template-columns: 1fr;
+}
+
+.dr-hero-select-ability-stat-row.is-fixed > div > span {
+  justify-items: start;
+  padding-left: 9px;
+  text-align: left;
+}
+
+.dr-hero-select-ability-stat-row.is-fixed > div > span b {
+  color: #c9d5d9;
+  font-size: 9.5px;
+}
+
+.dr-hero-select-ability-tooltip blockquote {
+  margin: 12px 0 0;
+  padding: 10px 0 0 12px;
+  border-top: 1px solid rgba(82, 114, 130, .18);
+  border-left: 2px solid rgba(197, 160, 66, .42);
+  color: #617984;
+  font: italic 500 9px/1.45 Georgia, "Times New Roman", serif;
+}
+
+.dr-hero-select-ability-tooltip > ul {
+  display: none !important;
+}
+
+/* Ultimate has three ranks: center its three columns instead of reserving a blank fourth. */
+.dr-hero-select-ability:nth-child(5) .dr-hero-select-ability-rank-head > div,
+.dr-hero-select-ability:nth-child(5) .dr-hero-select-ability-stat-row:not(.is-fixed) > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Keep edge tooltips on-screen while retaining the same large readable width. */
+.dr-hero-select-ability:first-child .dr-hero-select-ability-tooltip {
+  left: -6px !important;
+}
+
+.dr-hero-select-ability:last-child .dr-hero-select-ability-tooltip {
+  right: -6px !important;
+}
+
+@media (max-width: 1450px) {
+  .dr-hero-select-ability-tooltip {
+    width: 430px !important;
+    max-width: min(430px, 48vw) !important;
+  }
+
+  .dr-hero-select-ability-stat-row {
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+
+  .dr-hero-select-ability-tooltip-description {
+    font-size: 11px !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-ability-tooltip {
+    width: 410px !important;
+    max-height: 60vh;
+    padding: 12px 13px !important;
+  }
+
+  .dr-hero-select-ability-tooltip-header strong {
+    font-size: 15px !important;
+  }
+
+  .dr-hero-select-ability-tooltip-description {
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .dr-hero-select-ability-stat-row {
+    min-height: 33px;
+    padding: 5px 0;
+  }
+
+  .dr-hero-select-ability-stat-row > strong {
+    font-size: 8px;
+  }
+
+  .dr-hero-select-ability-stat-row > div > span b {
+    font-size: 8px;
+  }
+}
