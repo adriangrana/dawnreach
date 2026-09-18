@@ -252,6 +252,27 @@ export type MatchStartEvent = Readonly<{ type: 'match.start'; match: MatchSummar
 export type MatchAbandonedEvent = Readonly<{ type: 'match.abandoned'; matchId: string; ended: boolean }>;
 export type MatchPlayerAbandonedEvent = Readonly<{ type: 'match.player.abandoned'; match: MatchSummary; userId: string; username: string }>;
 export type MatchEndedEvent = Readonly<{ type: 'match.ended'; match: MatchSummary; winnerTeam: Team | null; reason: string }>;
+
+export type MatchRuntimePlayerState = Readonly<{
+  userId: string;
+  username: string;
+  team: Team;
+  slot: number;
+  heroId: string;
+  sequence: number;
+  position: Readonly<{ x: number; y: number; z: number }>;
+  yaw: number;
+  moving: boolean;
+  currentHp: number;
+  maxHp: number;
+  currentResource: number;
+  maxResource: number;
+  level: number;
+  alive: boolean;
+  sentAt: number;
+}>;
+export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
+export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
@@ -289,6 +310,8 @@ export type PlatformRealtimeEvent =
   | MatchAbandonedEvent
   | MatchPlayerAbandonedEvent
   | MatchEndedEvent
+  | MatchRuntimeStateEvent
+  | MatchRuntimeSnapshotEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
