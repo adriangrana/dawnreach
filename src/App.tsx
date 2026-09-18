@@ -703,6 +703,15 @@ function TeamPortraits({ team, side, localRespawn }: {
                   style={respawn ? { filter: 'grayscale(0.9) brightness(0.42)' } : undefined} />
               )}
               {respawn && <RespawnCooldownOverlay presentation={respawn} compact />}
+              {hero.disconnected && (
+                <span
+                  className="top-hero-disconnected"
+                  title="Jugador desconectado"
+                  aria-label="Jugador desconectado"
+                >
+                  <WifiOff />
+                </span>
+              )}
             </div>
             <span className="top-hero-level" style={respawn ? { zIndex: 5 } : undefined}>{hero.level ?? 1}</span>
           </div>
@@ -712,13 +721,22 @@ function TeamPortraits({ team, side, localRespawn }: {
   );
 }
 
-function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedAt, inspectedHeroOwnerUserId }: {
+function GameHud({
+  minimapRef,
+  minimapHeroRef,
+  runtime,
+  dispatch,
+  onlineStartedAt,
+  inspectedHeroOwnerUserId,
+  connectionState,
+}: {
   minimapRef: RefObject<HTMLDivElement | null>;
   minimapHeroRef: RefObject<HTMLImageElement | null>;
   runtime: HudRuntime;
   dispatch: Dispatch<HudAction>;
   onlineStartedAt?: string;
   inspectedHeroOwnerUserId?: string | null;
+  connectionState: MatchConnectionPresentation;
 }) {
   const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const inspectedPlayer = inspectedHeroOwnerUserId
@@ -756,8 +774,9 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
       totalMs: Math.max(1, Number(hero.runtime.counters['network.respawnDurationMs'] ?? remoteRespawnRemainingMs) || remoteRespawnRemainingMs || 1),
     }
     : localRespawnPresentation;
-  const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn', runtime.nowMs);
-  const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk', runtime.nowMs);
+  const disconnectedUserIds = new Set(connectionState.disconnectedUserIds);
+  const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn', runtime.nowMs, disconnectedUserIds);
+  const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk', runtime.nowMs, disconnectedUserIds);
 
   // Anchor the global match clock once to the server start timestamp, then advance it only
   // with Dawnreach's monotonic match-time clock. This prevents Date.now()/performance.now()
