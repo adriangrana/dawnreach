@@ -1402,9 +1402,6 @@ export function createPlatformServer(options = {}) {
     const source = active.players.find(candidate => candidate.userId === userId);
     if (!source) throw new Error('No participas en esta partida.');
 
-    const authorityUserId = runtimeAuthorityUserId(active);
-    if (!authorityUserId || authorityUserId === userId) return null;
-
     const structureId = String(payload?.structureId || '');
     const match = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/.exec(structureId);
     if (!match) throw new Error('Estructura de destino inválida.');
@@ -1413,6 +1410,29 @@ export function createPlatformServer(options = {}) {
     const amount = Math.max(0, Math.min(50000, Number(payload?.amount) || 0));
     if (amount <= 0) return null;
 
+    const previous = matchRuntimeStructureStates.get(active.id);
+    const target = previous?.structures?.find(structure => structure.id === structureId) || null;
+    if (!previous || !target || target.alive === false || Number(target.currentHp || 0) <= 0) return null;
+
+    const nextHp = Math.max(0, Number(target.currentHp || 0) - amount);
+    const nextStructure = {
+      ...target,
+      currentHp: nextHp,
+      alive: nextHp > 0,
+    };
+    const snapshot = {
+      ...previous,
+      type: 'match.runtime.structures',
+      matchId: active.id,
+      authorityUserId: runtimeAuthorityUserId(active),
+      sequence: Number(previous.sequence || 0) + 1,
+      sentAt: Date.now(),
+      structures: previous.structures.map(structure =>
+        structure.id === structureId ? nextStructure : structure),
+    };
+    matchRuntimeStructureStates.set(active.id, snapshot);
+
+    const simulatorUserId = runtimeAuthorityUserId(active);
     const event = {
       type: 'match.runtime.structure.damage',
       matchId: active.id,
@@ -1421,7 +1441,9 @@ export function createPlatformServer(options = {}) {
       amount,
       at: Date.now(),
     };
-    send(authorityUserId, event);
+
+    if (simulatorUserId && simulatorUserId !== userId) send(simulatorUserId, event);
+    broadcast(runtimeStructureSnapshot(active.id), active.players.map(candidate => candidate.userId));
     return event;
   }
 
