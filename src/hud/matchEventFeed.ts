@@ -54,6 +54,80 @@ function portraitFor(participant: MatchEventParticipant) {
     return '';
   }
   if (participant.kind !== 'hero') return '';
+
+  if (participant.heroId) {
+    const expected = new RegExp(`^${participant.heroId.replace(/[.*+?^$\\{}()|[\\]\\]/g, '\\  if (participant.kind !== 'hero') return '';
+  const slug = heroSlug(participant.entityId);
+  if (!slug) return '';
+  const directoryMarker = `/heroes/${slug}/images/`;
+  for (const [path, url] of Object.entries(heroPortraits)) {
+    if (!path.includes(directoryMarker)) continue;
+    const file = path.split('/').pop() ?? '';
+    if (/^H\d{3}\.(?:webp|png)$/i.test(file)) return url;
+  }
+  return '';
+}')}\\.(?:webp|png)import {
+  subscribeMatchEvents,
+  type HeroKilledMatchEvent,
+  type MatchEvent,
+  type MatchEventParticipant,
+  type MatchPauseMatchEvent,
+  type ObjectiveKilledMatchEvent,
+  type PlayerConnectionMatchEvent,
+  type ThroneDestroyedMatchEvent,
+  type ThroneUnderAttackMatchEvent,
+  type TowerDestroyedMatchEvent,
+} from '../game/match/matchEvents';
+import { TOWER_PORTRAITS } from './towerPortraitAssets';
+
+const FEED_ID = 'dawnreach-match-event-feed';
+const MAX_VISIBLE_ROWS = 6;
+const ROW_LIFETIME_MS = 7_500;
+const EXIT_ANIMATION_MS = 220;
+
+type FeedSystemEvent =
+  | TowerDestroyedMatchEvent
+  | ObjectiveKilledMatchEvent
+  | ThroneDestroyedMatchEvent
+  | ThroneUnderAttackMatchEvent
+  | MatchPauseMatchEvent
+  | PlayerConnectionMatchEvent;
+
+const heroPortraits = {
+  ...import.meta.glob<string>('../game/heroes/*/images/H*.webp', { eager: true, query: '?url', import: 'default' }),
+  ...import.meta.glob<string>('../game/heroes/*/images/H*.png', { eager: true, query: '?url', import: 'default' }),
+};
+
+function teamClass(team: MatchEventParticipant['team']) {
+  if (team === 'blue') return 'is-dawn';
+  if (team === 'red') return 'is-dusk';
+  return 'is-neutral';
+}
+
+function participantLabel(participant: MatchEventParticipant) {
+  return participant.kind === 'tower' ? 'Torre' : participant.label;
+}
+
+function heroSlug(entityId: string) {
+  const marker = '-hero-';
+  const index = entityId.indexOf(marker);
+  if (index < 0) return '';
+  return entityId.slice(index + marker.length).split(':')[0].toLowerCase();
+}
+
+function portraitFor(participant: MatchEventParticipant) {
+  if (participant.kind === 'tower') {
+    if (participant.team === 'blue') return TOWER_PORTRAITS.dawn;
+    if (participant.team === 'red') return TOWER_PORTRAITS.dusk;
+    return '';
+  }
+, 'i');
+    for (const [path, url] of Object.entries(heroPortraits)) {
+      const file = path.split('/').pop() ?? '';
+      if (expected.test(file)) return url;
+    }
+  }
+
   const slug = heroSlug(participant.entityId);
   if (!slug) return '';
   const directoryMarker = `/heroes/${slug}/images/`;
