@@ -249,6 +249,18 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
 
   update(nowMs: number) {
     if (this.disposed) return;
+
+    // Remote hero transforms are network-owned. Snapshot their already-interpolated position
+    // for this frame and restore it after local ability mechanics. This is a hard invariant:
+    // Q/W/E/R presentation may damage, slow or mark a remote hero, but it can never drag its
+    // replica along with Alden's dash. Any future real displacement must arrive as an
+    // authoritative network state/effect from the server.
+    const remoteHeroPositions: Array<[GameEntity, THREE.Vector3]> = [];
+    for (const entity of this.registry.values()) {
+      if (entity.kind !== 'hero' || entity.root.userData.networkRemoteHero !== true) continue;
+      remoteHeroPositions.push([entity, entity.root.position.clone()]);
+    }
+
     this.updateDash(nowMs);
     this.updateMovementModifiers(nowMs);
     this.updateFrozenTargets(nowMs);
@@ -256,6 +268,11 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     this.updateEffects(nowMs);
     this.applyAbilityPose(nowMs);
     this.pruneRuntimeState(nowMs);
+
+    for (const [entity, position] of remoteHeroPositions) {
+      if (!entity.root.parent) continue;
+      entity.root.position.copy(position);
+    }
   }
 
   private readonly onPointerMove = (event: PointerEvent) => {
