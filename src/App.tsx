@@ -1212,6 +1212,14 @@ export default function App({
       }
       for (const damage of pendingCreepDamageRef.current) game.applyRemoteCreepDamage(damage);
       pendingCreepDamageRef.current = [];
+
+      if (pendingStructureSnapshotRef.current) {
+        game.applyRemoteStructureNetworkSnapshot(pendingStructureSnapshotRef.current);
+        pendingStructureSnapshotRef.current = null;
+      }
+      for (const damage of pendingStructureDamageRef.current) game.applyRemoteStructureDamage(damage);
+      pendingStructureDamageRef.current = [];
+
       const pendingAbility = runtimeStateRef.current.pendingAbilityCast;
       if (pendingAbility) {
         game.castLocalAbility(pendingAbility.key, pendingAbility.rank, pendingAbility.atMs);
