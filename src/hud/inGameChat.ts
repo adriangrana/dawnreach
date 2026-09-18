@@ -6,11 +6,21 @@ import {
   type InGameChatChannel,
   type InGameChatMessage,
 } from '../game/match/chat';
+import { platformRealtime } from '../platform/realtimeClient';
+import type { PlatformRealtimeEvent } from '../platform/types';
 
 const CHAT_ROOT_ID = 'dawnreach-in-game-chat';
 const CHAT_INPUT_ID = 'dawnreach-in-game-chat-input';
 const LOCAL_PLAYER_ID = 'local-player';
 const LOCAL_TEAM = 'blue' as const;
+
+export type InGameChatRuntimeOptions = Readonly<{
+  matchId?: string | null;
+  playerId?: string | null;
+  playerName?: string | null;
+  team?: InGameChatMessage['team'] | null;
+}>;
+
 const MAX_RENDERED_MESSAGES = 40;
 const COLLAPSED_VISIBLE_MESSAGES = 6;
 const MINIMAP_GAP_PX = 12;
@@ -31,11 +41,12 @@ function teamClass(team: InGameChatMessage['team']) {
   return team === 'blue' ? 'is-dawn' : 'is-dusk';
 }
 
-function playerLabel(message: InGameChatMessage) {
-  return message.playerId === LOCAL_PLAYER_ID ? 'Tú' : message.playerId;
+function playerLabel(message: InGameChatMessage, localPlayerId: string) {
+  if (message.playerId === localPlayerId) return 'Tú';
+  return message.playerName?.trim() || message.playerId;
 }
 
-function createMessageRow(message: InGameChatMessage) {
+function createMessageRow(message: InGameChatMessage, localPlayerId: string) {
   const row = document.createElement('div');
   row.className = `in-game-chat-message ${teamClass(message.team)} channel-${message.channel}`;
   row.dataset.messageId = message.messageId;
@@ -46,7 +57,7 @@ function createMessageRow(message: InGameChatMessage) {
 
   const player = document.createElement('strong');
   player.className = 'in-game-chat-message-player';
-  player.textContent = `${playerLabel(message)}:`;
+  player.textContent = `${playerLabel(message, localPlayerId)}:`;
 
   const text = document.createElement('span');
   text.className = 'in-game-chat-message-text';
@@ -61,9 +72,15 @@ function nextMessageId() {
   return `local:${Date.now()}:${localMessageSequence}`;
 }
 
-export function mountInGameChat() {
+export function mountInGameChat(options: InGameChatRuntimeOptions = {}) {
   if (typeof document === 'undefined') return () => undefined;
   document.getElementById(CHAT_ROOT_ID)?.remove();
+
+  const matchId = options.matchId?.trim() || null;
+  const localPlayerId = options.playerId?.trim() || LOCAL_PLAYER_ID;
+  const localPlayerName = options.playerName?.trim() || undefined;
+  const localTeam = options.team === 'red' ? 'red' : LOCAL_TEAM;
+  const networked = Boolean(matchId && options.playerId);
 
   const root = document.createElement('aside');
   root.id = CHAT_ROOT_ID;
@@ -170,21 +187,34 @@ export function mountInGameChat() {
   const submit = () => {
     const text = normalizeChatText(input.value);
     if (text) {
-      publishInGameChatMessage({
-        messageId: nextMessageId(),
-        playerId: LOCAL_PLAYER_ID,
-        team: LOCAL_TEAM,
-        channel: activeChannel,
-        text,
-        atMs: performance.now(),
-      });
+      const sent = networked && matchId
+        ? platformRealtime.send('match.chat.send', {
+          matchId,
+          channel: activeChannel,
+          text,
+        })
+        : false;
+
+      // Online messages are rendered from the authoritative server echo so the sender and
+      // recipients see the same id/order. Offline development matches keep the local bus.
+      if (!sent) {
+        publishInGameChatMessage({
+          messageId: nextMessageId(),
+          playerId: localPlayerId,
+          playerName: localPlayerName,
+          team: localTeam,
+          channel: activeChannel,
+          text,
+          atMs: performance.now(),
+        });
+      }
     }
     closeChat();
   };
 
   const appendMessage = (message: InGameChatMessage) => {
     if (history.querySelector(`[data-message-id="${CSS.escape(message.messageId)}"]`)) return;
-    history.appendChild(createMessageRow(message));
+    history.appendChild(createMessageRow(message, localPlayerId));
     while (history.children.length > MAX_RENDERED_MESSAGES) history.firstElementChild?.remove();
     const rows = Array.from(history.children) as HTMLElement[];
     for (const [index, row] of rows.entries()) {
@@ -251,6 +281,41 @@ export function mountInGameChat() {
     refreshCollapsedRows();
   });
 
+  const unsubscribeRealtime = networked && matchId
+    ? platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
+      if (
+        typeof event !== 'object'
+        || event === null
+        || !('type' in event)
+        || event.type !== 'match.chat.message'
+        || !('message' in event)
+        || !event.message
+      ) return;
+
+      const raw = event.message as {
+        messageId?: unknown;
+        matchId?: unknown;
+        playerId?: unknown;
+        playerName?: unknown;
+        team?: unknown;
+        channel?: unknown;
+        text?: unknown;
+        atMs?: unknown;
+      };
+      if (String(raw.matchId || '') !== matchId) return;
+
+      publishInGameChatMessage({
+        messageId: String(raw.messageId || ''),
+        playerId: String(raw.playerId || ''),
+        playerName: String(raw.playerName || '').trim() || undefined,
+        team: raw.team === 'red' ? 'red' : 'blue',
+        channel: raw.channel === 'team' ? 'team' : 'all',
+        text: normalizeChatText(String(raw.text || '')),
+        atMs: Number(raw.atMs || Date.now()),
+      });
+    })
+    : () => undefined;
+
   const resizeObserver = new ResizeObserver(syncPlacement);
   const observeMinimap = () => {
     const current = document.querySelector<HTMLElement>('.minimap-shell');
@@ -281,6 +346,7 @@ export function mountInGameChat() {
   requestAnimationFrame(syncPlacement);
 
   return () => {
+    unsubscribeRealtime();
     unsubscribe();
     resizeObserver.disconnect();
     layoutObserver.disconnect();
