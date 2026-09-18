@@ -1658,3 +1658,19 @@
     height: 31px;
   }
 }
+
+
+.dr-custom-join-confirm-actions {
+  grid-template-columns: .8fr 1fr 1.2fr !important;
+}
+
+.dr-custom-join-confirm button.is-spectate {
+  border-color: rgba(78, 145, 175, .52);
+  background: rgba(12, 40, 55, .78);
+  color: #9bc7d9;
+}
+
+.dr-custom-join-confirm button:disabled {
+  cursor: default;
+  opacity: .42;
+}
