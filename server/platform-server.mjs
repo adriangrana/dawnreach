@@ -919,6 +919,7 @@ export function createPlatformServer(options = {}) {
     if (updated.source === 'custom') lobbies.markInGame(updated.id);
     matchRuntimeStates.set(updated.id, new Map());
     matchRuntimeCreepStates.delete(updated.id);
+    matchRuntimeStructureStates.delete(updated.id);
     matchRuntimeCombatLocks.delete(updated.id);
     matchRuntimeHeroDamageCredits.delete(updated.id);
     matchRuntimePauseStates.delete(updated.id);
@@ -977,6 +978,7 @@ export function createPlatformServer(options = {}) {
       }, participantIds);
       matchRuntimeStates.delete(active.id);
       matchRuntimeCreepStates.delete(active.id);
+      matchRuntimeStructureStates.delete(active.id);
       matchRuntimeCombatLocks.delete(active.id);
       matchRuntimeHeroDamageCredits.delete(active.id);
       matchRuntimePauseStates.delete(active.id);
@@ -1024,6 +1026,8 @@ export function createPlatformServer(options = {}) {
       peer.send({ type: 'match.runtime.snapshot', matchId: active.match.id, states: runtimeSnapshot(active.match.id) });
       const creepSnapshot = runtimeCreepSnapshot(active.match.id);
       if (creepSnapshot) peer.send(creepSnapshot);
+      const structureSnapshot = runtimeStructureSnapshot(active.match.id);
+      if (structureSnapshot) peer.send(structureSnapshot);
       peer.send(publicRuntimePauseState(active.match.id));
       return;
     }
@@ -1284,6 +1288,8 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
           else if (type === 'match.runtime.creeps') reportMatchRuntimeCreeps(user.id, message);
           else if (type === 'match.runtime.creep.damage') reportMatchRuntimeCreepDamage(user.id, message);
+          else if (type === 'match.runtime.structures') reportMatchRuntimeStructures(user.id, message);
+          else if (type === 'match.runtime.structure.damage') reportMatchRuntimeStructureDamage(user.id, message);
           else if (type === 'match.runtime.pause') reportMatchRuntimePause(user.id, message);
           else if (type === 'match.chat.send') reportMatchChatMessage(user.id, message);
           else if (type === 'match.runtime.snapshot') {
@@ -1292,6 +1298,8 @@ export function createPlatformServer(options = {}) {
             peer.send({ type: 'match.runtime.snapshot', matchId: active.id, states: runtimeSnapshot(active.id) });
             const creepSnapshot = runtimeCreepSnapshot(active.id);
             if (creepSnapshot) peer.send(creepSnapshot);
+            const structureSnapshot = runtimeStructureSnapshot(active.id);
+            if (structureSnapshot) peer.send(structureSnapshot);
             peer.send(publicRuntimePauseState(active.id));
           }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
