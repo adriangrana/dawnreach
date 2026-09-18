@@ -1275,7 +1275,7 @@ export function createPlatformServer(options = {}) {
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para sincronizar creeps.');
     if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La oleada pertenece a otra partida.');
     const authorityUserId = runtimeAuthorityUserId(active);
-    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo la autoridad de la partida puede publicar creeps.');
+    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo el simulador asignado puede proponer el estado de creeps.');
 
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
@@ -1410,7 +1410,7 @@ export function createPlatformServer(options = {}) {
     if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('Las estructuras pertenecen a otra partida.');
 
     const authorityUserId = runtimeAuthorityUserId(active);
-    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo la autoridad de la partida puede publicar estructuras.');
+    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo el simulador asignado puede proponer el estado de estructuras.');
 
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
