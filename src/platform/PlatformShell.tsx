@@ -187,7 +187,8 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
         setActiveMatch(event.activeMatch as ActiveMatchSession);
-        setNotice('Match session restored.');
+        setNotice('');
+        onLocalPlay();
       }
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
