@@ -608,6 +608,7 @@ export function createPlatformServer(options = {}) {
 
     let lethal = false;
     let respawnSeconds = null;
+    let synchronizedTargetState = null;
 
     if (targetRuntime) {
       const locks = runtimeCombatLocks(active.id);
@@ -647,6 +648,20 @@ export function createPlatformServer(options = {}) {
             : (existingLock?.sourceEntityId ?? sourceEntityId),
         });
       }
+
+      // Keep the shared runtime snapshot in sync immediately for ordinary damage/healing.
+      // Lethal damage still waits for the victim's authoritative alive=false packet so death,
+      // respawn and kill-feed accounting remain exactly-once.
+      if (!lethal) {
+        synchronizedTargetState = {
+          ...targetRuntime,
+          currentHp,
+          alive: currentHp > 0,
+          sequence: Number(targetRuntime.sequence || 0) + 1,
+          sentAt: now,
+        };
+        room.set(target.userId, synchronizedTargetState);
+      }
     }
 
     const event = {
@@ -663,7 +678,15 @@ export function createPlatformServer(options = {}) {
       respawnSeconds,
       at: now,
     };
-    broadcast(event, [source.userId, target.userId]);
+    const recipients = active.players.map(candidate => candidate.userId);
+    if (synchronizedTargetState) {
+      broadcast({
+        type: 'match.runtime.state',
+        matchId: active.id,
+        state: synchronizedTargetState,
+      }, recipients);
+    }
+    broadcast(event, [...new Set([source.userId, target.userId])]);
     return event;
   }
 
