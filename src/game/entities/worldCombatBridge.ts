@@ -34,6 +34,10 @@ export type WorldCombatEvent = Readonly<{
   atMs: number;
   respawnSeconds?: number;
   amount?: number;
+  /** Original unmitigated amount when the server already resolved defensive reductions. */
+  rawAmount?: number;
+  /** True when HP/death was canonically resolved by the multiplayer server. */
+  serverResolved?: boolean;
   sourceEntityId?: string;
   critical?: boolean;
   /** Optional metadata for hero reactions. Existing direct world attacks default to physical/front. */
