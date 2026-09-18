@@ -1457,7 +1457,8 @@ export default function App({
         && event.sourceUserId !== localUser.id
         && 'amount' in event
       ) {
-        gameRef.current?.applyLocalNetworkCombat({
+        const game = gameRef.current;
+        const resolved = game?.applyLocalNetworkCombat({
           reason: 'reason' in event && event.reason === 'heal' ? 'heal' : 'damage',
           amount: Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
@@ -1466,6 +1467,20 @@ export default function App({
             ? Number(event.respawnSeconds)
             : undefined,
         });
+        if (
+          resolved
+          && 'combatId' in event
+          && event.combatId
+          && (!('reason' in event) || event.reason !== 'heal')
+        ) {
+          platformRealtime.send('match.runtime.combat.resolve', {
+            matchId: onlineMatch.id,
+            combatId: String(event.combatId),
+            currentHp: resolved.currentHp,
+            currentResource: resolved.currentResource,
+            alive: resolved.alive,
+          });
+        }
       }
     });
 
