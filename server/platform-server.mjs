@@ -184,6 +184,8 @@ export function createPlatformServer(options = {}) {
       }).filter(item => item.definitionId)
       : (previous?.inventory || []);
     const nonNegativeCounter = (value, fallback = 0) => Math.max(0, Math.min(999999, Math.floor(finite(value, fallback))));
+    const payloadRespawnRemainingMs = clamp(payload?.respawnRemainingMs, 0, 120000);
+    const payloadRespawnDurationMs = clamp(payload?.respawnDurationMs, 0, 120000);
     const requestedMaxHp = clamp(payload?.maxHp, 1, 100000);
     const rawCurrentHp = clamp(payload?.currentHp, 0, requestedMaxHp);
     const rawAlive = payload?.alive !== false && rawCurrentHp > 0;
@@ -272,6 +274,20 @@ export function createPlatformServer(options = {}) {
       combatLocks.delete(userId);
     }
 
+    const authoritativeRespawnRemainingMs = requestedAlive
+      ? 0
+      : combatLock?.deadUntil && now < combatLock.deadUntil
+        ? Math.max(0, combatLock.deadUntil - now)
+        : payloadRespawnRemainingMs;
+    const authoritativeRespawnDurationMs = requestedAlive
+      ? 0
+      : Math.max(
+        authoritativeRespawnRemainingMs,
+        combatLock?.respawnSeconds
+          ? Math.max(0, Number(combatLock.respawnSeconds) * 1000)
+          : payloadRespawnDurationMs,
+      );
+
     const state = {
       userId,
       username: player.username,
@@ -292,6 +308,8 @@ export function createPlatformServer(options = {}) {
       maxResource: clamp(payload?.maxResource, 0, 100000),
       level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, 1)))),
       alive: requestedAlive,
+      respawnRemainingMs: authoritativeRespawnRemainingMs,
+      respawnDurationMs: authoritativeRespawnDurationMs,
       // Kills/deaths are server-owned. A client may report them for backwards compatibility,
       // but once a runtime row exists it cannot overwrite authoritative combat accounting.
       kills: previous ? previous.kills : 0,
