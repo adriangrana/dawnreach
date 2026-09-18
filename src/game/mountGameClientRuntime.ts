@@ -78,6 +78,9 @@ function mountNetworkMatchPause(options: GameClientRuntimeOptions) {
         : null,
       performance.now(),
       'accumulatedPauseMs' in event ? Number(event.accumulatedPauseMs || 0) : undefined,
+      Boolean(event.paused) && 'pausedByUsername' in event && event.pausedByUsername
+        ? String(event.pausedByUsername)
+        : null,
     );
   });
 
