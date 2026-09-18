@@ -47,6 +47,13 @@ import {
   type ItemUseDetail,
 } from './game/items/shopEvents';
 import { toMatchGameTimeMs } from './game/match/matchPauseRuntime';
+import { publishMatchEvent } from './game/match/matchEvents';
+import { setMatchEventHeroDeathServerAuthority } from './game/match/matchEventRuntime';
+import {
+  matchEventKindFromEntityId,
+  matchEventLabelForEntityId,
+  matchEventTeamFromEntityId,
+} from './game/match/matchEventParticipants';
 import { platformRealtime } from './platform/realtimeClient';
 import type { MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
 import AbilityButton from './hud/AbilityButton';
@@ -872,8 +879,12 @@ export default function App({
   useEffect(() => {
     const online = Boolean(onlineMatch && localUser && onlineMatch.status === 'in_game');
     setCombatHudServerAuthority(online);
+    setMatchEventHeroDeathServerAuthority(online);
     if (online) setCombatHudStats({ kills: 0, deaths: 0, assists: 0 });
-    return () => setCombatHudServerAuthority(false);
+    return () => {
+      setCombatHudServerAuthority(false);
+      setMatchEventHeroDeathServerAuthority(false);
+    };
   }, [onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
   useEffect(() => {
@@ -1133,6 +1144,67 @@ export default function App({
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+      } else if (
+        type === 'match.runtime.hero.kill'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'eventId' in event
+        && 'victimUserId' in event
+        && 'victimUsername' in event
+        && 'victimTeam' in event
+      ) {
+        const victimTeam = event.victimTeam === 'red' ? 'red' : 'blue';
+        const killerEntityId = 'killerEntityId' in event && event.killerEntityId
+          ? String(event.killerEntityId)
+          : null;
+        const killerUserId = 'killerUserId' in event && event.killerUserId
+          ? String(event.killerUserId)
+          : null;
+        const killerTeam = 'killerTeam' in event && event.killerTeam === 'red'
+          ? 'red'
+          : 'killerTeam' in event && event.killerTeam === 'blue'
+            ? 'blue'
+            : 'neutral';
+        const killer = killerUserId
+          ? {
+            entityId: `player:${killerUserId}:hero`,
+            team: killerTeam,
+            kind: 'hero' as const,
+            label: 'killerUsername' in event && event.killerUsername
+              ? String(event.killerUsername)
+              : 'Héroe',
+            heroId: 'killerHeroId' in event && event.killerHeroId
+              ? String(event.killerHeroId)
+              : null,
+          }
+          : killerEntityId
+            ? {
+              entityId: killerEntityId,
+              team: matchEventTeamFromEntityId(killerEntityId),
+              kind: matchEventKindFromEntityId(killerEntityId),
+              label: matchEventLabelForEntityId(
+                killerEntityId,
+                matchEventKindFromEntityId(killerEntityId),
+              ),
+            }
+            : null;
+
+        publishMatchEvent({
+          type: 'hero_killed',
+          eventId: String(event.eventId),
+          atMs: 'at' in event ? Number(event.at || Date.now()) : Date.now(),
+          killer,
+          victim: {
+            entityId: `player:${String(event.victimUserId)}:hero`,
+            team: victimTeam,
+            kind: 'hero',
+            label: String(event.victimUsername),
+            heroId: 'victimHeroId' in event && event.victimHeroId
+              ? String(event.victimHeroId)
+              : null,
+          },
+          assists: [],
+        });
       } else if (
         type === 'match.runtime.creeps'
         && 'matchId' in event
