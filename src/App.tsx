@@ -1187,6 +1187,24 @@ export default function App({
       return;
     }
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
+
+    if (onlineMatch && localUser && event.reason !== 'heal' && Number(event.amount || 0) > 0) {
+      const sourceEntityId = String(event.sourceEntityId || '');
+      const authorityUserId = runtimeAuthorityUserIdRef.current ?? matchCreepAuthorityUserId(onlineMatch);
+      const authoritativeLocalCreepHit = authorityUserId === localUser.id
+        && /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(sourceEntityId);
+      const localTowerHit = /^(blue|red)-[a-z0-9-]+-tower$/.test(sourceEntityId);
+      if (authoritativeLocalCreepHit || localTowerHit) {
+        platformRealtime.send('match.runtime.combat', {
+          matchId: onlineMatch.id,
+          targetUserId: localUser.id,
+          reason: 'damage',
+          amount: Number(event.amount || 0),
+          sourceEntityId,
+        });
+      }
+    }
+
     dispatch({ type: 'world-hero-sync', event: { ...event, atMs: toMatchGameTimeMs(event.atMs) } });
   }), [onlineMatch?.id, localUser?.id]);
 
