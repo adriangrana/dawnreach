@@ -484,6 +484,94 @@ test('server owns hero mitigation death and rejects stale client resurrection', 
   });
 });
 
+test('server keeps creep and structure HP canonical against stale simulator snapshots', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'world-state-canonical',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'world-blue', username: 'World Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'world-red', username: 'World Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    platform.reportMatchRuntimeCreeps('world-blue', {
+      matchId: match.id,
+      sequence: 50,
+      sentAt: Date.now(),
+      elapsedSeconds: 10,
+      creeps: [{
+        id: 'lane-creep:red:mid:1:1',
+        team: 'red',
+        lane: 'mid',
+        type: 'melee',
+        position: { x: 0, y: 0, z: 0 },
+        yaw: 0,
+        currentHp: 500,
+        maxHp: 500,
+        alive: true,
+        state: 'ATTACK_MOVE',
+        moving: true,
+        seed: 1,
+        attackSequence: 0,
+      }],
+    });
+    platform.reportMatchRuntimeCreepDamage('world-blue', {
+      matchId: match.id,
+      creepId: 'lane-creep:red:mid:1:1',
+      amount: 125,
+    });
+    let creep = platform.runtimeCreepSnapshot(match.id).creeps[0];
+    assert.equal(creep.currentHp, 375);
+
+    platform.reportMatchRuntimeCreeps('world-blue', {
+      matchId: match.id,
+      sequence: 999,
+      sentAt: Date.now(),
+      elapsedSeconds: 11,
+      creeps: [{ ...creep, currentHp: 500, alive: true }],
+    });
+    creep = platform.runtimeCreepSnapshot(match.id).creeps[0];
+    assert.equal(creep.currentHp, 375);
+
+    platform.reportMatchRuntimeStructures('world-blue', {
+      matchId: match.id,
+      sequence: 500,
+      structures: [{
+        id: 'red-mid-1-tower',
+        team: 'red',
+        kind: 'tower',
+        currentHp: 1000,
+        maxHp: 1000,
+        alive: true,
+      }],
+    });
+    platform.reportMatchRuntimeStructureDamage('world-blue', {
+      matchId: match.id,
+      structureId: 'red-mid-1-tower',
+      amount: 250,
+    });
+    let tower = platform.runtimeStructureSnapshot(match.id).structures[0];
+    assert.equal(tower.currentHp, 750);
+
+    platform.reportMatchRuntimeStructures('world-blue', {
+      matchId: match.id,
+      sequence: 999,
+      structures: [{ ...tower, currentHp: 1000, alive: true }],
+    });
+    tower = platform.runtimeStructureSnapshot(match.id).structures[0];
+    assert.equal(tower.currentHp, 750);
+  });
+});
+
 test('one disconnected team gets a reconnect grace period before the other team wins', async () => {
   await withServer(async ({ baseUrl, port, platform }) => {
     const blue = await jsonFetch(`${baseUrl}/api/register`, {
