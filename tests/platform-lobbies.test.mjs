@@ -82,6 +82,32 @@ test('custom lobby keeps five slots per team and launches a non-rated custom mat
 }));
 
 
+test('active custom match survives host abandonment and transfers lobby ownership', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'ActiveHost');
+  const red = addUser(store, 'ActiveRed');
+  const blueMate = addUser(store, 'ActiveBlueMate');
+  const redMate = addUser(store, 'ActiveRedMate');
+
+  const lobby = lobbies.create(host, 'Resilient active lobby', 'public');
+  lobbies.join(red, lobby.code);
+  lobbies.join(blueMate, lobby.code);
+  lobbies.join(redMate, lobby.code);
+  for (const player of [host, red, blueMate, redMate]) lobbies.setReady(player.id, true);
+
+  const match = lobbies.start(host.id);
+  lobbies.markInGame(match.id);
+
+  const after = lobbies.removeParticipantFromInGame(match.id, host.id);
+  assert.ok(after);
+  assert.equal(after.status, 'in_game');
+  assert.equal(after.players.some(player => player.userId === host.id), false);
+  assert.equal(after.players.length, 3);
+  assert.notEqual(after.ownerId, host.id);
+  assert.ok(after.players.some(player => player.userId === after.ownerId));
+  assert.equal(lobbies.lobbyForUser(host.id), null);
+  assert.equal(lobbies.lobbyForUser(red.id).status, 'in_game');
+}));
+
 test('custom lobby chat keeps TEAM private and ALL visible to everyone in the lobby', () => withLobbies(({ store, lobbies }) => {
   const host = addUser(store, 'ChatHost');
   const dusk = addUser(store, 'ChatDusk');
