@@ -1010,22 +1010,31 @@ export function createPlatformServer(options = {}) {
     const requestedSourceEntityId = String(payload?.sourceEntityId || '');
     const simulatorUserId = runtimeAuthorityUserId(active);
     const creepSourceMatch = /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.exec(requestedSourceEntityId);
+    const towerSourceMatch = /^(blue|red)-[a-z0-9-]+-tower$/.exec(requestedSourceEntityId);
     const serverAcceptedCreepSource = Boolean(
       simulatorUserId
       && userId === simulatorUserId
       && creepSourceMatch,
     );
-    if (!serverAcceptedCreepSource && reporter.userId === target.userId) {
+    const serverAcceptedTowerSource = Boolean(
+      reporter.userId === target.userId
+      && towerSourceMatch,
+    );
+    const environmentSource = serverAcceptedCreepSource || serverAcceptedTowerSource;
+    if (!environmentSource && reporter.userId === target.userId) {
       throw new Error('Objetivo de combate inválido.');
     }
 
-    const sourceEntityId = serverAcceptedCreepSource
+    const sourceEntityId = environmentSource
       ? requestedSourceEntityId
       : `player:${reporter.userId}:hero`;
 
     if (reason === 'damage') {
-      if (serverAcceptedCreepSource) {
-        if (creepSourceMatch?.[1] === target.team) throw new Error('No se permite daño aliado de creeps.');
+      if (environmentSource) {
+        const environmentTeam = creepSourceMatch?.[1] || towerSourceMatch?.[1] || null;
+        if (!environmentTeam || environmentTeam === target.team) {
+          throw new Error('No se permite daño aliado de fuentes del mundo.');
+        }
       } else if (reporter.team === target.team) {
         throw new Error('No se permite daño aliado entre héroes.');
       }
@@ -1046,7 +1055,7 @@ export function createPlatformServer(options = {}) {
       ? applyServerHeroDamageMitigation(
         active,
         target.userId,
-        serverAcceptedCreepSource ? null : reporter.userId,
+        environmentSource ? null : reporter.userId,
         sourceEntityId,
         requestedAmount,
         now,
@@ -1063,7 +1072,7 @@ export function createPlatformServer(options = {}) {
 
     if (
       reason === 'damage'
-      && !serverAcceptedCreepSource
+      && !environmentSource
       && reporter.userId !== target.userId
       && reporter.team !== target.team
     ) {
@@ -1078,7 +1087,7 @@ export function createPlatformServer(options = {}) {
     let confirmedHeroKillEvent = null;
 
     if (lethal) {
-      const directHeroKiller = !serverAcceptedCreepSource
+      const directHeroKiller = !environmentSource
         ? reporter
         : null;
       const recentCredit = runtimeHeroDamageCredits(active.id).get(target.userId) || null;
@@ -1117,7 +1126,11 @@ export function createPlatformServer(options = {}) {
         killerUserId: killerPlayer?.userId ?? null,
         killerUsername: killerPlayer?.username ?? null,
         killerTeam: killerPlayer?.team
-          ?? (creepSourceMatch?.[1] === 'red' ? 'red' : creepSourceMatch?.[1] === 'blue' ? 'blue' : 'neutral'),
+          ?? (creepSourceMatch?.[1] === 'red' || towerSourceMatch?.[1] === 'red'
+            ? 'red'
+            : creepSourceMatch?.[1] === 'blue' || towerSourceMatch?.[1] === 'blue'
+              ? 'blue'
+              : 'neutral'),
         killerHeroId: killerPlayer
           ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
           : null,
@@ -1152,7 +1165,7 @@ export function createPlatformServer(options = {}) {
         pendingLethal: lethal,
         deathAccounted: lethal,
         respawnSeconds,
-        sourceUserId: serverAcceptedCreepSource ? null : reporter.userId,
+        sourceUserId: environmentSource ? null : reporter.userId,
         sourceEntityId,
         serverResolved: true,
       });
