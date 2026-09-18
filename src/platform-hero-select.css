@@ -3133,3 +3133,253 @@
     font-size: 7px !important;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · leave / abandon flow
+   ========================================================= */
+
+.dr-hero-select-exit-trigger {
+  position: absolute;
+  right: 22px;
+  bottom: 8px;
+  z-index: 20;
+  height: 28px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(118, 145, 157, .24);
+  background: rgba(4, 13, 20, .46);
+  color: #80939d;
+  font: 700 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .10em;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.dr-hero-select-exit-trigger:hover {
+  color: #d9e1e3;
+  border-color: rgba(183, 93, 87, .48);
+  background: rgba(55, 20, 23, .42);
+}
+
+.dr-hero-select-exit-trigger svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.7;
+}
+
+.dr-hero-select-exit-trigger kbd {
+  min-width: 22px;
+  padding: 2px 4px;
+  border: 1px solid rgba(104, 132, 146, .20);
+  background: rgba(255,255,255,.025);
+  color: #607680;
+  font: 700 6px/1 "Segoe UI", Arial, sans-serif;
+  text-align: center;
+}
+
+.dr-hero-select-leave-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(20, 40, 51, .18), rgba(2, 7, 11, .78) 58%, rgba(1, 5, 8, .92));
+  backdrop-filter: blur(5px);
+}
+
+.dr-hero-select-leave-dialog {
+  position: relative;
+  width: min(440px, calc(100vw - 48px));
+  padding: 26px 28px 24px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  border: 1px solid rgba(164, 128, 63, .42);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(190, 147, 58, .07), transparent 38%),
+    linear-gradient(180deg, rgba(8, 21, 29, .995), rgba(3, 11, 17, .998));
+  box-shadow:
+    0 28px 70px rgba(0,0,0,.62),
+    inset 0 1px 0 rgba(255,255,255,.025);
+  text-align: center;
+}
+
+.dr-hero-select-leave-dialog::before,
+.dr-hero-select-leave-dialog::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  width: 76px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #d0ab52);
+}
+
+.dr-hero-select-leave-dialog::before {
+  left: 18px;
+}
+
+.dr-hero-select-leave-dialog::after {
+  right: 18px;
+  transform: scaleX(-1);
+}
+
+.dr-hero-select-leave-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #657b86;
+  cursor: pointer;
+}
+
+.dr-hero-select-leave-close:hover:not(:disabled) {
+  color: #d9e2e4;
+}
+
+.dr-hero-select-leave-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dr-hero-select-leave-close:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.dr-hero-select-leave-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(190, 90, 84, .42);
+  background: rgba(80, 25, 28, .24);
+  color: #d46e67;
+}
+
+.dr-hero-select-leave-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.55;
+}
+
+.dr-hero-select-leave-dialog > small {
+  margin-top: 2px;
+  color: #b99a58;
+  font: 800 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .15em;
+}
+
+.dr-hero-select-leave-dialog h2 {
+  margin: 0;
+  color: #eee8d9;
+  font: 500 25px/1.05 Georgia, "Times New Roman", serif;
+  letter-spacing: .04em;
+}
+
+.dr-hero-select-leave-dialog > p {
+  max-width: 360px;
+  margin: 2px 0 0;
+  color: #91a5ae;
+  font: 500 10px/1.55 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-hero-select-leave-dialog > p.dr-hero-select-leave-warning {
+  margin-top: 0;
+  color: #b28f68;
+  font-size: 8px;
+}
+
+.dr-hero-select-leave-dialog > p.dr-hero-select-leave-error {
+  width: 100%;
+  padding: 7px 9px;
+  box-sizing: border-box;
+  border: 1px solid rgba(190, 75, 72, .34);
+  background: rgba(74, 20, 22, .26);
+  color: #d98c87;
+  font-size: 8.5px;
+}
+
+.dr-hero-select-leave-actions {
+  width: 100%;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 8px;
+}
+
+.dr-hero-select-leave-actions button {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .08em;
+}
+
+.dr-hero-select-leave-actions button:disabled {
+  cursor: default;
+  opacity: .55;
+}
+
+.dr-hero-select-leave-actions .is-cancel {
+  border: 1px solid rgba(96, 127, 143, .28);
+  background: rgba(8, 25, 35, .66);
+  color: #a7b7bd;
+}
+
+.dr-hero-select-leave-actions .is-cancel:hover:not(:disabled) {
+  border-color: rgba(129, 162, 178, .42);
+  color: #d8e1e3;
+}
+
+.dr-hero-select-leave-actions .is-leave {
+  border: 1px solid rgba(184, 75, 71, .58);
+  background:
+    linear-gradient(180deg, rgba(103, 35, 36, .88), rgba(55, 19, 21, .96));
+  color: #e7c1bc;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.dr-hero-select-leave-actions .is-leave:hover:not(:disabled) {
+  border-color: rgba(222, 104, 96, .74);
+  filter: brightness(1.06);
+}
+
+.dr-hero-select-leave-actions .is-leave svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-exit-trigger {
+    right: 14px;
+    bottom: 6px;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-exit-trigger {
+    height: 24px;
+    padding: 0 7px;
+  }
+
+  .dr-hero-select-exit-trigger kbd {
+    display: none;
+  }
+
+  .dr-hero-select-leave-dialog {
+    padding: 22px 24px 20px;
+  }
+}
