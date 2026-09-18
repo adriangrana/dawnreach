@@ -2023,6 +2023,12 @@ export async function createDawnreachGame(
         currentHp: localHeroEntity.currentHp,
         currentResource: localHeroEntity.currentResource,
         alive: localHeroEntity.alive,
+        position: {
+          x: hero.root.position.x,
+          y: hero.root.position.y,
+          z: hero.root.position.z,
+        },
+        yaw: currentYaw,
       };
     },
     destroy() {
