@@ -1284,8 +1284,9 @@ export default function App({
       const authorityUserId = runtimeAuthorityUserIdRef.current ?? matchCreepAuthorityUserId(onlineMatch);
       const authoritativeLocalCreepHit = authorityUserId === localUser.id
         && /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(sourceEntityId);
-      const localTowerHit = /^(blue|red)-[a-z0-9-]+-tower$/.test(sourceEntityId);
-      if (authoritativeLocalCreepHit || localTowerHit) {
+      const authoritativeLocalTowerHit = authorityUserId === localUser.id
+        && /^(blue|red)-[a-z0-9-]+-tower$/.test(sourceEntityId);
+      if (authoritativeLocalCreepHit || authoritativeLocalTowerHit) {
         platformRealtime.send('match.runtime.combat', {
           matchId: onlineMatch.id,
           targetUserId: localUser.id,
