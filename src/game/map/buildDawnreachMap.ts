@@ -63,7 +63,7 @@ export function buildDawnreachMap(textures: DawnreachTextures) {
   for (const site of getLaneTowerSites()) {
     const tower = buildDefenseTower(site.team, materials);
     tower.position.set(site.x, 0, site.z);
-    tower.name = `${site.team}-${site.lane}-tower`;
+    tower.name = `${site.team}-${site.lane}-${site.towerIndex}-tower`;
     world.add(tower);
   }
   return world;
