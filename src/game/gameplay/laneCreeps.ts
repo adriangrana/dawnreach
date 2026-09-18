@@ -1116,7 +1116,10 @@ class LaneCreepManager {
     });
 
     const damage = calculateTowerAuraAdjustedDamage(creep.entity, target, creep.stats.damage);
-    if (target.kind === 'hero' && target.root.userData.networkRemoteHero === true) {
+    if (target.kind === 'hero' && this.scene.userData.dawnreachNetworkSession === true) {
+      // Online hero HP is server-owned, including world-AI hits. The simulation producer
+      // reports the hit intent only; neither the victim owner nor a remote replica may
+      // predict HP/death locally before the server serializes the combat event.
       emitWorldCombatEvent({
         entityId: target.id,
         reason: 'damage',
@@ -1124,6 +1127,7 @@ class LaneCreepManager {
         currentResource: target.currentResource,
         alive: target.alive,
         amount: damage,
+        rawAmount: damage,
         sourceEntityId: creep.entity.id,
         damageType: 'physical',
         isDirect: true,
