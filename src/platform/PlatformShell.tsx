@@ -46,7 +46,19 @@ function eventType(event: PlatformRealtimeEvent) {
 
 function LocalGameScreen({ activeMatch, user }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null } = {}) {
   const [ready, setReady] = useState(false);
-  useEffect(() => mountGameClientRuntime(), []);
+  const localMatchPlayer = activeMatch?.match.players.find(player => player.userId === user?.id) ?? null;
+  const runtimeMatchId = activeMatch?.match.id ?? null;
+  const runtimePlayerId = user?.id ?? null;
+  const runtimePlayerName = user?.username ?? null;
+  const runtimeTeam = localMatchPlayer?.team ?? null;
+
+  useEffect(() => mountGameClientRuntime({
+    matchId: runtimeMatchId,
+    playerId: runtimePlayerId,
+    playerName: runtimePlayerName,
+    team: runtimeTeam,
+  }), [runtimeMatchId, runtimePlayerId, runtimePlayerName, runtimeTeam]);
+
   useEffect(() => {
     let disposed = false;
     const startedAt = performance.now();
