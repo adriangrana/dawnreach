@@ -317,7 +317,9 @@ export function createPlatformServer(options = {}) {
             leaveQueue(user);
             lobbies.join(user, String(message.code || message.lobbyId || ''));
           } else if (type === 'lobby.move') lobbies.move(user.id, message.team === 'red' ? 'red' : 'blue', Number(message.slot));
+          else if (type === 'lobby.spectate') lobbies.spectate(user.id);
           else if (type === 'lobby.ready') lobbies.setReady(user.id, Boolean(message.ready));
+          else if (type === 'lobby.settings') lobbies.updateSettings(user.id, message.settings && typeof message.settings === 'object' ? message.settings : {});
           else if (type === 'lobby.message') lobbies.sendMessage(user.id, message.text, message.channel === 'team' ? 'team' : 'all');
           else if (type === 'lobby.leave') lobbies.leave(user.id);
           else if (type === 'lobby.start') lobbies.start(user.id);
