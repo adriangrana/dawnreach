@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { LogIn, Shield, UserPlus } from 'lucide-react';
+import { LogIn, Shield, UserPlus, X } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
@@ -108,6 +108,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   }, [chatFriendId, social.friends]);
 
   useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
+  useEffect(() => {
     void refreshSocial().catch(() => undefined);
     const unsubscribe = platformRealtime.subscribe(event => {
       const type = eventType(event);
@@ -145,7 +151,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setQueue(current => ({ ...current, joined: false }));
         setNotice('Match confirmed. The platform is preserving its players and teams.');
       }
-      if (type === 'match.session.pending') setNotice('Match created. Waiting to connect the shared Dawnreach game server.');
+      if (type === 'match.session.pending') setNotice('Match created. Preparing the next stage…');
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
         setRealtime('online');
@@ -199,16 +205,19 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
           {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="dr-play-overview">
             {playSection === 'matchmaking' ? <>
               <DawnreachPlayScreen me={user} party={party} queue={queue} initialMode={requestedPlayMode ?? undefined} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
-              {notice && <p className="platform-workspace-notice dr-play-notice" role="status">{notice}</p>}
             </> : <section className="platform-play-custom-shell">
               <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} onSelectMode={openPlayMode} />
-              {notice && <p className="platform-workspace-notice dr-custom-notice" role="status">{notice}</p>}
             </section>}
             {playSection === 'matchmaking' && <DawnreachSharedFooter user={user} online={online} social={social} party={party} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} />}
           </section>}
         </section>
         {!(section === 'play' && playSection === 'custom') && <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={chatFriendId} onOpenConversation={setChatFriendId} />}
       </div>
+      {notice && <div className="dr-platform-toast" role="status">
+        <span className="dr-platform-toast-mark" aria-hidden="true" />
+        <span>{notice}</span>
+        <button type="button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X /></button>
+      </div>}
     </main>
     {ready && <ReadyCheckOverlay ready={ready} me={user} />}
   </>;
