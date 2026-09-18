@@ -1033,6 +1033,13 @@ export default function App({
     stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
   });
   const [inspectedHeroOwnerUserId, setInspectedHeroOwnerUserId] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<MatchConnectionPresentation>({
+    mode: 'cleared',
+    team: null,
+    deadlineAt: null,
+    disconnectedUserIds: [],
+    disconnectedPlayers: [],
+  });
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
@@ -1382,6 +1389,19 @@ export default function App({
     const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
       const type = typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
       if (
+        type === 'match.connection.grace'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+      ) {
+        const grace = event as MatchConnectionGraceEvent;
+        setConnectionState({
+          mode: grace.mode,
+          team: grace.team,
+          deadlineAt: grace.deadlineAt,
+          disconnectedUserIds: [...(grace.disconnectedUserIds ?? [])],
+          disconnectedPlayers: [...(grace.disconnectedPlayers ?? [])],
+        });
+      } else if (
         type === 'match.runtime.authority'
         && 'matchId' in event
         && event.matchId === onlineMatch.id
@@ -1655,6 +1675,7 @@ export default function App({
         dispatch={dispatch}
         onlineStartedAt={onlineMatch?.startedAt}
         inspectedHeroOwnerUserId={inspectedHeroOwnerUserId}
+        connectionState={connectionState}
       />
       <ScoreboardOverlay
         match={runtime.match}
