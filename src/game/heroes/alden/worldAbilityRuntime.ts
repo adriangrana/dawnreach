@@ -13,6 +13,7 @@ import {
 } from '../../entities/worldCombatBridge';
 import { MAP_BOUNDS } from '../../map/mapLayout';
 import { LOCAL_HERO_ENTITY_ID, reduceHeroAbilityCooldown } from '../../match/abilityControls';
+import { toMatchGameTimeMs } from '../../match/matchPauseRuntime';
 import { calculateDefinitionStatsAtLevel } from '../heroAttributes';
 import type { AbilityKey } from '../types';
 import { ALDEN } from './gameplay';
@@ -141,7 +142,7 @@ export function triggerAldenWorldAbility(
   scene: THREE.Scene,
   key: AbilityKey,
   rank: number,
-  nowMs = performance.now(),
+  nowMs = toMatchGameTimeMs(performance.now()),
 ) {
   const runtime = installedScenes.get(scene);
   if (!runtime) return false;
@@ -289,7 +290,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
 
       const rank = this.readAbilityRank(key);
       if (rank <= 0 || !this.hero.alive || this.hero.currentHp <= 0) continue;
-      this.castAbility(key, rank, performance.now());
+      this.castAbility(key, rank, toMatchGameTimeMs(performance.now()));
     }
   };
 
@@ -1056,7 +1057,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     this.effects.push({
       object: mesh,
       material,
-      startedAtMs: performance.now(),
+      startedAtMs: toMatchGameTimeMs(performance.now()),
       durationMs,
       initialOpacity: opacity,
       grow: persistentFollow ? 0.025 : 0.20,
@@ -1093,7 +1094,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     this.effects.push({
       object: mesh,
       material,
-      startedAtMs: performance.now(),
+      startedAtMs: toMatchGameTimeMs(performance.now()),
       durationMs,
       initialOpacity: opacity,
       grow: 0.08,
@@ -1131,7 +1132,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     this.effects.push({
       object: mesh,
       material,
-      startedAtMs: performance.now(),
+      startedAtMs: toMatchGameTimeMs(performance.now()),
       durationMs,
       initialOpacity: opacity,
       grow: 0.02,
