@@ -40,6 +40,7 @@ import type { NavigationPath } from './navigation/navigationWorld';
 import { prepareHeavyRevealAssets } from './shared/prepareHeavyRevealAssets';
 import { createProceduralTextures } from './shared/textures';
 import { HERO_PROGRESSION_TUNING, type AbilityKey, type HeroStats, type MatchHeroState } from './match';
+import { toMatchGameTimeMs } from './match/matchPauseRuntime';
 import { createVisionSystem } from './vision/visionSystem';
 
 type HeroOverlayState = {
@@ -1579,7 +1580,7 @@ export async function createDawnreachGame(
     // overwritten by the generic walk/attack animation. Premium presentation is VFX-only here:
     // worldAbilityRuntime owns the authored character pose, while the presentation layer restores
     // the golden feathered effects that were previously installed only through a renderer hook.
-    const abilityFrameNowMs = performance.now();
+    const abilityFrameNowMs = toMatchGameTimeMs(performance.now());
     aldenAbilityRuntime?.update(abilityFrameNowMs);
     aldenAbilityPresentation?.update(abilityFrameNowMs, false);
     aldenAbilityEdgePolish?.update();
