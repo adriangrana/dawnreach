@@ -1132,6 +1132,8 @@ export function createPlatformServer(options = {}) {
     matchRuntimeCombatLocks.delete(updated.id);
     matchRuntimeHeroDamageCredits.delete(updated.id);
     matchRuntimePauseStates.delete(updated.id);
+    matchRuntimeSpawnPositions.delete(updated.id);
+    clearMatchDisconnectGrace(updated.id);
     runtimePauseState(updated.id);
 
     broadcast({
