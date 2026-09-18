@@ -420,16 +420,21 @@ export function createPlatformServer(options = {}) {
       .map(player => ({ userId: player.userId, username: player.username, team: player.team }));
     const disconnectedUserIds = disconnectedPlayers.map(player => player.userId);
     broadcastRuntimeAuthority(match);
-    if (!connectivity.blue.length || !connectivity.red.length) {
+    if (!connectivity.blue.length && !connectivity.red.length) {
       clearMatchDisconnectGrace(matchId);
-      if (!connectivity.blue.length && !connectivity.red.length) {
-        return finishMatch(match, { reason: 'all_players_abandoned', voided: true });
-      }
-      return finishMatch(match, {
-        winnerTeam: connectivity.blue.length ? 'blue' : 'red',
-        reason: 'team_abandonment',
-      });
+      return finishMatch(match, { reason: 'all_players_abandoned', voided: true });
     }
+    if (!connectivity.blue.length && connectivity.redConnected.length) {
+      clearMatchDisconnectGrace(matchId);
+      return finishMatch(match, { winnerTeam: 'red', reason: 'team_abandonment' });
+    }
+    if (!connectivity.red.length && connectivity.blueConnected.length) {
+      clearMatchDisconnectGrace(matchId);
+      return finishMatch(match, { winnerTeam: 'blue', reason: 'team_abandonment' });
+    }
+    // If the only non-abandoned team is itself offline, do not award an offline victory.
+    // It gets the same reconnect grace; reconnecting immediately wins, while nobody returning
+    // ends the orphaned match as cancelled/unrated.
 
     const now = Date.now();
     const previous = matchDisconnectGraceStates.get(matchId) || {};
@@ -1608,9 +1613,16 @@ export function createPlatformServer(options = {}) {
 
     const loadingCancelled = active.status === 'loading';
     const teamEliminated = active.status === 'in_game' && (!remainingDawn.length || !remainingDusk.length);
-    const ended = loadingCancelled || teamEliminated;
-    const winnerTeam = active.status === 'in_game' && teamEliminated
-      ? remainingDawn.length ? 'blue' : remainingDusk.length ? 'red' : null
+    const survivingTeam = remainingDawn.length ? 'blue' : remainingDusk.length ? 'red' : null;
+    const survivingTeamHasConnection = survivingTeam
+      ? remainingPlayers.some(candidate => candidate.team === survivingTeam && isOnline(candidate.userId))
+      : false;
+    const teamEliminatedWithConnectedWinner = teamEliminated && survivingTeamHasConnection;
+    const ended = loadingCancelled
+      || (teamEliminated && !survivingTeam)
+      || teamEliminatedWithConnectedWinner;
+    const winnerTeam = active.status === 'in_game' && teamEliminatedWithConnectedWinner
+      ? survivingTeam
       : null;
 
     // Do not delete a leaver's runtime row while the match continues. Their hero becomes an
@@ -1632,7 +1644,11 @@ export function createPlatformServer(options = {}) {
       ...(ended ? {
         status: loadingCancelled ? 'cancelled' : 'completed',
         endedAt: new Date().toISOString(),
-        endReason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
+        endReason: loadingCancelled
+          ? 'loading_abandonment'
+          : winnerTeam
+            ? 'team_abandonment'
+            : 'all_players_abandoned',
         winnerTeam,
       } : {}),
     }) || { ...active, abandonedUserIds };
@@ -1649,7 +1665,11 @@ export function createPlatformServer(options = {}) {
         type: 'match.ended',
         match: publicMatch(updated),
         winnerTeam,
-        reason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
+        reason: loadingCancelled
+          ? 'loading_abandonment'
+          : winnerTeam
+            ? 'team_abandonment'
+            : 'all_players_abandoned',
       }, participantIds);
       clearMatchRuntime(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
