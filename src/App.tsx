@@ -1302,14 +1302,18 @@ export default function App({
 
     const applyRemote = (state: MatchRuntimePlayerState) => {
       if (state.userId === localUser.id) {
-        // K/D is server-authoritative in online matches. Reconcile the local overlay from
-        // the same state that every other client receives instead of trusting duplicate
-        // world death events on this client.
+        // The server owns the final combat/death/respawn lifecycle. Reconcile the local HUD
+        // and world entity too; previously the owner ignored its own authoritative packet,
+        // which allowed a stale local HP snapshot to resurrect the hero at the death point.
         setCombatHudStats({
           kills: state.kills,
           deaths: state.deaths,
           assists: state.assists,
         });
+        dispatch({ type: 'local-server-sync', state, nowMs: performance.now() });
+        const game = gameRef.current;
+        if (game) game.applyLocalAuthoritativeNetworkState(state as DawnreachRemoteHeroState);
+        else pendingLocalAuthoritativeStateRef.current = state;
         return;
       }
       dispatch({ type: 'remote-player-sync', state, nowMs: performance.now() });
