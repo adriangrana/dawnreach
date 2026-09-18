@@ -262,6 +262,7 @@ export class PlatformStore {
     for (let index = this.#state.matches.length - 1; index >= 0; index -= 1) {
       const match = this.#state.matches[index];
       if (!match.players?.some(player => player.userId === userId)) continue;
+      if (match.abandonedUserIds?.includes(userId)) continue;
       if (!['loading', 'in_game'].includes(match.status)) continue;
       return { ...match };
     }
