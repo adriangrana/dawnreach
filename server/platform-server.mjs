@@ -809,6 +809,8 @@ export function createPlatformServer(options = {}) {
     const room = runtimeRoom(active.id);
     const targetRuntime = room.get(target.userId);
     const now = Date.now();
+    matchCombatSequence += 1;
+    const combatId = `${active.id}:${target.userId}:${now}:${matchCombatSequence}`;
 
     if (
       reason === 'damage'
@@ -847,6 +849,7 @@ export function createPlatformServer(options = {}) {
       if (reason === 'damage') {
         const crossedLethal = lethal && !existingLock?.pendingLethal;
         locks.set(target.userId, {
+          combatId,
           preDamageHp,
           hpCeiling: currentHp,
           until: now + 1200,
@@ -886,6 +889,7 @@ export function createPlatformServer(options = {}) {
       sourceUserId: source.userId,
       sourceUsername: source.username,
       sourceEntityId,
+      combatId,
       targetUserId: target.userId,
       targetUsername: target.username,
       reason,
