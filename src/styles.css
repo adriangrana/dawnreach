@@ -126,6 +126,84 @@ body {
     linear-gradient(135deg, #443039, #261b23 55%, #120d12);
 }
 
+.top-hero-disconnected {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  z-index: 7;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffe8d0;
+  background: rgba(158, 47, 47, 0.94);
+  border: 1px solid #ffb4a3;
+  box-shadow: 0 1px 5px rgba(0,0,0,.72), 0 0 8px rgba(255,75,59,.4);
+  pointer-events: none;
+}
+
+.top-hero-disconnected svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.4;
+}
+
+.reconnect-grace-banner {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  z-index: 980;
+  transform: translateX(-50%);
+  min-width: min(560px, calc(100vw - 30px));
+  max-width: 720px;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 1px solid #a68a57;
+  background: linear-gradient(180deg, rgba(39,37,31,.96), rgba(17,22,21,.98));
+  box-shadow: 0 8px 28px rgba(0,0,0,.66), inset 0 1px rgba(233,213,167,.17);
+  color: #eee5d1;
+  pointer-events: none;
+}
+
+.reconnect-grace-banner > svg {
+  width: 22px;
+  height: 22px;
+  color: #e7a976;
+}
+
+.reconnect-grace-banner > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reconnect-grace-banner strong {
+  font-size: 11px;
+  letter-spacing: .11em;
+  color: #e4c891;
+}
+
+.reconnect-grace-banner em {
+  font-style: normal;
+  font-size: 11px;
+  color: #c8c5ba;
+  white-space: normal;
+}
+
+.reconnect-grace-banner > b {
+  min-width: 54px;
+  font: 800 20px/1 "Trebuchet MS", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #fff1c7;
+  text-shadow: 0 1px 5px #000;
+}
+
 .top-hero-level {
   position: absolute;
   right: 3px;
