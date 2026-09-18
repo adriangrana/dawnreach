@@ -11,6 +11,13 @@ import { getTowerAuraState, getTowerBackdoorRegenPerSecond } from './towerAuras'
 
 const STYLE_ID = 'dawnreach-selection-hud-style';
 const OVERLAY_CLASS = 'selected-entity-hud-overlay';
+export const HERO_SELECTION_CHANGED_EVENT = 'dawnreach:hero-selection-changed';
+
+export type HeroSelectionChangedDetail = Readonly<{
+  worldEntityId: string | null;
+  ownerUserId: string | null;
+  local: boolean;
+}>;
 const MAX_VISIBLE_STATUS_ICONS = 8;
 let activeBridgeCount = 0;
 
@@ -550,7 +557,9 @@ export function createSelectionHudBridge(localHero: GameEntity | null): Selectio
     lastSignature = signature;
 
     const localHeroSelected = selected !== null && localHero !== null && selected === localHero;
-    if (localHeroSelected && selected) {
+    if (selected?.kind === 'hero') {
+      // Hero inspection uses the real React command deck. Keep this imperative layer only
+      // for world/status adornments so enemy heroes get the same HUD structure as the owner.
       renderLocalHeroStatusLayer(overlay, selected);
       return;
     }
@@ -586,6 +595,16 @@ export function createSelectionHudBridge(localHero: GameEntity | null): Selectio
       if (selected?.id !== entity?.id) lastSignature = '';
       selected = entity;
       render(true);
+      const hero = selected?.kind === 'hero' ? selected : null;
+      window.dispatchEvent(new CustomEvent<HeroSelectionChangedDetail>(HERO_SELECTION_CHANGED_EVENT, {
+        detail: {
+          worldEntityId: hero?.id ?? null,
+          ownerUserId: hero && hero !== localHero
+            ? String(hero.root.userData.networkOwnerUserId || '') || null
+            : null,
+          local: Boolean(hero && localHero && hero === localHero),
+        },
+      }));
     },
     refresh(entity) {
       selected = entity;
