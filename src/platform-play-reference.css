@@ -2240,3 +2240,87 @@
     grid-template-rows: minmax(0, 1fr) !important;
   }
 }
+
+
+/* =========================================================
+   PLATFORM STATUS TOAST · compact, non-blocking notification
+   ========================================================= */
+
+.dr-platform-toast {
+  position: fixed;
+  z-index: 80;
+  top: 72px;
+  left: 50%;
+  width: min(440px, calc(100vw - 40px));
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 8px 34px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(176, 151, 82, .34);
+  background:
+    linear-gradient(180deg, rgba(9, 23, 31, .965), rgba(4, 14, 20, .98));
+  color: #c8c4af;
+  font: 600 9px/1.35 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .02em;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, .32),
+    inset 0 1px 0 rgba(255,255,255,.025);
+  backdrop-filter: blur(8px);
+  animation: dr-platform-toast-in .18s ease-out both;
+}
+
+.dr-platform-toast-mark {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  transform: rotate(45deg);
+  background: #c9a94f;
+  box-shadow: 0 0 8px rgba(201, 169, 79, .46);
+}
+
+.dr-platform-toast > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dr-platform-toast > button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: #71858e;
+  cursor: pointer;
+}
+
+.dr-platform-toast > button:hover {
+  color: #c5d0d3;
+}
+
+.dr-platform-toast > button svg {
+  width: 13px;
+  height: 13px;
+}
+
+@keyframes dr-platform-toast-in {
+  from { opacity: 0; transform: translate(-50%, -7px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 720px) {
+  .dr-platform-toast {
+    top: 64px;
+    width: calc(100vw - 20px);
+  }
+}
