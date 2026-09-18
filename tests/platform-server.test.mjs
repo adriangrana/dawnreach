@@ -546,6 +546,74 @@ test('server owns hero mitigation death and rejects stale client resurrection', 
   });
 });
 
+test('server serialization rejects late attacks from a hero already confirmed dead', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-combat-dead-source',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'late-blue', username: 'Late Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'late-red', username: 'Late Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'late-blue': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'late-red': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+    platform.store.addMatch(match);
+
+    for (const [userId, x] of [['late-blue', 0], ['late-red', 1]]) {
+      platform.reportMatchRuntimeState(userId, {
+        matchId: match.id,
+        sequence: 1,
+        position: { x, y: 5, z: 0 },
+        yaw: 0,
+        moving: false,
+        currentHp: 50,
+        maxHp: 700,
+        currentResource: 300,
+        maxResource: 300,
+        level: 1,
+        alive: true,
+        abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+      });
+    }
+
+    const lethal = platform.reportMatchRuntimeCombat('late-red', {
+      matchId: match.id,
+      targetUserId: 'late-blue',
+      reason: 'damage',
+      amount: 100,
+    });
+    assert.equal(lethal.lethal, true);
+
+    const latePacket = platform.reportMatchRuntimeCombat('late-blue', {
+      matchId: match.id,
+      targetUserId: 'late-red',
+      reason: 'damage',
+      amount: 100,
+    });
+    assert.equal(latePacket, null);
+
+    const states = platform.runtimeSnapshot(match.id);
+    const blue = states.find(state => state.userId === 'late-blue');
+    const red = states.find(state => state.userId === 'late-red');
+    assert.equal(blue.currentHp, 0);
+    assert.equal(blue.alive, false);
+    assert.equal(blue.deaths, 1);
+    assert.equal(red.currentHp, 50);
+    assert.equal(red.alive, true);
+    assert.equal(red.kills, 1);
+  });
+});
+
 test('server keeps creep and structure HP canonical against stale simulator snapshots', async () => {
   await withServer(async ({ platform }) => {
     const match = {
