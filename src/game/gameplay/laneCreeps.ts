@@ -42,6 +42,7 @@ export type LaneCreepNetworkUnit = Readonly<{
   state: LaneCreepState;
   moving: boolean;
   seed: number;
+  attackSequence: number;
 }>;
 
 export type LaneCreepNetworkSnapshot = Readonly<{
@@ -97,6 +98,7 @@ type LaneCreepRuntime = {
   blockedForSeconds: number;
   nextRepathAt: number;
   avoidanceSide: -1 | 1;
+  attackSequence: number;
 };
 
 type LaneTeamBucket = Record<CombatTeam, Set<LaneCreepRuntime>>;
@@ -346,6 +348,7 @@ class LaneCreepManager {
         state: creep.state,
         moving: creep.moving,
         seed: creep.seed,
+        attackSequence: creep.attackSequence,
       })),
     };
   }
@@ -369,6 +372,11 @@ class LaneCreepManager {
       creep.entity.alive = unit.alive !== false && creep.entity.currentHp > 0;
       creep.state = unit.state;
       creep.moving = Boolean(unit.moving);
+      const nextAttackSequence = Math.max(0, Math.floor(Number(unit.attackSequence) || 0));
+      if (nextAttackSequence > creep.attackSequence) {
+        creep.attackSequence = nextAttackSequence;
+        triggerLaneCreepAttack(creep.visual, performance.now() / 1000);
+      }
       creep.entity.root.userData.currentHp = creep.entity.currentHp;
       creep.entity.root.userData.maxHp = creep.entity.maxHp;
       creep.entity.root.userData.alive = creep.entity.alive;
@@ -548,6 +556,7 @@ class LaneCreepManager {
       blockedForSeconds: 0,
       nextRepathAt: 0,
       avoidanceSide: unit.seed % 2 === 0 ? 1 : -1,
+      attackSequence: Math.max(0, Math.floor(Number(unit.attackSequence) || 0)),
     };
     this.creeps.push(runtime);
     this.creepById.set(entity.id, runtime);
@@ -711,6 +720,7 @@ class LaneCreepManager {
       blockedForSeconds: 0,
       nextRepathAt: 0,
       avoidanceSide: seed % 2 === 0 ? 1 : -1,
+      attackSequence: 0,
     };
 
     this.creeps.push(runtime);
@@ -1004,6 +1014,7 @@ class LaneCreepManager {
   private attackTarget(creep: LaneCreepRuntime, target: GameEntity, now: number) {
     if (!this.isTargetValid(creep, target)) return;
     creep.nextAttackAt = now + creep.stats.attackInterval;
+    creep.attackSequence += 1;
     triggerLaneCreepAttack(creep.visual, now);
 
     const attackerPosition = this.getEntityPosition(creep.entity, TEMP_A);
@@ -1385,10 +1396,9 @@ class LaneCreepManager {
       );
     }
 
-    // Animation follows real progress, not microscopic collision jitter. This removes the
-    // "walking on the spot" symptom while still showing motion during legitimate detours.
-    return bestMoved > Math.max(0.003, travel * 0.08)
-      && (bestProgress > -0.01 || creep.navWaypoints.length > 0);
+    // Animation follows real translation, not route-direction heuristics. This is team
+    // agnostic: if the unit actually changed world position, its locomotion animation runs.
+    return bestMoved > Math.max(0.003, travel * 0.08);
   }
 
   private resolveDynamicCollision(creep: LaneCreepRuntime, startX: number, startZ: number) {
