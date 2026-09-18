@@ -778,10 +778,13 @@ function pushTrailPoint(projectile: TowerProjectile, point: THREE.Vector3): void
 function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntity, elapsed: number): void {
   if (!target.alive || target.currentHp <= 0) return;
 
-  // Lane creeps are simulated by one multiplayer authority. A replica client may still render
-  // the tower projectile, but mutating a replicated creep here causes the next authoritative
-  // creep snapshot to "heal" it back to its previous HP.
-  if (target.kind === 'creep' && target.root.userData.networkReplica === true) return;
+  // Replicated units never own their HP locally. A client may still render the tower
+  // projectile, but mutating a remote hero/creep here creates visible HP rollback when the
+  // canonical server snapshot arrives.
+  if (
+    (target.kind === 'creep' && target.root.userData.networkReplica === true)
+    || (target.kind === 'hero' && target.root.userData.networkRemoteHero === true)
+  ) return;
 
   const damage = calculateTowerAuraAdjustedDamage(source, target, TOWER_COMBAT_TUNING.damage);
   target.currentHp = Math.max(0, target.currentHp - damage);
