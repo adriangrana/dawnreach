@@ -24,14 +24,16 @@ function player(userId, team, slot) {
 function manager(overrides = {}) {
   const events = [];
   const completed = [];
+  const cancelled = [];
   const heroSelect = new HeroSelectManager({
     heroIds: overrides.heroIds || ['H001'],
     heroNames: { H001: 'Alden', H002: 'Other' },
     pickSeconds: 45,
     onEvent: (event, userIds) => events.push({ event, userIds }),
     onComplete: (createdMatch, selections) => completed.push({ match: createdMatch, selections }),
+    onCancel: (createdMatch, player) => cancelled.push({ match: createdMatch, player }),
   });
-  return { heroSelect, events, completed };
+  return { heroSelect, events, completed, cancelled };
 }
 
 test('hero select begins for every match participant and exposes Dawnreach lanes', () => {
@@ -109,4 +111,28 @@ test('ranked hero select reserves draft ban presentation while roster is still d
   assert.equal(snapshot.selectionType, 'draft');
   assert.equal(snapshot.bansPerTeam, 3);
   assert.equal(snapshot.draftRulesDeferred, true);
+});
+
+
+test('leaving hero select cancels the session for every participant and clears reconnect state', () => {
+  const { heroSelect, events, cancelled } = manager();
+  const created = match([
+    player('a', 'blue', 0),
+    player('b', 'red', 1),
+  ], { mode: 'normal', source: 'matchmaking' });
+
+  heroSelect.begin(created);
+  const event = heroSelect.cancel('a');
+
+  assert.equal(event.type, 'hero_select.cancelled');
+  assert.equal(event.cancelledByUserId, 'a');
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].match.id, created.id);
+  assert.equal(cancelled[0].player.userId, 'a');
+  assert.equal(heroSelect.snapshotForUser('a'), null);
+  assert.equal(heroSelect.snapshotForUser('b'), null);
+
+  const cancelledEvents = events.filter(item => item.event.type === 'hero_select.cancelled');
+  assert.equal(cancelledEvents.length, 1);
+  assert.deepEqual(cancelledEvents[0].userIds, ['a', 'b']);
 });
