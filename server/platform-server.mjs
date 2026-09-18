@@ -484,6 +484,19 @@ export function createPlatformServer(options = {}) {
     const room = runtimeRoom(active.id);
     const targetRuntime = room.get(target.userId);
     const now = Date.now();
+
+    if (
+      reason === 'damage'
+      && sourceEntityId === `player:${source.userId}:hero`
+      && source.userId !== target.userId
+      && source.team !== target.team
+    ) {
+      runtimeHeroDamageCredits(active.id).set(target.userId, {
+        sourceUserId: source.userId,
+        at: now,
+      });
+    }
+
     let lethal = false;
     let respawnSeconds = null;
 
