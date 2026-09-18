@@ -58,7 +58,7 @@ import {
   createPlayableMatch, createPlayableRosterMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
   getRequiredHero, getUnspentHeroAbilityPoints,
   recoverHeroResource, resolveHeroWorldBasicAttackEffects, upgradeHeroAbility, useHeroAbility,
-  type AbilityKey, type CombatTargetClass, type InventoryItem, type MatchState,
+  type AbilityKey, type CombatTargetClass, type HeroId, type InventoryItem, type MatchState,
 } from './game/match';
 
 const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', import.meta.url).href;
@@ -700,7 +700,7 @@ export default function App({
             displayName: player.username,
             team: player.team === 'blue' ? 'dawn' : 'dusk',
             slotIndex: (Math.min(5, teamIndex + 1)) as 1 | 2 | 3 | 4 | 5,
-            heroId: onlineMatch.heroSelections?.[player.userId]?.heroId || 'H001',
+            heroId: (onlineMatch.heroSelections?.[player.userId]?.heroId || 'H001') as HeroId,
           };
         }),
         localUser.id,
