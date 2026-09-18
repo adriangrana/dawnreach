@@ -1351,7 +1351,8 @@ export function createPlatformServer(options = {}) {
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
     const structureIdPattern = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/;
     const previous = matchRuntimeStructureStates.get(active.id);
-    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const previousById = new Map((previous?.structures || []).map(structure => [structure.id, structure]));
+    const sequence = Number(previous?.sequence || 0) + 1;
 
     const structures = (Array.isArray(payload?.structures) ? payload.structures : []).slice(0, 32).flatMap(raw => {
       if (!raw || typeof raw !== 'object') return [];
@@ -1360,15 +1361,23 @@ export function createPlatformServer(options = {}) {
       if (!match) return [];
       const team = match[1];
       const kind = id.endsWith('-tower') ? 'tower' : 'building';
-      const maxHp = clamp(raw.maxHp, 1, 100000);
-      const currentHp = clamp(raw.currentHp, 0, maxHp);
+      const incomingMaxHp = clamp(raw.maxHp, 1, 100000);
+      const prior = previousById.get(id) || null;
+      const maxHp = prior ? Math.max(1, Number(prior.maxHp) || incomingMaxHp) : incomingMaxHp;
+      const incomingHp = clamp(raw.currentHp, 0, maxHp);
+      // Structures do not regenerate or respawn. The server therefore treats HP/death as
+      // monotonic canonical state and rejects any stale client proposal that restores them.
+      const currentHp = prior
+        ? Math.min(Math.max(0, Number(prior.currentHp) || 0), incomingHp)
+        : incomingHp;
+      const alive = (prior?.alive !== false) && raw.alive !== false && currentHp > 0;
       return [{
         id,
         team,
         kind,
-        currentHp,
+        currentHp: alive ? currentHp : 0,
         maxHp,
-        alive: raw.alive !== false && currentHp > 0,
+        alive,
       }];
     });
 
