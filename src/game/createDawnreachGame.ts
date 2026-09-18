@@ -1838,6 +1838,7 @@ export async function createDawnreachGame(
     },
     applyLocalAuthoritativeNetworkState(state: DawnreachRemoteHeroState) {
       if (state.userId !== localPlayerId || state.sequence <= lastLocalAuthoritativeSequence) return false;
+      const firstAuthoritativeState = lastLocalAuthoritativeSequence < 0;
       lastLocalAuthoritativeSequence = state.sequence;
 
       const wasAlive = localHeroEntity.alive && localHeroEntity.currentHp > 0;
@@ -1875,9 +1876,10 @@ export async function createDawnreachGame(
         hero.root.visible = true;
         hero.model.visible = true;
         hero.model.rotation.x = 0;
-        if (!wasAlive) {
-          // Only a dead -> alive transition may relocate the local hero. Normal echoed
-          // network packets never correct movement, avoiding self rubber-banding.
+        if (!wasAlive || firstAuthoritativeState) {
+          // A dead -> alive transition respawns at the server position. The first state after
+          // mounting also restores a reconnecting player's last world position. Later normal
+          // echoes never correct movement, avoiding self rubber-banding.
           hero.root.position.set(state.position.x, state.position.y, state.position.z);
           currentYaw = state.yaw;
           targetYaw = state.yaw;
