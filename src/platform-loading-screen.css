@@ -152,9 +152,14 @@
 }
 
 .dr-loading-team-cards {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
+  justify-content: center;
   gap: clamp(8px, .75vw, 14px);
+}
+
+.dr-loading-team-cards > .dr-loading-player-card {
+  width: clamp(150px, 13.25vw, 208px);
+  flex: 0 1 clamp(150px, 13.25vw, 208px);
 }
 
 .dr-loading-player-card {
