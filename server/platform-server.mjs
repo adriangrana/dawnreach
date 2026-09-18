@@ -11,6 +11,7 @@ import { PlatformStore } from './store.mjs';
 import { PartyManager } from './parties.mjs';
 import { Matchmaker } from './matchmaking.mjs';
 import { LobbyManager } from './lobbies.mjs';
+import { HeroSelectManager } from './hero-select.mjs';
 import { acceptWebSocket } from './websocket.mjs';
 
 export function createPlatformServer(options = {}) {
@@ -46,13 +47,25 @@ export function createPlatformServer(options = {}) {
     onEvent: (event, userIds) => broadcast(event, userIds),
   });
 
-  function launchMatch(match) {
+  function handoffToGameSession(match, heroSelections) {
     const { resultToken: _secret, ...safe } = match;
     broadcast({
       type: 'match.session.pending',
-      match: safe,
-      note: 'La plataforma ya creó la partida. El transporte de la sesión de juego se conectará en la siguiente fase.',
+      match: { ...safe, heroSelections },
+      note: 'Hero Select complete. Preparing the shared Dawnreach game session.',
     }, match.players.map(player => player.userId));
+  }
+
+  const heroSelect = new HeroSelectManager({
+    heroIds: ['H001'],
+    heroNames: { H001: 'Alden' },
+    pickSeconds: 45,
+    onEvent: (event, userIds) => broadcast(event, userIds),
+    onComplete: handoffToGameSession,
+  });
+
+  function launchMatch(match) {
+    heroSelect.begin(match);
   }
 
   const matchmaker = new Matchmaker({
@@ -327,6 +340,9 @@ export function createPlatformServer(options = {}) {
           else if (type === 'lobby.leave') lobbies.leave(user.id);
           else if (type === 'lobby.start') lobbies.start(user.id);
           else if (type === 'lobby.list') lobbies.emitList();
+          else if (type === 'hero_select.preview') heroSelect.preview(user.id, String(message.heroId || ''));
+          else if (type === 'hero_select.lock') heroSelect.lock(user.id, String(message.heroId || ''));
+          else if (type === 'hero_select.message') heroSelect.sendMessage(user.id, message.text);
           else if (type === 'party.create') parties.create(user);
           else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
           else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
@@ -353,6 +369,7 @@ export function createPlatformServer(options = {}) {
         queue: { joined: Boolean(matchmaker.statusFor(user.id)), target: config.queueSize },
         lobbies: lobbies.listPublic(),
         lobby: lobbies.lobbyForUser(user.id),
+        heroSelect: heroSelect.snapshotForUser(user.id),
       });
       broadcastPresence();
     } catch {
@@ -381,5 +398,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, lobbies, start, close };
+  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, start, close };
 }
