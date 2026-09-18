@@ -1004,6 +1004,8 @@ export default function App({
   const pendingCreepDamageRef = useRef<Array<{ creepId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const pendingStructureSnapshotRef = useRef<DawnreachStructureNetworkSnapshot | null>(null);
   const pendingStructureDamageRef = useRef<Array<{ structureId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
+  const runtimeAuthorityUserIdRef = useRef<string | null>(matchCreepAuthorityUserId(onlineMatch));
+  const pendingAuthorityUserIdRef = useRef<string | null | undefined>(undefined);
   const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
@@ -1065,7 +1067,7 @@ export default function App({
   useEffect(() => subscribeWorldCombatEvents((event) => {
     if (onlineMatch && localUser && event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) {
       const amount = Number(event.amount || 0);
-      const authorityUserId = matchCreepAuthorityUserId(onlineMatch);
+      const authorityUserId = runtimeAuthorityUserIdRef.current ?? matchCreepAuthorityUserId(onlineMatch);
       const remoteMatch = /^player:(.+):hero$/.exec(event.entityId);
 
       if (remoteMatch && amount > 0) {
@@ -1259,6 +1261,11 @@ export default function App({
         return;
       }
       gameRef.current = game;
+      if (pendingAuthorityUserIdRef.current !== undefined) {
+        runtimeAuthorityUserIdRef.current = pendingAuthorityUserIdRef.current;
+        game.setNetworkAuthority(pendingAuthorityUserIdRef.current === localUser?.id);
+        pendingAuthorityUserIdRef.current = undefined;
+      }
       if (pendingLocalAuthoritativeStateRef.current) {
         game.applyLocalAuthoritativeNetworkState(
           pendingLocalAuthoritativeStateRef.current as DawnreachRemoteHeroState,
