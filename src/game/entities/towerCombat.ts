@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
-import { DAWNREACH_LAYOUT } from '../map/mapLayout';
+import { TEAM_START_BASE_LAYOUT, getTeamStartSpawnPosition } from '../map/mapLayout';
 import { getGameEntity, type GameEntity, type GameEntityRegistry, type TeamId } from './gameEntities';
 import { calculateTowerAuraAdjustedDamage, updateTowerGameplayAuras } from './towerAuras';
 import {
@@ -29,6 +29,7 @@ const RESPAWN_AT_KEY = 'dawnreachRespawnAtSeconds';
 const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
 const DEATH_COUNT_KEY = 'dawnreachDeaths';
 const DEATH_POSITION_KEY = 'dawnreachDeathPosition';
+const RESPAWN_POSITION_KEY = 'dawnreachRespawnPosition';
 const LAST_WORLD_SYNC_KEY = 'dawnreachTowerWorldSyncAtSeconds';
 const LAST_HERO_DEATH_PRESENTATION_KEY = 'dawnreachHeroDeathPresentationElapsed';
 const TRAIL_POINTS = 6;
@@ -336,10 +337,10 @@ function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void
     const respawnAt = Number(entity.root.userData[RESPAWN_AT_KEY] ?? Number.POSITIVE_INFINITY);
     if (!Number.isFinite(respawnAt) || elapsed < respawnAt) continue;
 
-    const spawn = getTeamSpawn(entity.team);
+    const spawn = getTeamSpawn(entity);
     if (!spawn) continue;
 
-    entity.root.position.set(spawn.x, 0.03, spawn.z);
+    entity.root.position.set(spawn.x, spawn.y, spawn.z);
     entity.currentHp = entity.maxHp;
     entity.currentResource = entity.maxResource;
     entity.alive = true;
@@ -413,10 +414,30 @@ function setHeroCorpsePose(entity: GameEntity, dead: boolean): void {
   model.rotation.x = dead ? -Math.PI * 0.48 : 0;
 }
 
-function getTeamSpawn(team: TeamId): { x: number; z: number } | null {
-  if (team === 'blue') return DAWNREACH_LAYOUT.blueSpawn;
-  if (team === 'red') return DAWNREACH_LAYOUT.redSpawn;
-  return null;
+function getTeamSpawn(entity: GameEntity): { x: number; y: number; z: number } | null {
+  const authored = entity.root.userData[RESPAWN_POSITION_KEY] as
+    | { x?: unknown; y?: unknown; z?: unknown }
+    | undefined;
+  if (
+    authored
+    && Number.isFinite(Number(authored.x))
+    && Number.isFinite(Number(authored.y))
+    && Number.isFinite(Number(authored.z))
+  ) {
+    return {
+      x: Number(authored.x),
+      y: Number(authored.y),
+      z: Number(authored.z),
+    };
+  }
+
+  if (entity.team !== 'blue' && entity.team !== 'red') return null;
+  const spawn = getTeamStartSpawnPosition(entity.team);
+  return {
+    x: spawn.x,
+    y: TEAM_START_BASE_LAYOUT.elevation + 0.03,
+    z: spawn.z,
+  };
 }
 
 function scheduleHeroRespawn(entity: GameEntity, elapsed: number): number {
