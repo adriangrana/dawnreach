@@ -31,6 +31,9 @@ export class HeroSelectManager {
   }
 
   begin(match) {
+    const existing = this.sessions.get(match.id);
+    if (existing) return this.snapshotForMatch(match.id);
+
     const teamSize = Math.max(1, Math.min(5, Number(match.customSettings?.teamSize || Math.floor(match.players.length / 2) || 5)));
     const selectionType = match.customSettings?.heroSelect === 'draft' || match.mode === 'ranked' ? 'draft' : 'all_pick';
     const bansPerTeam = match.customSettings?.bans === '4'
