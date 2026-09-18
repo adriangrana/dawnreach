@@ -1488,11 +1488,15 @@ export default function App({
         && event.matchId === onlineMatch.id
         && 'authorityUserId' in event
       ) {
-        const authorityUserId = event.authorityUserId ? String(event.authorityUserId) : null;
-        runtimeAuthorityUserIdRef.current = authorityUserId;
+        const simulationUserId = 'simulationUserId' in event && event.simulationUserId
+          ? String(event.simulationUserId)
+          : event.authorityUserId
+            ? String(event.authorityUserId)
+            : null;
+        runtimeAuthorityUserIdRef.current = simulationUserId;
         const game = gameRef.current;
-        if (game) game.setNetworkAuthority(authorityUserId === localUser.id);
-        else pendingAuthorityUserIdRef.current = authorityUserId;
+        if (game) game.setNetworkAuthority(simulationUserId === localUser.id);
+        else pendingAuthorityUserIdRef.current = simulationUserId;
       } else if (type === 'match.runtime.state' && 'matchId' in event && event.matchId === onlineMatch.id && 'state' in event) {
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
@@ -1567,11 +1571,15 @@ export default function App({
       ) {
         const snapshot = event as unknown as DawnreachCreepNetworkSnapshot;
         const game = gameRef.current;
-        if ('authorityUserId' in event) {
-          const authorityUserId = event.authorityUserId ? String(event.authorityUserId) : null;
-          runtimeAuthorityUserIdRef.current = authorityUserId;
-          if (game) game.setNetworkAuthority(authorityUserId === localUser.id);
-          else pendingAuthorityUserIdRef.current = authorityUserId;
+        if ('authorityUserId' in event || 'simulationUserId' in event) {
+          const simulationUserId = 'simulationUserId' in event && event.simulationUserId
+            ? String(event.simulationUserId)
+            : 'authorityUserId' in event && event.authorityUserId
+              ? String(event.authorityUserId)
+              : null;
+          runtimeAuthorityUserIdRef.current = simulationUserId;
+          if (game) game.setNetworkAuthority(simulationUserId === localUser.id);
+          else pendingAuthorityUserIdRef.current = simulationUserId;
         }
         if (game) game.applyRemoteCreepNetworkSnapshot(snapshot);
         else pendingCreepSnapshotRef.current = snapshot;
