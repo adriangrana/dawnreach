@@ -8,7 +8,11 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
-import { createDawnreachGame, type DawnreachRemoteHeroState } from './game/createDawnreachGame';
+import {
+  createDawnreachGame,
+  type DawnreachCreepNetworkSnapshot,
+  type DawnreachRemoteHeroState,
+} from './game/createDawnreachGame';
 import {
   publishWorldEntityRuntime,
   queueWorldDamageAdjustment,
@@ -50,7 +54,7 @@ import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
 import ScoreboardOverlay from './hud/ScoreboardOverlay';
 import ShopOverlay from './hud/ShopOverlay';
-import { setCombatHudStats } from './hud/combatStatsOverlay';
+import { getCombatHudStatsSnapshot, setCombatHudStats } from './hud/combatStatsOverlay';
 import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
@@ -137,6 +141,17 @@ function worldTargetClass(kind: WorldAttackEvent['targetKind']): CombatTargetCla
   return 'elite';
 }
 
+function matchCreepAuthorityUserId(match: MatchSummary | null | undefined) {
+  if (!match) return null;
+  const abandoned = new Set(match.abandonedUserIds ?? []);
+  return [...match.players]
+    .filter(player => !abandoned.has(player.userId))
+    .sort((left, right) => {
+      const teamOrder = (left.team === 'blue' ? 0 : 1) - (right.team === 'blue' ? 0 : 1);
+      return teamOrder || left.slot - right.slot || left.userId.localeCompare(right.userId);
+    })[0]?.userId ?? null;
+}
+
 type HudRuntime = {
   match: MatchState;
   nowMs: number;
@@ -157,6 +172,7 @@ type HudAction =
   | { type: 'world-hero-sync'; event: WorldCombatEvent }
   | { type: 'world-hero-attack'; event: WorldAttackEvent }
   | { type: 'world-progression'; event: WorldHeroProgressionEvent }
+  | { type: 'remote-player-sync'; state: MatchRuntimePlayerState; nowMs: number }
   | { type: 'shop-open'; nowMs: number }
   | { type: 'shop-close'; nowMs: number }
   | { type: 'shop-buy'; itemId: string; nowMs: number }
@@ -185,6 +201,68 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   match = advanceHeroWorldEffects(match, nowMs);
 
   if (action.type === 'tick') return { ...runtime, match, nowMs };
+
+  if (action.type === 'remote-player-sync') {
+    const player = match.players[action.state.userId];
+    const heroEntityId = player?.ownedHeroEntityId ?? null;
+    const hero = heroEntityId ? match.heroes[heroEntityId] ?? null : null;
+    if (!player || !hero || heroEntityId === LOCAL_HERO_ENTITY_ID) return { ...runtime, match, nowMs };
+
+    const remoteItems = new Map(
+      (action.state.inventory ?? []).map(item => [item.slot, item] as const),
+    );
+    const inventory = hero.inventory.map(slot => {
+      const item = remoteItems.get(slot.slot);
+      return {
+        ...slot,
+        item: item
+          ? {
+            instanceId: `remote:${action.state.userId}:${slot.slot}:${item.definitionId}`,
+            definitionId: item.definitionId,
+            displayName: item.displayName,
+            quantity: Math.max(1, item.quantity),
+            statModifiers: [],
+            cooldownReadyAtMs: 0,
+          }
+          : null,
+      };
+    });
+
+    const nextHero = {
+      ...hero,
+      level: Math.max(1, Math.floor(action.state.level)),
+      currentHp: Math.max(0, action.state.currentHp),
+      currentResource: Math.max(0, action.state.currentResource),
+      gold: Math.max(0, Math.floor(action.state.gold ?? hero.gold)),
+      lastHits: Math.max(0, Math.floor(action.state.lastHits ?? hero.lastHits)),
+      denies: Math.max(0, Math.floor(action.state.denies ?? hero.denies)),
+      inventory,
+      runtime: {
+        ...hero.runtime,
+        counters: {
+          ...hero.runtime.counters,
+          'scoreboard.kills': Math.max(0, Math.floor(action.state.kills ?? 0)),
+          'scoreboard.deaths': Math.max(0, Math.floor(action.state.deaths ?? 0)),
+          'scoreboard.assists': Math.max(0, Math.floor(action.state.assists ?? 0)),
+        },
+      },
+    };
+    return {
+      ...runtime,
+      match: {
+        ...match,
+        players: {
+          ...match.players,
+          [player.playerId]: { ...player, connected: true },
+        },
+        heroes: {
+          ...match.heroes,
+          [heroEntityId]: nextHero,
+        },
+      },
+      nowMs,
+    };
+  }
 
   if (action.type === 'shop-open') {
     return { ...runtime, match, nowMs, shopOpen: true, feedback: 'Mercado del Alba abierto.' };
@@ -778,6 +856,8 @@ export default function App({
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
+  const pendingCreepSnapshotRef = useRef<DawnreachCreepNetworkSnapshot | null>(null);
+  const pendingCreepDamageRef = useRef<Array<{ creepId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
@@ -810,13 +890,34 @@ export default function App({
 
   useEffect(() => subscribeWorldCombatEvents((event) => {
     if (onlineMatch && localUser && event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) {
-      const remoteMatch = /^player:(.+):hero$/.exec(event.entityId);
       const amount = Number(event.amount || 0);
-      if (remoteMatch && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID && amount > 0) {
-        platformRealtime.send('match.runtime.combat', {
+      const authorityUserId = matchCreepAuthorityUserId(onlineMatch);
+      const remoteMatch = /^player:(.+):hero$/.exec(event.entityId);
+
+      if (remoteMatch && amount > 0) {
+        const sourceEntityId = String(event.sourceEntityId || '');
+        const localHeroDamage = sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID;
+        const authoritativeCreepDamage = authorityUserId === localUser.id && sourceEntityId.startsWith('lane-creep:');
+        if (localHeroDamage || authoritativeCreepDamage) {
+          platformRealtime.send('match.runtime.combat', {
+            matchId: onlineMatch.id,
+            targetUserId: remoteMatch[1],
+            reason: event.reason === 'heal' ? 'heal' : 'damage',
+            amount,
+            sourceEntityId,
+          });
+        }
+      }
+
+      if (
+        authorityUserId !== localUser.id
+        && event.entityId.startsWith('lane-creep:')
+        && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID
+        && amount > 0
+      ) {
+        platformRealtime.send('match.runtime.creep.damage', {
           matchId: onlineMatch.id,
-          targetUserId: remoteMatch[1],
-          reason: event.reason === 'heal' ? 'heal' : 'damage',
+          creepId: event.entityId,
           amount,
         });
       }
@@ -974,6 +1075,12 @@ export default function App({
         game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
       }
       pendingRemoteStatesRef.current.clear();
+      if (pendingCreepSnapshotRef.current) {
+        game.applyRemoteCreepNetworkSnapshot(pendingCreepSnapshotRef.current);
+        pendingCreepSnapshotRef.current = null;
+      }
+      for (const damage of pendingCreepDamageRef.current) game.applyRemoteCreepDamage(damage);
+      pendingCreepDamageRef.current = [];
       const pendingAbility = runtimeStateRef.current.pendingAbilityCast;
       if (pendingAbility) {
         game.castLocalAbility(pendingAbility.key, pendingAbility.rank, pendingAbility.atMs);
@@ -993,6 +1100,7 @@ export default function App({
 
     const applyRemote = (state: MatchRuntimePlayerState) => {
       if (state.userId === localUser.id) return;
+      dispatch({ type: 'remote-player-sync', state, nowMs: performance.now() });
       const game = gameRef.current;
       if (game) game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
       else pendingRemoteStatesRef.current.set(state.userId, state);
@@ -1004,6 +1112,35 @@ export default function App({
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+      } else if (
+        type === 'match.runtime.creeps'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'creeps' in event
+        && Array.isArray(event.creeps)
+      ) {
+        const snapshot = event as unknown as DawnreachCreepNetworkSnapshot;
+        const game = gameRef.current;
+        if (game) game.applyRemoteCreepNetworkSnapshot(snapshot);
+        else pendingCreepSnapshotRef.current = snapshot;
+      } else if (
+        type === 'match.runtime.creep.damage'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'sourceUserId' in event
+        && event.sourceUserId !== localUser.id
+        && 'creepId' in event
+        && 'amount' in event
+      ) {
+        const damage = {
+          creepId: String(event.creepId || ''),
+          amount: Number(event.amount || 0),
+          sourceUserId: String(event.sourceUserId || ''),
+          atMs: performance.now(),
+        };
+        const game = gameRef.current;
+        if (game?.isCreepNetworkAuthority()) game.applyRemoteCreepDamage(damage);
+        else if (!game) pendingCreepDamageRef.current.push(damage);
       } else if (
         type === 'match.runtime.combat'
         && 'matchId' in event
@@ -1018,6 +1155,7 @@ export default function App({
           reason: 'reason' in event && event.reason === 'heal' ? 'heal' : 'damage',
           amount: Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
+          sourceEntityId: 'sourceEntityId' in event ? String(event.sourceEntityId || '') : undefined,
         });
       }
     });
@@ -1028,12 +1166,37 @@ export default function App({
       const game = gameRef.current;
       if (!game) return;
       const state = game.getLocalNetworkState();
+      const snapshot = runtimeStateRef.current;
+      const hero = getRequiredHero(snapshot.match, LOCAL_HERO_ENTITY_ID);
+      const combat = getCombatHudStatsSnapshot();
       networkSequenceRef.current += 1;
       platformRealtime.send('match.runtime.state', {
         matchId: onlineMatch.id,
         sequence: networkSequenceRef.current,
         ...state,
+        kills: combat.kills,
+        deaths: combat.deaths,
+        assists: combat.assists,
+        lastHits: hero.lastHits,
+        denies: hero.denies,
+        gold: hero.gold,
+        inventory: hero.inventory.flatMap(slot => slot.item ? [{
+          slot: slot.slot,
+          definitionId: slot.item.definitionId,
+          displayName: slot.item.displayName,
+          quantity: slot.item.quantity ?? 1,
+        }] : []),
       });
+
+      const creeps = game.getCreepNetworkSnapshot();
+      if (creeps) {
+        platformRealtime.send('match.runtime.creeps', {
+          matchId: onlineMatch.id,
+          sequence: creeps.sequence,
+          sentAt: creeps.sentAt,
+          creeps: creeps.creeps,
+        });
+      }
     };
 
     publish();
