@@ -517,7 +517,7 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [x] **HECHO · Identidad visual Dawnreach propia.** La plataforma reutiliza conceptos/estado, no la presentación visual TCL.
 - [ ] **PARCIAL · Shell prepartida Dawnreach.** Login, Home, PLAY y Social funcionan; Ranking y Perfil siguen pendientes.
 - [x] **HECHO · Superficie Party/Matchmaking/Ready**, integrada en Home/PLAY con rail social persistente.
-- [ ] **PARCIAL · Lobby personalizada 5v5.** Ya tiene la UI canónica de Custom Lobbies: browser público, crear/join por código, sala activa, equipos visibles `DAWN / DUSK`, slots 5v5, código compartible, settings y `START GAME`; el backend real ya cubre create/join/move/leave/start. Faltan ready states, spectators, bots, lobby chat/invites directos y persistencia/edición real de reglas avanzadas.
+- [ ] **PARCIAL · Lobby personalizada 5v5.** Ya tiene la UI canónica de Custom Lobbies: browser público, crear/join por código, sala activa, equipos visibles `DAWN / DUSK`, slots 5v5, código compartible, settings y `START GAME`. El backend real cubre create/join/move/leave/start, **READY server-authoritative** (todos los humanos, incluido host, deben estar listos; cambiar de equipo/slot resetea el estado) y **chat de lobby TEAM / ALL** con filtrado servidor para no enviar mensajes TEAM al equipo contrario. Faltan spectators, bots, invites directos y persistencia/edición real de reglas avanzadas.
 - [ ] **P1 · Hero Select.**
 - [ ] **P1 · Loading screen multiplayer.**
 - [ ] **P1 · PostMatch.**
