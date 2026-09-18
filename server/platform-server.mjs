@@ -196,6 +196,135 @@ export function createPlatformServer(options = {}) {
     return credits;
   }
 
+  function runtimeHeroAbilityStates(matchId) {
+    let states = matchRuntimeHeroAbilityStates.get(matchId);
+    if (!states) {
+      states = new Map();
+      matchRuntimeHeroAbilityStates.set(matchId, states);
+    }
+    return states;
+  }
+
+  const HERO_SERVER_COMBAT_RULES = {
+    H001: {
+      W: {
+        durationMs: 1250,
+        frontalArcDegrees: 140,
+        damageReductionPercentByRank: [40, 45, 50, 55],
+      },
+      R: {
+        delayMs: 550,
+        durationMs: 6000,
+        damageReductionPercentByRank: [15, 20, 24],
+      },
+    },
+  };
+
+  function reportMatchRuntimeAbilityCast(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para usar habilidades.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La habilidad pertenece a otra partida.');
+
+    const player = active.players.find(candidate => candidate.userId === userId);
+    const runtime = runtimeRoom(active.id).get(userId) || null;
+    if (!player || !runtime || runtime.alive === false || Number(runtime.currentHp || 0) <= 0) return null;
+
+    const key = String(payload?.key || '').toUpperCase();
+    if (!['Q', 'W', 'E', 'R'].includes(key)) return null;
+    const learnedRank = Math.max(0, Math.floor(Number(runtime.abilityRanks?.[key] || 0)));
+    const requestedRank = Math.max(0, Math.floor(Number(payload?.rank || 0)));
+    const rank = Math.min(learnedRank, requestedRank);
+    if (rank <= 0) return null;
+
+    const now = Date.now();
+    const heroId = active.heroSelections?.[userId]?.heroId || runtime.heroId || 'H001';
+    const current = runtimeHeroAbilityStates(active.id).get(userId) || {};
+    const next = { ...current, heroId, lastCastAt: now, lastCastKey: key };
+
+    const rules = HERO_SERVER_COMBAT_RULES[heroId];
+    if (key === 'W' && rules?.W) {
+      next.guardRank = rank;
+      next.guardUntil = now + rules.W.durationMs;
+    }
+    if (key === 'R' && rules?.R) {
+      next.majestyRank = rank;
+      next.majestyStartsAt = now + rules.R.delayMs;
+      next.majestyUntil = now + rules.R.delayMs + rules.R.durationMs;
+    }
+
+    runtimeHeroAbilityStates(active.id).set(userId, next);
+    return next;
+  }
+
+  function isSourceInsideServerGuardArc(active, targetRuntime, sourceUserId, sourceEntityId, arcDegrees) {
+    const sourceRuntime = sourceUserId ? runtimeRoom(active.id).get(sourceUserId) || null : null;
+    let sourcePosition = sourceRuntime?.position || null;
+
+    if (!sourcePosition && sourceEntityId?.startsWith('lane-creep:')) {
+      const creep = matchRuntimeCreepStates.get(active.id)?.creeps?.find(candidate => candidate.id === sourceEntityId) || null;
+      sourcePosition = creep?.position || null;
+    }
+    if (!sourcePosition || !targetRuntime?.position) return true;
+
+    const dx = Number(sourcePosition.x || 0) - Number(targetRuntime.position.x || 0);
+    const dz = Number(sourcePosition.z || 0) - Number(targetRuntime.position.z || 0);
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.001) return true;
+
+    const yaw = Number(targetRuntime.yaw || 0);
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const dot = Math.max(-1, Math.min(1, fx * dx / distance + fz * dz / distance));
+    return Math.acos(dot) <= (Math.max(0, Number(arcDegrees) || 0) * Math.PI / 180) * 0.5;
+  }
+
+  function applyServerHeroDamageMitigation(active, targetUserId, sourceUserId, sourceEntityId, amount, now) {
+    const targetRuntime = runtimeRoom(active.id).get(targetUserId) || null;
+    const abilityState = runtimeHeroAbilityStates(active.id).get(targetUserId) || null;
+    if (!targetRuntime || !abilityState) return Math.max(0, amount);
+
+    const heroId = active.heroSelections?.[targetUserId]?.heroId || targetRuntime.heroId || 'H001';
+    const rules = HERO_SERVER_COMBAT_RULES[heroId];
+    if (!rules) return Math.max(0, amount);
+
+    let remaining = Math.max(0, amount);
+    if (
+      rules.R
+      && Number(abilityState.majestyStartsAt || 0) <= now
+      && Number(abilityState.majestyUntil || 0) > now
+      && Number(abilityState.majestyRank || 0) > 0
+    ) {
+      const rank = Math.min(
+        rules.R.damageReductionPercentByRank.length,
+        Math.max(1, Math.floor(Number(abilityState.majestyRank))),
+      );
+      const reduction = rules.R.damageReductionPercentByRank[rank - 1] || 0;
+      remaining *= 1 - reduction / 100;
+    }
+
+    if (
+      rules.W
+      && Number(abilityState.guardUntil || 0) > now
+      && Number(abilityState.guardRank || 0) > 0
+      && isSourceInsideServerGuardArc(
+        active,
+        targetRuntime,
+        sourceUserId,
+        sourceEntityId,
+        rules.W.frontalArcDegrees,
+      )
+    ) {
+      const rank = Math.min(
+        rules.W.damageReductionPercentByRank.length,
+        Math.max(1, Math.floor(Number(abilityState.guardRank))),
+      );
+      const reduction = rules.W.damageReductionPercentByRank[rank - 1] || 0;
+      remaining *= 1 - reduction / 100;
+    }
+
+    return Math.max(0, remaining);
+  }
+
   function runtimeSpawnPositions(matchId) {
     let positions = matchRuntimeSpawnPositions.get(matchId);
     if (!positions) {
