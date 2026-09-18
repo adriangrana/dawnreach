@@ -283,3 +283,51 @@ test('active match runtime state is shared by match id and survives as an in-mem
     assert.equal(snapshot[0].currentHp, 640);
   });
 });
+
+
+test('shared player combat updates the target runtime snapshot', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-combat-1v1',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'combat-blue', username: 'Combat Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'combat-red', username: 'Combat Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'combat-blue': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'combat-red': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+
+    platform.store.addMatch(match);
+    platform.reportMatchRuntimeState('combat-blue', {
+      matchId: match.id, sequence: 1, position: { x: 0, y: 0, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+    });
+    platform.reportMatchRuntimeState('combat-red', {
+      matchId: match.id, sequence: 1, position: { x: 1, y: 0, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+    });
+
+    const event = platform.reportMatchRuntimeCombat('combat-blue', {
+      matchId: match.id,
+      targetUserId: 'combat-red',
+      reason: 'damage',
+      amount: 66,
+    });
+
+    assert.equal(event.targetUserId, 'combat-red');
+    assert.equal(event.amount, 66);
+    const target = platform.runtimeSnapshot(match.id).find(state => state.userId === 'combat-red');
+    assert.equal(target.currentHp, 634);
+    assert.equal(target.alive, true);
+  });
+});
