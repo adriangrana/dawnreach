@@ -200,6 +200,7 @@ type HudAction =
   | { type: 'world-hero-attack'; event: WorldAttackEvent }
   | { type: 'world-progression'; event: WorldHeroProgressionEvent }
   | { type: 'remote-player-sync'; state: MatchRuntimePlayerState; nowMs: number }
+  | { type: 'local-server-sync'; state: MatchRuntimePlayerState; nowMs: number }
   | { type: 'shop-open'; nowMs: number }
   | { type: 'shop-close'; nowMs: number }
   | { type: 'shop-buy'; itemId: string; nowMs: number }
