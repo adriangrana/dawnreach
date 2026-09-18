@@ -1712,8 +1712,15 @@ export default function App({
         && 'targetUserId' in event
         && event.targetUserId === localUser.id
         && 'sourceUserId' in event
-        && event.sourceUserId !== localUser.id
         && 'amount' in event
+        && (
+          event.sourceUserId !== localUser.id
+          || ('sourceEntityId' in event
+            && (
+              /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(String(event.sourceEntityId || ''))
+              || /^(blue|red)-[a-z0-9-]+-tower$/.test(String(event.sourceEntityId || ''))
+            ))
+        )
       ) {
         const game = gameRef.current;
         const resolved = game?.applyLocalNetworkCombat({
