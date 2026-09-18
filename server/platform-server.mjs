@@ -1355,6 +1355,11 @@ export function createPlatformServer(options = {}) {
       if (creepSnapshot) peer.send(creepSnapshot);
       const structureSnapshot = runtimeStructureSnapshot(active.match.id);
       if (structureSnapshot) peer.send(structureSnapshot);
+      peer.send({
+        type: 'match.runtime.authority',
+        matchId: active.match.id,
+        authorityUserId: runtimeAuthorityUserId(active.match),
+      });
       peer.send(publicRuntimePauseState(active.match.id));
       return;
     }
@@ -1630,6 +1635,11 @@ export function createPlatformServer(options = {}) {
             if (creepSnapshot) peer.send(creepSnapshot);
             const structureSnapshot = runtimeStructureSnapshot(active.id);
             if (structureSnapshot) peer.send(structureSnapshot);
+            peer.send({
+              type: 'match.runtime.authority',
+              matchId: active.id,
+              authorityUserId: runtimeAuthorityUserId(active),
+            });
             peer.send(publicRuntimePauseState(active.id));
           }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
