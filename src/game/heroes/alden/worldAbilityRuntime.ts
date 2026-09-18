@@ -164,6 +164,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
   private readonly tempTarget = new THREE.Vector3();
   private readonly lastHeroPosition = new THREE.Vector3();
   private readonly cooldownWasActive = new Map<AbilityKey, boolean>();
+  private readonly lastCastAtMs = new Map<AbilityKey, number>();
   private readonly joints: AbilityJoints;
 
   private camera: THREE.Camera;
@@ -303,7 +304,10 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
   }
 
   castAbility(key: AbilityKey, rank: number, nowMs: number) {
+    const previousCastAt = this.lastCastAtMs.get(key) ?? -Infinity;
+    if (nowMs - previousCastAt < 120) return;
     const safeRank = Math.max(1, Math.floor(rank));
+    this.lastCastAtMs.set(key, nowMs);
     this.cooldownWasActive.set(key, true);
     switch (key) {
       case 'Q': this.castQ(safeRank, nowMs); break;
