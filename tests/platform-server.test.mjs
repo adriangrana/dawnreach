@@ -341,6 +341,52 @@ test('all explicit abandons void the match instead of awarding an empty team', a
   }, { matchReconnectGraceMs: 200 });
 });
 
+test('all explicit abandonments void a rated match instead of awarding a ghost winner', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AllLeaveBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AllLeaveRed', password: 'Iron!Crown42' }),
+    });
+    const match = {
+      id: 'all-explicit-abandon',
+      mode: 'ranked',
+      source: 'matchmaking',
+      rated: true,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: blue.body.user.id, username: 'AllLeaveBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'AllLeaveRed', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    const blueSocket = await openWebsocket(port, blue.body.token);
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+
+    // Disconnect the survivor before the first player explicitly leaves so no offline
+    // participant is awarded a win. The orphaned team then gets the normal grace window.
+    redSocket.destroy();
+    platform.abandonActiveMatch(blue.body.user.id);
+    await wait(80);
+
+    const ended = platform.store.match(match.id);
+    assert.equal(ended.status, 'cancelled');
+    assert.equal(ended.winnerTeam, null);
+    assert.equal(ended.rated, false);
+
+    blueSocket.destroy();
+  }, { matchReconnectGraceMs: 40 });
+});
+
 test('one abandonment in a multi-player team leaves the match active for everyone else', async () => {
   await withServer(async ({ platform }) => {
     const match = {
