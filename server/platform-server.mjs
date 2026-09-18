@@ -29,6 +29,7 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeHeroDamageCredits = new Map();
   const matchRuntimePauseStates = new Map();
   const matchRuntimeSpawnPositions = new Map();
+  const matchRuntimeAuthorityUsers = new Map();
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
   const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
@@ -138,12 +139,42 @@ export function createPlatformServer(options = {}) {
 
   function runtimeAuthorityUserId(match) {
     const abandoned = new Set(match?.abandonedUserIds || []);
-    return [...(match?.players || [])]
+    const eligible = [...(match?.players || [])]
       .filter(player => !abandoned.has(player.userId))
       .sort((left, right) => {
         const teamOrder = (left.team === 'blue' ? 0 : 1) - (right.team === 'blue' ? 0 : 1);
         return teamOrder || Number(left.slot || 0) - Number(right.slot || 0) || String(left.userId).localeCompare(String(right.userId));
-      })[0]?.userId || null;
+      });
+    if (!eligible.length) {
+      matchRuntimeAuthorityUsers.delete(match?.id);
+      return null;
+    }
+
+    const currentUserId = matchRuntimeAuthorityUsers.get(match.id) || null;
+    const current = currentUserId
+      ? eligible.find(player => player.userId === currentUserId) || null
+      : null;
+    if (current && isOnline(current.userId)) return current.userId;
+
+    // Authority is sticky while connected. If it disappears, migrate to the first remaining
+    // connected participant. Reconnecting an old lobby host never steals authority back.
+    const next = eligible.find(player => isOnline(player.userId)) || current || eligible[0];
+    matchRuntimeAuthorityUsers.set(match.id, next.userId);
+    return next.userId;
+  }
+
+  function broadcastRuntimeAuthority(match) {
+    if (!match || match.status !== 'in_game') return null;
+    const previous = matchRuntimeAuthorityUsers.get(match.id) || null;
+    const authorityUserId = runtimeAuthorityUserId(match);
+    if (authorityUserId !== previous || authorityUserId) {
+      broadcast({
+        type: 'match.runtime.authority',
+        matchId: match.id,
+        authorityUserId,
+      }, match.players.map(player => player.userId));
+    }
+    return authorityUserId;
   }
 
   function runtimeCombatLocks(matchId) {
@@ -187,6 +218,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimeHeroDamageCredits.delete(matchId);
     matchRuntimePauseStates.delete(matchId);
     matchRuntimeSpawnPositions.delete(matchId);
+    matchRuntimeAuthorityUsers.delete(matchId);
     clearMatchDisconnectGrace(matchId);
   }
 
@@ -242,6 +274,7 @@ export function createPlatformServer(options = {}) {
     }
 
     const connectivity = matchConnectivity(match);
+    broadcastRuntimeAuthority(match);
     if (!connectivity.blue.length || !connectivity.red.length) {
       clearMatchDisconnectGrace(matchId);
       if (!connectivity.blue.length && !connectivity.red.length) {
@@ -1215,8 +1248,10 @@ export function createPlatformServer(options = {}) {
     matchRuntimeHeroDamageCredits.delete(updated.id);
     matchRuntimePauseStates.delete(updated.id);
     matchRuntimeSpawnPositions.delete(updated.id);
+    matchRuntimeAuthorityUsers.delete(updated.id);
     clearMatchDisconnectGrace(updated.id);
     runtimePauseState(updated.id);
+    broadcastRuntimeAuthority(updated);
 
     broadcast({
       type: 'match.start',
