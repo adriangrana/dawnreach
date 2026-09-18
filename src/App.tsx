@@ -2,6 +2,7 @@ import {
   useEffect,
   useReducer,
   useRef,
+  useState,
   type Dispatch,
   type DragEvent as ReactDragEvent,
   type RefObject,
@@ -34,6 +35,7 @@ import {
   purchaseShopItem,
   sellInventoryItem,
   useInventoryItem,
+  itemStatsToHeroModifiers,
 } from './game/items/shopRuntime';
 import {
   ITEM_DROP_EVENT,
@@ -59,6 +61,10 @@ import type { MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, Plat
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
+import {
+  HERO_SELECTION_CHANGED_EVENT,
+  type HeroSelectionChangedDetail,
+} from './game/entities/selectionHudOverlay';
 import ScoreboardOverlay from './hud/ScoreboardOverlay';
 import ShopOverlay from './hud/ShopOverlay';
 import {
