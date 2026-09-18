@@ -1424,7 +1424,7 @@ export default function App({
       pendingStructureDamageRef.current = [];
 
       if (pendingAuthorityUserId !== undefined) {
-        if (pendingAuthorityUserId === localUser?.id) game.setNetworkAuthority(true);
+        game.setNetworkAuthority(pendingAuthorityUserId === localUser?.id);
         pendingAuthorityUserIdRef.current = undefined;
       }
 
