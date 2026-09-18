@@ -1541,8 +1541,9 @@ export async function createDawnreachGame(
       // Network packets must never bypass fog-of-war. The vision system owns "revealed";
       // the render loop enforces it every frame so a remote state/respawn packet cannot
       // make an enemy visible outside allied vision.
-      root.visible = remote.entity.team === localTeam
-        || (remote.entity.alive && remote.entity.revealed);
+      root.visible = !remote.entity.alive
+        || remote.entity.team === localTeam
+        || remote.entity.revealed;
 
       if (!remote.entity.alive || remote.entity.currentHp <= 0) {
         remote.moving = false;
@@ -1689,7 +1690,9 @@ export async function createDawnreachGame(
       remote.entity.root.userData.alive = remote.entity.alive;
 
       if (!remote.entity.alive) {
-        remote.entity.root.visible = remote.entity.team === localTeam;
+        // Corpses are public world information: once a hero is confirmed dead, every
+        // player keeps the body rendered at the authoritative death position until respawn.
+        remote.entity.root.visible = true;
         remote.rig.model.visible = true;
         remote.rig.model.rotation.x = -Math.PI * 0.48;
       } else {
