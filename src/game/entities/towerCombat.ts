@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TOWER_GAMEPLAY } from '../gameplay/towerConfig';
 import { toMatchGameTimeMs } from '../match/matchPauseRuntime';
 import { TEAM_START_BASE_LAYOUT, getTeamStartSpawnPosition } from '../map/mapLayout';
+import type { VisionSystem } from '../vision/visionSystem';
 import { getGameEntity, type GameEntity, type GameEntityRegistry, type TeamId } from './gameEntities';
 import { calculateTowerAuraAdjustedDamage, updateTowerGameplayAuras } from './towerAuras';
 import {
@@ -556,6 +557,7 @@ function findBestTowerTarget(
 }
 
 function isHostileUnitTarget(tower: GameEntity, target: GameEntity): boolean {
+  if (!tower.root.parent || !target.root.parent) return false;
   if (!target.alive || target.currentHp <= 0 || target.maxHp <= 0) return false;
   if (target.team === tower.team || target.team === 'neutral') return false;
   return target.kind !== 'tower' && target.kind !== 'building' && target.kind !== 'shop';
@@ -565,12 +567,23 @@ function isValidTowerTarget(tower: GameEntity, target: GameEntity): boolean {
   if (!isHostileUnitTarget(tower, target)) return false;
   tower.root.getWorldPosition(towerPosition);
   target.root.getWorldPosition(entityPosition);
-  return planarDistanceSquared(
-    towerPosition.x,
-    towerPosition.z,
-    entityPosition.x,
-    entityPosition.z,
-  ) <= tower.attackRange * tower.attackRange;
+  if (
+    planarDistanceSquared(
+      towerPosition.x,
+      towerPosition.z,
+      entityPosition.x,
+      entityPosition.z,
+    ) > tower.attackRange * tower.attackRange
+  ) return false;
+
+  // A tower must only acquire units it can actually see from its own vision source.
+  // Using the local player's fog flag here is incorrect for enemy towers, so query the
+  // source-specific LOS test exposed by VisionSystem instead.
+  const worldRoot = getWorldRoot(tower.root);
+  const vision = worldRoot.userData.visionSystem as VisionSystem | undefined;
+  if (vision && !vision.isEntityVisibleFromSource(tower, target)) return false;
+
+  return true;
 }
 
 function createProjectileResources(team: CombatTeam): ProjectileResources {
