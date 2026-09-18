@@ -1717,8 +1717,91 @@ export async function createDawnreachGame(
     getCreepNetworkSnapshot() {
       return laneCreepSystem.getNetworkSnapshot();
     },
+    getStructureNetworkSnapshot(): DawnreachStructureNetworkSnapshot | null {
+      if (!laneCreepSystem.isNetworkAuthority()) return null;
+      structureNetworkSequence += 1;
+      return {
+        sequence: structureNetworkSequence,
+        sentAt: Date.now(),
+        structures: networkStructures().map(entity => ({
+          id: entity.id,
+          team: entity.team as 'blue' | 'red',
+          kind: entity.kind as 'tower' | 'building',
+          currentHp: entity.currentHp,
+          maxHp: entity.maxHp,
+          alive: entity.alive && entity.currentHp > 0,
+        })),
+      };
+    },
     applyRemoteCreepNetworkSnapshot(snapshot: DawnreachCreepNetworkSnapshot) {
       laneCreepSystem.applyNetworkSnapshot(snapshot);
+    },
+    applyRemoteStructureNetworkSnapshot(snapshot: DawnreachStructureNetworkSnapshot) {
+      if (laneCreepSystem.isNetworkAuthority()) return;
+      if (!Number.isFinite(snapshot.sequence) || snapshot.sequence <= lastStructureReplicaSequence) return;
+      lastStructureReplicaSequence = snapshot.sequence;
+      for (const state of snapshot.structures) applyStructureState(state);
+      vision.updateEntityVisibility();
+    },
+    applyRemoteStructureDamage(input: {
+      structureId: string;
+      amount: number;
+      sourceUserId: string;
+      atMs?: number;
+    }) {
+      if (!laneCreepSystem.isNetworkAuthority()) return false;
+      const target = networkStructures().find(entity => entity.id === input.structureId) ?? null;
+      if (!target || !target.alive || target.currentHp <= 0) return false;
+
+      const amount = Math.max(0, Number(input.amount) || 0);
+      if (amount <= 0) return false;
+
+      const atMs = input.atMs ?? toMatchGameTimeMs(performance.now());
+      const source = entityRegistry.values().find(
+        entity => entity.id === `player:${input.sourceUserId}:hero`,
+      ) ?? null;
+      if (source) {
+        source.root.getWorldPosition(basicAttackSourcePosition);
+        target.root.getWorldPosition(basicAttackTargetPosition);
+        publishWorldAttackEvent({
+          attackerId: source.id,
+          targetId: target.id,
+          attackerTeam: source.team,
+          targetTeam: target.team,
+          attackerKind: source.kind,
+          targetKind: target.kind,
+          attackerPosition: { x: basicAttackSourcePosition.x, z: basicAttackSourcePosition.z },
+          targetPosition: { x: basicAttackTargetPosition.x, z: basicAttackTargetPosition.z },
+          atMs,
+        });
+      }
+
+      const before = target.currentHp;
+      const currentHp = Math.max(0, before - amount);
+      applyStructureState({
+        id: target.id,
+        team: target.team as 'blue' | 'red',
+        kind: target.kind as 'tower' | 'building',
+        currentHp,
+        maxHp: target.maxHp,
+        alive: currentHp > 0,
+      });
+      const dealt = Math.max(0, before - currentHp);
+      emitWorldCombatEvent({
+        entityId: target.id,
+        reason: currentHp > 0 ? 'damage' : 'death',
+        currentHp,
+        currentResource: target.currentResource,
+        alive: currentHp > 0,
+        amount: dealt,
+        sourceEntityId: source?.id ?? `player:${input.sourceUserId}:hero`,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+        atMs,
+      });
+      if (currentHp <= 0) vision.updateEntityVisibility();
+      return true;
     },
     applyRemoteCreepDamage(input: { creepId: string; amount: number; sourceUserId: string; atMs?: number }) {
       return laneCreepSystem.applyRemoteDamage(
