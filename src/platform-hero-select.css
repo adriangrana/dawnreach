@@ -24,7 +24,6 @@
   background:
     linear-gradient(180deg, rgba(3,10,16,.34), rgba(3,10,16,.66)),
     url('/assets/images/dawnreach_home_background.webp') center 28% / cover no-repeat;
-  filter: saturate(.82) brightness(.72) contrast(1.05);
 }
 
 .dr-hero-select-screen::before,
