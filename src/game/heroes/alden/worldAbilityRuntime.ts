@@ -744,6 +744,26 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     const adjustedDamage = Math.max(0, calculateTowerAuraAdjustedDamage(this.hero, target, rawDamage));
     if (adjustedDamage <= EPSILON) return 0;
 
+    const networkRemoteHero = target.kind === 'hero' && target.root.userData.networkRemoteHero === true;
+    if (networkRemoteHero) {
+      // Multiplayer hero health is reconciled by the victim/server path. Keep the cast
+      // responsive, but do not mutate/predict remote HP or death on the attacker's client.
+      emitWorldCombatEvent({
+        entityId: target.id,
+        reason: 'damage',
+        currentHp: target.currentHp,
+        currentResource: target.currentResource,
+        alive: target.alive,
+        atMs,
+        amount: adjustedDamage,
+        sourceEntityId: this.hero.id,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+      });
+      return adjustedDamage;
+    }
+
     const before = target.currentHp;
     target.currentHp = Math.max(0, target.currentHp - adjustedDamage);
     target.alive = target.currentHp > 0;
