@@ -182,9 +182,22 @@ function LobbyBrowser({
         <strong>{pendingLobby.name}</strong>
         <span>Hosted by {pendingLobby.ownerUsername} · {pendingLobby.players.length}/{pendingLobby.maxPlayers} players</span>
         {currentLobby && currentLobby.id !== pendingLobby.id && <em>You will leave <b>{currentLobby.name}</b> to join this lobby.</em>}
-        <div>
+        <div className="dr-custom-join-confirm-actions">
           <button type="button" onClick={() => setPendingLobbyId(null)}>CANCEL</button>
-          <button type="button" className="is-confirm" onClick={confirmLobbyJoin}>JOIN LOBBY</button>
+          {pendingLobby.settings.allowSpectators && pendingLobby.spectators.length < pendingLobby.maxSpectators && <button
+            type="button"
+            className="is-spectate"
+            onClick={() => {
+              platformRealtime.send('lobby.join.spectator', { code: pendingLobby.code });
+              setPendingLobbyId(null);
+            }}
+          >SPECTATE</button>}
+          <button
+            type="button"
+            className="is-confirm"
+            disabled={pendingLobby.players.length >= pendingLobby.maxPlayers}
+            onClick={confirmLobbyJoin}
+          >{pendingLobby.players.length >= pendingLobby.maxPlayers ? 'LOBBY FULL' : 'JOIN LOBBY'}</button>
         </div>
       </div>
     </div>}
