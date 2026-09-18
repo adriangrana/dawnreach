@@ -251,7 +251,13 @@ export type MatchLoadingUpdateEvent = Readonly<{ type: 'match.loading.update'; m
 export type MatchStartEvent = Readonly<{ type: 'match.start'; match: MatchSummary }>;
 export type MatchAbandonedEvent = Readonly<{ type: 'match.abandoned'; matchId: string; ended: boolean }>;
 export type MatchPlayerAbandonedEvent = Readonly<{ type: 'match.player.abandoned'; match: MatchSummary; userId: string; username: string }>;
-export type MatchEndedEvent = Readonly<{ type: 'match.ended'; match: MatchSummary; winnerTeam: Team | null; reason: string }>;
+export type MatchEndedEvent = Readonly<{
+  type: 'match.ended';
+  match: MatchSummary;
+  winnerTeam: Team | null;
+  reason: string;
+  voided?: boolean;
+}>;
 
 export type MatchRuntimeInventoryItem = Readonly<{
   slot: number;
