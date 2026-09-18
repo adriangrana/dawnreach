@@ -151,7 +151,31 @@ export function MatchLoadingScreen({
       } catch {
         // Font readiness should never block the battle.
       }
-      report(90);
+      report(88);
+
+      const runtimeStartedAt = performance.now();
+      await new Promise<void>(resolve => {
+        const inspectRuntime = () => {
+          if (disposed) { resolve(); return; }
+          const canvas = document.querySelector<HTMLCanvasElement>('.game-canvas');
+          const minimap = document.querySelector<HTMLCanvasElement>('.minimap-canvas');
+          const hud = document.querySelector<HTMLElement>('.game-hud');
+          const runtimeReady = Boolean(
+            canvas?.dataset.dawnreachReady === 'true'
+            && minimap
+            && hud
+            && canvas.width > 0
+            && minimap.width > 0
+          );
+          if (runtimeReady || performance.now() - runtimeStartedAt > 15_000) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(inspectRuntime);
+        };
+        requestAnimationFrame(inspectRuntime);
+      });
+      report(96);
 
       const minimumVisibleMs = 1350;
       const remaining = minimumVisibleMs - (performance.now() - visibleSince);
