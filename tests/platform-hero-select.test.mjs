@@ -72,6 +72,8 @@ test('hero select preview is not a lock and all players must lock before complet
   assert.equal(completed.length, 1);
   assert.equal(completed[0].selections.a.heroId, 'H001');
   assert.equal(completed[0].selections.b.heroId, 'H001');
+  assert.equal(heroSelect.snapshotForUser('a'), null);
+  assert.equal(heroSelect.snapshotForUser('b'), null);
 });
 
 test('development roster allows duplicate heroes until enough unique heroes exist', () => {
