@@ -348,7 +348,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
 
   return <>
     <main className="platform-home-surface platform-home-shell">
-      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} activeMatch={activeMatch} onReturnToMatch={returnToMatch} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
+      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
       {activeMatch?.stage === 'in_game' && !sharedGameVisible && <aside className="dr-active-match-recovery" role="status">
         <Swords />
         <div>
