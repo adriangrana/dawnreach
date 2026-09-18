@@ -975,119 +975,195 @@ export function createPlatformServer(options = {}) {
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para combatir.');
     if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El evento pertenece a otra partida.');
 
-    const source = active.players.find(candidate => candidate.userId === userId);
+    const reporter = active.players.find(candidate => candidate.userId === userId);
     const targetUserId = String(payload?.targetUserId || '');
     const target = active.players.find(candidate => candidate.userId === targetUserId);
-    if (!source || !target || source.userId === target.userId) throw new Error('Objetivo de combate inválido.');
+    if (!reporter || !target) throw new Error('Objetivo de combate inválido.');
 
-    const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
-    if (amount <= 0) return null;
     const reason = payload?.reason === 'heal' ? 'heal' : 'damage';
-    if (reason === 'damage' && source.team === target.team) throw new Error('No se permite daño aliado entre héroes.');
     const requestedSourceEntityId = String(payload?.sourceEntityId || '');
-    const authorityUserId = runtimeAuthorityUserId(active);
-    const sourceEntityId = userId === authorityUserId && /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(requestedSourceEntityId)
+    const simulatorUserId = runtimeAuthorityUserId(active);
+    const creepSourceMatch = /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.exec(requestedSourceEntityId);
+    const serverAcceptedCreepSource = Boolean(
+      simulatorUserId
+      && userId === simulatorUserId
+      && creepSourceMatch,
+    );
+    if (!serverAcceptedCreepSource && reporter.userId === target.userId) {
+      throw new Error('Objetivo de combate inválido.');
+    }
+
+    const sourceEntityId = serverAcceptedCreepSource
       ? requestedSourceEntityId
-      : `player:${userId}:hero`;
+      : `player:${reporter.userId}:hero`;
+
+    if (reason === 'damage') {
+      if (serverAcceptedCreepSource) {
+        if (creepSourceMatch?.[1] === target.team) throw new Error('No se permite daño aliado de creeps.');
+      } else if (reporter.team === target.team) {
+        throw new Error('No se permite daño aliado entre héroes.');
+      }
+    }
+
+    const requestedAmount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
+    if (requestedAmount <= 0) return null;
 
     const room = runtimeRoom(active.id);
-    const targetRuntime = room.get(target.userId);
+    const targetRuntime = room.get(target.userId) || null;
+    if (!targetRuntime || targetRuntime.alive === false || Number(targetRuntime.currentHp || 0) <= 0) return null;
+
     const now = Date.now();
     matchCombatSequence += 1;
     const combatId = `${active.id}:${target.userId}:${now}:${matchCombatSequence}`;
 
+    const finalDamage = reason === 'damage'
+      ? applyServerHeroDamageMitigation(
+        active,
+        target.userId,
+        serverAcceptedCreepSource ? null : reporter.userId,
+        sourceEntityId,
+        requestedAmount,
+        now,
+      )
+      : 0;
+
+    const nextHp = reason === 'heal'
+      ? Math.min(Number(targetRuntime.maxHp || 1), Number(targetRuntime.currentHp || 0) + requestedAmount)
+      : Math.max(0, Number(targetRuntime.currentHp || 0) - finalDamage);
+    const lethal = reason === 'damage' && nextHp <= 0;
+    const respawnSeconds = lethal
+      ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2
+      : null;
+
     if (
       reason === 'damage'
-      && sourceEntityId === `player:${source.userId}:hero`
-      && source.userId !== target.userId
-      && source.team !== target.team
+      && !serverAcceptedCreepSource
+      && reporter.userId !== target.userId
+      && reporter.team !== target.team
     ) {
       runtimeHeroDamageCredits(active.id).set(target.userId, {
-        sourceUserId: source.userId,
+        sourceUserId: reporter.userId,
         at: now,
       });
     }
 
-    let lethal = false;
-    let respawnSeconds = null;
-    let synchronizedTargetState = null;
+    let killerPlayer = null;
+    let creditedKillerState = null;
+    let confirmedHeroKillEvent = null;
 
-    if (targetRuntime) {
-      const locks = runtimeCombatLocks(active.id);
-      const existingLock = locks.get(target.userId) || null;
-      const preDamageHp = existingLock?.preDamageHp ?? targetRuntime.currentHp;
-      const baseHp = reason === 'damage' && existingLock
-        ? Math.min(targetRuntime.currentHp, Math.max(0, Number(existingLock.hpCeiling ?? targetRuntime.currentHp)))
-        : targetRuntime.currentHp;
-      const currentHp = reason === 'heal'
-        ? Math.min(targetRuntime.maxHp, targetRuntime.currentHp + amount)
-        : Math.max(0, baseHp - amount);
-      lethal = reason === 'damage' && currentHp <= 0;
-      respawnSeconds = lethal
-        ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2
+    if (lethal) {
+      const directHeroKiller = !serverAcceptedCreepSource
+        ? reporter
         : null;
+      const recentCredit = runtimeHeroDamageCredits(active.id).get(target.userId) || null;
+      const recentCreditedPlayer = recentCredit
+        && now - Number(recentCredit.at || 0) <= HERO_KILL_CREDIT_WINDOW_MS
+        ? active.players.find(candidate =>
+          candidate.userId === recentCredit.sourceUserId
+          && candidate.team !== target.team
+        ) ?? null
+        : null;
+      killerPlayer = directHeroKiller || recentCreditedPlayer;
 
-      // Do not broadcast a speculative target state. The victim applies the combat event
-      // and its next runtime packet becomes the authoritative HP/alive result. The lock
-      // only prevents an older pre-hit snapshot from restoring HP in the meantime.
-      if (reason === 'damage') {
-        const crossedLethal = lethal && !existingLock?.pendingLethal;
-        locks.set(target.userId, {
-          combatId,
-          preDamageHp,
-          hpCeiling: currentHp,
-          until: now + 1200,
-          deadUntil: existingLock?.deadUntil ?? null,
-          pendingLethal: Boolean(existingLock?.pendingLethal || lethal),
-          deathAccounted: Boolean(existingLock?.deathAccounted),
-          respawnSeconds: crossedLethal
-            ? respawnSeconds
-            : (existingLock?.respawnSeconds ?? respawnSeconds),
-          sourceUserId: crossedLethal
-            ? source.userId
-            : (existingLock?.sourceUserId ?? source.userId),
-          sourceEntityId: crossedLethal
-            ? sourceEntityId
-            : (existingLock?.sourceEntityId ?? sourceEntityId),
-        });
+      if (killerPlayer) {
+        const killerRuntime = room.get(killerPlayer.userId) || null;
+        if (killerRuntime) {
+          creditedKillerState = {
+            ...killerRuntime,
+            kills: Number(killerRuntime.kills || 0) + 1,
+            sequence: Number(killerRuntime.sequence || 0) + 1,
+            sentAt: now,
+          };
+          room.set(killerPlayer.userId, creditedKillerState);
+        }
       }
+      runtimeHeroDamageCredits(active.id).delete(target.userId);
 
-      // Keep the shared runtime snapshot in sync immediately for ordinary damage/healing.
-      // Lethal damage still waits for the victim's authoritative alive=false packet so death,
-      // respawn and kill-feed accounting remain exactly-once.
-      if (!lethal) {
-        synchronizedTargetState = {
-          ...targetRuntime,
-          currentHp,
-          alive: currentHp > 0,
-          sequence: Number(targetRuntime.sequence || 0) + 1,
-          sentAt: now,
-        };
-        room.set(target.userId, synchronizedTargetState);
-      }
+      const nextDeaths = Number(targetRuntime.deaths || 0) + 1;
+      confirmedHeroKillEvent = {
+        type: 'match.runtime.hero.kill',
+        matchId: active.id,
+        eventId: `hero-kill:${active.id}:${target.userId}:${nextDeaths}`,
+        victimUserId: target.userId,
+        victimUsername: target.username,
+        victimTeam: target.team,
+        victimHeroId: active.heroSelections?.[target.userId]?.heroId || 'H001',
+        killerUserId: killerPlayer?.userId ?? null,
+        killerUsername: killerPlayer?.username ?? null,
+        killerTeam: killerPlayer?.team
+          ?? (creepSourceMatch?.[1] === 'red' ? 'red' : creepSourceMatch?.[1] === 'blue' ? 'blue' : 'neutral'),
+        killerHeroId: killerPlayer
+          ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
+          : null,
+        killerEntityId: killerPlayer
+          ? `player:${killerPlayer.userId}:hero`
+          : sourceEntityId || null,
+        at: now,
+      };
+    }
+
+    const targetState = {
+      ...targetRuntime,
+      currentHp: nextHp,
+      alive: nextHp > 0,
+      moving: nextHp > 0 ? Boolean(targetRuntime.moving) : false,
+      deaths: Number(targetRuntime.deaths || 0) + (lethal ? 1 : 0),
+      respawnRemainingMs: lethal ? respawnSeconds * 1000 : 0,
+      respawnDurationMs: lethal ? respawnSeconds * 1000 : 0,
+      sequence: Number(targetRuntime.sequence || 0) + 1,
+      sentAt: now,
+    };
+    room.set(target.userId, targetState);
+
+    const locks = runtimeCombatLocks(active.id);
+    if (reason === 'damage') {
+      locks.set(target.userId, {
+        combatId,
+        preDamageHp: Number(targetRuntime.currentHp || 0),
+        hpCeiling: nextHp,
+        until: lethal ? now + respawnSeconds * 1000 : now + 1200,
+        deadUntil: lethal ? now + respawnSeconds * 1000 : null,
+        pendingLethal: lethal,
+        deathAccounted: lethal,
+        respawnSeconds,
+        sourceUserId: serverAcceptedCreepSource ? null : reporter.userId,
+        sourceEntityId,
+        serverResolved: true,
+      });
     }
 
     const event = {
       type: 'match.runtime.combat',
       matchId: active.id,
-      sourceUserId: source.userId,
-      sourceUsername: source.username,
+      sourceUserId: reporter.userId,
+      sourceUsername: reporter.username,
       sourceEntityId,
       combatId,
       targetUserId: target.userId,
       targetUsername: target.username,
       reason,
-      amount,
+      amount: requestedAmount,
+      resolvedAmount: reason === 'damage' ? finalDamage : requestedAmount,
       lethal,
       respawnSeconds,
       at: now,
     };
+
     const recipients = active.players.map(candidate => candidate.userId);
-    // Keep the prediction in the server room so rapid consecutive hits serialize against
-    // one HP value, but do not render that speculative HP on any client. The victim resolves
-    // mitigation first and reportMatchRuntimeCombatResolve broadcasts the final value, which
-    // removes the visible damage-down / HP-back-up rollback.
-    broadcast(event, [...new Set([source.userId, target.userId])]);
+    broadcast({
+      type: 'match.runtime.state',
+      matchId: active.id,
+      state: targetState,
+    }, recipients);
+    if (creditedKillerState) {
+      broadcast({
+        type: 'match.runtime.state',
+        matchId: active.id,
+        state: creditedKillerState,
+      }, recipients);
+    }
+    if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);
+    broadcast(event, [...new Set([reporter.userId, target.userId])]);
     return event;
   }
 
