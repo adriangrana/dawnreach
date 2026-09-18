@@ -1040,7 +1040,7 @@ export default function App({
         }
       }
 
-      const structureTarget = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/.test(event.entityId);
+      const structureTarget = /^(blue|red)-(?:[a-z0-9-]+-tower|throne)$/.test(event.entityId);
       if (
         structureTarget
         && authorityUserId !== localUser.id
