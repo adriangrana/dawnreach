@@ -2972,3 +2972,9 @@
   background:
     linear-gradient(90deg, rgba(1, 7, 12, .28), rgba(1, 7, 12, .08)) !important;
 }
+
+
+/* Small breathing room for the hero search input from the right fade edge. */
+.dr-hero-select-roster > header label {
+  margin-right: 16px !important;
+}
