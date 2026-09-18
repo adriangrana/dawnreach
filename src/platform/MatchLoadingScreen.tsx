@@ -79,7 +79,7 @@ function TeamRow({
   session: ActiveMatchSession;
   me: PlatformUser;
 }) {
-  return <section className={`dr-loading-team-row is-${team}`}>
+  return <section className={`dr-loading-team-row is-${team} is-count-${Math.min(5, Math.max(1, players.length))}`}>
     <header><span /><strong>{teamName(team)}</strong><span /></header>
     <div className="dr-loading-team-cards">
       {players.map(player => <LoadingPlayerCard key={player.userId} player={player} teammates={players} session={session} me={me} />)}
@@ -112,6 +112,11 @@ export function MatchLoadingScreen({
   const globalProgress = progressValues.length
     ? Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)
     : 0;
+
+  useEffect(() => {
+    document.body.classList.add('dr-match-loading-active');
+    return () => document.body.classList.remove('dr-match-loading-active');
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTipIndex(index => (index + 1) % TIPS.length), 7000);
