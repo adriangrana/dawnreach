@@ -93,6 +93,13 @@ type PendingItemUse = {
   detail: ItemUseDetail;
 };
 
+type PendingAbilityCast = {
+  token: string;
+  key: AbilityKey;
+  rank: number;
+  atMs: number;
+};
+
 function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk'): TeamHero[] {
   return match.slots
     .filter(slot => slot.team === team)
@@ -140,6 +147,7 @@ type HudRuntime = {
   pendingDrops: readonly PendingWorldDrop[];
   groundItems: Readonly<Record<string, InventoryItem>>;
   pendingItemUses: readonly PendingItemUse[];
+  pendingAbilityCast: PendingAbilityCast | null;
 };
 
 type HudAction =
@@ -159,6 +167,7 @@ type HudAction =
   | { type: 'inventory-sell'; instanceId: string; nowMs: number }
   | { type: 'item-use'; slot: number; nowMs: number }
   | { type: 'item-use-clear'; token: string; nowMs: number }
+  | { type: 'ability-world-clear'; token: string; nowMs: number }
   | { type: 'feedback'; message: string; nowMs: number };
 
 function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
@@ -201,6 +210,12 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
       nowMs,
       pendingItemUses: runtime.pendingItemUses.filter(use => use.token !== action.token),
     };
+  }
+
+  if (action.type === 'ability-world-clear') {
+    return runtime.pendingAbilityCast?.token === action.token
+      ? { ...runtime, match, nowMs, pendingAbilityCast: null }
+      : { ...runtime, match, nowMs };
   }
 
   if (action.type === 'feedback') {
@@ -413,11 +428,26 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   if (castingHero.currentHp <= 0) {
     return { ...runtime, match, nowMs, feedback: `${control.ability.name}: no disponible mientras estás muerto.` };
   }
+  if (!control.canUse || control.rank <= 0) {
+    return {
+      ...runtime,
+      match,
+      nowMs,
+      feedback: `${control.ability.name}: ${control.blockedReason ?? 'no disponible'}`,
+    };
+  }
+  const nextMatch = useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
   return {
     ...runtime,
-    match: useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs),
+    match: nextMatch,
     nowMs,
-    feedback: `${control.ability.name}: ${control.blockedReason ?? 'activada'}`,
+    pendingAbilityCast: {
+      token: `${action.key}:${action.nowMs}:${control.rank}`,
+      key: action.key,
+      rank: control.rank,
+      atMs: action.nowMs,
+    },
+    feedback: `${control.ability.name}: activada`,
   };
 }
 
@@ -733,6 +763,7 @@ export default function App({
       pendingDrops: [],
       groundItems: {},
       pendingItemUses: [],
+      pendingAbilityCast: null,
     };
   });
 
@@ -861,6 +892,15 @@ export default function App({
   }, [runtime.pendingItemUses]);
 
   useEffect(() => {
+    const pending = runtime.pendingAbilityCast;
+    if (!pending) return;
+    const game = gameRef.current;
+    if (!game) return;
+    game.castLocalAbility(pending.key, pending.rank, pending.atMs);
+    dispatch({ type: 'ability-world-clear', token: pending.token, nowMs: performance.now() });
+  }, [runtime.pendingAbilityCast?.token]);
+
+  useEffect(() => {
     if (!localHeroDead) return;
     const belongsToGameSurface = (target: EventTarget | null) => (
       target instanceof Element && Boolean(target.closest('.game-canvas, .minimap-live'))
@@ -930,6 +970,11 @@ export default function App({
         game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
       }
       pendingRemoteStatesRef.current.clear();
+      const pendingAbility = runtimeStateRef.current.pendingAbilityCast;
+      if (pendingAbility) {
+        game.castLocalAbility(pendingAbility.key, pendingAbility.rank, pendingAbility.atMs);
+        dispatch({ type: 'ability-world-clear', token: pendingAbility.token, nowMs: performance.now() });
+      }
       destroy = game.destroy;
     });
     return () => {
