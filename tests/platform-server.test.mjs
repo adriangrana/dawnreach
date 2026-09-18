@@ -232,3 +232,54 @@ test('one abandonment in a multi-player team leaves the match active for everyon
     assert.equal(platform.store.activeMatchForUser('red-a').id, match.id);
   });
 });
+
+
+test('active match runtime state is shared by match id and survives as an in-memory snapshot', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-room-1',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'runtime-blue', username: 'Runtime Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'runtime-red', username: 'Runtime Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'runtime-blue': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'runtime-red': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+
+    platform.store.addMatch(match);
+    const published = platform.reportMatchRuntimeState('runtime-blue', {
+      matchId: match.id,
+      sequence: 7,
+      position: { x: -12.5, y: 5.3, z: 9.25 },
+      yaw: 1.2,
+      moving: true,
+      currentHp: 640,
+      maxHp: 700,
+      currentResource: 285,
+      maxResource: 318,
+      level: 2,
+      alive: true,
+    });
+
+    assert.equal(published.userId, 'runtime-blue');
+    assert.equal(published.heroId, 'H001');
+    assert.equal(published.team, 'blue');
+    assert.equal(published.sequence, 7);
+    assert.deepEqual(published.position, { x: -12.5, y: 5.3, z: 9.25 });
+
+    const snapshot = platform.runtimeSnapshot(match.id);
+    assert.equal(snapshot.length, 1);
+    assert.equal(snapshot[0].username, 'Runtime Blue');
+    assert.equal(snapshot[0].currentHp, 640);
+  });
+});
