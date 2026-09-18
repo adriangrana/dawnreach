@@ -67,6 +67,7 @@ export function installMatchEventLifecycleRuntime() {
 
   const tracker = new MatchLifecycleTracker();
   let lastPausedByPlayerId: string | null = null;
+  let lastPausedByDisplayName: string | null = null;
 
   const unsubscribeCombat = subscribeWorldCombatEvents((event) => {
     if (event.reason !== 'damage' || event.currentHp <= 0) return;
@@ -92,13 +93,21 @@ export function installMatchEventLifecycleRuntime() {
     const detail = (event as CustomEvent<MatchPauseStateDetail>).detail;
     if (!detail || typeof detail.paused !== 'boolean') return;
     const actorPlayerId = detail.paused ? detail.pausedByPlayerId : lastPausedByPlayerId;
-    if (detail.paused) lastPausedByPlayerId = detail.pausedByPlayerId;
+    const actorDisplayName = detail.paused ? detail.pausedByDisplayName : lastPausedByDisplayName;
+    if (detail.paused) {
+      lastPausedByPlayerId = detail.pausedByPlayerId;
+      lastPausedByDisplayName = detail.pausedByDisplayName;
+    }
     publishMatchEvent(buildPauseMatchEvent(
       detail.paused,
       actorPlayerId,
       toMatchGameTimeMs(detail.changedAtMs),
+      actorDisplayName,
     ));
-    if (!detail.paused) lastPausedByPlayerId = null;
+    if (!detail.paused) {
+      lastPausedByPlayerId = null;
+      lastPausedByDisplayName = null;
+    }
   };
 
   window.addEventListener(MATCH_PAUSE_STATE_EVENT, onPauseState as EventListener);
@@ -107,6 +116,7 @@ export function installMatchEventLifecycleRuntime() {
     installed = false;
     tracker.reset();
     lastPausedByPlayerId = null;
+    lastPausedByDisplayName = null;
     unsubscribeCombat();
     window.removeEventListener(MATCH_PAUSE_STATE_EVENT, onPauseState as EventListener);
   };
