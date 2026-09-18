@@ -742,10 +742,17 @@ export function createPlatformServer(options = {}) {
       requestedAlive = true;
       combatLocks.delete(userId);
     } else if (combatLock?.until && now < combatLock.until) {
-      const processedDamage = rawAlive === false
-        || rawCurrentHp < Math.max(0, Number(combatLock.preDamageHp || 0)) - 0.001;
+      if (combatLock.serverResolved) {
+        // During the short reconciliation window the server HP is immutable. Periodic
+        // client snapshots may be based on a frame rendered before/after the combat packet;
+        // accepting either value here reintroduces HP rollback and accidental resurrection.
+        requestedCurrentHp = Math.max(0, Number(previous?.currentHp ?? combatLock.hpCeiling ?? 0));
+        requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
+      } else {
+        const processedDamage = rawAlive === false
+          || rawCurrentHp < Math.max(0, Number(combatLock.preDamageHp || 0)) - 0.001;
 
-      if (processedDamage) {
+        if (processedDamage) {
         requestedCurrentHp = rawCurrentHp;
         requestedAlive = rawAlive;
 
@@ -837,6 +844,7 @@ export function createPlatformServer(options = {}) {
           requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
           requestedAlive = requestedCurrentHp > 0;
         }
+      }
       }
     } else if (combatLock) {
       combatLocks.delete(userId);
