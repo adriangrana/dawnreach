@@ -1059,8 +1059,18 @@ export function createPlatformServer(options = {}) {
     if (requestedAmount <= 0) return null;
 
     const room = runtimeRoom(active.id);
+    const reporterRuntime = room.get(reporter.userId) || null;
     const targetRuntime = room.get(target.userId) || null;
     if (!targetRuntime || targetRuntime.alive === false || Number(targetRuntime.currentHp || 0) <= 0) return null;
+    if (
+      reason === 'damage'
+      && !environmentSource
+      && (!reporterRuntime || reporterRuntime.alive === false || Number(reporterRuntime.currentHp || 0) <= 0)
+    ) {
+      // Combat is serialized by the server. Once a hero is canonically dead, late/stale
+      // client attack packets from that hero cannot kill someone after death.
+      return null;
+    }
 
     const now = Date.now();
     matchCombatSequence += 1;
