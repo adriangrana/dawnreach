@@ -16,6 +16,7 @@ import {
   publishWorldEntityRuntime,
 } from './entities/worldCombatBridge';
 import { connectLocalLaneProgression } from './gameplay/localLaneProgression';
+import { ensureLaneCreepSystem, type LaneCreepNetworkSnapshot } from './gameplay/laneCreeps';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden, type AldenRig } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
@@ -71,6 +72,17 @@ export type DawnreachGameOptions = Readonly<{
   localWorldEntityId?: string;
   players?: readonly DawnreachSharedPlayer[];
 }>;
+
+export type DawnreachCreepNetworkSnapshot = LaneCreepNetworkSnapshot;
+
+function creepAuthorityPlayerId(players: readonly DawnreachSharedPlayer[], fallback: string) {
+  if (players.length === 0) return fallback;
+  return [...players]
+    .sort((left, right) => {
+      const teamOrder = (left.team === 'blue' ? 0 : 1) - (right.team === 'blue' ? 0 : 1);
+      return teamOrder || left.slot - right.slot || left.userId.localeCompare(right.userId);
+    })[0]?.userId ?? fallback;
+}
 
 const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.webp', {
   eager: true, query: '?url', import: 'default',
@@ -156,8 +168,14 @@ export async function createDawnreachGame(
     };
   };
   const localSpawn = playerSpawn(localTeam, localSharedPlayer?.slot ?? 0);
+  const creepAuthorityId = creepAuthorityPlayerId(sharedPlayers, localPlayerId);
+  const creepNetworkMode = sharedPlayers.length > 1 && creepAuthorityId !== localPlayerId
+    ? 'replica'
+    : 'authority';
 
   const scene = new THREE.Scene();
+  scene.userData.laneCreepNetworkMode = creepNetworkMode;
+  scene.userData.laneCreepAuthorityPlayerId = creepAuthorityId;
   // Team-relative presentation (health bars, fog/overheads) must know the viewer's side
   // before authored entities are registered and their overheads are attached.
   scene.userData.localTeam = localTeam;
@@ -372,6 +390,7 @@ export async function createDawnreachGame(
     });
   }
 
+  const laneCreepSystem = ensureLaneCreepSystem(scene, entityRegistry);
   const disconnectLaneProgression = connectLocalLaneProgression(entityRegistry, localHeroEntity);
   const vision = createVisionSystem(entityRegistry, localTeam);
   scene.userData.entityRegistry = entityRegistry;
@@ -924,6 +943,11 @@ export async function createDawnreachGame(
       currentHp: target.currentHp,
       currentResource: target.currentResource,
       alive: aliveAfterHit,
+      amount: damage,
+      sourceEntityId: localHeroEntity.id,
+      damageType: 'physical',
+      isDirect: true,
+      isFromFront: true,
       atMs: nowMs,
     });
 
@@ -1552,6 +1576,23 @@ export async function createDawnreachGame(
     castLocalAbility(key: AbilityKey, rank: number, nowMs = performance.now()) {
       syncLocalHeroEntityState();
       return triggerAldenWorldAbility(scene, key, rank, nowMs);
+    },
+    isCreepNetworkAuthority() {
+      return laneCreepSystem.isNetworkAuthority();
+    },
+    getCreepNetworkSnapshot() {
+      return laneCreepSystem.getNetworkSnapshot();
+    },
+    applyRemoteCreepNetworkSnapshot(snapshot: DawnreachCreepNetworkSnapshot) {
+      laneCreepSystem.applyNetworkSnapshot(snapshot);
+    },
+    applyRemoteCreepDamage(input: { creepId: string; amount: number; sourceUserId: string; atMs?: number }) {
+      return laneCreepSystem.applyRemoteDamage(
+        input.creepId,
+        input.amount,
+        `player:${input.sourceUserId}:hero`,
+        input.atMs ?? performance.now(),
+      );
     },
     applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
       if (state.userId === localPlayerId) return;
