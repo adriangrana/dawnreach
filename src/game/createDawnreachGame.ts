@@ -8,6 +8,7 @@ import {
   registerAuthoredMapEntities,
   VISION_RANGES,
   type GameEntity,
+  type TeamId,
 } from './entities/gameEntities';
 import { calculateTowerAuraAdjustedDamage } from './entities/towerAuras';
 import {
@@ -17,12 +18,12 @@ import {
 } from './entities/worldCombatBridge';
 import { connectLocalLaneProgression } from './gameplay/localLaneProgression';
 import { animateAlden } from './heroes/alden/animateAlden';
-import { buildAlden } from './heroes/alden/buildAlden';
+import { buildAlden, type AldenRig } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
 import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { createMapCollisionWorld } from './map/collisionWorld';
-import { DAWNREACH_LAYOUT, MAP_BOUNDS } from './map/mapLayout';
+import { DAWNREACH_LAYOUT, MAP_BOUNDS, getTeamStartSpawnPosition } from './map/mapLayout';
 import { polishRiverBridges } from './map/polishRiverBridges';
 import { createWaterEffects } from './map/waterEffects';
 import {
@@ -41,6 +42,35 @@ type HeroOverlayState = {
   hero: MatchHeroState;
   stats: Pick<HeroStats, 'maxHp' | 'maxResource' | 'attackDamage' | 'attackSpeed'>;
 };
+
+export type DawnreachSharedPlayer = Readonly<{
+  userId: string;
+  username: string;
+  team: 'blue' | 'red';
+  slot: number;
+  heroId: string;
+}>;
+
+export type DawnreachRemoteHeroState = Readonly<{
+  userId: string;
+  sequence: number;
+  position: Readonly<{ x: number; y: number; z: number }>;
+  yaw: number;
+  moving: boolean;
+  currentHp: number;
+  maxHp: number;
+  currentResource: number;
+  maxResource: number;
+  level: number;
+  alive: boolean;
+}>;
+
+export type DawnreachGameOptions = Readonly<{
+  localPlayerId?: string;
+  localTeam?: 'blue' | 'red';
+  localWorldEntityId?: string;
+  players?: readonly DawnreachSharedPlayer[];
+}>;
 
 const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.webp', {
   eager: true, query: '?url', import: 'default',
@@ -109,7 +139,24 @@ export async function createDawnreachGame(
   minimapHost?: HTMLDivElement | null,
   minimapHeroMarker?: HTMLImageElement | null,
   getHeroState?: () => HeroOverlayState | null,
+  options: DawnreachGameOptions = {},
 ) {
+  const localTeam: 'blue' | 'red' = options.localTeam ?? 'blue';
+  const localPlayerId = options.localPlayerId ?? 'local-player';
+  const localWorldEntityId = options.localWorldEntityId ?? 'blue-hero-alden';
+  const sharedPlayers = options.players ?? [];
+  const localSharedPlayer = sharedPlayers.find(player => player.userId === localPlayerId) ?? null;
+  const playerSpawn = (team: 'blue' | 'red', slot = 0) => {
+    const base = getTeamStartSpawnPosition(team);
+    const centeredSlot = THREE.MathUtils.clamp(slot, 0, 4) - 2;
+    const sign = team === 'blue' ? 1 : -1;
+    return {
+      x: base.x + centeredSlot * 0.72,
+      z: base.z + centeredSlot * 0.46 * sign,
+    };
+  };
+  const localSpawn = playerSpawn(localTeam, localSharedPlayer?.slot ?? 0);
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x758994);
   scene.fog = new THREE.Fog(0x758994, 42, 100);
@@ -216,16 +263,16 @@ export async function createDawnreachGame(
 
   hero.root.scale.setScalar(heroPresentationScale);
   const heroOverlay = addHeroOverlay(hero.root);
-  hero.root.position.set(DAWNREACH_LAYOUT.blueSpawn.x, HERO_GROUND_OFFSET, DAWNREACH_LAYOUT.blueSpawn.z);
+  hero.root.position.set(localSpawn.x, HERO_GROUND_OFFSET, localSpawn.z);
   scene.add(hero.root);
 
   const entityRegistry = new GameEntityRegistry();
-  registerAuthoredMapEntities(entityRegistry, battlefield);
+  registerAuthoredMapEntities(entityRegistry, battlefield, localTeam);
   const localHeroEntity = entityRegistry.register(hero.root, {
-    id: 'blue-hero-alden',
+    id: localWorldEntityId,
     displayName: alden ? 'Alden' : 'Humanoid Preview',
     kind: 'hero',
-    team: 'blue',
+    team: localTeam,
     selectable: true,
     targetable: true,
     grantsVision: true,
@@ -235,8 +282,58 @@ export async function createDawnreachGame(
     interaction: 'unit',
     selectionRadius: 0.78,
   });
+
+  type RemoteHeroRuntime = {
+    player: DawnreachSharedPlayer;
+    rig: AldenRig;
+    entity: GameEntity;
+    targetPosition: THREE.Vector3;
+    targetYaw: number;
+    moving: boolean;
+    lastSequence: number;
+  };
+  const remoteHeroes = new Map<string, RemoteHeroRuntime>();
+  for (const player of sharedPlayers) {
+    if (player.userId === localPlayerId) continue;
+    const remoteRig = buildAlden(createAldenMaterials());
+    remoteRig.root.scale.setScalar(GAME_HERO_SCALE);
+    const spawn = playerSpawn(player.team, player.slot);
+    remoteRig.root.position.set(spawn.x, HERO_GROUND_OFFSET, spawn.z);
+    scene.add(remoteRig.root);
+    const entity = entityRegistry.register(remoteRig.root, {
+      id: `player:${player.userId}:hero`,
+      displayName: player.username || 'Hero',
+      kind: 'hero',
+      team: player.team,
+      selectable: true,
+      targetable: true,
+      grantsVision: true,
+      visionRadius: VISION_RANGES.hero,
+      visionHeight: 1.8,
+      visibilityPolicy: 'vision-only',
+      interaction: 'unit',
+      selectionRadius: 0.78,
+      maxHp: 700,
+      currentHp: 700,
+      maxResource: 300,
+      currentResource: 300,
+      definitionId: player.heroId,
+      level: 1,
+      alive: true,
+    });
+    remoteHeroes.set(player.userId, {
+      player,
+      rig: remoteRig,
+      entity,
+      targetPosition: remoteRig.root.position.clone(),
+      targetYaw: 0,
+      moving: false,
+      lastSequence: -1,
+    });
+  }
+
   const disconnectLaneProgression = connectLocalLaneProgression(entityRegistry, localHeroEntity);
-  const vision = createVisionSystem(entityRegistry, 'blue');
+  const vision = createVisionSystem(entityRegistry, localTeam);
   scene.userData.entityRegistry = entityRegistry;
   scene.userData.visionSystem = vision;
 
@@ -252,7 +349,7 @@ export async function createDawnreachGame(
   const selection = createEntitySelectionController(
     scene,
     entityRegistry,
-    entity => entity.team === 'blue' || entity.revealed,
+    entity => entity.team === localTeam || entity.revealed,
   );
   vision.updateEntityVisibility();
   const surfaceRay = new THREE.Raycaster();
@@ -289,6 +386,14 @@ export async function createDawnreachGame(
     hero.root.position.z,
     0,
   ) + HERO_GROUND_OFFSET;
+  for (const remote of remoteHeroes.values()) {
+    remote.rig.root.position.y = sampleSurfaceHeight(
+      remote.rig.root.position.x,
+      remote.rig.root.position.z,
+      0,
+    ) + HERO_GROUND_OFFSET;
+    remote.targetPosition.copy(remote.rig.root.position);
+  }
   const heroSpawnSurfaceY = hero.root.position.y;
 
   let destination: Point3 | null = null;
@@ -317,6 +422,7 @@ export async function createDawnreachGame(
   let targetYaw = 0;
   let currentYaw = 0;
   let elapsed = 0;
+  let localHeroMoving = false;
   let animationFrame = 0;
   let lastMinimapRender = -Infinity;
   let lastVisionUpdate = -Infinity;
@@ -1075,8 +1181,8 @@ export async function createDawnreachGame(
     const worldHeroEntity = getGameEntity(hero.root);
     if (worldHeroEntity?.alive && movementWasLocked) {
       const atSpawn = Math.hypot(
-        hero.root.position.x - DAWNREACH_LAYOUT.blueSpawn.x,
-        hero.root.position.z - DAWNREACH_LAYOUT.blueSpawn.z,
+        hero.root.position.x - localSpawn.x,
+        hero.root.position.z - localSpawn.z,
       ) <= 0.08;
       if (atSpawn) hero.root.position.y = heroSpawnSurfaceY;
       hero.root.visible = true;
@@ -1274,6 +1380,7 @@ export async function createDawnreachGame(
       currentYaw += yawDelta * Math.min(1, dt * 11);
       hero.model.rotation.y = currentYaw;
 
+      localHeroMoving = moving;
       if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
       else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
@@ -1302,6 +1409,27 @@ export async function createDawnreachGame(
       }
     }
 
+    for (const remote of remoteHeroes.values()) {
+      const root = remote.rig.root;
+      const dx = remote.targetPosition.x - root.position.x;
+      const dy = remote.targetPosition.y - root.position.y;
+      const dz = remote.targetPosition.z - root.position.z;
+      const distance = Math.hypot(dx, dz);
+      const blend = 1 - Math.exp(-dt * 13);
+      root.position.x = THREE.MathUtils.lerp(root.position.x, remote.targetPosition.x, blend);
+      root.position.y = THREE.MathUtils.lerp(root.position.y, remote.targetPosition.y, blend);
+      root.position.z = THREE.MathUtils.lerp(root.position.z, remote.targetPosition.z, blend);
+      const yawDelta = Math.atan2(
+        Math.sin(remote.targetYaw - remote.rig.model.rotation.y),
+        Math.cos(remote.targetYaw - remote.rig.model.rotation.y),
+      );
+      remote.rig.model.rotation.y += yawDelta * Math.min(1, dt * 12);
+      const remoteMoving = remote.moving || distance > 0.035 || Math.abs(dy) > 0.05;
+      animateAlden(remote.rig, elapsed, remoteMoving, dt, heroAnimationSpeed);
+      remote.entity.root.userData.currentHp = remote.entity.currentHp;
+      remote.entity.root.userData.maxHp = remote.entity.maxHp;
+    }
+
     for (const marker of [targetMarker, attackMarker]) {
       if (!marker.visible) continue;
       const kind = marker.userData.kind as CommandMarkerKind;
@@ -1324,7 +1452,7 @@ export async function createDawnreachGame(
     textures.water.offset.set(Math.sin(elapsed * 0.12) * 0.025, -elapsed * 0.055);
     textures.waterFlow.offset.set(Math.sin(elapsed * 0.17) * 0.035, -elapsed * 0.07);
     for (const surface of waterSurfaces) animateRiverSurface(surface, elapsed);
-    waterEffects.update(elapsed, [hero.root]);
+    waterEffects.update(elapsed, [hero.root, ...Array.from(remoteHeroes.values(), remote => remote.rig.root)]);
     for (const animateMapObject of mapAnimations) animateMapObject(elapsed);
     heroOverlay.update(getHeroState?.() ?? null);
 
@@ -1345,6 +1473,42 @@ export async function createDawnreachGame(
   animate();
 
   return {
+    getLocalNetworkState() {
+      const overlay = getHeroState?.() ?? null;
+      return {
+        position: {
+          x: hero.root.position.x,
+          y: hero.root.position.y,
+          z: hero.root.position.z,
+        },
+        yaw: currentYaw,
+        moving: localHeroMoving,
+        currentHp: overlay?.hero.currentHp ?? localHeroEntity.currentHp,
+        maxHp: overlay?.stats.maxHp ?? Math.max(1, localHeroEntity.maxHp),
+        currentResource: overlay?.hero.currentResource ?? localHeroEntity.currentResource,
+        maxResource: overlay?.stats.maxResource ?? localHeroEntity.maxResource,
+        level: overlay?.hero.level ?? localHeroEntity.level,
+        alive: overlay ? overlay.hero.currentHp > 0 : localHeroEntity.alive,
+      };
+    },
+    applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
+      if (state.userId === localPlayerId) return;
+      const remote = remoteHeroes.get(state.userId);
+      if (!remote || state.sequence <= remote.lastSequence) return;
+      remote.lastSequence = state.sequence;
+      remote.targetPosition.set(state.position.x, state.position.y, state.position.z);
+      remote.targetYaw = state.yaw;
+      remote.moving = state.moving;
+      remote.entity.maxHp = Math.max(1, state.maxHp);
+      remote.entity.currentHp = THREE.MathUtils.clamp(state.currentHp, 0, remote.entity.maxHp);
+      remote.entity.maxResource = Math.max(0, state.maxResource);
+      remote.entity.currentResource = THREE.MathUtils.clamp(state.currentResource, 0, remote.entity.maxResource || state.currentResource);
+      remote.entity.level = Math.max(1, Math.floor(state.level));
+      remote.entity.alive = state.alive && remote.entity.currentHp > 0;
+      remote.entity.root.userData.maxHp = remote.entity.maxHp;
+      remote.entity.root.userData.currentHp = remote.entity.currentHp;
+      remote.entity.root.userData.level = remote.entity.level;
+    },
     destroy() {
       cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
