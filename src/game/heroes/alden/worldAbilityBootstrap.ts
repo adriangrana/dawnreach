@@ -214,22 +214,23 @@ export function mountAldenWorldAbilityBootstrap() {
           ? registry.values().find(entity => entity.id === localHeroEntityId) ?? null
           : registry?.values().find(entity => entity.kind === 'hero' && entity.root.userData.dawnreachLocalControlledHero === true) ?? null;
         if (registry && hero) {
-          const runtime = ensureAldenWorldAbilityRuntime(
+          const explicitAbilityRuntime = scene.userData.dawnreachExplicitAbilityRuntime === true;
+          const runtime = explicitAbilityRuntime ? null : ensureAldenWorldAbilityRuntime(
             scene,
             registry,
             hero,
             renderer.domElement,
             camera,
           );
-          const presentation = ensureAldenAbilityPresentation(
+          const presentation = explicitAbilityRuntime ? null : ensureAldenAbilityPresentation(
             scene,
             registry,
             hero,
             renderer.domElement,
             camera,
           );
-          const edgePolish = ensureAldenAbilityEdgePolish(scene);
-          const linePolish = ensureWorldLineVfxPolish(scene);
+          const edgePolish = explicitAbilityRuntime ? null : ensureAldenAbilityEdgePolish(scene);
+          const linePolish = explicitAbilityRuntime ? null : ensureWorldLineVfxPolish(scene);
           if (renderer.getRenderTarget() === null) {
             const nowMs = performance.now();
             presentAtMs = nowMs;
@@ -237,13 +238,11 @@ export function mountAldenWorldAbilityBootstrap() {
 
             // Match pause freezes all ability mechanics and VFX progression. Rendering continues
             // so the pause/menu overlays stay responsive, but pending impacts cannot advance.
-            if (!isMatchPaused()) {
+            // Modern createDawnreachGame scenes own ability mechanics/VFX explicitly; the bootstrap
+            // remains only as a legacy fallback for older renderer-owned scenes.
+            if (!isMatchPaused() && runtime && presentation && edgePolish && linePolish) {
               runtime.update(nowMs);
 
-              // abilityPresentation owns VFX only. Its legacy pose layer used additive Euler
-              // rotations every rendered frame, so Q permanently pitched the pelvis forward and
-              // each later cast compounded the error. Preserve the authoritative pose produced by
-              // animateAlden/worldAbilityRuntime while presentation updates its VFX.
               const poseGuard = getPresentationPoseGuard(hero.root);
               capturePresentationPose(poseGuard);
               cameraBeforePresentation.copy(camera.position);
