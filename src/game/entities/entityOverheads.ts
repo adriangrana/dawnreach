@@ -11,6 +11,8 @@ const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
 // sprite is 3.264 world units wide. Generic/network heroes compensate parent scaling;
 // use the same final world width so remote/enemy bars do not appear oversized.
 const HERO_OVERHEAD_WORLD_WIDTH = 4.8 * 0.68;
+const HERO_OVERHEAD_CANVAS_HEIGHT = 116;
+const HERO_FRAME_Y = 30;
 
 type LocalTeamId = Exclude<TeamId, 'neutral'>;
 
@@ -93,17 +95,17 @@ function drawHeroHealth(
 ) {
   const palette = healthPalette(team, localTeam);
   ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 12, 302, 37);
+  ctx.fillRect(78, HERO_FRAME_Y + 4, 302, 37);
   ctx.fillStyle = palette.dark;
-  ctx.fillRect(82, 16, 294, 29);
-  const health = ctx.createLinearGradient(0, 16, 0, 45);
+  ctx.fillRect(82, HERO_FRAME_Y + 8, 294, 29);
+  const health = ctx.createLinearGradient(0, HERO_FRAME_Y + 8, 0, HERO_FRAME_Y + 37);
   health.addColorStop(0, palette.top);
   health.addColorStop(1, palette.bottom);
   ctx.fillStyle = health;
-  ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
+  ctx.fillRect(82, HERO_FRAME_Y + 8, 294 * resourceFraction(hp, maxHp), 29);
   ctx.fillStyle = palette.divider;
   for (let segment = 1; segment < 3; segment++) {
-    ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
+    ctx.fillRect(82 + 294 * segment / 3, HERO_FRAME_Y + 8, 2, 29);
   }
 }
 
@@ -113,11 +115,11 @@ function drawHeroResource(
   maxResource: number,
 ) {
   ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 46, 302, 18);
+  ctx.fillRect(78, HERO_FRAME_Y + 38, 302, 18);
   ctx.fillStyle = '#14213a';
-  ctx.fillRect(82, 49, 294, 11);
+  ctx.fillRect(82, HERO_FRAME_Y + 41, 294, 11);
   ctx.fillStyle = '#367eff';
-  ctx.fillRect(82, 49, 294 * resourceFraction(resource, maxResource), 11);
+  ctx.fillRect(82, HERO_FRAME_Y + 41, 294 * resourceFraction(resource, maxResource), 11);
 }
 
 function drawHeroLevel(ctx: CanvasRenderingContext2D, level: number) {
@@ -125,7 +127,22 @@ function drawHeroLevel(ctx: CanvasRenderingContext2D, level: number) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#080b09';
-  ctx.fillText(String(Math.max(1, Math.floor(level))), 406, 40, 50);
+  ctx.fillText(String(Math.max(1, Math.floor(level))), 406, HERO_FRAME_Y + 32, 50);
+}
+
+function drawHeroPlayerName(ctx: CanvasRenderingContext2D, name: string) {
+  const safeName = name.trim() || 'Jugador';
+  ctx.save();
+  ctx.font = '700 22px "Trebuchet MS", "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(2, 5, 7, 0.96)';
+  ctx.lineWidth = 5;
+  ctx.strokeText(safeName, 229, 15, 300);
+  ctx.fillStyle = '#f2ead5';
+  ctx.fillText(safeName, 229, 15, 300);
+  ctx.restore();
 }
 
 function drawHeroFrame(
@@ -136,18 +153,20 @@ function drawHeroFrame(
   localTeam: LocalTeamId | null,
 ) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const frame = ctx.createLinearGradient(0, 8, 0, 72);
+  drawHeroPlayerName(ctx, entity.displayName);
+
+  const frame = ctx.createLinearGradient(0, HERO_FRAME_Y, 0, HERO_FRAME_Y + 64);
   frame.addColorStop(0, '#fafafa');
   frame.addColorStop(1, '#9caaa7');
   ctx.fillStyle = frame;
   ctx.beginPath();
-  ctx.moveTo(48, 8);
-  ctx.lineTo(436, 8);
-  ctx.lineTo(436, 68);
-  ctx.lineTo(276, 68);
-  ctx.lineTo(canvas.width / 2, 82);
-  ctx.lineTo(164, 68);
-  ctx.lineTo(48, 68);
+  ctx.moveTo(48, HERO_FRAME_Y);
+  ctx.lineTo(436, HERO_FRAME_Y);
+  ctx.lineTo(436, HERO_FRAME_Y + 60);
+  ctx.lineTo(276, HERO_FRAME_Y + 60);
+  ctx.lineTo(canvas.width / 2, HERO_FRAME_Y + 74);
+  ctx.lineTo(164, HERO_FRAME_Y + 60);
+  ctx.lineTo(48, HERO_FRAME_Y + 60);
   ctx.closePath();
   ctx.fill();
 
@@ -159,13 +178,13 @@ function drawHeroFrame(
     const scale = Math.min(80 / icon.naturalWidth, 80 / icon.naturalHeight);
     const width = icon.naturalWidth * scale;
     const height = icon.naturalHeight * scale;
-    ctx.drawImage(icon, (80 - width) / 2, (80 - height) / 2, width, height);
+    ctx.drawImage(icon, (80 - width) / 2, HERO_FRAME_Y + (80 - height) / 2, width, height);
   } else {
     ctx.font = 'bold 38px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(entity.displayName.charAt(0) || '?', 38, 40);
+    ctx.fillText(entity.displayName.charAt(0) || '?', 38, HERO_FRAME_Y + 40);
   }
 }
 
@@ -254,7 +273,7 @@ export function attachEntityOverhead(entity: GameEntity) {
   const hero = entity.kind === 'hero';
   const canvas = document.createElement('canvas');
   canvas.width = hero ? 440 : 320;
-  canvas.height = hero ? 88 : 28;
+  canvas.height = hero ? HERO_OVERHEAD_CANVAS_HEIGHT : 28;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
@@ -290,7 +309,7 @@ export function attachEntityOverhead(entity: GameEntity) {
   const safeScaleY = Math.max(0.001, Math.abs(worldScale.y));
   const worldWidth = worldBarWidth(entity.kind);
   const worldHeight = worldWidth * canvas.height / canvas.width;
-  sprite.position.set(0, (visibleWorldHeight + margin) / safeScaleY, 0);
+  sprite.position.set(0, (visibleWorldHeight + margin + (hero ? 0.11 : 0)) / safeScaleY, 0);
   sprite.scale.set(worldWidth / safeScaleX, worldHeight / safeScaleY, 1);
 
   let lastSignature = '';
