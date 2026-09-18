@@ -931,6 +931,23 @@ class LaneCreepManager {
     });
 
     const damage = calculateTowerAuraAdjustedDamage(creep.entity, target, creep.stats.damage);
+    if (target.kind === 'hero' && target.root.userData.networkRemoteHero === true) {
+      emitWorldCombatEvent({
+        entityId: target.id,
+        reason: 'damage',
+        currentHp: target.currentHp,
+        currentResource: target.currentResource,
+        alive: target.alive,
+        amount: damage,
+        sourceEntityId: creep.entity.id,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+        atMs: eventNow,
+      });
+      return;
+    }
+
     target.currentHp = Math.max(0, target.currentHp - damage);
     target.root.userData.currentHp = target.currentHp;
     if (target.currentHp <= 0) {
