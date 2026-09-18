@@ -115,6 +115,8 @@ export type MatchSummary = Readonly<{
   createdAt: string;
   players: readonly MatchPlayer[];
   mapSha256: string | null;
+  customSettings?: LobbySettings;
+  heroSelections?: Readonly<Record<string, Readonly<{ heroId: string | null; locked: boolean; lockedAt: number | null }>>>;
 }>;
 
 export type LobbyPlayer = Readonly<{
@@ -174,6 +176,41 @@ export type CustomLobby = Readonly<{
   matchId?: string;
 }>;
 
+export type HeroSelectPlayer = MatchPlayer & Readonly<{
+  lane: 'NORTH' | 'MID' | 'SOUTH';
+  selection: Readonly<{
+    heroId: string | null;
+    locked: boolean;
+    lockedAt: number | null;
+  }>;
+}>;
+
+export type HeroSelectMessage = Readonly<{
+  id: string;
+  username: string;
+  userId: string | null;
+  team: Team;
+  text: string;
+  createdAt: string;
+  system: boolean;
+}>;
+
+export type HeroSelectState = Readonly<{
+  id: string;
+  match: MatchSummary;
+  phase: 'pick' | 'complete';
+  selectionType: 'all_pick' | 'draft';
+  bansPerTeam: number;
+  draftRulesDeferred: boolean;
+  rosterDevelopmentMode: boolean;
+  teamSize: number;
+  startedAt: number;
+  expiresAt: number;
+  availableHeroIds: readonly string[];
+  players: readonly HeroSelectPlayer[];
+  messages: readonly HeroSelectMessage[];
+}>;
+
 export type PresenceSnapshot = Readonly<{ type: 'presence.snapshot'; users: readonly PlatformUser[] }>;
 export type SessionReadyEvent = Readonly<{
   type: 'session.ready';
@@ -184,6 +221,7 @@ export type SessionReadyEvent = Readonly<{
   queue?: Readonly<{ joined: boolean; target: number }>;
   lobbies?: readonly CustomLobby[];
   lobby?: CustomLobby | null;
+  heroSelect?: HeroSelectState | null;
 }>;
 export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
 export type DirectMessageEvent = Readonly<{ type: 'direct.message'; message: DirectMessage; user: PlatformUser | null }>;
@@ -195,6 +233,10 @@ export type ReadyStartEvent = Readonly<{ type: 'ready.start'; readyId: string; m
 export type ReadyProgressEvent = Readonly<{ type: 'ready.progress'; readyId: string; acceptedUserIds: readonly string[]; declinedUserIds: readonly string[] }>;
 export type ReadyCancelledEvent = Readonly<{ type: 'ready.cancelled'; readyId: string; declinedUserId: string | null }>;
 export type MatchFoundEvent = Readonly<{ type: 'match.found'; match: MatchSummary }>;
+export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
+export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
+export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
+
 export type LobbiesUpdateEvent = Readonly<{ type: 'lobbies.update'; lobbies: readonly CustomLobby[] }>;
 export type LobbyUpdateEvent = Readonly<{ type: 'lobby.update'; lobby: CustomLobby }>;
 export type LobbyLeftEvent = Readonly<{ type: 'lobby.left'; lobbyId: string }>;
@@ -213,6 +255,9 @@ export type PlatformRealtimeEvent =
   | ReadyProgressEvent
   | ReadyCancelledEvent
   | MatchFoundEvent
+  | HeroSelectStartEvent
+  | HeroSelectUpdateEvent
+  | HeroSelectCompleteEvent
   | LobbiesUpdateEvent
   | LobbyUpdateEvent
   | LobbyLeftEvent
