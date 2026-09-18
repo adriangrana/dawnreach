@@ -1109,33 +1109,56 @@ class LaneCreepManager {
     return this.moveToward(creep, node[0], node[1], dt, false, now);
   }
 
-  private moveToward(
-    creep: LaneCreepRuntime,
-    x: number,
-    z: number,
-    dt: number,
-    enforceLeash: boolean,
-    now: number,
-  ) {
+  private navigationFor(creep: LaneCreepRuntime) {
+    return creep.type === 'siege' ? this.siegeNavigation : this.creepNavigation;
+  }
+
+  private clearNavigation(creep: LaneCreepRuntime) {
+    creep.navWaypoints.length = 0;
+    creep.navIndex = 0;
+    creep.navPartial = false;
+  }
+
+  private planNavigation(creep: LaneCreepRuntime, targetX: number, targetZ: number, now: number) {
+    creep.nextRepathAt = now + CREEP_NAV_REPATH_INTERVAL_SECONDS;
     const root = creep.entity.root;
-    const dx = x - root.position.x;
-    const dz = z - root.position.z;
-    const distanceSq = dx * dx + dz * dz;
-    if (distanceSq <= 1e-12) return false;
+    const path = this.navigationFor(creep).findPath(
+      { x: root.position.x, z: root.position.z },
+      { x: targetX, z: targetZ },
+      {
+        allowPartial: true,
+        nearestSearchRadius: 4.5,
+        maxExpandedNodes: CREEP_NAV_MAX_EXPANDED_NODES,
+      },
+    );
 
-    const distance = Math.sqrt(distanceSq);
-    const travel = Math.min(distance, creep.stats.moveSpeed * dt);
-    const nx = dx / distance;
-    const nz = dz / distance;
-    const from = { x: root.position.x, z: root.position.z };
-    const desired = {
-      x: root.position.x + nx * travel,
-      z: root.position.z + nz * travel,
-    };
-
-    if (enforceLeash && distanceToPolylineSquared(desired.x, desired.z, creep.route) > LEASH_DISTANCE_SQ) {
-      this.beginReturning(creep);
+    if (!path || path.waypoints.length === 0) {
+      this.clearNavigation(creep);
       return false;
+    }
+
+    creep.navWaypoints = path.waypoints.map(point => ({ x: point.x, z: point.z }));
+    creep.navIndex = 0;
+    creep.navTargetX = targetX;
+    creep.navTargetZ = targetZ;
+    creep.navPartial = path.partial;
+    return true;
+  }
+
+  private movementCandidate(
+    creep: LaneCreepRuntime,
+    from: NavigationPoint,
+    directionX: number,
+    directionZ: number,
+    travel: number,
+    enforceLeash: boolean,
+  ) {
+    const desired = {
+      x: from.x + directionX * travel,
+      z: from.z + directionZ * travel,
+    };
+    if (enforceLeash && distanceToPolylineSquared(desired.x, desired.z, creep.route) > LEASH_DISTANCE_SQ) {
+      return { x: from.x, z: from.z };
     }
 
     let resolved = this.collisionWorld.isBlocked(desired, creep.stats.collisionRadius)
@@ -1155,15 +1178,160 @@ class LaneCreepManager {
         && !this.hasDynamicOverlapAt(creep, retry.x, retry.z, creep.stats.collisionRadius)) {
         resolved = retry;
       } else {
-        resolved = from;
+        resolved = { x: from.x, z: from.z };
       }
     }
 
-    root.position.x = resolved.x;
-    root.position.z = resolved.z;
-    root.rotation.y = Math.atan2(nx, nz);
+    return resolved;
+  }
+
+  private moveToward(
+    creep: LaneCreepRuntime,
+    x: number,
+    z: number,
+    dt: number,
+    enforceLeash: boolean,
+    now: number,
+  ) {
+    const root = creep.entity.root;
+    const ultimateTarget = { x, z };
+
+    if (
+      creep.navWaypoints.length > 0
+      && ((creep.navTargetX - x) ** 2 + (creep.navTargetZ - z) ** 2 > CREEP_NAV_TARGET_DRIFT_SQ)
+    ) {
+      this.clearNavigation(creep);
+    }
+
+    let steeringTarget: NavigationPoint = ultimateTarget;
+    if (creep.navWaypoints.length > 0) {
+      while (creep.navIndex < creep.navWaypoints.length) {
+        const waypoint = creep.navWaypoints[creep.navIndex];
+        const wx = waypoint.x - root.position.x;
+        const wz = waypoint.z - root.position.z;
+        if (wx * wx + wz * wz > CREEP_NAV_WAYPOINT_ARRIVAL_SQ) {
+          steeringTarget = waypoint;
+          break;
+        }
+        creep.navIndex += 1;
+      }
+
+      if (creep.navIndex >= creep.navWaypoints.length) {
+        const wasPartial = creep.navPartial;
+        this.clearNavigation(creep);
+        if (wasPartial && now >= creep.nextRepathAt) {
+          this.planNavigation(creep, x, z, now);
+          if (creep.navWaypoints.length > 0) steeringTarget = creep.navWaypoints[0];
+        }
+      }
+    }
+
+    let dx = steeringTarget.x - root.position.x;
+    let dz = steeringTarget.z - root.position.z;
+    let distanceSq = dx * dx + dz * dz;
+    if (distanceSq <= 1e-12) return false;
+
+    let distance = Math.sqrt(distanceSq);
+    const travel = Math.min(distance, creep.stats.moveSpeed * dt);
+    const nx = dx / distance;
+    const nz = dz / distance;
+    const from = { x: root.position.x, z: root.position.z };
+    const beforeDistance = distance;
+
+    let best = this.movementCandidate(creep, from, nx, nz, travel, enforceLeash);
+    let bestDistance = Math.hypot(steeringTarget.x - best.x, steeringTarget.z - best.z);
+    let bestProgress = beforeDistance - bestDistance;
+    let bestMoved = Math.hypot(best.x - from.x, best.z - from.z);
+
+    // Dynamic unit blocking is not static pathfinding. If the direct step is being cancelled
+    // by a hero or another creep, probe deterministic side-steering directions before waiting.
+    // A persistent preferred side prevents left/right oscillation and lets following waves
+    // flow around a congested frontline instead of walking in place.
+    if (bestProgress < Math.max(CREEP_MOVE_PROGRESS_EPSILON, travel * 0.06)) {
+      const preferred = creep.avoidanceSide;
+      for (const magnitude of CREEP_AVOIDANCE_ANGLES) {
+        for (const sign of [preferred, -preferred] as const) {
+          const angle = magnitude * sign;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const candidateDirX = nx * cos - nz * sin;
+          const candidateDirZ = nx * sin + nz * cos;
+          const candidate = this.movementCandidate(
+            creep,
+            from,
+            candidateDirX,
+            candidateDirZ,
+            travel,
+            enforceLeash,
+          );
+          const moved = Math.hypot(candidate.x - from.x, candidate.z - from.z);
+          if (moved <= 0.0005) continue;
+          const remaining = Math.hypot(
+            steeringTarget.x - candidate.x,
+            steeringTarget.z - candidate.z,
+          );
+          const progress = beforeDistance - remaining;
+          // Permit a tiny temporary sideways cost, but never select a move that materially
+          // retreats from the current steering waypoint.
+          if (progress < -0.035) continue;
+          const score = progress * 3.2 + moved * 0.28 - magnitude * 0.006;
+          const bestScore = bestProgress * 3.2 + bestMoved * 0.28;
+          if (score <= bestScore + 1e-6) continue;
+          best = candidate;
+          bestDistance = remaining;
+          bestProgress = progress;
+          bestMoved = moved;
+          creep.avoidanceSide = sign;
+        }
+      }
+    }
+
+    if (
+      enforceLeash
+      && distanceToPolylineSquared(best.x, best.z, creep.route) > LEASH_DISTANCE_SQ
+    ) {
+      this.beginReturning(creep);
+      return false;
+    }
+
+    root.position.x = best.x;
+    root.position.z = best.z;
+    const actualDx = best.x - from.x;
+    const actualDz = best.z - from.z;
+    if (actualDx * actualDx + actualDz * actualDz > 1e-8) {
+      root.rotation.y = Math.atan2(actualDx, actualDz);
+    } else {
+      root.rotation.y = Math.atan2(nx, nz);
+    }
     this.updateSpatialCell(creep);
-    return Math.hypot(resolved.x - from.x, resolved.z - from.z) > 0.0005;
+
+    const meaningfulProgress = bestProgress >= Math.max(
+      CREEP_MOVE_PROGRESS_EPSILON,
+      travel * 0.055,
+    );
+    if (meaningfulProgress) {
+      creep.blockedForSeconds = Math.max(0, creep.blockedForSeconds - dt * 2.5);
+    } else {
+      creep.blockedForSeconds += dt;
+    }
+
+    if (
+      creep.blockedForSeconds >= CREEP_NAV_REPATH_STUCK_SECONDS
+      && now >= creep.nextRepathAt
+    ) {
+      this.planNavigation(creep, ultimateTarget.x, ultimateTarget.z, now);
+      // Do not clear the stuck timer immediately: a direct A* result means the blocker is
+      // another unit, so local steering must keep working rather than declaring success.
+      creep.blockedForSeconds = Math.min(
+        creep.blockedForSeconds,
+        CREEP_NAV_REPATH_STUCK_SECONDS + 0.15,
+      );
+    }
+
+    // Animation follows real progress, not microscopic collision jitter. This removes the
+    // "walking on the spot" symptom while still showing motion during legitimate detours.
+    return bestMoved > Math.max(0.003, travel * 0.08)
+      && (bestProgress > -0.01 || creep.navWaypoints.length > 0);
   }
 
   private resolveDynamicCollision(creep: LaneCreepRuntime, startX: number, startZ: number) {
