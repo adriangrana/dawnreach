@@ -1507,6 +1507,48 @@ export async function createDawnreachGame(
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
       remote.entity.root.userData.currentHp = remote.entity.currentHp;
       remote.entity.root.userData.level = remote.entity.level;
+      publishWorldEntityRuntime(remote.entity.id, {
+        level: remote.entity.level,
+        maxHp: remote.entity.maxHp,
+        currentHp: remote.entity.currentHp,
+        maxResource: remote.entity.maxResource,
+        currentResource: remote.entity.currentResource,
+        alive: remote.entity.alive,
+      });
+    },
+    applyLocalNetworkCombat(input: { reason: 'damage' | 'heal'; amount: number; sourceUserId: string }) {
+      const overlay = getHeroState?.() ?? null;
+      if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return;
+      const maxHp = Math.max(1, overlay.stats.maxHp);
+      const currentHp = input.reason === 'heal'
+        ? Math.min(maxHp, overlay.hero.currentHp + input.amount)
+        : Math.max(0, overlay.hero.currentHp - input.amount);
+      localHeroEntity.maxHp = maxHp;
+      localHeroEntity.currentHp = currentHp;
+      localHeroEntity.alive = currentHp > 0;
+      localHeroEntity.root.userData.maxHp = maxHp;
+      localHeroEntity.root.userData.currentHp = currentHp;
+      publishWorldEntityRuntime(localWorldEntityId, {
+        level: overlay.hero.level,
+        maxHp,
+        currentHp,
+        maxResource: overlay.stats.maxResource,
+        currentResource: overlay.hero.currentResource,
+        alive: currentHp > 0,
+      });
+      emitWorldCombatEvent({
+        entityId: localWorldEntityId,
+        reason: input.reason === 'heal' ? 'heal' : (currentHp > 0 ? 'damage' : 'death'),
+        currentHp,
+        currentResource: overlay.hero.currentResource,
+        alive: currentHp > 0,
+        amount: input.amount,
+        sourceEntityId: `player:${input.sourceUserId}:hero`,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+        atMs: performance.now(),
+      });
     },
     destroy() {
       cancelAnimationFrame(animationFrame);
