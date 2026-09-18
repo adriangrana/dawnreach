@@ -3,13 +3,10 @@ import {
   ChevronDown,
   Coins,
   Crown,
-  Gamepad2,
   Gem,
   MessageSquare,
   Plus,
   Settings,
-  Shield,
-  Sparkles,
   Swords,
   Trophy,
   Users,
@@ -123,11 +120,35 @@ export function DawnreachHomeOverview({
       </div>
 
       <nav className="dr-home-mode-ribbon" aria-label="Game modes">
-        <button type="button" onClick={onLocalPlay}><Gamepad2 /><span><strong>PRACTICE</strong><small>Test the battlefield</small></span></button>
-        <button type="button" onClick={onNormal}><Shield /><span><strong>NORMAL</strong><small>Fight without pressure</small></span></button>
+        <button type="button" onClick={onLocalPlay}>
+          <span className="dr-home-mode-icon" aria-hidden="true">
+            <img className="is-idle" src="/assets/icon/training.png" alt="" draggable={false} />
+            <img className="is-active" src="/assets/icon/training-active.png" alt="" draggable={false} />
+          </span>
+          <span><strong>PRACTICE</strong><small>Test the battlefield</small></span>
+        </button>
+        <button type="button" onClick={onNormal}>
+          <span className="dr-home-mode-icon" aria-hidden="true">
+            <img className="is-idle" src="/assets/icon/normal.png" alt="" draggable={false} />
+            <img className="is-active" src="/assets/icon/normal-active.png" alt="" draggable={false} />
+          </span>
+          <span><strong>NORMAL</strong><small>Fight without pressure</small></span>
+        </button>
         <button className="is-primary" type="button" onClick={onPlay}><Swords /><span><strong>PLAY</strong><small>Choose your mode</small></span></button>
-        <button type="button" onClick={onRanked} className="invert"><Trophy /><span><strong>RANKED</strong><small>Climb the ranks</small></span></button>
-        <button type="button" onClick={onCustom}><Sparkles /><span><strong>CUSTOM</strong><small>Your rules, your lobby</small></span></button>
+        <button type="button" onClick={onRanked} className="invert">
+          <span className="dr-home-mode-icon" aria-hidden="true">
+            <img className="is-idle" src="/assets/icon/ranked.png" alt="" draggable={false} />
+            <img className="is-active" src="/assets/icon/ranked-active.png" alt="" draggable={false} />
+          </span>
+          <span><strong>RANKED</strong><small>Climb the ranks</small></span>
+        </button>
+        <button type="button" onClick={onCustom}>
+          <span className="dr-home-mode-icon" aria-hidden="true">
+            <img className="is-idle" src="/assets/icon/custom.png" alt="" draggable={false} />
+            <img className="is-active" src="/assets/icon/custom-active.png" alt="" draggable={false} />
+          </span>
+          <span><strong>CUSTOM</strong><small>Your rules, your lobby</small></span>
+        </button>
       </nav>
     </div>
 
