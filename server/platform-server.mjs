@@ -133,7 +133,9 @@ export function createPlatformServer(options = {}) {
 
   function reportMatchLoadingProgress(userId, value) {
     const active = store.activeMatchForUser(userId);
-    if (!active || active.status !== 'loading') throw new Error('No tienes una partida cargando.');
+    if (!active) throw new Error('No tienes una partida cargando.');
+    if (active.status === 'in_game') return;
+    if (active.status !== 'loading') throw new Error('No tienes una partida cargando.');
 
     const progress = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
     const loadingProgress = { ...(active.loadingProgress || {}) };
