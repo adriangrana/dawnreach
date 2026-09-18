@@ -761,9 +761,28 @@ function pushTrailPoint(projectile: TowerProjectile, point: THREE.Vector3): void
 function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntity, elapsed: number): void {
   if (!target.alive || target.currentHp <= 0) return;
 
+  // Lane creeps are simulated by one multiplayer authority. A replica client may still render
+  // the tower projectile, but mutating a replicated creep here causes the next authoritative
+  // creep snapshot to "heal" it back to its previous HP.
+  if (target.kind === 'creep' && target.root.userData.networkReplica === true) return;
+
   const damage = calculateTowerAuraAdjustedDamage(source, target, TOWER_COMBAT_TUNING.damage);
   target.currentHp = Math.max(0, target.currentHp - damage);
+  target.alive = target.currentHp > 0;
   target.root.userData.currentHp = target.currentHp;
+  target.root.userData.alive = target.alive;
+
+  // Tower damage must immediately become the world-runtime truth. synchronizeWorldRuntime()
+  // reads this bridge at 30 Hz; without publishing here it restores the pre-hit creep HP on
+  // the very next tower update, producing the visible damage -> heal loop.
+  publishWorldEntityRuntime(target.id, {
+    level: target.level,
+    maxHp: target.maxHp,
+    currentHp: target.currentHp,
+    maxResource: target.maxResource,
+    currentResource: target.currentResource,
+    alive: target.alive,
+  });
 
   if (target.currentHp > 0) {
     emitWorldCombatEvent({
@@ -778,7 +797,6 @@ function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntit
     return;
   }
 
-  target.alive = false;
   if (target.kind === 'hero') {
     setHeroRenderVisible(target);
     setHeroStatusOverlayVisible(target, false);
