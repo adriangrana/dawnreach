@@ -1185,12 +1185,7 @@ export function createPlatformServer(options = {}) {
         winnerTeam,
         reason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
       }, participantIds);
-      matchRuntimeStates.delete(active.id);
-      matchRuntimeCreepStates.delete(active.id);
-      matchRuntimeStructureStates.delete(active.id);
-      matchRuntimeCombatLocks.delete(active.id);
-      matchRuntimeHeroDamageCredits.delete(active.id);
-      matchRuntimePauseStates.delete(active.id);
+      clearMatchRuntime(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
       return publicMatch(updated);
     }
@@ -1202,6 +1197,10 @@ export function createPlatformServer(options = {}) {
       userId,
       username: player.username,
     }, remainingPlayers.map(candidate => candidate.userId));
+
+    // The game session is independent of the lobby owner. If the custom-lobby creator
+    // abandons, ownership may migrate, but every remaining player stays in the same match.
+    evaluateMatchConnectivity(active.id);
     return publicMatch(updated);
   }
 
