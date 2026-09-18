@@ -253,6 +253,13 @@ export type MatchAbandonedEvent = Readonly<{ type: 'match.abandoned'; matchId: s
 export type MatchPlayerAbandonedEvent = Readonly<{ type: 'match.player.abandoned'; match: MatchSummary; userId: string; username: string }>;
 export type MatchEndedEvent = Readonly<{ type: 'match.ended'; match: MatchSummary; winnerTeam: Team | null; reason: string }>;
 
+export type MatchRuntimeInventoryItem = Readonly<{
+  slot: number;
+  definitionId: string;
+  displayName: string;
+  quantity: number;
+}>;
+
 export type MatchRuntimePlayerState = Readonly<{
   userId: string;
   username: string;
@@ -269,6 +276,13 @@ export type MatchRuntimePlayerState = Readonly<{
   maxResource: number;
   level: number;
   alive: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  lastHits: number;
+  denies: number;
+  gold: number;
+  inventory: readonly MatchRuntimeInventoryItem[];
   sentAt: number;
 }>;
 export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
@@ -278,11 +292,61 @@ export type MatchRuntimeCombatEvent = Readonly<{
   matchId: string;
   sourceUserId: string;
   sourceUsername: string;
+  sourceEntityId: string;
   targetUserId: string;
   targetUsername: string;
   reason: 'damage' | 'heal';
   amount: number;
   at: number;
+}>;
+
+export type MatchRuntimeCreepState = Readonly<{
+  id: string;
+  team: Team;
+  lane: 'top' | 'mid' | 'bot';
+  type: 'melee' | 'ranged' | 'flagbearer' | 'siege';
+  position: Readonly<{ x: number; y: number; z: number }>;
+  yaw: number;
+  currentHp: number;
+  maxHp: number;
+  alive: boolean;
+  state: 'ATTACK_MOVE' | 'COMBAT' | 'AGGRO' | 'RETURNING';
+  moving: boolean;
+  seed: number;
+}>;
+
+export type MatchRuntimeCreepSnapshotEvent = Readonly<{
+  type: 'match.runtime.creeps';
+  matchId: string;
+  authorityUserId: string;
+  sequence: number;
+  sentAt: number;
+  creeps: readonly MatchRuntimeCreepState[];
+}>;
+
+export type MatchRuntimeCreepDamageEvent = Readonly<{
+  type: 'match.runtime.creep.damage';
+  matchId: string;
+  sourceUserId: string;
+  creepId: string;
+  amount: number;
+  at: number;
+}>;
+
+export type MatchChatMessage = Readonly<{
+  messageId: string;
+  matchId: string;
+  playerId: string;
+  playerName: string;
+  team: Team;
+  channel: 'team' | 'all';
+  text: string;
+  atMs: number;
+}>;
+
+export type MatchChatMessageEvent = Readonly<{
+  type: 'match.chat.message';
+  message: MatchChatMessage;
 }>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
@@ -324,6 +388,9 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeStateEvent
   | MatchRuntimeSnapshotEvent
   | MatchRuntimeCombatEvent
+  | MatchRuntimeCreepSnapshotEvent
+  | MatchRuntimeCreepDamageEvent
+  | MatchChatMessageEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
