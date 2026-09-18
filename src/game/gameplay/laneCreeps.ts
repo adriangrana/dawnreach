@@ -651,7 +651,7 @@ class LaneCreepManager {
       returnNodeIndex: 0,
       reachedEndAt: null,
       spawnedAt: now,
-      seed: this.serial,
+      seed,
       spatialX: spatial.x,
       spatialZ: spatial.z,
       heightCellKey: heightKey(root.position.x, root.position.z),
