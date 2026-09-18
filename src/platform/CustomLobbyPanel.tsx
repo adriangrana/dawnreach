@@ -1,4 +1,5 @@
 import {
+  CheckCircle2,
   ChevronDown,
   Copy,
   Crown,
@@ -9,6 +10,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   Settings,
   Shield,
   Signal,
@@ -24,10 +26,8 @@ import type { CustomLobby, LobbyPlayer, PlatformUser, Team } from './types';
 
 const MAP_ART = '/assets/images/dawnreach_normal_background.webp';
 
-function playerStatus(player: LobbyPlayer, lobby: CustomLobby, me: PlatformUser) {
-  if (player.userId === lobby.ownerId) return 'HOST';
-  if (player.userId === me.id) return 'YOU';
-  return 'CONNECTED';
+function playerStatus(player: LobbyPlayer) {
+  return player.ready ? 'READY' : 'NOT READY';
 }
 
 function TeamColumn({ team, lobby, me }: { team: Team; lobby: CustomLobby; me: PlatformUser }) {
@@ -47,11 +47,11 @@ function TeamColumn({ team, lobby, me }: { team: Team; lobby: CustomLobby; me: P
         if (player) {
           const isSelf = player.userId === me.id;
           const isHost = player.userId === lobby.ownerId;
-          return <article className={`dr-custom-player${isSelf ? ' is-self' : ''}`} key={player.userId}>
+          return <article className={`dr-custom-player${isSelf ? ' is-self' : ''}${player.ready ? ' is-ready' : ' is-not-ready'}`} key={player.userId}>
             <span className="dr-custom-player-mark">{isHost ? <Crown /> : <span>{player.username.slice(0, 2).toUpperCase()}</span>}</span>
             <div>
               <strong>{player.username}</strong>
-              <small><i /> {playerStatus(player, lobby, me)}</small>
+              <small><i /> {playerStatus(player)}{isHost ? ' · HOST' : ''}{isSelf ? ' · YOU' : ''}</small>
             </div>
             <em>{player.rating > 0 ? player.rating : '—'}</em>
           </article>;
@@ -171,7 +171,11 @@ function LobbyBrowser({
 
 function LobbyRoom({ lobby, me }: { lobby: CustomLobby; me: PlatformUser }) {
   const [copied, setCopied] = useState(false);
-  const players = [...lobby.players].sort((a, b) => a.joinedAt - b.joinedAt);
+  const [channel, setChannel] = useState<'team' | 'all'>('team');
+  const [messageText, setMessageText] = useState('');
+  const meInLobby = lobby.players.find(player => player.userId === me.id) ?? null;
+  const visibleMessages = lobby.messages.filter(message =>
+    message.channel === 'system' || message.channel === channel);
 
   const copyCode = async () => {
     try {
@@ -181,6 +185,13 @@ function LobbyRoom({ lobby, me }: { lobby: CustomLobby; me: PlatformUser }) {
     } catch {
       setCopied(false);
     }
+  };
+
+  const submitMessage = () => {
+    const text = messageText.trim();
+    if (!text) return;
+    platformRealtime.send('lobby.message', { channel, text });
+    setMessageText('');
   };
 
   return <section className="dr-custom-room-panel">
@@ -200,12 +211,47 @@ function LobbyRoom({ lobby, me }: { lobby: CustomLobby; me: PlatformUser }) {
       <TeamColumn team="red" lobby={lobby} me={me} />
     </div>
 
-    <section className="dr-custom-activity">
-      <header><strong>LOBBY ACTIVITY</strong><span>{lobby.players.length}/{lobby.maxPlayers} PLAYERS CONNECTED</span></header>
-      <div>
-        <p><time>NOW</time><strong>{lobby.ownerUsername}</strong><span> opened the lobby.</span></p>
-        {players.slice(-5).map(player => <p key={player.userId}><time>•</time><strong>{player.username}</strong><span> joined {player.team === 'blue' ? 'Dawn' : 'Dusk'}.</span></p>)}
+    <section className="dr-custom-lobby-chat">
+      <header>
+        <div className="dr-custom-chat-tabs">
+          <button type="button" className={channel === 'team' ? 'is-active' : ''} onClick={() => setChannel('team')}>TEAM</button>
+          <button type="button" className={channel === 'all' ? 'is-active' : ''} onClick={() => setChannel('all')}>ALL</button>
+        </div>
+        <div className="dr-custom-chat-ready">
+          <span>{lobby.players.filter(player => player.ready).length}/{lobby.players.length} READY</span>
+          <button
+            type="button"
+            className={meInLobby?.ready ? 'is-ready' : ''}
+            disabled={!meInLobby || lobby.status !== 'open'}
+            onClick={() => platformRealtime.send('lobby.ready', { ready: !meInLobby?.ready })}
+          >
+            <CheckCircle2 />
+            {meInLobby?.ready ? 'READY' : 'MARK READY'}
+          </button>
+        </div>
+      </header>
+
+      <div className="dr-custom-chat-messages">
+        {visibleMessages.map(message => <p className={`is-${message.channel}`} key={message.id}>
+          <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
+          {message.channel === 'system'
+            ? <span>{message.text}</span>
+            : <><strong>{message.username}</strong><em>{message.channel === 'team' ? '[TEAM]' : '[ALL]'}</em><span>{message.text}</span></>}
+        </p>)}
+        {visibleMessages.length === 0 && <div className="dr-custom-chat-empty">No messages in this channel yet.</div>}
       </div>
+
+      <form onSubmit={event => { event.preventDefault(); submitMessage(); }}>
+        <span>{channel === 'team' ? 'TEAM' : 'ALL'}</span>
+        <input
+          value={messageText}
+          maxLength={300}
+          onChange={event => setMessageText(event.target.value)}
+          placeholder={channel === 'team' ? 'Message your team...' : 'Message everyone...'}
+          disabled={lobby.status !== 'open'}
+        />
+        <button type="submit" aria-label="Send lobby message" disabled={!messageText.trim() || lobby.status !== 'open'}><Send /></button>
+      </form>
     </section>
   </section>;
 }
@@ -222,6 +268,24 @@ function EmptyLobbyRoom() {
 function LobbySettings({ lobby, me }: { lobby: CustomLobby | null; me: PlatformUser }) {
   const owner = Boolean(lobby && lobby.ownerId === me.id);
   const running = Boolean(lobby && lobby.status !== 'open');
+  const blueCount = lobby?.players.filter(player => player.team === 'blue').length ?? 0;
+  const redCount = lobby?.players.filter(player => player.team === 'red').length ?? 0;
+  const readyCount = lobby?.players.filter(player => player.ready).length ?? 0;
+  const allReady = Boolean(lobby && lobby.players.length >= 2 && lobby.players.every(player => player.ready));
+  const teamsValid = blueCount > 0 && redCount > 0;
+  const canStart = Boolean(lobby && owner && !running && allReady && teamsValid);
+
+  const startLabel = running
+    ? 'MATCH STARTING'
+    : !lobby
+      ? 'START GAME'
+      : !owner
+        ? 'WAITING FOR HOST'
+        : !teamsValid
+          ? 'BALANCE TEAMS'
+          : !allReady
+            ? 'WAITING FOR READY'
+            : 'START GAME';
 
   return <aside className="dr-custom-settings-panel">
     <header className="dr-custom-panel-title"><div><strong>LOBBY SETTINGS</strong><small>{owner ? 'HOST CONTROLS' : 'MATCH RULES'}</small></div><Settings /></header>
@@ -283,13 +347,17 @@ function LobbySettings({ lobby, me }: { lobby: CustomLobby | null; me: PlatformU
       {lobby && <button type="button" className="dr-custom-leave" disabled={running} onClick={() => platformRealtime.send('lobby.leave')}><X /> LEAVE LOBBY</button>}
       <button
         type="button"
-        className="dr-custom-start"
-        disabled={!lobby || !owner || running}
+        className={`dr-custom-start${canStart ? ' is-ready' : ''}`}
+        disabled={!canStart}
         onClick={() => platformRealtime.send('lobby.start')}
       >
-        <Swords /> {running ? 'MATCH STARTING' : owner ? 'START GAME' : lobby ? 'WAITING FOR HOST' : 'START GAME'}
+        <Swords /> {startLabel}
       </button>
-      <small>{!lobby ? 'Create or join a lobby first.' : owner ? `${lobby.players.length}/${lobby.maxPlayers} players connected` : `Host: ${lobby.ownerUsername}`}</small>
+      <small>{!lobby
+        ? 'Create or join a lobby first.'
+        : !teamsValid
+          ? 'At least one player is required on Dawn and Dusk.'
+          : `${readyCount}/${lobby.players.length} players ready`}</small>
     </footer>
   </aside>;
 }
