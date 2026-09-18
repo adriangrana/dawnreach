@@ -610,6 +610,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
         currentHp: correctedHp,
         alive: correctedHp > 0,
         amount: remaining,
+        rawAmount: event.rawAmount ?? amount,
       });
     } finally {
       this.forwardingAdjustedDamage = false;
