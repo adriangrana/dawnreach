@@ -959,3 +959,209 @@
     min-height: 70px;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · scale / legibility / roster density pass
+   ========================================================= */
+
+/* Give the hero focus art a viewport-driven scale while preserving aspect ratio. */
+.dr-hero-select-screen {
+  grid-template-rows: 88px minmax(0, 1fr) clamp(250px, 26vh, 290px);
+}
+
+.dr-hero-select-main-art {
+  width: auto !important;
+  height: min(70vh, calc(100% - 8px)) !important;
+  max-width: min(50vw, 820px) !important;
+  max-height: none !important;
+  top: 49% !important;
+  object-fit: contain !important;
+}
+
+/* Overview: readable at normal desktop viewing distance. */
+.dr-hero-select-overview {
+  width: min(350px, 31%) !important;
+  padding: 14px !important;
+}
+
+.dr-hero-select-overview nav {
+  height: 30px;
+}
+
+.dr-hero-select-overview nav button {
+  font-size: 9px !important;
+  letter-spacing: .09em;
+}
+
+.dr-hero-select-overview > p {
+  margin: 13px 0 13px !important;
+  font-size: 11px !important;
+  line-height: 1.55 !important;
+}
+
+.dr-hero-select-abilities {
+  gap: 7px !important;
+}
+
+.dr-hero-select-abilities article {
+  gap: 5px !important;
+}
+
+.dr-hero-select-abilities small {
+  font-size: 8px !important;
+}
+
+.dr-hero-select-abilities span {
+  font-size: 7px !important;
+}
+
+.dr-hero-select-ratings {
+  margin-top: 13px !important;
+  gap: 8px !important;
+}
+
+.dr-hero-select-ratings label {
+  grid-template-columns: 82px 1fr !important;
+  gap: 9px !important;
+}
+
+.dr-hero-select-ratings label > span {
+  font-size: 8px !important;
+}
+
+/* Team chat: slightly larger copy without making the panel visually heavy. */
+.dr-hero-select-chat > header span {
+  font-size: 8.5px !important;
+}
+
+.dr-hero-select-chat > header small {
+  font-size: 7.5px !important;
+}
+
+.dr-hero-select-chat p {
+  gap: 6px !important;
+  font-size: 9px !important;
+  line-height: 1.38 !important;
+}
+
+.dr-hero-select-chat p time {
+  font-size: 7.5px !important;
+}
+
+.dr-hero-select-chat input {
+  font-size: 9.5px !important;
+}
+
+/* Roster: two compact rows fit comfortably and scale independently from screen width. */
+.dr-hero-select-roster {
+  padding-bottom: 9px !important;
+}
+
+.dr-hero-select-roster > div {
+  grid-template-columns: repeat(auto-fill, minmax(58px, 72px)) !important;
+  grid-auto-rows: 72px !important;
+  align-content: start !important;
+  justify-content: start !important;
+  gap: 6px !important;
+  overflow-y: auto !important;
+  padding-top: 7px !important;
+}
+
+.dr-hero-select-roster > div > button,
+.dr-hero-select-roster-placeholder {
+  width: 100% !important;
+  height: 72px !important;
+  min-height: 72px !important;
+}
+
+.dr-hero-select-roster > div > button img {
+  height: 56px !important;
+}
+
+.dr-hero-select-roster > div > button span {
+  height: 16px !important;
+  font-size: 6.5px !important;
+}
+
+.dr-hero-select-roster-placeholder {
+  gap: 4px !important;
+}
+
+.dr-hero-select-roster-placeholder svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.dr-hero-select-roster-placeholder span {
+  font-size: 5.5px !important;
+}
+
+/* Selected hero reads immediately as the active pick: bright Dawnreach gold. */
+.dr-hero-select-roster > div > button.is-selected,
+.dr-hero-select-roster > div > button.is-selected.is-locked {
+  border: 2px solid #f0c95d !important;
+  box-shadow:
+    0 0 7px rgba(255, 215, 103, .92),
+    0 0 18px rgba(224, 171, 46, .58),
+    inset 0 0 0 1px rgba(255, 239, 180, .48) !important;
+}
+
+.dr-hero-select-roster > div > button.is-selected::after,
+.dr-hero-select-roster > div > button.is-selected.is-locked::after {
+  inset: 1px !important;
+  box-shadow:
+    inset 0 0 10px rgba(255, 214, 92, .22),
+    inset 0 0 0 1px rgba(255, 244, 199, .30) !important;
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-screen {
+    grid-template-rows: 72px minmax(0, 1fr) 224px !important;
+  }
+
+  .dr-hero-select-main-art {
+    height: min(68vh, calc(100% - 4px)) !important;
+  }
+
+  .dr-hero-select-overview {
+    width: min(330px, 31%) !important;
+    padding: 11px !important;
+  }
+
+  .dr-hero-select-overview > p {
+    font-size: 10px !important;
+    line-height: 1.45 !important;
+  }
+
+  .dr-hero-select-abilities small {
+    font-size: 7px !important;
+  }
+
+  .dr-hero-select-abilities span {
+    font-size: 6px !important;
+  }
+
+  .dr-hero-select-chat p {
+    font-size: 8.5px !important;
+  }
+
+  .dr-hero-select-roster > div {
+    grid-template-columns: repeat(auto-fill, minmax(54px, 66px)) !important;
+    grid-auto-rows: 64px !important;
+  }
+
+  .dr-hero-select-roster > div > button,
+  .dr-hero-select-roster-placeholder {
+    height: 64px !important;
+    min-height: 64px !important;
+  }
+
+  .dr-hero-select-roster > div > button img {
+    height: 49px !important;
+  }
+
+  .dr-hero-select-roster > div > button span {
+    height: 15px !important;
+  }
+}
