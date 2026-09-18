@@ -383,6 +383,9 @@ export type MatchConnectionGraceEvent = Readonly<{
   mode: 'team' | 'all' | 'cleared';
   team: Team | null;
   deadlineAt: number | null;
+  connectedUserIds: readonly string[];
+  disconnectedUserIds: readonly string[];
+  disconnectedPlayers: readonly Readonly<{ userId: string; username: string; team: Team }>[];
 }>;
 
 export type MatchRuntimePauseStateEvent = Readonly<{
