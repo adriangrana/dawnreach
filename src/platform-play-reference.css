@@ -1500,3 +1500,11 @@
     height: 40px !important;
   }
 }
+
+
+/* CUSTOM active artwork has a slightly smaller painted bounding box than its
+   blue counterpart. Compensate visually while keeping the same icon slot. */
+.dr-play-mode-card.is-custom.is-selected .dr-play-mode-icon img {
+  transform: scale(1.015) !important;
+  transform-origin: center center !important;
+}
