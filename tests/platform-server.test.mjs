@@ -590,3 +590,80 @@ test('reconnecting inside the grace period keeps the match alive', async () => {
     redSocket.destroy();
   }, { matchReconnectGraceMs: 60 });
 });
+
+
+test('gameplay authority migrates when its player disconnects and stays with the successor', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AuthorityBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AuthorityRed', password: 'Iron!Crown42' }),
+    });
+    const match = {
+      id: 'authority-migration',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: blue.body.user.id, username: 'AuthorityBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'AuthorityRed', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    let blueSocket = await openWebsocket(port, blue.body.token);
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+
+    const blueSnapshot = platform.reportMatchRuntimeCreeps(blue.body.user.id, {
+      matchId: match.id,
+      sequence: 1,
+      sentAt: Date.now(),
+      elapsedSeconds: 10,
+      creeps: [],
+    });
+    assert.equal(blueSnapshot.authorityUserId, blue.body.user.id);
+
+    blueSocket.destroy();
+    await wait(20);
+
+    const redSnapshot = platform.reportMatchRuntimeCreeps(red.body.user.id, {
+      matchId: match.id,
+      sequence: 1,
+      sentAt: Date.now(),
+      elapsedSeconds: 12,
+      creeps: [],
+    });
+    assert.equal(redSnapshot.authorityUserId, red.body.user.id);
+
+    blueSocket = await openWebsocket(port, blue.body.token);
+    await wait(10);
+
+    const stillRed = platform.reportMatchRuntimeCreeps(red.body.user.id, {
+      matchId: match.id,
+      sequence: 2,
+      sentAt: Date.now(),
+      elapsedSeconds: 13,
+      creeps: [],
+    });
+    assert.equal(stillRed.authorityUserId, red.body.user.id);
+    assert.throws(() => platform.reportMatchRuntimeCreeps(blue.body.user.id, {
+      matchId: match.id,
+      sequence: 3,
+      sentAt: Date.now(),
+      elapsedSeconds: 13,
+      creeps: [],
+    }), /Solo la autoridad/);
+
+    blueSocket.destroy();
+    redSocket.destroy();
+  }, { matchReconnectGraceMs: 200 });
+});
