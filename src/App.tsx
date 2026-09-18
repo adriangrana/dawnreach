@@ -721,6 +721,30 @@ function TeamPortraits({ team, side, localRespawn }: {
   );
 }
 
+function ReconnectGraceBanner({ state }: { state: MatchConnectionPresentation }) {
+  if (state.mode === 'cleared' || state.deadlineAt === null) return null;
+  const remainingSeconds = Math.max(0, Math.ceil((state.deadlineAt - Date.now()) / 1000));
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const countdown = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const names = state.disconnectedPlayers.map(player => player.username).filter(Boolean);
+  const playerText = names.length > 0 ? names.join(', ') : 'Jugadores desconectados';
+  const message = state.mode === 'all'
+    ? `${playerText}. La partida se cancelará sin puntuar si nadie vuelve.`
+    : `${playerText}. El equipo ${state.team === 'blue' ? 'Dawn' : 'Dusk'} tiene 1 minuto para reconectarse.`;
+
+  return (
+    <aside className="reconnect-grace-banner" role="status" aria-live="polite">
+      <WifiOff />
+      <span>
+        <strong>{state.mode === 'all' ? 'TODOS DESCONECTADOS' : 'RECONEXIÓN EN CURSO'}</strong>
+        <em>{message}</em>
+      </span>
+      <b>{countdown}</b>
+    </aside>
+  );
+}
+
 function GameHud({
   minimapRef,
   minimapHeroRef,
@@ -851,6 +875,7 @@ function GameHud({
         </div>
         <TeamPortraits team={duskTeam} side="dusk" localRespawn={localRespawnPresentation} />
       </section>
+      <ReconnectGraceBanner state={connectionState} />
 
       <section className="minimap-shell">
         <div className="minimap-field">
