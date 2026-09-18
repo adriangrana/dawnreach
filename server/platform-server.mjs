@@ -185,15 +185,57 @@ export function createPlatformServer(options = {}) {
       : (previous?.inventory || []);
     const nonNegativeCounter = (value, fallback = 0) => Math.max(0, Math.min(999999, Math.floor(finite(value, fallback))));
     const requestedMaxHp = clamp(payload?.maxHp, 1, 100000);
-    let requestedCurrentHp = clamp(payload?.currentHp, 0, requestedMaxHp);
-    let requestedAlive = payload?.alive !== false && requestedCurrentHp > 0;
+    const rawCurrentHp = clamp(payload?.currentHp, 0, requestedMaxHp);
+    const rawAlive = payload?.alive !== false && rawCurrentHp > 0;
+    let requestedCurrentHp = rawCurrentHp;
+    let requestedAlive = rawAlive;
+    let deathIncrement = 0;
+    let creditedKillerState = null;
 
     if (combatLock?.deadUntil && now < combatLock.deadUntil) {
       requestedCurrentHp = 0;
       requestedAlive = false;
     } else if (combatLock?.until && now < combatLock.until) {
-      requestedCurrentHp = Math.min(requestedCurrentHp, Math.max(0, combatLock.hpCeiling));
-      requestedAlive = requestedAlive && requestedCurrentHp > 0;
+      const processedDamage = rawAlive === false
+        || rawCurrentHp < Math.max(0, Number(combatLock.preDamageHp || 0)) - 0.001;
+
+      if (processedDamage) {
+        requestedCurrentHp = rawCurrentHp;
+        requestedAlive = rawAlive;
+
+        if (!requestedAlive && combatLock.pendingLethal && !combatLock.deathAccounted) {
+          deathIncrement = 1;
+          const respawnSeconds = Math.max(0, Number(combatLock.respawnSeconds || 0));
+          combatLock.deathAccounted = true;
+          combatLock.hpCeiling = 0;
+          combatLock.deadUntil = now + respawnSeconds * 1000;
+          combatLock.until = Math.max(combatLock.until, combatLock.deadUntil);
+
+          if (
+            combatLock.sourceEntityId === `player:${combatLock.sourceUserId}:hero`
+            && combatLock.sourceUserId
+          ) {
+            const killerRuntime = runtimeRoom(active.id).get(combatLock.sourceUserId);
+            if (killerRuntime) {
+              creditedKillerState = {
+                ...killerRuntime,
+                kills: Number(killerRuntime.kills || 0) + 1,
+                sequence: killerRuntime.sequence + 1,
+                sentAt: now,
+              };
+              runtimeRoom(active.id).set(combatLock.sourceUserId, creditedKillerState);
+            }
+          }
+        } else if (requestedAlive) {
+          combatLocks.delete(userId);
+        }
+      } else {
+        // This packet was authored before the target processed the combat event. Preserve
+        // movement/inventory updates but keep the server's predicted HP so the attacker
+        // never sees health jump back up and then down again.
+        requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
+        requestedAlive = requestedCurrentHp > 0;
+      }
     } else if (combatLock) {
       combatLocks.delete(userId);
     }
@@ -221,7 +263,7 @@ export function createPlatformServer(options = {}) {
       // Kills/deaths are server-owned. A client may report them for backwards compatibility,
       // but once a runtime row exists it cannot overwrite authoritative combat accounting.
       kills: previous ? previous.kills : 0,
-      deaths: previous ? previous.deaths : 0,
+      deaths: (previous ? previous.deaths : 0) + deathIncrement,
       assists: previous ? nonNegativeCounter(payload?.assists, previous.assists) : 0,
       lastHits: nonNegativeCounter(payload?.lastHits, previous?.lastHits),
       denies: nonNegativeCounter(payload?.denies, previous?.denies),
@@ -231,11 +273,19 @@ export function createPlatformServer(options = {}) {
     };
 
     runtimeRoom(active.id).set(userId, state);
+    const recipients = active.players.map(candidate => candidate.userId);
     broadcast({
       type: 'match.runtime.state',
       matchId: active.id,
       state,
-    }, active.players.map(candidate => candidate.userId));
+    }, recipients);
+    if (creditedKillerState) {
+      broadcast({
+        type: 'match.runtime.state',
+        matchId: active.id,
+        state: creditedKillerState,
+      }, recipients);
+    }
     return state;
   }
 
@@ -261,66 +311,60 @@ export function createPlatformServer(options = {}) {
 
     const room = runtimeRoom(active.id);
     const targetRuntime = room.get(target.userId);
-    const sourceRuntime = room.get(source.userId);
     const now = Date.now();
     let lethal = false;
     let respawnSeconds = null;
-    let nextTargetRuntime = targetRuntime ?? null;
-    let nextSourceRuntime = sourceRuntime ?? null;
+    let previewTargetRuntime = null;
 
     if (targetRuntime) {
-      const wasAlive = targetRuntime.alive !== false && targetRuntime.currentHp > 0;
+      const locks = runtimeCombatLocks(active.id);
+      const existingLock = locks.get(target.userId) || null;
+      const preDamageHp = existingLock?.preDamageHp ?? targetRuntime.currentHp;
       const currentHp = reason === 'heal'
         ? Math.min(targetRuntime.maxHp, targetRuntime.currentHp + amount)
         : Math.max(0, targetRuntime.currentHp - amount);
-      lethal = reason === 'damage' && wasAlive && currentHp <= 0;
-      respawnSeconds = lethal ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2 : null;
+      lethal = reason === 'damage' && currentHp <= 0;
+      respawnSeconds = lethal
+        ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2
+        : null;
 
-      nextTargetRuntime = {
+      previewTargetRuntime = {
         ...targetRuntime,
         currentHp,
         alive: currentHp > 0,
-        deaths: lethal ? Number(targetRuntime.deaths || 0) + 1 : Number(targetRuntime.deaths || 0),
         sequence: targetRuntime.sequence + 1,
         sentAt: now,
       };
-      room.set(target.userId, nextTargetRuntime);
+      room.set(target.userId, previewTargetRuntime);
 
-      const locks = runtimeCombatLocks(active.id);
       if (reason === 'damage') {
+        const crossedLethal = lethal && !existingLock?.pendingLethal;
         locks.set(target.userId, {
+          preDamageHp,
           hpCeiling: currentHp,
-          until: now + 900,
-          deadUntil: lethal && respawnSeconds ? now + respawnSeconds * 1000 : null,
+          until: now + 1200,
+          deadUntil: existingLock?.deadUntil ?? null,
+          pendingLethal: Boolean(existingLock?.pendingLethal || lethal),
+          deathAccounted: Boolean(existingLock?.deathAccounted),
+          respawnSeconds: crossedLethal
+            ? respawnSeconds
+            : (existingLock?.respawnSeconds ?? respawnSeconds),
+          sourceUserId: crossedLethal
+            ? source.userId
+            : (existingLock?.sourceUserId ?? source.userId),
+          sourceEntityId: crossedLethal
+            ? sourceEntityId
+            : (existingLock?.sourceEntityId ?? sourceEntityId),
         });
       }
-
-      const heroKill = lethal && sourceEntityId === `player:${source.userId}:hero`;
-      if (heroKill && sourceRuntime) {
-        nextSourceRuntime = {
-          ...sourceRuntime,
-          kills: Number(sourceRuntime.kills || 0) + 1,
-          sequence: sourceRuntime.sequence + 1,
-          sentAt: now,
-        };
-        room.set(source.userId, nextSourceRuntime);
-      }
     }
 
-    const recipients = active.players.map(candidate => candidate.userId);
-    if (nextTargetRuntime) {
+    if (previewTargetRuntime) {
       broadcast({
         type: 'match.runtime.state',
         matchId: active.id,
-        state: nextTargetRuntime,
-      }, recipients);
-    }
-    if (nextSourceRuntime && nextSourceRuntime !== sourceRuntime) {
-      broadcast({
-        type: 'match.runtime.state',
-        matchId: active.id,
-        state: nextSourceRuntime,
-      }, recipients);
+        state: previewTargetRuntime,
+      }, active.players.map(candidate => candidate.userId));
     }
 
     const event = {
