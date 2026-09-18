@@ -478,6 +478,7 @@ export function createPlatformServer(options = {}) {
         state,
         moving: Boolean(raw.moving),
         seed: Math.max(0, Math.min(1000000, Math.floor(finite(raw.seed, 0)))),
+        attackSequence: Math.max(0, Math.min(1000000000, Math.floor(finite(raw.attackSequence, 0)))),
       }];
     });
 
