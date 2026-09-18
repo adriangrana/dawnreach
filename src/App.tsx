@@ -8,7 +8,7 @@ import {
   type RefObject,
   type SyntheticEvent,
 } from 'react';
-import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
+import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, WifiOff, ZoomIn } from 'lucide-react';
 import {
   createDawnreachGame,
   type DawnreachCreepNetworkSnapshot,
@@ -58,7 +58,7 @@ import {
   matchEventTeamFromEntityId,
 } from './game/match/matchEventParticipants';
 import { platformRealtime } from './platform/realtimeClient';
-import type { MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
+import type { MatchConnectionGraceEvent, MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
@@ -95,10 +95,20 @@ type TeamHero = {
   initial: string;
   portrait?: string;
   local?: boolean;
+  ownerUserId?: string | null;
+  disconnected?: boolean;
   level?: number;
   dead?: boolean;
   respawnRemainingMs?: number;
   respawnDurationMs?: number;
+};
+
+type MatchConnectionPresentation = {
+  mode: 'team' | 'all' | 'cleared';
+  team: 'blue' | 'red' | null;
+  deadlineAt: number | null;
+  disconnectedUserIds: readonly string[];
+  disconnectedPlayers: readonly Readonly<{ userId: string; username: string; team: 'blue' | 'red' }>[];
 };
 
 type RespawnPresentation = {
@@ -125,13 +135,19 @@ type PendingAbilityCast = {
   atMs: number;
 };
 
-function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk', nowMs: number): TeamHero[] {
+function teamPortraitsFromMatch(
+  match: MatchState,
+  team: 'dawn' | 'dusk',
+  nowMs: number,
+  disconnectedUserIds: ReadonlySet<string>,
+): TeamHero[] {
   return match.slots
     .filter(slot => slot.team === team)
     .sort((a, b) => a.index - b.index)
     .map(slot => {
       const hero = slot.heroEntityId ? match.heroes[slot.heroEntityId] : null;
       if (!hero) return { initial: '' };
+      const ownerUserId = hero.ownerPlayerId || slot.playerId || null;
       const syncedRemainingMs = Math.max(0, Number(hero.runtime.counters['network.respawnRemainingMs'] ?? 0));
       const syncedAtMs = Math.max(0, Number(hero.runtime.counters['network.respawnSyncedAtMs'] ?? nowMs));
       const elapsedSinceSyncMs = Math.max(0, nowMs - syncedAtMs);
@@ -139,6 +155,8 @@ function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk', nowMs:
         initial: hero.heroName?.slice(0, 1).toUpperCase() || '?',
         portrait: hero.definitionId === 'H001' ? ALDEN_PORTRAIT_SRC : undefined,
         local: hero.heroEntityId === LOCAL_HERO_ENTITY_ID,
+        ownerUserId,
+        disconnected: Boolean(ownerUserId && disconnectedUserIds.has(ownerUserId)),
         level: hero.level,
         dead: hero.currentHp <= 0,
         respawnRemainingMs: Math.max(0, syncedRemainingMs - elapsedSinceSyncMs),
