@@ -236,13 +236,27 @@ export function createPlatformServer(options = {}) {
           combatLock.deadUntil = now + respawnSeconds * 1000;
           combatLock.until = Math.max(combatLock.until, combatLock.deadUntil);
 
-          const killerPlayer = combatLock.sourceUserId
+          const directKillerPlayer = combatLock.sourceUserId
             ? active.players.find(candidate => candidate.userId === combatLock.sourceUserId) ?? null
             : null;
-          const heroKiller = Boolean(
-            killerPlayer
+          const directHeroKiller = Boolean(
+            directKillerPlayer
             && combatLock.sourceEntityId === `player:${combatLock.sourceUserId}:hero`,
           );
+
+          const damageCredits = runtimeHeroDamageCredits(active.id);
+          const recentCredit = damageCredits.get(userId) || null;
+          const recentCreditedPlayer = recentCredit
+            && now - Number(recentCredit.at || 0) <= HERO_KILL_CREDIT_WINDOW_MS
+            ? active.players.find(candidate =>
+              candidate.userId === recentCredit.sourceUserId
+              && candidate.team !== player.team
+            ) ?? null
+            : null;
+          const killerPlayer = directHeroKiller
+            ? directKillerPlayer
+            : recentCreditedPlayer;
+          const heroKiller = Boolean(killerPlayer);
 
           if (heroKiller && killerPlayer) {
             const killerRuntime = runtimeRoom(active.id).get(killerPlayer.userId);
@@ -256,6 +270,8 @@ export function createPlatformServer(options = {}) {
               runtimeRoom(active.id).set(killerPlayer.userId, creditedKillerState);
             }
           }
+
+          damageCredits.delete(userId);
 
           const killerTeam = heroKiller && killerPlayer
             ? killerPlayer.team
@@ -279,7 +295,9 @@ export function createPlatformServer(options = {}) {
             killerHeroId: heroKiller && killerPlayer
               ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
               : null,
-            killerEntityId: String(combatLock.sourceEntityId || '') || null,
+            killerEntityId: heroKiller && killerPlayer
+              ? `player:${killerPlayer.userId}:hero`
+              : String(combatLock.sourceEntityId || '') || null,
             at: now,
           };
         } else if (requestedAlive) {
