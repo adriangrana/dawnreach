@@ -1620,12 +1620,22 @@ class LaneCreepManager {
 
   private cleanupCreep(index: number) {
     const creep = this.creeps[index];
+
+    // Invalidate the entity before detaching it. Other systems (especially tower projectiles
+    // and cached combat targets) can still hold the GameEntity object for the rest of this
+    // frame; leaving an end-of-lane/lifetime despawn marked alive makes them attack a ghost
+    // at the creep's last transform.
+    creep.entity.alive = false;
+    creep.entity.currentHp = 0;
+    creep.entity.grantsVision = false;
+    creep.entity.root.userData.alive = false;
+    creep.entity.root.userData.currentHp = 0;
+
     this.removeFromSpatialCell(creep);
     this.buckets[creep.lane][creep.team].delete(creep);
     this.creepById.delete(creep.entity.id);
     this.replicaTargets.delete(creep.entity.id);
     this.attackActivity.delete(creep.entity.id);
-    creep.entity.grantsVision = false;
     disposeEntityOverhead(creep.entity.root);
     this.registry.unregister(creep.entity.root);
     removeWorldEntityRuntime(creep.entity.id);
