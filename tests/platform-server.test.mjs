@@ -307,6 +307,40 @@ test('final team abandon waits for an offline survivor before cancelling the orp
   }, { matchReconnectGraceMs: 40 });
 });
 
+test('all explicit abandons void the match instead of awarding an empty team', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'all-explicit-abandon',
+      mode: 'ranked',
+      source: 'matchmaking',
+      rated: true,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'all-abandon-blue', username: 'All Abandon Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'all-abandon-red', username: 'All Abandon Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    const afterBlue = platform.abandonActiveMatch('all-abandon-blue');
+    assert.equal(afterBlue.status, 'in_game');
+
+    const afterRed = platform.abandonActiveMatch('all-abandon-red');
+    assert.equal(afterRed.status, 'cancelled');
+    assert.equal(afterRed.rated, false);
+    assert.equal(afterRed.winnerTeam, null);
+    assert.equal(afterRed.endReason, 'all_players_abandoned');
+    assert.deepEqual(
+      [...afterRed.abandonedUserIds].sort(),
+      ['all-abandon-blue', 'all-abandon-red'].sort(),
+    );
+  }, { matchReconnectGraceMs: 200 });
+});
+
 test('one abandonment in a multi-player team leaves the match active for everyone else', async () => {
   await withServer(async ({ platform }) => {
     const match = {
