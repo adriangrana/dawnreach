@@ -74,6 +74,20 @@ function teamAccent(team: TeamId) {
   }
 }
 
+function healthAccent(entity: GameEntity, localHero: GameEntity | null) {
+  if (entity.team === 'neutral') return { start: '#b78d24', end: '#e5c84e' };
+  const allied = localHero ? entity.team === localHero.team : entity.team === 'blue';
+  return allied
+    ? { start: '#159742', end: '#55d83d' }
+    : { start: '#b52f2a', end: '#f05b50' };
+}
+
+function applyHealthAccent(overlay: HTMLElement, entity: GameEntity, localHero: GameEntity | null) {
+  const accent = healthAccent(entity, localHero);
+  overlay.style.setProperty('--selection-health-start', accent.start);
+  overlay.style.setProperty('--selection-health-end', accent.end);
+}
+
 function formatNumber(value: number, digits = 0) {
   if (!Number.isFinite(value)) return '—';
   return value.toFixed(digits);
@@ -248,7 +262,7 @@ function installStyles() {
     .selected-entity-hud__ability-row { width:100%; display:flex; align-items:flex-start; justify-content:center; gap:8px; }
     .selected-entity-hud__no-abilities { width:100%; min-height:62px; display:grid; place-items:center; border:1px dashed rgba(143,162,157,.22); background:linear-gradient(145deg,rgba(25,35,40,.46),rgba(5,9,12,.62)); color:#788985; font:700 11px/1 Georgia,serif; letter-spacing:.08em; text-transform:uppercase; }
     .selected-entity-hud__health { position:relative; height:16px; overflow:hidden; border:1px solid rgba(0,0,0,.78); background:rgba(0,0,0,.68); }
-    .selected-entity-hud__health > i { position:absolute; inset:0 auto 0 0; display:block; background:linear-gradient(90deg,#159742,#55d83d); }
+    .selected-entity-hud__health > i { position:absolute; inset:0 auto 0 0; display:block; background:linear-gradient(90deg,var(--selection-health-start,#159742),var(--selection-health-end,#55d83d)); }
     .selected-entity-hud__health > b { position:absolute; inset:0; display:grid; place-items:center; color:#f1f5ef; font-size:9px; }
     .selected-entity-hud__details { display:flex; flex-direction:column; justify-content:center; gap:8px; }
     .selected-entity-hud__detail-row { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:25px; padding:0 8px; border:1px solid rgba(255,255,255,.07); background:rgba(4,8,10,.4); color:#8fa29d; font-size:9px; text-transform:uppercase; }
@@ -299,7 +313,7 @@ function installStyles() {
     .tower-hud__abilities { position:relative; display:flex; flex-direction:column; justify-content:center; gap:9px; padding:9px 12px 8px; }
     .tower-hud__ability-row { display:flex; align-items:flex-start; justify-content:center; gap:8px; min-height:66px; }
     .tower-hud__health { position:relative; height:23px; overflow:hidden; border:2px solid #090d0e; background:#030706; box-shadow:inset 0 0 8px #000; }
-    .tower-hud__health-fill { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#12aa36,#62db45); box-shadow:inset 0 3px 7px #8dff8844; }
+    .tower-hud__health-fill { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,var(--selection-health-start,#12aa36),var(--selection-health-end,#62db45)); box-shadow:inset 0 3px 7px #8dff8844; }
     .tower-hud__health-text { position:absolute; inset:0; display:grid; place-items:center; color:#fff; font-size:11px; font-weight:800; font-variant-numeric:tabular-nums; }
     .tower-hud__regen { position:absolute; z-index:2; right:7px; top:4px; color:#7dff83; font-size:9px; font-weight:700; }
     .tower-hud__details { padding:8px 7px 7px; background:rgba(4,8,10,.28); }
@@ -456,6 +470,7 @@ function updateTowerDynamicHud(overlay: HTMLElement, entity: GameEntity) {
 }
 
 function renderTowerEntity(overlay: HTMLElement, entity: GameEntity, localHero: GameEntity | null) {
+  applyHealthAccent(overlay, entity, localHero);
   const sameTower = overlay.dataset.selectionKind === 'tower'
     && overlay.dataset.selectionId === entity.id
     && Boolean(overlay.querySelector('.tower-hud'));
@@ -487,6 +502,7 @@ function renderGenericEntity(overlay: HTMLElement, entity: GameEntity | null, lo
 
   const accent = teamAccent(entity.team);
   overlay.style.setProperty('--selection-accent', accent);
+  applyHealthAccent(overlay, entity, localHero);
   const hpFraction = entity.maxHp > 0 ? Math.max(0, Math.min(1, entity.currentHp / entity.maxHp)) : 0;
   const hpText = entity.maxHp > 0 ? `${Math.floor(entity.currentHp)} / ${Math.floor(entity.maxHp)}` : '—';
   const isHero = entity.kind === 'hero';
