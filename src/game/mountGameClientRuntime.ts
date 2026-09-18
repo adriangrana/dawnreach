@@ -8,8 +8,7 @@ import { installMatchEventRuntime } from './match/matchEventRuntime';
 import {
   applyAuthoritativeMatchPause,
   installMatchPauseRuntime,
-  MATCH_PAUSE_REQUEST_EVENT,
-  type MatchPauseRequestDetail,
+  setMatchPauseRequestForwarder,
 } from './match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './performance/shadowInvalidationBridge';
@@ -50,14 +49,12 @@ function mountNetworkMatchPause(options: GameClientRuntimeOptions) {
 
   let lastRevision = -1;
 
-  const onPauseRequest = (event: Event) => {
-    const detail = (event as CustomEvent<MatchPauseRequestDetail>).detail;
-    if (!detail || typeof detail.paused !== 'boolean') return;
+  const clearForwarder = setMatchPauseRequestForwarder(detail => (
     platformRealtime.send('match.runtime.pause', {
       matchId,
       paused: detail.paused,
-    });
-  };
+    })
+  ));
 
   const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
     if (
@@ -83,9 +80,8 @@ function mountNetworkMatchPause(options: GameClientRuntimeOptions) {
     );
   });
 
-  window.addEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
   return () => {
-    window.removeEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
+    clearForwarder();
     unsubscribe();
   };
 }
