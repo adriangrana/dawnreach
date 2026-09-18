@@ -1925,3 +1925,252 @@
   .dr-play-deployment-copy > strong { font-size: 16px; }
   .dr-play-deployment-copy > small { display: none; }
 }
+
+
+/* =========================================================
+   DEPLOYMENT VALIDATION + NON-MATCHMAKING MODE CONTEXT
+   ========================================================= */
+
+.dr-play-deployment-panel.is-invalid {
+  border-color: rgba(183, 113, 82, .48);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.02),
+    inset 0 0 24px rgba(157, 70, 52, .035);
+}
+
+.dr-play-deployment-warning {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 7px;
+  z-index: 4;
+  pointer-events: none;
+  color: #a87968;
+  font: 600 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .055em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.dr-play-deployment-warning strong {
+  color: #d4a089;
+  font-weight: 700;
+}
+
+.dr-play-find-match:disabled {
+  cursor: not-allowed !important;
+  color: rgba(219, 216, 204, .48) !important;
+  background:
+    linear-gradient(180deg, rgba(54, 58, 58, .78), rgba(31, 35, 36, .92)) !important;
+  text-shadow: none !important;
+  filter: grayscale(.48) brightness(.72) !important;
+  opacity: .76;
+}
+
+.dr-play-find-match:disabled::before {
+  border-color: rgba(159, 166, 164, .25) !important;
+}
+
+.dr-play-find-match:disabled:hover {
+  filter: grayscale(.48) brightness(.72) !important;
+}
+
+.dr-play-ready-card.is-invalid {
+  border-color: rgba(176, 102, 75, .42);
+  background:
+    linear-gradient(180deg, rgba(45, 23, 20, .74), rgba(27, 16, 17, .84));
+}
+
+.dr-play-ready-card.is-invalid > svg,
+.dr-play-ready-card.is-invalid strong {
+  color: #d69a82;
+}
+
+.dr-play-ready-card.is-invalid small {
+  color: #966f64;
+}
+
+.dr-play-mode-context-panel {
+  position: relative;
+  min-height: 182px;
+  padding: 0 30px;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(116, 146, 159, .24);
+  background:
+    radial-gradient(circle at 14% 50%, rgba(71, 123, 149, .095), transparent 26%),
+    linear-gradient(180deg, rgba(5, 17, 25, .985), rgba(3, 12, 18, .99));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    inset 0 -1px 0 rgba(47,81,99,.09);
+}
+
+.dr-play-mode-context-panel::before,
+.dr-play-mode-context-panel::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.dr-play-mode-context-panel::before {
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 0 64%, rgba(130, 174, 193, .025) 64.2% 64.5%, transparent 64.7%),
+    linear-gradient(180deg, rgba(255,255,255,.018), transparent 44%);
+}
+
+.dr-play-mode-context-panel::after {
+  width: 180px;
+  height: 180px;
+  left: -75px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  border: 1px solid rgba(92, 141, 164, .11);
+  box-shadow: inset 0 0 40px rgba(69, 122, 148, .035);
+}
+
+.dr-play-mode-context-panel.is-training {
+  background:
+    radial-gradient(circle at 14% 50%, rgba(83, 143, 159, .105), transparent 27%),
+    linear-gradient(180deg, rgba(5, 20, 27, .985), rgba(3, 13, 18, .99));
+}
+
+.dr-play-mode-context-panel.is-custom {
+  background:
+    radial-gradient(circle at 14% 50%, rgba(111, 82, 154, .11), transparent 27%),
+    linear-gradient(180deg, rgba(13, 12, 27, .985), rgba(5, 10, 20, .99));
+}
+
+.dr-play-mode-context-icon {
+  position: relative;
+  z-index: 2;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(106, 147, 166, .34);
+  transform: rotate(45deg);
+  background:
+    linear-gradient(135deg, rgba(11, 34, 45, .92), rgba(5, 19, 27, .94));
+  box-shadow:
+    inset 0 0 18px rgba(73, 138, 165, .055),
+    0 8px 20px rgba(0,0,0,.18);
+}
+
+.dr-play-mode-context-icon svg {
+  width: 28px;
+  height: 28px;
+  color: #91b8c8;
+  stroke-width: 1.45;
+  transform: rotate(-45deg);
+}
+
+.dr-play-mode-context-panel.is-custom .dr-play-mode-context-icon {
+  border-color: rgba(128, 105, 169, .42);
+  background: linear-gradient(135deg, rgba(24, 22, 48, .94), rgba(9, 16, 30, .96));
+}
+
+.dr-play-mode-context-panel.is-custom .dr-play-mode-context-icon svg {
+  color: #aa96d1;
+}
+
+.dr-play-mode-context-copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.dr-play-mode-context-copy > small {
+  color: #748d99;
+  font: 700 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .13em;
+}
+
+.dr-play-mode-context-copy > strong {
+  color: #e5e9e6;
+  font: 500 clamp(16px, 1.35vw, 21px)/1.05 Georgia, "Times New Roman", serif;
+  letter-spacing: .055em;
+}
+
+.dr-play-mode-context-copy > span {
+  max-width: 680px;
+  color: #718894;
+  font: 500 9px/1.45 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-play-mode-context-badge {
+  position: relative;
+  z-index: 2;
+  min-width: 116px;
+  padding: 9px 12px;
+  border: 1px solid rgba(97, 138, 157, .27);
+  color: #8ca8b4;
+  background: rgba(6, 19, 27, .58);
+  font: 700 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .12em;
+  text-align: center;
+}
+
+.dr-play-mode-context-panel.is-custom .dr-play-mode-context-badge {
+  border-color: rgba(126, 100, 168, .31);
+  color: #aa9bc8;
+  background: rgba(18, 15, 35, .62);
+}
+
+@media (max-width: 1320px) {
+  .dr-play-mode-context-panel {
+    padding-left: 22px;
+    padding-right: 22px;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    gap: 15px;
+  }
+
+  .dr-play-mode-context-icon {
+    width: 50px;
+    height: 50px;
+  }
+
+  .dr-play-mode-context-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .dr-play-mode-context-copy > span {
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .dr-play-mode-context-panel {
+    padding-left: 16px;
+    padding-right: 16px;
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .dr-play-mode-context-badge {
+    display: none;
+  }
+
+  .dr-play-mode-context-copy > strong {
+    font-size: 15px;
+  }
+
+  .dr-play-mode-context-copy > span {
+    font-size: 8px;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-mode-context-panel {
+    min-height: 150px;
+  }
+
+  .dr-play-deployment-warning {
+    bottom: 4px;
+  }
+}
