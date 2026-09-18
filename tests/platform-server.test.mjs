@@ -957,7 +957,8 @@ test('simulation lease migrates when its producer disconnects while server state
       elapsedSeconds: 10,
       creeps: [],
     });
-    assert.equal(blueSnapshot.authorityUserId, blue.body.user.id);
+    assert.equal(blueSnapshot.authorityUserId, null);
+    assert.equal(blueSnapshot.simulationUserId, blue.body.user.id);
 
     blueSocket.destroy();
     await wait(20);
@@ -969,7 +970,8 @@ test('simulation lease migrates when its producer disconnects while server state
       elapsedSeconds: 12,
       creeps: [],
     });
-    assert.equal(redSnapshot.authorityUserId, red.body.user.id);
+    assert.equal(redSnapshot.authorityUserId, null);
+    assert.equal(redSnapshot.simulationUserId, red.body.user.id);
 
     blueSocket = await openWebsocket(port, blue.body.token);
     await wait(10);
@@ -981,14 +983,15 @@ test('simulation lease migrates when its producer disconnects while server state
       elapsedSeconds: 13,
       creeps: [],
     });
-    assert.equal(stillRed.authorityUserId, red.body.user.id);
+    assert.equal(stillRed.authorityUserId, null);
+    assert.equal(stillRed.simulationUserId, red.body.user.id);
     assert.throws(() => platform.reportMatchRuntimeCreeps(blue.body.user.id, {
       matchId: match.id,
       sequence: 3,
       sentAt: Date.now(),
       elapsedSeconds: 13,
       creeps: [],
-    }), /Solo la autoridad/);
+    }), /Solo el simulador|Solo la autoridad/);
 
     blueSocket.destroy();
     redSocket.destroy();
