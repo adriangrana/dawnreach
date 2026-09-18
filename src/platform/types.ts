@@ -297,6 +297,8 @@ export type MatchRuntimeCombatEvent = Readonly<{
   targetUsername: string;
   reason: 'damage' | 'heal';
   amount: number;
+  lethal?: boolean;
+  respawnSeconds?: number | null;
   at: number;
 }>;
 
