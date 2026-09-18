@@ -1344,8 +1344,8 @@
 }
 
 .dr-play-modes {
-  padding-top: 22px !important;
-  grid-template-rows: repeat(5, clamp(80px, 9vh, 94px)) auto !important;
+  padding-top: 32px !important;
+  grid-template-rows: repeat(5, clamp(80px, 9vh, 110px)) auto !important;
   align-content: start !important;
   gap: 9px !important;
 }
