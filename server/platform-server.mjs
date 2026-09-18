@@ -26,6 +26,7 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeCreepStates = new Map();
   const matchRuntimeCombatLocks = new Map();
   const matchRuntimeHeroDamageCredits = new Map();
+  const matchRuntimePauseStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
   let matchChatSequence = 0;
 
@@ -155,6 +156,103 @@ export function createPlatformServer(options = {}) {
       matchRuntimeHeroDamageCredits.set(matchId, credits);
     }
     return credits;
+  }
+
+  function runtimePauseState(matchId) {
+    let pause = matchRuntimePauseStates.get(matchId);
+    if (!pause) {
+      pause = {
+        type: 'match.runtime.pause',
+        matchId,
+        paused: false,
+        pausedByUserId: null,
+        revision: 0,
+        changedAt: Date.now(),
+        pauseStartedAt: null,
+        accumulatedPauseMs: 0,
+      };
+      matchRuntimePauseStates.set(matchId, pause);
+    }
+    return pause;
+  }
+
+  function publicRuntimePauseState(matchId) {
+    const pause = runtimePauseState(matchId);
+    return {
+      type: 'match.runtime.pause',
+      matchId,
+      paused: pause.paused,
+      pausedByUserId: pause.pausedByUserId,
+      revision: pause.revision,
+      changedAt: pause.changedAt,
+      accumulatedPauseMs: pause.accumulatedPauseMs,
+    };
+  }
+
+  function shiftRuntimeTimersForPause(matchId, durationMs) {
+    if (!(durationMs > 0)) return;
+
+    const locks = matchRuntimeCombatLocks.get(matchId);
+    if (locks) {
+      for (const [entityId, lock] of locks) {
+        locks.set(entityId, {
+          ...lock,
+          until: Number.isFinite(Number(lock.until)) ? Number(lock.until) + durationMs : lock.until,
+          deadUntil: Number.isFinite(Number(lock.deadUntil)) ? Number(lock.deadUntil) + durationMs : lock.deadUntil,
+        });
+      }
+    }
+
+    const credits = matchRuntimeHeroDamageCredits.get(matchId);
+    if (credits) {
+      for (const [entityId, credit] of credits) {
+        credits.set(entityId, {
+          ...credit,
+          at: Number(credit.at || 0) + durationMs,
+        });
+      }
+    }
+  }
+
+  function reportMatchRuntimePause(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para pausar.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La pausa pertenece a otra partida.');
+    const player = active.players.find(candidate => candidate.userId === userId);
+    if (!player) throw new Error('No participas en esta partida.');
+
+    const requestedPaused = Boolean(payload?.paused);
+    const current = runtimePauseState(active.id);
+    const now = Date.now();
+
+    if (current.paused === requestedPaused) {
+      const snapshot = publicRuntimePauseState(active.id);
+      send(userId, snapshot);
+      return snapshot;
+    }
+
+    let accumulatedPauseMs = Number(current.accumulatedPauseMs || 0);
+    if (!requestedPaused && current.pauseStartedAt !== null) {
+      const pausedForMs = Math.max(0, now - Number(current.pauseStartedAt));
+      accumulatedPauseMs += pausedForMs;
+      shiftRuntimeTimersForPause(active.id, pausedForMs);
+    }
+
+    const next = {
+      type: 'match.runtime.pause',
+      matchId: active.id,
+      paused: requestedPaused,
+      pausedByUserId: requestedPaused ? userId : null,
+      revision: Number(current.revision || 0) + 1,
+      changedAt: now,
+      pauseStartedAt: requestedPaused ? now : null,
+      accumulatedPauseMs,
+    };
+    matchRuntimePauseStates.set(active.id, next);
+
+    const event = publicRuntimePauseState(active.id);
+    broadcast(event, active.players.map(candidate => candidate.userId));
+    return event;
   }
 
   function runtimeCreepSnapshot(matchId) {
@@ -736,6 +834,8 @@ export function createPlatformServer(options = {}) {
     matchRuntimeCreepStates.delete(updated.id);
     matchRuntimeCombatLocks.delete(updated.id);
     matchRuntimeHeroDamageCredits.delete(updated.id);
+    matchRuntimePauseStates.delete(updated.id);
+    runtimePauseState(updated.id);
 
     broadcast({
       type: 'match.start',
@@ -792,6 +892,7 @@ export function createPlatformServer(options = {}) {
       matchRuntimeCreepStates.delete(active.id);
       matchRuntimeCombatLocks.delete(active.id);
       matchRuntimeHeroDamageCredits.delete(active.id);
+      matchRuntimePauseStates.delete(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
       return publicMatch(updated);
     }
@@ -836,6 +937,7 @@ export function createPlatformServer(options = {}) {
       peer.send({ type: 'match.runtime.snapshot', matchId: active.match.id, states: runtimeSnapshot(active.match.id) });
       const creepSnapshot = runtimeCreepSnapshot(active.match.id);
       if (creepSnapshot) peer.send(creepSnapshot);
+      peer.send(publicRuntimePauseState(active.match.id));
       return;
     }
 
@@ -1095,6 +1197,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
           else if (type === 'match.runtime.creeps') reportMatchRuntimeCreeps(user.id, message);
           else if (type === 'match.runtime.creep.damage') reportMatchRuntimeCreepDamage(user.id, message);
+          else if (type === 'match.runtime.pause') reportMatchRuntimePause(user.id, message);
           else if (type === 'match.chat.send') reportMatchChatMessage(user.id, message);
           else if (type === 'match.runtime.snapshot') {
             const active = store.activeMatchForUser(user.id);
@@ -1102,6 +1205,7 @@ export function createPlatformServer(options = {}) {
             peer.send({ type: 'match.runtime.snapshot', matchId: active.id, states: runtimeSnapshot(active.id) });
             const creepSnapshot = runtimeCreepSnapshot(active.id);
             if (creepSnapshot) peer.send(creepSnapshot);
+            peer.send(publicRuntimePauseState(active.id));
           }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
           else if (type === 'lobby.create') {
