@@ -1132,9 +1132,21 @@ class LaneCreepManager {
   private planNavigation(creep: LaneCreepRuntime, targetX: number, targetZ: number, now: number) {
     creep.nextRepathAt = now + CREEP_NAV_REPATH_INTERVAL_SECONDS;
     const root = creep.entity.root;
-    const path = this.navigationFor(creep).findPath(
-      { x: root.position.x, z: root.position.z },
-      { x: targetX, z: targetZ },
+    const navigation = this.navigationFor(creep);
+    const start = { x: root.position.x, z: root.position.z };
+    const target = { x: targetX, z: targetZ };
+
+    // If the static map has a clear line, A* cannot solve the blockage: another unit is in
+    // the way. Leave that case to deterministic local avoidance and avoid an A* storm when
+    // several waves are queued behind the same frontline.
+    if (navigation.segmentIsWalkable(start, target)) {
+      this.clearNavigation(creep);
+      return false;
+    }
+
+    const path = navigation.findPath(
+      start,
+      target,
       {
         allowPartial: true,
         nearestSearchRadius: 4.5,
