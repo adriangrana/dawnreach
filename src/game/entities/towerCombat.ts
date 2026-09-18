@@ -274,6 +274,7 @@ function synchronizeWorldRuntime(
       !entity.alive
       && entity.kind === 'hero'
       && entity.root.userData.networkRemoteHero !== true
+      && getWorldRoot(entity.root).userData.dawnreachNetworkSession !== true
       && !hasPendingRespawn(entity)
     ) {
       const respawnSeconds = scheduleHeroRespawn(entity, elapsed);
@@ -306,7 +307,9 @@ function synchronizeWorldRuntime(
     }
   }
 
-  updateHeroRespawns(registry, elapsed);
+  if (worldRoot.userData.dawnreachNetworkSession !== true) {
+    updateHeroRespawns(registry, elapsed);
+  }
 }
 
 function updateHeroDeathPresentationOnce(
