@@ -336,7 +336,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   };
 
   if (activeMatch?.stage === 'loading' || (activeMatch?.stage === 'in_game' && sharedGameVisible)) {
-    return <div className="platform-shared-match-runtime">
+    return <div className={`platform-shared-match-runtime${activeMatch.stage === 'loading' ? ' is-loading' : ''}`}>
       <LocalGameScreen />
       {activeMatch.stage === 'loading' && <MatchLoadingScreen session={activeMatch} me={user} />}
     </div>;
