@@ -609,7 +609,7 @@ test('reconnecting inside the grace period keeps the match alive', async () => {
 });
 
 
-test('gameplay authority migrates when its player disconnects and stays with the successor', async () => {
+test('simulation lease migrates when its producer disconnects while server state remains canonical', async () => {
   await withServer(async ({ baseUrl, port, platform }) => {
     const blue = await jsonFetch(`${baseUrl}/api/register`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
