@@ -999,6 +999,7 @@ export default function App({
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
+  const pendingLocalAuthoritativeStateRef = useRef<MatchRuntimePlayerState | null>(null);
   const pendingCreepSnapshotRef = useRef<DawnreachCreepNetworkSnapshot | null>(null);
   const pendingCreepDamageRef = useRef<Array<{ creepId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const pendingStructureSnapshotRef = useRef<DawnreachStructureNetworkSnapshot | null>(null);
