@@ -934,16 +934,10 @@ export function createPlatformServer(options = {}) {
       at: now,
     };
     const recipients = active.players.map(candidate => candidate.userId);
-    if (synchronizedTargetState) {
-      // Observers and the attacker can render the predicted HP immediately, but the victim
-      // must apply the combat event against its own pre-hit state exactly once. Sending the
-      // prediction to the victim first made it subtract the same hit twice.
-      broadcast({
-        type: 'match.runtime.state',
-        matchId: active.id,
-        state: synchronizedTargetState,
-      }, recipients.filter(recipientUserId => recipientUserId !== target.userId));
-    }
+    // Keep the prediction in the server room so rapid consecutive hits serialize against
+    // one HP value, but do not render that speculative HP on any client. The victim resolves
+    // mitigation first and reportMatchRuntimeCombatResolve broadcasts the final value, which
+    // removes the visible damage-down / HP-back-up rollback.
     broadcast(event, [...new Set([source.userId, target.userId])]);
     return event;
   }
