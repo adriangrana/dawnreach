@@ -321,6 +321,7 @@ export type MatchRuntimeCreepState = Readonly<{
   state: 'ATTACK_MOVE' | 'COMBAT' | 'AGGRO' | 'RETURNING';
   moving: boolean;
   seed: number;
+  attackSequence?: number;
 }>;
 
 export type MatchRuntimeCreepSnapshotEvent = Readonly<{
