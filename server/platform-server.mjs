@@ -28,8 +28,13 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeCombatLocks = new Map();
   const matchRuntimeHeroDamageCredits = new Map();
   const matchRuntimePauseStates = new Map();
+  const matchRuntimeSpawnPositions = new Map();
+  const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
+  const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
   let matchChatSequence = 0;
+  let matchCombatSequence = 0;
+  let shuttingDown = false;
 
   function isOnline(userId) {
     return peersByUser.has(userId);
