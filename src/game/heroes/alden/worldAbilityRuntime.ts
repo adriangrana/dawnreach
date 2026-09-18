@@ -602,7 +602,12 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
 
   private updateFrozenTargets(nowMs: number) {
     for (const [id, frozen] of this.frozenTargets) {
-      if (nowMs >= frozen.untilMs || !frozen.entity.alive || !frozen.entity.root.parent) {
+      if (
+        frozen.entity.root.userData.networkRemoteHero === true
+        || nowMs >= frozen.untilMs
+        || !frozen.entity.alive
+        || !frozen.entity.root.parent
+      ) {
         this.frozenTargets.delete(id);
         continue;
       }
@@ -881,6 +886,14 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
   }
 
   private freezeTarget(target: GameEntity, durationSeconds: number, nowMs: number) {
+    // A remote hero transform belongs exclusively to its owner/network state. Pinning the
+    // replica position locally fights interpolation and can make Q/dash sequences appear to
+    // drag another player's hero. Until hard-CC gets its own authoritative network message,
+    // never mutate a remote hero transform from this client.
+    if (target.kind === 'hero' && target.root.userData.networkRemoteHero === true) {
+      target.root.userData.aldenStunnedUntilMs = nowMs + durationSeconds * 1000;
+      return;
+    }
     this.frozenTargets.set(target.id, {
       entity: target,
       untilMs: nowMs + durationSeconds * 1000,
