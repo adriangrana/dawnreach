@@ -106,7 +106,7 @@
 .score--dusk { color: #e59499; text-shadow: 0 1px 3px #000, 0 0 12px #ea435c44; }
 .match-clock { min-width: 55px; gap: 3px; }
 .match-clock span { font-size: 7px; color: #b7aa89; }
-.match-clock b { font-size: 12px; color: #e1e1d7; }
+.match-clock b, .match-clock-value { font-size: 12px; color: #e1e1d7; font-weight:700; font-variant-numeric:tabular-nums; text-decoration:none; }
 
 .minimap-shell {
   left: 12px;
@@ -405,7 +405,7 @@
   .score { width: 20px; font-size: 19px; }
   .match-clock { min-width: 39px; }
   .match-clock span { display: none; }
-  .match-clock b { font-size: 10px; }
+  .match-clock b, .match-clock-value { font-size: 10px; }
   .minimap-shell { bottom: 204px; }
   .minimap-hero-icon { width: 20px; height: 20px; }
   .command-deck { left: 8px; right: 8px; max-width: 346px; height: 178px; grid-template-columns: 86px minmax(0, 1fr); grid-template-rows: 112px 48px; padding: 6px; }
