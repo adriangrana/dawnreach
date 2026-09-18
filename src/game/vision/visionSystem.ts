@@ -13,6 +13,7 @@ export type VisionSystem = Readonly<{
   team: TeamId;
   isPointVisible(point: VisionPoint, y?: number): boolean;
   isEntityVisible(entity: GameEntity): boolean;
+  isEntityVisibleFromSource(source: GameEntity, entity: GameEntity): boolean;
   updateEntityVisibility(): void;
   getSources(): GameEntity[];
 }>;
@@ -885,26 +886,41 @@ export function createVisionSystem(
 
   const getSources = () => registry.visionSources(team);
 
+  const isPointVisibleFromSource = (source: GameEntity, point: VisionPoint, y = 0) => {
+    if (!source.alive || !source.grantsVision || source.visionRadius <= 0 || !source.root.parent) return false;
+    source.root.getWorldPosition(sourcePosition);
+    const confinement = getBaseVisionConfinement(source, sourcePosition);
+    if (confinement && !pointInsideBaseConfinement(point, confinement)) return false;
+    const dx = point.x - sourcePosition.x;
+    const dz = point.z - sourcePosition.z;
+    if (dx * dx + dz * dz > source.visionRadius * source.visionRadius) return false;
+    if (!resolvedLineOfSight) return true;
+    const from = {
+      x: sourcePosition.x,
+      y: sourcePosition.y + source.visionHeight,
+      z: sourcePosition.z,
+    };
+    return resolvedLineOfSight(from, { x: point.x, y, z: point.z });
+  };
+
   const isPointVisibleAgainst = (sources: readonly GameEntity[], point: VisionPoint, y = 0) => {
     for (const source of sources) {
-      source.root.getWorldPosition(sourcePosition);
-      const confinement = getBaseVisionConfinement(source, sourcePosition);
-      if (confinement && !pointInsideBaseConfinement(point, confinement)) continue;
-      const dx = point.x - sourcePosition.x;
-      const dz = point.z - sourcePosition.z;
-      if (dx * dx + dz * dz > source.visionRadius * source.visionRadius) continue;
-      if (!resolvedLineOfSight) return true;
-      const from = {
-        x: sourcePosition.x,
-        y: sourcePosition.y + source.visionHeight,
-        z: sourcePosition.z,
-      };
-      if (resolvedLineOfSight(from, { x: point.x, y, z: point.z })) return true;
+      if (isPointVisibleFromSource(source, point, y)) return true;
     }
     return false;
   };
 
   const isPointVisible = (point: VisionPoint, y = 0) => isPointVisibleAgainst(getSources(), point, y);
+
+  const isEntityVisibleFromSource = (source: GameEntity, entity: GameEntity) => {
+    if (!entity.alive || !entity.root.parent) return false;
+    entity.root.getWorldPosition(targetPosition);
+    return isPointVisibleFromSource(
+      source,
+      { x: targetPosition.x, z: targetPosition.z },
+      targetPosition.y + entity.visionHeight * 0.5,
+    );
+  };
 
   const isEntityVisibleAgainst = (entity: GameEntity, sources: readonly GameEntity[]) => {
     // Hero corpses are public information and remain rendered for every player until respawn.
@@ -937,5 +953,5 @@ export function createVisionSystem(
     }
   };
 
-  return { team, isPointVisible, isEntityVisible, updateEntityVisibility, getSources };
+  return { team, isPointVisible, isEntityVisible, isEntityVisibleFromSource, updateEntityVisibility, getSources };
 }
