@@ -79,6 +79,21 @@ export type DawnreachGameOptions = Readonly<{
 
 export type DawnreachCreepNetworkSnapshot = LaneCreepNetworkSnapshot;
 
+export type DawnreachStructureNetworkState = Readonly<{
+  id: string;
+  team: 'blue' | 'red';
+  kind: 'tower' | 'building';
+  currentHp: number;
+  maxHp: number;
+  alive: boolean;
+}>;
+
+export type DawnreachStructureNetworkSnapshot = Readonly<{
+  sequence: number;
+  sentAt: number;
+  structures: readonly DawnreachStructureNetworkState[];
+}>;
+
 function creepAuthorityPlayerId(players: readonly DawnreachSharedPlayer[], fallback: string) {
   if (players.length === 0) return fallback;
   return [...players]
@@ -401,6 +416,47 @@ export async function createDawnreachGame(
   }
 
   const laneCreepSystem = ensureLaneCreepSystem(scene, entityRegistry);
+  let structureNetworkSequence = 0;
+  let lastStructureReplicaSequence = -1;
+
+  const networkStructures = () => entityRegistry.values().filter(entity => (
+    (entity.kind === 'tower' || entity.kind === 'building')
+    && entity.interaction === 'attackable-structure'
+    && entity.maxHp > 0
+    && (entity.team === 'blue' || entity.team === 'red')
+  ));
+
+  const applyStructureState = (state: DawnreachStructureNetworkState) => {
+    const entity = entityRegistry.values().find(candidate => candidate.id === state.id) ?? null;
+    if (
+      !entity
+      || (entity.kind !== 'tower' && entity.kind !== 'building')
+      || entity.interaction !== 'attackable-structure'
+    ) return false;
+
+    entity.maxHp = Math.max(1, Number(state.maxHp) || entity.maxHp);
+    entity.currentHp = THREE.MathUtils.clamp(Number(state.currentHp) || 0, 0, entity.maxHp);
+    entity.alive = state.alive !== false && entity.currentHp > 0;
+    entity.root.userData.maxHp = entity.maxHp;
+    entity.root.userData.currentHp = entity.currentHp;
+    entity.root.userData.alive = entity.alive;
+    if (!entity.alive) {
+      entity.revealed = false;
+      entity.root.userData.inVision = false;
+      entity.root.visible = false;
+    }
+
+    publishWorldEntityRuntime(entity.id, {
+      level: entity.level,
+      maxHp: entity.maxHp,
+      currentHp: entity.currentHp,
+      maxResource: entity.maxResource,
+      currentResource: entity.currentResource,
+      alive: entity.alive,
+    });
+    return true;
+  };
+
   const disconnectLaneProgression = connectLocalLaneProgression(entityRegistry, localHeroEntity);
   const vision = createVisionSystem(entityRegistry, localTeam);
   scene.userData.entityRegistry = entityRegistry;
