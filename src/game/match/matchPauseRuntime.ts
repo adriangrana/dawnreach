@@ -16,6 +16,7 @@ export type MatchPauseRequestDetail = Readonly<{
 export type MatchPauseStateDetail = Readonly<{
   paused: boolean;
   pausedByPlayerId: string | null;
+  pausedByDisplayName: string | null;
   changedAtMs: number;
   pauseStartedAtMs: number | null;
   accumulatedPauseMs: number;
@@ -24,6 +25,7 @@ export type MatchPauseStateDetail = Readonly<{
 type MutablePauseState = {
   paused: boolean;
   pausedByPlayerId: string | null;
+  pausedByDisplayName: string | null;
   changedAtMs: number;
   pauseStartedAtMs: number | null;
   accumulatedPauseMs: number;
@@ -32,6 +34,7 @@ type MutablePauseState = {
 const state: MutablePauseState = {
   paused: false,
   pausedByPlayerId: null,
+  pausedByDisplayName: null,
   changedAtMs: 0,
   pauseStartedAtMs: null,
   accumulatedPauseMs: 0,
@@ -109,6 +112,7 @@ export function applyAuthoritativeMatchPause(
   pausedByPlayerId: string | null,
   changedAtMs = realNowMs(),
   authoritativeAccumulatedPauseMs?: number,
+  pausedByDisplayName: string | null = null,
 ) {
   const hasAuthoritativeAccumulated = Number.isFinite(authoritativeAccumulatedPauseMs);
   const authoritativeAccumulated = hasAuthoritativeAccumulated
@@ -117,7 +121,10 @@ export function applyAuthoritativeMatchPause(
 
   if (state.paused === paused) {
     if (authoritativeAccumulated !== null) state.accumulatedPauseMs = authoritativeAccumulated;
-    if (paused) state.pausedByPlayerId = pausedByPlayerId;
+    if (paused) {
+      state.pausedByPlayerId = pausedByPlayerId;
+      state.pausedByDisplayName = pausedByDisplayName;
+    }
     return;
   }
 
@@ -125,6 +132,7 @@ export function applyAuthoritativeMatchPause(
     if (authoritativeAccumulated !== null) state.accumulatedPauseMs = authoritativeAccumulated;
     state.paused = true;
     state.pausedByPlayerId = pausedByPlayerId;
+    state.pausedByDisplayName = pausedByDisplayName;
     state.pauseStartedAtMs = changedAtMs;
   } else {
     if (authoritativeAccumulated !== null) {
@@ -134,6 +142,7 @@ export function applyAuthoritativeMatchPause(
     }
     state.paused = false;
     state.pausedByPlayerId = null;
+    state.pausedByDisplayName = null;
     state.pauseStartedAtMs = null;
   }
   state.changedAtMs = changedAtMs;
@@ -306,6 +315,7 @@ export function installMatchPauseRuntime() {
     document.getElementById(PAUSE_OVERLAY_ID)?.remove();
     state.paused = false;
     state.pausedByPlayerId = null;
+    state.pausedByDisplayName = null;
     state.pauseStartedAtMs = null;
     state.accumulatedPauseMs = 0;
     state.changedAtMs = 0;
