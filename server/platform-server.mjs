@@ -468,6 +468,32 @@ export function createPlatformServer(options = {}) {
     };
   }
 
+  function runtimeConnectionGraceEvent(match) {
+    const connectivity = matchConnectivity(match);
+    const connectedUserIds = [
+      ...connectivity.blueConnected,
+      ...connectivity.redConnected,
+    ].map(player => player.userId);
+    const connectedSet = new Set(connectedUserIds);
+    const disconnectedPlayers = [
+      ...connectivity.blue,
+      ...connectivity.red,
+    ]
+      .filter(player => !connectedSet.has(player.userId))
+      .map(player => ({ userId: player.userId, username: player.username, team: player.team }));
+    const state = matchDisconnectGraceStates.get(match.id) || null;
+    return {
+      type: 'match.connection.grace',
+      matchId: match.id,
+      mode: state?.mode === 'team' || state?.mode === 'all' ? state.mode : 'cleared',
+      team: state?.team === 'blue' || state?.team === 'red' ? state.team : null,
+      deadlineAt: Number.isFinite(Number(state?.deadlineAt)) ? Number(state.deadlineAt) : null,
+      connectedUserIds,
+      disconnectedUserIds: disconnectedPlayers.map(player => player.userId),
+      disconnectedPlayers,
+    };
+  }
+
   function evaluateMatchConnectivity(matchId) {
     const match = store.match(matchId);
     if (!match || match.status !== 'in_game' || shuttingDown) {
