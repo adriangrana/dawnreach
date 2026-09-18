@@ -167,6 +167,63 @@ export function createPlatformServer(options = {}) {
     }, participants);
   }
 
+  function abandonActiveMatch(userId) {
+    const active = store.activeMatchForUser(userId);
+    if (!active) throw new Error('No tienes una partida activa que abandonar.');
+
+    const player = active.players.find(candidate => candidate.userId === userId);
+    if (!player) throw new Error('No participas en esta partida.');
+
+    const abandonedUserIds = [...new Set([...(active.abandonedUserIds || []), userId])];
+    const remainingPlayers = active.players.filter(candidate => !abandonedUserIds.includes(candidate.userId));
+    const remainingDawn = remainingPlayers.filter(candidate => candidate.team === 'blue');
+    const remainingDusk = remainingPlayers.filter(candidate => candidate.team === 'red');
+
+    const loadingCancelled = active.status === 'loading';
+    const teamEliminated = active.status === 'in_game' && (!remainingDawn.length || !remainingDusk.length);
+    const ended = loadingCancelled || teamEliminated;
+    const winnerTeam = active.status === 'in_game' && teamEliminated
+      ? remainingDawn.length ? 'blue' : remainingDusk.length ? 'red' : null
+      : null;
+
+    const updated = store.updateMatch(active.id, {
+      abandonedUserIds,
+      ...(ended ? {
+        status: loadingCancelled ? 'cancelled' : 'completed',
+        endedAt: new Date().toISOString(),
+        endReason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
+        winnerTeam,
+      } : {}),
+    }) || { ...active, abandonedUserIds };
+
+    send(userId, {
+      type: 'match.abandoned',
+      matchId: active.id,
+      ended,
+    });
+
+    const participantIds = active.players.map(candidate => candidate.userId);
+    if (ended) {
+      broadcast({
+        type: 'match.ended',
+        match: publicMatch(updated),
+        winnerTeam,
+        reason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
+      }, participantIds);
+      if (active.source === 'custom') lobbies.closeByMatch(active.id);
+      return publicMatch(updated);
+    }
+
+    if (active.source === 'custom') lobbies.removeParticipantFromInGame(active.id, userId);
+    broadcast({
+      type: 'match.player.abandoned',
+      match: publicMatch(updated),
+      userId,
+      username: player.username,
+    }, remainingPlayers.map(candidate => candidate.userId));
+    return publicMatch(updated);
+  }
+
   function requireNoActiveSession(userId) {
     if (activeSessionForUser(userId)) {
       throw new Error('Ya tienes una partida activa. Usa RETURN TO MATCH para volver o abandónala desde la partida.');
@@ -449,6 +506,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
           else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
+          else if (type === 'match.abandon') abandonActiveMatch(user.id);
           else if (type === 'lobby.create') {
             requireNoActiveSession(user.id);
             leaveQueue(user);
