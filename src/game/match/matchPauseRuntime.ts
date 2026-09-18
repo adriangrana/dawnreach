@@ -38,6 +38,16 @@ const state: MutablePauseState = {
 };
 
 let installed = false;
+let pauseRequestForwarder: ((detail: MatchPauseRequestDetail) => boolean) | null = null;
+
+export function setMatchPauseRequestForwarder(
+  forwarder: ((detail: MatchPauseRequestDetail) => boolean) | null,
+) {
+  pauseRequestForwarder = forwarder;
+  return () => {
+    if (pauseRequestForwarder === forwarder) pauseRequestForwarder = null;
+  };
+}
 
 function realNowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -208,6 +218,12 @@ export function installMatchPauseRuntime() {
   const onPauseRequest = (event: Event) => {
     const detail = (event as CustomEvent<MatchPauseRequestDetail>).detail;
     if (!detail || typeof detail.paused !== 'boolean') return;
+
+    // Online matches forward the request to the server and wait for the replicated decision.
+    // If transport is unavailable, fall back to local authority so offline/development matches
+    // retain their existing pause behavior.
+    if (pauseRequestForwarder?.(detail)) return;
+
     applyAuthoritativeMatchPause(
       detail.paused,
       detail.paused ? detail.requestedByPlayerId || LOCAL_PLAYER_ID : null,
@@ -280,5 +296,6 @@ export function installMatchPauseRuntime() {
     state.pauseStartedAtMs = null;
     state.accumulatedPauseMs = 0;
     state.changedAtMs = 0;
+    pauseRequestForwarder = null;
   };
 }
