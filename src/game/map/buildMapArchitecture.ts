@@ -267,16 +267,21 @@ export function buildCitadel(team: 'blue' | 'red', stone: StoneMaterials) {
   group.userData.gates = gates;
   group.userData.plazaRadius = radius;
   group.userData.towerSites = [];
-  for (const angle of gates) {
+  for (let gateIndex = 0; gateIndex < gates.length; gateIndex++) {
+    const angle = gates[gateIndex];
     const tower = buildDefenseTower(team, stone);
+    tower.name = `${team}-base-gate-${gateIndex + 1}-tower`;
     tower.position.set(Math.cos(angle + 0.08) * (radius - 3.2), 0.05, Math.sin(angle + 0.08) * (radius - 3.2));
     tower.userData.role = 'gate';
     group.userData.towerSites.push(tower.position.toArray());
     group.add(tower);
   }
+  let throneTowerIndex = 0;
   for (const side of [-1, 1]) {
+    throneTowerIndex += 1;
     const angle = BASE_LAYOUT.gates[1] + rotation + side * 0.65;
     const tower = buildDefenseTower(team, stone);
+    tower.name = `${team}-base-throne-${throneTowerIndex}-tower`;
     tower.position.set(Math.cos(angle) * 7.4, 0.05, Math.sin(angle) * 7.4);
     tower.userData.role = 'throne';
     group.userData.towerSites.push(tower.position.toArray());
