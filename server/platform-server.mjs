@@ -368,7 +368,19 @@ export function createPlatformServer(options = {}) {
         sentAt: now,
       };
       runtimeRoom(matchId).set(userId, respawned);
-      locks.delete(userId);
+      // Keep a short server reconciliation guard after respawn. A client can have one last
+      // corpse/death-position snapshot already in flight; it must not teleport the freshly
+      // respawned hero back to the death location or kill it again.
+      locks.set(userId, {
+        ...lock,
+        hpCeiling: respawned.currentHp,
+        until: now + 1500,
+        deadUntil: null,
+        pendingLethal: false,
+        respawnSeconds: null,
+        serverResolved: true,
+        respawnGuard: true,
+      });
       broadcast({
         type: 'match.runtime.state',
         matchId,
@@ -896,6 +908,12 @@ export function createPlatformServer(options = {}) {
     }
 
     const effectiveCombatLock = combatLocks.get(userId) || combatLock;
+    const respawnGuardActive = Boolean(
+      effectiveCombatLock?.respawnGuard
+      && effectiveCombatLock?.until
+      && now < effectiveCombatLock.until
+      && previous?.alive !== false,
+    );
     const authoritativeRespawnRemainingMs = requestedAlive
       ? 0
       : effectiveCombatLock?.deadUntil && now < effectiveCombatLock.deadUntil
@@ -919,9 +937,13 @@ export function createPlatformServer(options = {}) {
       sequence,
       position: serverRespawned
         ? { ...(runtimeSpawnPositions(active.id).get(userId) || reportedPosition) }
-        : reportedPosition,
-      yaw: clamp(payload?.yaw, -Math.PI * 8, Math.PI * 8),
-      moving: serverRespawned ? false : Boolean(payload?.moving),
+        : respawnGuardActive && previous
+          ? { ...previous.position }
+          : reportedPosition,
+      yaw: respawnGuardActive && previous
+        ? previous.yaw
+        : clamp(payload?.yaw, -Math.PI * 8, Math.PI * 8),
+      moving: serverRespawned || respawnGuardActive ? false : Boolean(payload?.moving),
       currentHp: requestedCurrentHp,
       maxHp: requestedMaxHp,
       currentResource: requestedCurrentResource,
