@@ -8,7 +8,7 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { Coins, Crosshair, Diamond, Eye, Shield, Sparkles, Sword, Swords, ZoomIn } from 'lucide-react';
-import { createDawnreachGame } from './game/createDawnreachGame';
+import { createDawnreachGame, type DawnreachRemoteHeroState } from './game/createDawnreachGame';
 import {
   publishWorldEntityRuntime,
   queueWorldDamageAdjustment,
@@ -43,6 +43,8 @@ import {
   type ItemUseDetail,
 } from './game/items/shopEvents';
 import { toMatchGameTimeMs } from './game/match/matchPauseRuntime';
+import { platformRealtime } from './platform/realtimeClient';
+import type { MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
@@ -53,7 +55,7 @@ import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
   calculateHeroAttributes, calculateHeroDamageBreakdown, calculateHeroStats, calculateHeroWorldBasicAttackPreview,
-  createPlayableMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
+  createPlayableMatch, createPlayableRosterMatch, getAbilityControl, getHeroDefinition, getHeroExperienceProgress,
   getRequiredHero, getUnspentHeroAbilityPoints,
   recoverHeroResource, resolveHeroWorldBasicAttackEffects, upgradeHeroAbility, useHeroAbility,
   type AbilityKey, type CombatTargetClass, type InventoryItem, type MatchState,
@@ -673,14 +675,40 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
   );
 }
 
-export default function App() {
+export default function App({
+  onlineMatch,
+  localUser,
+}: {
+  onlineMatch?: MatchSummary | null;
+  localUser?: PlatformUser | null;
+} = {}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const minimapHeroRef = useRef<HTMLImageElement | null>(null);
   const [runtime, dispatch] = useReducer(updateHudRuntime, undefined, () => {
     const nowMs = toMatchGameTimeMs();
+    const match = onlineMatch && localUser
+      ? createPlayableRosterMatch(
+        onlineMatch.id,
+        onlineMatch.players.map(player => {
+          const teammates = onlineMatch.players
+            .filter(candidate => candidate.team === player.team)
+            .sort((a, b) => a.slot - b.slot);
+          const teamIndex = Math.max(0, teammates.findIndex(candidate => candidate.userId === player.userId));
+          return {
+            playerId: player.userId,
+            displayName: player.username,
+            team: player.team === 'blue' ? 'dawn' : 'dusk',
+            slotIndex: (Math.min(5, teamIndex + 1)) as 1 | 2 | 3 | 4 | 5,
+            heroId: onlineMatch.heroSelections?.[player.userId]?.heroId || 'H001',
+          };
+        }),
+        localUser.id,
+        nowMs,
+      )
+      : createPlayableMatch('H001', 1, nowMs);
     return {
-      match: createPlayableMatch('H001', 1, nowMs),
+      match,
       nowMs,
       feedback: '',
       respawnReadyAtMs: null,
@@ -697,6 +725,9 @@ export default function App() {
     stats: calculateHeroStats(runtime.match, LOCAL_HERO_ENTITY_ID, { nowMs: runtime.nowMs }),
   });
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
+  const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
+  const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
+  const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
   const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
@@ -838,18 +869,87 @@ export default function App() {
 
     let disposed = false;
     let destroy: (() => void) | undefined;
-    void createDawnreachGame(host, minimapHost, minimapHeroMarker, () => overlayStateRef.current).then((game) => {
+    const localPlayer = onlineMatch && localUser
+      ? onlineMatch.players.find(player => player.userId === localUser.id) ?? null
+      : null;
+    const sharedPlayers = onlineMatch?.players.map(player => ({
+      userId: player.userId,
+      username: player.username,
+      team: player.team,
+      slot: player.slot,
+      heroId: onlineMatch.heroSelections?.[player.userId]?.heroId || 'H001',
+    })) ?? [];
+
+    void createDawnreachGame(
+      host,
+      minimapHost,
+      minimapHeroMarker,
+      () => overlayStateRef.current,
+      {
+        localPlayerId: localUser?.id,
+        localTeam: localPlayer?.team,
+        localWorldEntityId: LOCAL_WORLD_HERO_ENTITY_ID,
+        players: sharedPlayers,
+      },
+    ).then((game) => {
       if (disposed) {
         game.destroy();
         return;
       }
+      gameRef.current = game;
+      for (const state of pendingRemoteStatesRef.current.values()) {
+        game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
+      }
+      pendingRemoteStatesRef.current.clear();
       destroy = game.destroy;
     });
     return () => {
       disposed = true;
+      gameRef.current = null;
       destroy?.();
     };
-  }, []);
+  }, [onlineMatch?.id, localUser?.id]);
+
+  useEffect(() => {
+    if (!onlineMatch || !localUser || onlineMatch.status !== 'in_game') return;
+
+    const applyRemote = (state: MatchRuntimePlayerState) => {
+      if (state.userId === localUser.id) return;
+      const game = gameRef.current;
+      if (game) game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
+      else pendingRemoteStatesRef.current.set(state.userId, state);
+    };
+
+    const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
+      const type = typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
+      if (type === 'match.runtime.state' && 'matchId' in event && event.matchId === onlineMatch.id && 'state' in event) {
+        applyRemote(event.state as MatchRuntimePlayerState);
+      } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
+        for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+      }
+    });
+
+    platformRealtime.send('match.runtime.snapshot', { matchId: onlineMatch.id });
+
+    const publish = () => {
+      const game = gameRef.current;
+      if (!game) return;
+      const state = game.getLocalNetworkState();
+      networkSequenceRef.current += 1;
+      platformRealtime.send('match.runtime.state', {
+        matchId: onlineMatch.id,
+        sequence: networkSequenceRef.current,
+        ...state,
+      });
+    };
+
+    publish();
+    const timer = window.setInterval(publish, 80);
+    return () => {
+      window.clearInterval(timer);
+      unsubscribe();
+    };
+  }, [onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
   const onWorldDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes('application/x-dawnreach-inventory-item')) return;
