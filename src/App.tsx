@@ -1562,6 +1562,7 @@ export default function App({
           matchId: onlineMatch.id,
           sequence: creeps.sequence,
           sentAt: creeps.sentAt,
+          elapsedSeconds: creeps.elapsedSeconds,
           creeps: creeps.creeps,
         });
       }
