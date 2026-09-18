@@ -7,7 +7,8 @@ import {
   Shield,
   Swords,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ALDEN_SELECTION_ART from '../game/heroes/alden/images/H001.webp';
 import ALDEN_PASSIVE from '../game/heroes/alden/images/H001P.webp';
 import ALDEN_FOCUS_ART from '../game/heroes/alden/images/H001F.png';
@@ -244,6 +245,81 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
   },
 ];
 
+function AbilityTooltipOverlay({
+  ability,
+  anchor,
+}: {
+  ability: AbilityTooltipDefinition;
+  anchor: DOMRect;
+}) {
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState({ left: 16, top: 16, ready: false });
+
+  useLayoutEffect(() => {
+    const tooltip = tooltipRef.current;
+    if (!tooltip) return;
+
+    const margin = 14;
+    const gap = 10;
+    const rect = tooltip.getBoundingClientRect();
+
+    let left = anchor.left + anchor.width / 2 - rect.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - rect.width - margin));
+
+    let top = anchor.bottom + gap;
+    if (top + rect.height > window.innerHeight - margin) {
+      top = anchor.top - rect.height - gap;
+    }
+    top = Math.max(margin, Math.min(top, window.innerHeight - rect.height - margin));
+
+    setPosition({ left, top, ready: true });
+  }, [ability, anchor]);
+
+  return createPortal(
+    <div
+      ref={tooltipRef}
+      className="dr-hero-select-ability-tooltip-portal"
+      role="tooltip"
+      style={{
+        left: position.left,
+        top: position.top,
+        visibility: position.ready ? 'visible' : 'hidden',
+      }}
+    >
+      <header>
+        <div><em>{ability.label}</em><strong>{ability.name}</strong></div>
+        <span>{ability.typeLabel}</span>
+      </header>
+
+      <p className="dr-hero-select-ability-tooltip-description">{ability.description}</p>
+
+      <div className="dr-hero-select-ability-rank-line">
+        <strong>{ability.key === 'P' ? 'NIVELES DE HÉROE' : 'RANGOS'}</strong>
+        <span>{ability.rankLabels.join(' / ')}</span>
+      </div>
+      <div className="dr-hero-select-ability-rank-line">
+        <strong>{ability.key === 'P' ? 'MUESTRAS DE ESCALADO' : 'DESBLOQUEO'}</strong>
+        <span>{ability.rankHeroLevels.map(level => `Nv. ${level}`).join(' / ')}</span>
+      </div>
+
+      <div className="dr-hero-select-ability-tooltip-sections">
+        {ability.sections.map(section => <section key={section.title}>
+          <h4>{section.title}</h4>
+          <div>
+            {section.rows.map(row => <p key={row.label} className="dr-hero-select-ability-stat-line">
+              <strong>{row.label}:</strong>
+              <span>{row.values.join(' / ')}</span>
+            </p>)}
+          </div>
+        </section>)}
+      </div>
+
+      <blockquote>{ability.lore}</blockquote>
+    </div>,
+    document.body,
+  );
+}
+
 function formatClock(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(seconds / 60);
@@ -355,6 +431,7 @@ export function HeroSelectScreen({
     return mine?.selection.heroId || state.availableHeroIds[0] || null;
   });
   const [search, setSearch] = useState('');
+  const [abilityTooltip, setAbilityTooltip] = useState<{ ability: AbilityTooltipDefinition; anchor: DOMRect } | null>(null);
 
   const meState = state.players.find(player => player.userId === me.id) ?? null;
   const myTeam = meState?.team ?? 'blue';
@@ -447,52 +524,17 @@ export function HeroSelectScreen({
               className="dr-hero-select-ability"
               tabIndex={0}
               aria-label={`${ability.label} · ${ability.name}`}
+              onMouseEnter={event => setAbilityTooltip({ ability, anchor: event.currentTarget.getBoundingClientRect() })}
+              onMouseLeave={() => setAbilityTooltip(null)}
+              onFocus={event => setAbilityTooltip({ ability, anchor: event.currentTarget.getBoundingClientRect() })}
+              onBlur={() => setAbilityTooltip(null)}
             >
               <img src={ability.art} alt="" draggable={false} />
               <small>{ability.label}</small>
               <span>{ability.name}</span>
-              <div className="dr-hero-select-ability-tooltip" role="tooltip">
-                <header className="dr-hero-select-ability-tooltip-header">
-                  <div><em>{ability.label}</em><strong>{ability.name}</strong></div>
-                  <span>{ability.typeLabel}</span>
-                </header>
-
-                <p className="dr-hero-select-ability-tooltip-description">{ability.description}</p>
-
-                <div className="dr-hero-select-ability-rank-head">
-                  <strong>RANGO DE HABILIDAD</strong>
-                  <div>
-                    {ability.rankLabels.map((rank, index) => <span key={rank}>
-                      <b>{rank}</b>
-                      <small>{ability.key === 'P' ? `HÉROE ${ability.rankHeroLevels[index]}` : `DESBLOQUEO HÉROE ${ability.rankHeroLevels[index]}`}</small>
-                    </span>)}
-                  </div>
-                </div>
-
-                <div className="dr-hero-select-ability-tooltip-sections">
-                  {ability.sections.map(section => <section key={section.title}>
-                    <h4>{section.title}</h4>
-                    <div className="dr-hero-select-ability-stat-table">
-                      {section.rows.map(row => <div
-                        key={row.label}
-                        className={`dr-hero-select-ability-stat-row${row.values.length === 1 ? ' is-fixed' : ''}`}
-                      >
-                        <strong>{row.label}</strong>
-                        <div>
-                          {row.values.map((value, index) => <span key={`${row.label}-${index}`}>
-                            {row.values.length > 1 && <small>{ability.rankLabels[index]}</small>}
-                            <b>{value}</b>
-                          </span>)}
-                        </div>
-                      </div>)}
-                    </div>
-                  </section>)}
-                </div>
-
-                <blockquote>{ability.lore}</blockquote>
-              </div>
             </article>)}
           </div>
+          {abilityTooltip && <AbilityTooltipOverlay ability={abilityTooltip.ability} anchor={abilityTooltip.anchor} />}
           <div className="dr-hero-select-ratings">
             <label><span>DURABILITY</span><i><b style={{ width: '82%' }} /></i></label>
             <label><span>DAMAGE</span><i><b style={{ width: '48%' }} /></i></label>
