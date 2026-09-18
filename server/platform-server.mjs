@@ -1217,7 +1217,10 @@ export function createPlatformServer(options = {}) {
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
     const previous = matchRuntimeCreepStates.get(active.id);
-    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const previousById = new Map((previous?.creeps || []).map(creep => [creep.id, creep]));
+    // Sequence belongs to the server. The selected client is a simulation producer only;
+    // it can never move the canonical snapshot sequence backwards/forwards on its own.
+    const sequence = Number(previous?.sequence || 0) + 1;
     const allowedLanes = new Set(['top', 'mid', 'bot']);
     const allowedTypes = new Set(['melee', 'ranged', 'flagbearer', 'siege']);
     const allowedStates = new Set(['ATTACK_MOVE', 'COMBAT', 'AGGRO', 'RETURNING']);
@@ -1230,6 +1233,16 @@ export function createPlatformServer(options = {}) {
       const state = String(raw.state || '');
       if (!/^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(id) || !team || !allowedLanes.has(lane) || !allowedTypes.has(type) || !allowedStates.has(state)) return [];
       const position = raw.position && typeof raw.position === 'object' ? raw.position : {};
+      const prior = previousById.get(id) || null;
+      const incomingMaxHp = clamp(raw.maxHp, 1, 100000);
+      const maxHp = prior ? Math.max(1, Number(prior.maxHp) || incomingMaxHp) : incomingMaxHp;
+      const incomingHp = clamp(raw.currentHp, 0, maxHp);
+      // Creeps have no healing mechanic. Server-applied damage/death is irreversible for the
+      // same creep id, so a stale simulator proposal cannot heal or resurrect it.
+      const currentHp = prior
+        ? Math.min(Math.max(0, Number(prior.currentHp) || 0), incomingHp)
+        : incomingHp;
+      const alive = (prior?.alive !== false) && raw.alive !== false && currentHp > 0;
       return [{
         id,
         team,
@@ -1241,13 +1254,16 @@ export function createPlatformServer(options = {}) {
           z: clamp(position.z, -62.5, 62.5),
         },
         yaw: clamp(raw.yaw, -Math.PI * 8, Math.PI * 8),
-        currentHp: clamp(raw.currentHp, 0, 100000),
-        maxHp: clamp(raw.maxHp, 1, 100000),
-        alive: raw.alive !== false,
+        currentHp: alive ? currentHp : 0,
+        maxHp,
+        alive,
         state,
-        moving: Boolean(raw.moving),
+        moving: alive && Boolean(raw.moving),
         seed: Math.max(0, Math.min(1000000, Math.floor(finite(raw.seed, 0)))),
-        attackSequence: Math.max(0, Math.min(1000000000, Math.floor(finite(raw.attackSequence, 0)))),
+        attackSequence: Math.max(
+          Number(prior?.attackSequence || 0),
+          Math.max(0, Math.min(1000000000, Math.floor(finite(raw.attackSequence, 0)))),
+        ),
       }];
     });
 
