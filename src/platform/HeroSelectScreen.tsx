@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ALDEN_SELECTION_ART from '../game/heroes/alden/images/H001.webp';
-import ALDEN_PASSIVE from '../game/heroes/alden/images/H001I.webp';
+import ALDEN_PASSIVE from '../game/heroes/alden/images/H001P.webp';
 import ALDEN_FOCUS_ART from '../game/heroes/alden/images/H001F.png';
 import ALDEN_Q from '../game/heroes/alden/images/H001Q.webp';
 import ALDEN_W from '../game/heroes/alden/images/H001W.webp';
@@ -32,11 +32,76 @@ const HERO_NAMES: Record<string, string> = {
 };
 
 const ABILITIES = [
-  { key: 'P', label: 'PASSIVE', name: ALDEN.innate.name, art: ALDEN_PASSIVE },
-  { key: 'Q', label: 'Q', name: ALDEN.abilities.Q.name, art: ALDEN_Q },
-  { key: 'W', label: 'W', name: ALDEN.abilities.W.name, art: ALDEN_W },
-  { key: 'E', label: 'E', name: ALDEN.abilities.E.name, art: ALDEN_E },
-  { key: 'R', label: 'R', name: ALDEN.abilities.R.name, art: ALDEN_R },
+  {
+    key: 'P',
+    label: 'PASSIVE',
+    name: ALDEN.innate.name,
+    art: ALDEN_PASSIVE,
+    description: ALDEN.innate.technicalDescription,
+    stats: [
+      `Max stacks · ${ALDEN.innate.maxStacks}`,
+      `Front arc · ${ALDEN.innate.frontalArcDegrees}°`,
+      `Empowered window · ${ALDEN.innate.empoweredAttackWindowSeconds}s`,
+      `Proc lockout · ${ALDEN.innate.procLockoutSeconds}s`,
+      `Bonus damage · ${ALDEN.innate.bonusDamageBase} + ${Math.round(ALDEN.innate.totalAdRatio * 100)}% total AD`,
+    ],
+  },
+  {
+    key: 'Q',
+    label: 'Q',
+    name: ALDEN.abilities.Q.name,
+    art: ALDEN_Q,
+    description: ALDEN.abilities.Q.technicalDescription,
+    stats: [
+      `Dash · ${ALDEN.q.dashRange}`,
+      `Cleave · ${ALDEN.q.cleaveRange} / ${ALDEN.q.cleaveAngleDegrees}°`,
+      `Damage · ${ALDEN.q.ranks[0].baseDamage}–${ALDEN.q.ranks[3].baseDamage} + ${Math.round(ALDEN.q.totalAdRatio * 100)}% total AD`,
+      `Slow · ${ALDEN.q.ranks[0].slowPercent}–${ALDEN.q.ranks[3].slowPercent}%`,
+      `Cooldown · ${ALDEN.q.ranks[0].cooldownSeconds}–${ALDEN.q.ranks[3].cooldownSeconds}s`,
+    ],
+  },
+  {
+    key: 'W',
+    label: 'W',
+    name: ALDEN.abilities.W.name,
+    art: ALDEN_W,
+    description: ALDEN.abilities.W.technicalDescription,
+    stats: [
+      `Guard · ${ALDEN.w.guardDurationSeconds}s / ${ALDEN.w.guardArcDegrees}°`,
+      `Damage reduction · ${ALDEN.w.ranks[0].frontDamageReductionPercent}–${ALDEN.w.ranks[3].frontDamageReductionPercent}%`,
+      `Movement penalty · ${ALDEN.w.movementPenaltyPercent}%`,
+      `Reprisal window · ${ALDEN.w.reprisalWindowSeconds}s`,
+      `Cooldown · ${ALDEN.w.ranks[0].cooldownSeconds}–${ALDEN.w.ranks[3].cooldownSeconds}s`,
+    ],
+  },
+  {
+    key: 'E',
+    label: 'E',
+    name: ALDEN.abilities.E.name,
+    art: ALDEN_E,
+    description: ALDEN.abilities.E.technicalDescription,
+    stats: [
+      `Cadence stacks · ${ALDEN.e.maxCadenceStacks}`,
+      `Stack duration · ${ALDEN.e.cadenceDurationSeconds}s`,
+      `Active radius · ${ALDEN.e.activeRadius}`,
+      `Damage · ${ALDEN.e.ranks[0].activeBaseDamage}–${ALDEN.e.ranks[3].activeBaseDamage} + ${Math.round(ALDEN.e.activeTotalAdRatio * 100)}% total AD`,
+      `Cooldown · ${ALDEN.e.ranks[0].cooldownSeconds}–${ALDEN.e.ranks[3].cooldownSeconds}s`,
+    ],
+  },
+  {
+    key: 'R',
+    label: 'R',
+    name: ALDEN.abilities.R.name,
+    art: ALDEN_R,
+    description: ALDEN.abilities.R.technicalDescription,
+    stats: [
+      `Radius · ${ALDEN.r.radius}`,
+      `Damage · ${ALDEN.r.ranks[0].baseDamage}–${ALDEN.r.ranks[2].baseDamage} + ${Math.round(ALDEN.r.totalAdRatio * 100)}% total AD`,
+      `Majesty · ${ALDEN.r.majestyDurationSeconds}s`,
+      `Damage reduction · ${ALDEN.r.ranks[0].damageReductionPercent}–${ALDEN.r.ranks[2].damageReductionPercent}%`,
+      `Cooldown · ${ALDEN.r.ranks[0].cooldownSeconds}–${ALDEN.r.ranks[2].cooldownSeconds}s`,
+    ],
+  },
 ] as const;
 
 function formatClock(ms: number) {
@@ -237,10 +302,20 @@ export function HeroSelectScreen({
           <nav><button type="button" className="is-active">OVERVIEW</button><button type="button" disabled>SKINS</button></nav>
           <p>{selected === 'H001' ? ALDEN.lore : 'Select a hero to inspect their battlefield identity.'}</p>
           <div className="dr-hero-select-abilities">
-            {ABILITIES.map(ability => <article key={ability.key} title={ability.name}>
+            {ABILITIES.map(ability => <article
+              key={ability.key}
+              className="dr-hero-select-ability"
+              tabIndex={0}
+              aria-label={`${ability.label} · ${ability.name}`}
+            >
               <img src={ability.art} alt="" draggable={false} />
               <small>{ability.label}</small>
               <span>{ability.name}</span>
+              <div className="dr-hero-select-ability-tooltip" role="tooltip">
+                <header><em>{ability.label}</em><strong>{ability.name}</strong></header>
+                <p>{ability.description}</p>
+                <ul>{ability.stats.map(stat => <li key={stat}>{stat}</li>)}</ul>
+              </div>
             </article>)}
           </div>
           <div className="dr-hero-select-ratings">
