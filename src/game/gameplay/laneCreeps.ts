@@ -430,7 +430,7 @@ class LaneCreepManager {
     if (this.networkMode !== 'replica' || this.disposed) return;
     if (!Number.isFinite(snapshot.sequence) || snapshot.sequence <= this.lastReplicaSequence) return;
     this.lastReplicaSequence = snapshot.sequence;
-    if (Number.isFinite(snapshot.elapsedSeconds)) {
+    if (Number.isFinite(Number(snapshot.elapsedSeconds))) {
       this.lastReplicaElapsedSeconds = Math.max(
         this.lastReplicaElapsedSeconds,
         Number(snapshot.elapsedSeconds),
