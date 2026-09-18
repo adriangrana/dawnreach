@@ -533,6 +533,37 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     if (amount <= EPSILON) return true;
 
     const nowMs = event.atMs;
+
+    if (event.serverResolved) {
+      // Multiplayer HP is already canonical. Recompute only the local Guard bookkeeping
+      // (Reprisal threshold/VFX) from the raw hit; never mitigate the resolved amount twice.
+      const rawAmount = Math.max(amount, event.rawAmount ?? amount);
+      let bookkeepingRemaining = rawAmount;
+      if (this.majestyUntilMs > nowMs && this.majestyRank > 0) {
+        const rankData = ALDEN.r.ranks[this.majestyRank - 1];
+        bookkeepingRemaining *= 1 - rankData.damageReductionPercent / 100;
+      }
+      const guardCanBlock = this.guardUntilMs > nowMs
+        && this.guardRank > 0
+        && event.damageType !== 'true'
+        && event.isDirect !== false
+        && this.isSourceInsideGuardArc(event.sourceEntityId);
+      if (guardCanBlock) {
+        const rankData = ALDEN.w.ranks[this.guardRank - 1];
+        const preventedByGuard = bookkeepingRemaining * rankData.frontDamageReductionPercent / 100;
+        if (preventedByGuard > EPSILON) {
+          this.guardPreventedDamage += preventedByGuard;
+          const threshold = Math.max(1, this.hero.maxHp) * ALDEN.w.reprisalTriggerPreventedDamagePercentMaxHp / 100;
+          if (this.guardPreventedDamage + EPSILON >= threshold) {
+            this.reprisalRank = this.guardRank;
+            this.reprisalUntilMs = nowMs + ALDEN.w.reprisalWindowSeconds * 1000;
+            this.spawnGroundRing(this.hero.root, 1.05, GUARD_BLUE, ALDEN.w.reprisalWindowSeconds * 1000, 0.48, true);
+          }
+        }
+      }
+      return true;
+    }
+
     let remaining = amount;
     let preventedByGuard = 0;
 
