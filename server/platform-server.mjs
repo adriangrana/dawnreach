@@ -274,6 +274,18 @@ export function createPlatformServer(options = {}) {
     }
 
     const connectivity = matchConnectivity(match);
+    const connectedUserIds = [
+      ...connectivity.blueConnected,
+      ...connectivity.redConnected,
+    ].map(player => player.userId);
+    const connectedSet = new Set(connectedUserIds);
+    const disconnectedPlayers = [
+      ...connectivity.blue,
+      ...connectivity.red,
+    ]
+      .filter(player => !connectedSet.has(player.userId))
+      .map(player => ({ userId: player.userId, username: player.username, team: player.team }));
+    const disconnectedUserIds = disconnectedPlayers.map(player => player.userId);
     broadcastRuntimeAuthority(match);
     if (!connectivity.blue.length || !connectivity.red.length) {
       clearMatchDisconnectGrace(matchId);
@@ -327,6 +339,9 @@ export function createPlatformServer(options = {}) {
         mode: 'cleared',
         team: null,
         deadlineAt: null,
+        connectedUserIds,
+        disconnectedUserIds,
+        disconnectedPlayers,
       }, match.players.map(player => player.userId));
       return null;
     }
@@ -371,6 +386,9 @@ export function createPlatformServer(options = {}) {
       mode,
       team,
       deadlineAt,
+      connectedUserIds,
+      disconnectedUserIds,
+      disconnectedPlayers,
     }, match.players.map(player => player.userId));
     return { mode, team, deadlineAt };
   }
