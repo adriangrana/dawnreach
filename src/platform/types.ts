@@ -111,12 +111,17 @@ export type MatchSummary = Readonly<{
   source: 'matchmaking' | 'custom';
   lobbyId?: string;
   rated: boolean;
-  status: 'launching';
+  status: 'launching' | 'loading' | 'in_game' | 'completed' | 'cancelled';
   createdAt: string;
   players: readonly MatchPlayer[];
   mapSha256: string | null;
   customSettings?: LobbySettings;
   heroSelections?: Readonly<Record<string, Readonly<{ heroId: string | null; locked: boolean; lockedAt: number | null }>>>;
+}>;
+
+export type ActiveMatchSession = Readonly<{
+  stage: 'hero_select' | 'loading' | 'in_game';
+  match: MatchSummary;
 }>;
 
 export type LobbyPlayer = Readonly<{
@@ -222,6 +227,7 @@ export type SessionReadyEvent = Readonly<{
   lobbies?: readonly CustomLobby[];
   lobby?: CustomLobby | null;
   heroSelect?: HeroSelectState | null;
+  activeMatch?: ActiveMatchSession | null;
 }>;
 export type SocialSnapshotEvent = SocialSnapshot & Readonly<{ type: 'social.snapshot' }>;
 export type DirectMessageEvent = Readonly<{ type: 'direct.message'; message: DirectMessage; user: PlatformUser | null }>;
@@ -233,6 +239,8 @@ export type ReadyStartEvent = Readonly<{ type: 'ready.start'; readyId: string; m
 export type ReadyProgressEvent = Readonly<{ type: 'ready.progress'; readyId: string; acceptedUserIds: readonly string[]; declinedUserIds: readonly string[] }>;
 export type ReadyCancelledEvent = Readonly<{ type: 'ready.cancelled'; readyId: string; declinedUserId: string | null }>;
 export type MatchFoundEvent = Readonly<{ type: 'match.found'; match: MatchSummary }>;
+export type MatchSessionPendingEvent = Readonly<{ type: 'match.session.pending'; match: MatchSummary; note?: string; resumed?: boolean }>;
+export type MatchRejoinReadyEvent = Readonly<{ type: 'match.rejoin.ready'; activeMatch: ActiveMatchSession }>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
@@ -263,6 +271,8 @@ export type PlatformRealtimeEvent =
   | ReadyProgressEvent
   | ReadyCancelledEvent
   | MatchFoundEvent
+  | MatchSessionPendingEvent
+  | MatchRejoinReadyEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
