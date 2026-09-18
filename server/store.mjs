@@ -245,6 +245,29 @@ export class PlatformStore {
     this.#persist();
   }
 
+  match(matchId) {
+    const match = this.#state.matches.find(candidate => candidate.id === matchId);
+    return match ? { ...match } : null;
+  }
+
+  updateMatch(matchId, patch) {
+    const match = this.#state.matches.find(candidate => candidate.id === matchId);
+    if (!match) return null;
+    Object.assign(match, patch);
+    this.#persist();
+    return { ...match };
+  }
+
+  activeMatchForUser(userId) {
+    for (let index = this.#state.matches.length - 1; index >= 0; index -= 1) {
+      const match = this.#state.matches[index];
+      if (!match.players?.some(player => player.userId === userId)) continue;
+      if (!['loading', 'in_game'].includes(match.status)) continue;
+      return { ...match };
+    }
+    return null;
+  }
+
   matches() {
     return this.#state.matches.map(match => ({ ...match }));
   }
