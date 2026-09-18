@@ -194,3 +194,16 @@ test('custom lobby host can disable spectators only when no spectators are prese
   assert.equal(lobbies.lobbyForUser(host.id).settings.allowSpectators, false);
   assert.throws(() => lobbies.spectate(guest.id), /no permite espectadores/);
 }));
+
+
+test('custom lobby supports direct spectator join without consuming a team slot', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'DirectSpectatorHost');
+  const watcher = addUser(store, 'DirectSpectatorWatcher');
+  const lobby = lobbies.create(host, 'Direct spectator room', 'public');
+
+  const watched = lobbies.joinSpectator(watcher, lobby.code);
+  assert.equal(watched.players.length, 1);
+  assert.equal(watched.spectators.length, 1);
+  assert.equal(watched.spectators[0].userId, watcher.id);
+  assert.equal(lobbies.lobbyForUser(watcher.id).id, lobby.id);
+}));
