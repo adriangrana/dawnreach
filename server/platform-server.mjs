@@ -734,6 +734,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimeStates.set(updated.id, new Map());
     matchRuntimeCreepStates.delete(updated.id);
     matchRuntimeCombatLocks.delete(updated.id);
+    matchRuntimeHeroDamageCredits.delete(updated.id);
 
     broadcast({
       type: 'match.start',
@@ -789,6 +790,7 @@ export function createPlatformServer(options = {}) {
       matchRuntimeStates.delete(active.id);
       matchRuntimeCreepStates.delete(active.id);
       matchRuntimeCombatLocks.delete(active.id);
+      matchRuntimeHeroDamageCredits.delete(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
       return publicMatch(updated);
     }
