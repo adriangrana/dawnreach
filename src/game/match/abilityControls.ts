@@ -5,7 +5,7 @@ import {
     addPlayerToMatch, assignSelectedHeroToPlayer, createMatchState, getRequiredHero,
     selectHeroForPlayer, setHeroLevel, setMatchPhase,
 } from './matchState';
-import type { MatchState } from './types';
+import type { MatchState, TeamId, TeamSlotIndex } from './types';
 import { calculateHeroStats } from './stats';
 
 export const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -47,6 +47,40 @@ function clearWorldCooldownReduction(heroEntityId: string, key: AbilityKey) {
     if (!reductions) return;
     delete reductions[key];
     if (Object.keys(reductions).length === 0) worldCooldownReductionMs.delete(heroEntityId);
+}
+
+export type PlayableRosterEntry = Readonly<{
+    playerId: string;
+    displayName: string;
+    team: TeamId;
+    slotIndex: TeamSlotIndex;
+    heroId: string;
+}>;
+
+export function createPlayableRosterMatch(
+    matchId: string,
+    roster: readonly PlayableRosterEntry[],
+    localPlayerId: string,
+    nowMs = 0,
+): MatchState {
+    let state = createMatchState(matchId || 'online-match', nowMs);
+
+    for (const entry of roster) {
+        state = addPlayerToMatch(state, {
+            playerId: entry.playerId,
+            displayName: entry.displayName,
+            team: entry.team,
+            slotIndex: entry.slotIndex,
+        });
+        state = selectHeroForPlayer(state, entry.playerId, entry.heroId);
+        state = assignSelectedHeroToPlayer(
+            state,
+            entry.playerId,
+            entry.playerId === localPlayerId ? LOCAL_HERO_ENTITY_ID : `remote:${entry.playerId}:hero`,
+        );
+    }
+
+    return setMatchPhase(state, 'in_progress');
 }
 
 export function createPlayableMatch(
