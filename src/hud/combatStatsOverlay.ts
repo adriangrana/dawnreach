@@ -40,6 +40,10 @@ function snapshot(): CombatHudStats {
   return { ...stats };
 }
 
+export function getCombatHudStatsSnapshot(): CombatHudStats {
+  return snapshot();
+}
+
 function publish() {
   const next = snapshot();
   for (const listener of listeners) listener(next);
