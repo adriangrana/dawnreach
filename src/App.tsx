@@ -1510,6 +1510,8 @@ export default function App({
             currentHp: resolved.currentHp,
             currentResource: resolved.currentResource,
             alive: resolved.alive,
+            position: resolved.position,
+            yaw: resolved.yaw,
           });
         }
       }
