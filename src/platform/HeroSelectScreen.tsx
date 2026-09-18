@@ -31,19 +31,75 @@ const HERO_NAMES: Record<string, string> = {
   H001: ALDEN.displayName,
 };
 
-const ABILITIES = [
+type AbilityTooltipRow = Readonly<{
+  label: string;
+  values: readonly string[];
+}>;
+
+type AbilityTooltipSection = Readonly<{
+  title: string;
+  rows: readonly AbilityTooltipRow[];
+}>;
+
+type AbilityTooltipDefinition = Readonly<{
+  key: string;
+  label: string;
+  name: string;
+  art: string;
+  typeLabel: string;
+  description: string;
+  lore: string;
+  rankLabels: readonly string[];
+  rankHeroLevels: readonly number[];
+  sections: readonly AbilityTooltipSection[];
+}>;
+
+const basicRankLabels = ['N1', 'N2', 'N3', 'N4'] as const;
+const ultimateRankLabels = ['N1', 'N2', 'N3'] as const;
+
+const ABILITIES: readonly AbilityTooltipDefinition[] = [
   {
     key: 'P',
     label: 'PASSIVE',
     name: ALDEN.innate.name,
     art: ALDEN_PASSIVE,
+    typeLabel: 'Pasiva innata',
     description: ALDEN.innate.technicalDescription,
-    stats: [
-      `Max stacks · ${ALDEN.innate.maxStacks}`,
-      `Front arc · ${ALDEN.innate.frontalArcDegrees}°`,
-      `Empowered window · ${ALDEN.innate.empoweredAttackWindowSeconds}s`,
-      `Proc lockout · ${ALDEN.innate.procLockoutSeconds}s`,
-      `Bonus damage · ${ALDEN.innate.bonusDamageBase} + ${Math.round(ALDEN.innate.totalAdRatio * 100)}% total AD`,
+    lore: ALDEN.innate.description,
+    rankLabels: ['NIVEL 1', 'NIVEL 10', 'NIVEL 20', 'NIVEL 30'],
+    rankHeroLevels: [1, 10, 20, 30],
+    sections: [
+      {
+        title: 'ESCALADO POR NIVEL DE HÉROE',
+        rows: [
+          {
+            label: 'Daño adicional',
+            values: [1, 10, 20, 30].map(level => {
+              const flat = ALDEN.innate.bonusDamageBase + ALDEN.innate.bonusDamagePerHeroLevel * (level - 1);
+              return `${Number(flat.toFixed(1))} + ${Math.round(ALDEN.innate.totalAdRatio * 100)}% AD total`;
+            }),
+          },
+          {
+            label: 'Curación máx. HP',
+            values: [1, 10, 20, 30].map(level => {
+              const heal = ALDEN.innate.healingBasePercentMaxHp + ALDEN.innate.healingPercentMaxHpPerHeroLevel * (level - 1);
+              return `${Number(heal.toFixed(2))}%`;
+            }),
+          },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Cargas máximas', values: [String(ALDEN.innate.maxStacks)] },
+          { label: 'Ángulo frontal', values: [`${ALDEN.innate.frontalArcDegrees}°`] },
+          { label: 'ICD por carga', values: [`${ALDEN.innate.stackInternalCooldownSeconds}s`] },
+          { label: 'Ventana potenciada', values: [`${ALDEN.innate.empoweredAttackWindowSeconds}s`] },
+          { label: 'Bloqueo tras proc', values: [`${ALDEN.innate.procLockoutSeconds}s`] },
+          { label: 'Curación vs normal', values: [`${Math.round(ALDEN.innate.normalEnemyHealingMultiplier * 100)}%`] },
+          { label: 'Curación vs héroe/élite/jefe', values: [`${Math.round(ALDEN.innate.eliteBossPlayerHealingMultiplier * 100)}%`] },
+        ],
+      },
     ],
   },
   {
@@ -51,13 +107,32 @@ const ABILITIES = [
     label: 'Q',
     name: ALDEN.abilities.Q.name,
     art: ALDEN_Q,
+    typeLabel: 'Activa · daño físico / movilidad / slow',
     description: ALDEN.abilities.Q.technicalDescription,
-    stats: [
-      `Dash · ${ALDEN.q.dashRange}`,
-      `Cleave · ${ALDEN.q.cleaveRange} / ${ALDEN.q.cleaveAngleDegrees}°`,
-      `Damage · ${ALDEN.q.ranks[0].baseDamage}–${ALDEN.q.ranks[3].baseDamage} + ${Math.round(ALDEN.q.totalAdRatio * 100)}% total AD`,
-      `Slow · ${ALDEN.q.ranks[0].slowPercent}–${ALDEN.q.ranks[3].slowPercent}%`,
-      `Cooldown · ${ALDEN.q.ranks[0].cooldownSeconds}–${ALDEN.q.ranks[3].cooldownSeconds}s`,
+    lore: ALDEN.abilities.Q.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: ALDEN.abilities.Q.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Daño base', values: ALDEN.q.ranks.map(rank => String(rank.baseDamage)) },
+          { label: 'Coste de maná', values: ALDEN.q.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: ALDEN.q.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+          { label: 'Ralentización', values: ALDEN.q.ranks.map(rank => `${rank.slowPercent}%`) },
+          { label: 'Duración slow', values: ALDEN.q.ranks.map(rank => `${rank.slowDurationSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Escalado', values: [`${Math.round(ALDEN.q.totalAdRatio * 100)}% AD total`] },
+          { label: 'Dash', values: [`${ALDEN.q.dashRange} unidades`] },
+          { label: 'Corte', values: [`${ALDEN.q.cleaveRange} unidades · ${ALDEN.q.cleaveAngleDegrees}°`] },
+          { label: 'Tiempo de casteo', values: [`${ALDEN.q.castTimeSeconds}s`] },
+          { label: 'Cadencia aplicada', values: [String(ALDEN.q.cadenceStacksAppliedToFirstPriorityTarget)] },
+        ],
+      },
     ],
   },
   {
@@ -65,13 +140,34 @@ const ABILITIES = [
     label: 'W',
     name: ALDEN.abilities.W.name,
     art: ALDEN_W,
+    typeLabel: 'Activa · defensa / represalia / control',
     description: ALDEN.abilities.W.technicalDescription,
-    stats: [
-      `Guard · ${ALDEN.w.guardDurationSeconds}s / ${ALDEN.w.guardArcDegrees}°`,
-      `Damage reduction · ${ALDEN.w.ranks[0].frontDamageReductionPercent}–${ALDEN.w.ranks[3].frontDamageReductionPercent}%`,
-      `Movement penalty · ${ALDEN.w.movementPenaltyPercent}%`,
-      `Reprisal window · ${ALDEN.w.reprisalWindowSeconds}s`,
-      `Cooldown · ${ALDEN.w.ranks[0].cooldownSeconds}–${ALDEN.w.ranks[3].cooldownSeconds}s`,
+    lore: ALDEN.abilities.W.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: ALDEN.abilities.W.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Reducción frontal', values: ALDEN.w.ranks.map(rank => `${rank.frontDamageReductionPercent}%`) },
+          { label: 'Daño de Represalia', values: ALDEN.w.ranks.map(rank => String(rank.reprisalBaseDamage)) },
+          { label: 'Aturdimiento', values: ALDEN.w.ranks.map(rank => `${rank.stunDurationSeconds}s`) },
+          { label: 'Coste de maná', values: ALDEN.w.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: ALDEN.w.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Duración guardia', values: [`${ALDEN.w.guardDurationSeconds}s`] },
+          { label: 'Arco frontal', values: [`${ALDEN.w.guardArcDegrees}°`] },
+          { label: 'Penalización movimiento', values: [`${ALDEN.w.movementPenaltyPercent}%`] },
+          { label: 'Umbral Represalia', values: [`${ALDEN.w.reprisalTriggerPreventedDamagePercentMaxHp}% HP máx. prevenido`] },
+          { label: 'Ventana Represalia', values: [`${ALDEN.w.reprisalWindowSeconds}s`] },
+          { label: 'Rango extra Represalia', values: [`${ALDEN.w.reprisalBonusAttackRange}`] },
+          { label: 'Escalado Represalia', values: [`${Math.round(ALDEN.w.reprisalTotalAdRatio * 100)}% AD total`] },
+        ],
+      },
     ],
   },
   {
@@ -79,13 +175,34 @@ const ABILITIES = [
     label: 'E',
     name: ALDEN.abilities.E.name,
     art: ALDEN_E,
+    typeLabel: 'Activa + pasiva · daño / velocidad / curación',
     description: ALDEN.abilities.E.technicalDescription,
-    stats: [
-      `Cadence stacks · ${ALDEN.e.maxCadenceStacks}`,
-      `Stack duration · ${ALDEN.e.cadenceDurationSeconds}s`,
-      `Active radius · ${ALDEN.e.activeRadius}`,
-      `Damage · ${ALDEN.e.ranks[0].activeBaseDamage}–${ALDEN.e.ranks[3].activeBaseDamage} + ${Math.round(ALDEN.e.activeTotalAdRatio * 100)}% total AD`,
-      `Cooldown · ${ALDEN.e.ranks[0].cooldownSeconds}–${ALDEN.e.ranks[3].cooldownSeconds}s`,
+    lore: ALDEN.abilities.E.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: ALDEN.abilities.E.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Vel. ataque por carga', values: ALDEN.e.ranks.map(rank => `${rank.attackSpeedPercentPerStack}%`) },
+          { label: 'Daño base activo', values: ALDEN.e.ranks.map(rank => String(rank.activeBaseDamage)) },
+          { label: 'Daño por carga', values: ALDEN.e.ranks.map(rank => String(rank.bonusDamagePerConsumedStack)) },
+          { label: 'Curación por carga', values: ALDEN.e.ranks.map(rank => `${rank.healingPercentMaxHpPerStack}% HP máx.`) },
+          { label: 'Coste de maná', values: ALDEN.e.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: ALDEN.e.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Cargas máximas', values: [String(ALDEN.e.maxCadenceStacks)] },
+          { label: 'Duración cargas', values: [`${ALDEN.e.cadenceDurationSeconds}s`] },
+          { label: 'Radio activo', values: [`${ALDEN.e.activeRadius}`] },
+          { label: 'Escalado activo', values: [`${Math.round(ALDEN.e.activeTotalAdRatio * 100)}% AD total`] },
+          { label: 'Curación vs normal', values: [`${Math.round(ALDEN.e.normalEnemyHealingMultiplier * 100)}%`] },
+          { label: 'Curación vs héroe/élite/jefe', values: [`${Math.round(ALDEN.e.eliteBossPlayerHealingMultiplier * 100)}%`] },
+        ],
+      },
     ],
   },
   {
@@ -93,16 +210,39 @@ const ABILITIES = [
     label: 'R',
     name: ALDEN.abilities.R.name,
     art: ALDEN_R,
+    typeLabel: 'Ultimate · daño / provocación / mitigación',
     description: ALDEN.abilities.R.technicalDescription,
-    stats: [
-      `Radius · ${ALDEN.r.radius}`,
-      `Damage · ${ALDEN.r.ranks[0].baseDamage}–${ALDEN.r.ranks[2].baseDamage} + ${Math.round(ALDEN.r.totalAdRatio * 100)}% total AD`,
-      `Majesty · ${ALDEN.r.majestyDurationSeconds}s`,
-      `Damage reduction · ${ALDEN.r.ranks[0].damageReductionPercent}–${ALDEN.r.ranks[2].damageReductionPercent}%`,
-      `Cooldown · ${ALDEN.r.ranks[0].cooldownSeconds}–${ALDEN.r.ranks[2].cooldownSeconds}s`,
+    lore: ALDEN.abilities.R.lore,
+    rankLabels: ultimateRankLabels,
+    rankHeroLevels: ALDEN.abilities.R.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Daño base', values: ALDEN.r.ranks.map(rank => String(rank.baseDamage)) },
+          { label: 'Coste de maná', values: ALDEN.r.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: ALDEN.r.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+          { label: 'Provocación PvP', values: ALDEN.r.ranks.map(rank => `${rank.pvpTauntDurationSeconds}s`) },
+          { label: 'Provocación élite', values: ALDEN.r.ranks.map(rank => `${rank.eliteTauntDurationSeconds}s`) },
+          { label: 'Reducción de daño', values: ALDEN.r.ranks.map(rank => `${rank.damageReductionPercent}%`) },
+          { label: 'Tenacidad', values: ALDEN.r.ranks.map(rank => `${rank.tenacityPercent}%`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Radio', values: [`${ALDEN.r.radius}`] },
+          { label: 'Tiempo de casteo', values: [`${ALDEN.r.castTimeSeconds}s`] },
+          { label: 'Escalado', values: [`${Math.round(ALDEN.r.totalAdRatio * 100)}% AD total`] },
+          { label: 'Duración Majestad', values: [`${ALDEN.r.majestyDurationSeconds}s`] },
+          { label: 'Reducción Q/W por básico', values: [`${ALDEN.r.qwCooldownReductionPerBasicAttackSeconds}s`] },
+          { label: 'ICD reducción Q/W', values: [`${ALDEN.r.cooldownReductionInternalCooldownSeconds}s`] },
+          { label: 'Multiplicador amenaza jefe', values: [`×${ALDEN.r.bossThreatMultiplier}`] },
+        ],
+      },
     ],
   },
-] as const;
+];
 
 function formatClock(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
@@ -312,9 +452,44 @@ export function HeroSelectScreen({
               <small>{ability.label}</small>
               <span>{ability.name}</span>
               <div className="dr-hero-select-ability-tooltip" role="tooltip">
-                <header><em>{ability.label}</em><strong>{ability.name}</strong></header>
-                <p>{ability.description}</p>
-                <ul>{ability.stats.map(stat => <li key={stat}>{stat}</li>)}</ul>
+                <header className="dr-hero-select-ability-tooltip-header">
+                  <div><em>{ability.label}</em><strong>{ability.name}</strong></div>
+                  <span>{ability.typeLabel}</span>
+                </header>
+
+                <p className="dr-hero-select-ability-tooltip-description">{ability.description}</p>
+
+                <div className="dr-hero-select-ability-rank-head">
+                  <strong>RANGO DE HABILIDAD</strong>
+                  <div>
+                    {ability.rankLabels.map((rank, index) => <span key={rank}>
+                      <b>{rank}</b>
+                      <small>{ability.key === 'P' ? `HÉROE ${ability.rankHeroLevels[index]}` : `DESBLOQUEO HÉROE ${ability.rankHeroLevels[index]}`}</small>
+                    </span>)}
+                  </div>
+                </div>
+
+                <div className="dr-hero-select-ability-tooltip-sections">
+                  {ability.sections.map(section => <section key={section.title}>
+                    <h4>{section.title}</h4>
+                    <div className="dr-hero-select-ability-stat-table">
+                      {section.rows.map(row => <div
+                        key={row.label}
+                        className={`dr-hero-select-ability-stat-row${row.values.length === 1 ? ' is-fixed' : ''}`}
+                      >
+                        <strong>{row.label}</strong>
+                        <div>
+                          {row.values.map((value, index) => <span key={`${row.label}-${index}`}>
+                            {row.values.length > 1 && <small>{ability.rankLabels[index]}</small>}
+                            <b>{value}</b>
+                          </span>)}
+                        </div>
+                      </div>)}
+                    </div>
+                  </section>)}
+                </div>
+
+                <blockquote>{ability.lore}</blockquote>
               </div>
             </article>)}
           </div>
