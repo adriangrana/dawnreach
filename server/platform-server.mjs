@@ -1622,6 +1622,7 @@ export function createPlatformServer(options = {}) {
     const winnerTeam = active.status === 'in_game' && teamEliminatedWithConnectedWinner
       ? survivingTeam
       : null;
+    const voided = active.status === 'in_game' && teamEliminated && !survivingTeam;
 
     // Do not delete a leaver's runtime row while the match continues. Their hero becomes an
     // idle world entity and remains targetable/killable from the canonical server snapshot.
@@ -1640,7 +1641,7 @@ export function createPlatformServer(options = {}) {
     const updated = store.updateMatch(active.id, {
       abandonedUserIds,
       ...(ended ? {
-        status: loadingCancelled ? 'cancelled' : 'completed',
+        status: loadingCancelled || voided ? 'cancelled' : 'completed',
         endedAt: new Date().toISOString(),
         endReason: loadingCancelled
           ? 'loading_abandonment'
@@ -1648,6 +1649,7 @@ export function createPlatformServer(options = {}) {
             ? 'team_abandonment'
             : 'all_players_abandoned',
         winnerTeam,
+        ...(voided ? { rated: false } : {}),
       } : {}),
     }) || { ...active, abandonedUserIds };
 
@@ -1668,6 +1670,7 @@ export function createPlatformServer(options = {}) {
           : winnerTeam
             ? 'team_abandonment'
             : 'all_players_abandoned',
+        voided: loadingCancelled || voided,
       }, participantIds);
       clearMatchRuntime(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
