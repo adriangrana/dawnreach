@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GameEntity, GameEntityRegistry } from '../../entities/gameEntities';
+import { toMatchGameTimeMs } from '../../match/matchPauseRuntime';
 import type { AbilityKey } from '../types';
 import { ALDEN } from './gameplay';
 
@@ -327,7 +328,7 @@ class AldenAbilityPresentation {
       const wasCooling = this.cooldownWasActive.get(key) ?? false;
       this.cooldownWasActive.set(key, cooling);
       if (wasCooling || !cooling || !this.hero.alive || this.hero.currentHp <= 0) continue;
-      this.presentCast(key, performance.now());
+      this.presentCast(key, toMatchGameTimeMs(performance.now()));
     }
   };
 
@@ -667,7 +668,7 @@ class AldenAbilityPresentation {
     materials: THREE.Material[],
     durationMs: number,
     update?: (t: number, nowMs: number) => void,
-    startedAtMs = performance.now(),
+    startedAtMs = toMatchGameTimeMs(performance.now()),
   ) {
     this.effects.push({ root, materials, durationMs, update, startedAtMs });
   }
@@ -834,7 +835,7 @@ class AldenAbilityPresentation {
 
   private kickCameraShake(amplitude: number, durationMs: number) {
     this.cameraShakeAmplitude = Math.max(this.cameraShakeAmplitude, amplitude);
-    this.cameraShakeUntilMs = Math.max(this.cameraShakeUntilMs, performance.now() + durationMs);
+    this.cameraShakeUntilMs = Math.max(this.cameraShakeUntilMs, toMatchGameTimeMs(performance.now()) + durationMs);
   }
 
   private applyCameraShake(nowMs: number) {
