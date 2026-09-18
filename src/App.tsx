@@ -1006,6 +1006,12 @@ export default function App({
   const pendingStructureDamageRef = useRef<Array<{ structureId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const runtimeAuthorityUserIdRef = useRef<string | null>(matchCreepAuthorityUserId(onlineMatch));
   const pendingAuthorityUserIdRef = useRef<string | null | undefined>(undefined);
+  const authorityMatchIdRef = useRef<string | null>(onlineMatch?.id ?? null);
+  if (authorityMatchIdRef.current !== (onlineMatch?.id ?? null)) {
+    authorityMatchIdRef.current = onlineMatch?.id ?? null;
+    runtimeAuthorityUserIdRef.current = matchCreepAuthorityUserId(onlineMatch);
+    pendingAuthorityUserIdRef.current = undefined;
+  }
   const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
