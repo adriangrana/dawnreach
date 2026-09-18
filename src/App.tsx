@@ -872,6 +872,7 @@ export default function App({
   useEffect(() => {
     const online = Boolean(onlineMatch && localUser && onlineMatch.status === 'in_game');
     setCombatHudServerAuthority(online);
+    if (online) setCombatHudStats({ kills: 0, deaths: 0, assists: 0 });
     return () => setCombatHudServerAuthority(false);
   }, [onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
