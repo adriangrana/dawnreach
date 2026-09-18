@@ -20,7 +20,7 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 
 > **Decisión de diseño cerrada:** el layout actual de torres es definitivo. Dawnreach tendrá **2 torres por equipo en cada carril** (6 por equipo en total). No se añadirán más torres ni se ampliará ese layout.
 >
-> **Prioridad de plataforma actual:** cerrar el flujo prepartida `PLAY → cola → Ready Check → Hero Select → Loading → MatchState`, manteniendo la identidad visual Dawnreach de las pantallas de referencia.
+> **Prioridad de plataforma actual:** cerrar el flujo prepartida `PLAY → cola → Ready Check → Hero Select → Loading → MatchState`, manteniendo la identidad visual Dawnreach de las pantallas de referencia. **Hero Select ya está integrado; la siguiente pantalla pendiente es Loading.**
 
 - [x] **HECHO · Reloj real de partida en el HUD**, usando `nowMs - match.createdAtMs` y la fuente de tiempo pause-aware. El JSX conserva `00:00` solo como valor inicial antes de que el runtime sincronice el reloj.
 - [x] **HECHO · Marcador superior sincronizado con las kills disponibles del scoreboard.**
@@ -49,7 +49,7 @@ Estas son las tareas que más acercan Dawnreach a una partida MOBA completa, en 
 - [x] Limpieza/HMR de buena parte de los runtimes montados desde `main.tsx`.
 - [ ] **PARCIAL · Ciclo de vida completo de partida.** Ya existe shell prepartida con Auth, Home, PLAY, Party, Matchmaking, Ready Check y Custom Lobby; todavía falta encadenar `match.found` con `hero_select → loading → in_progress` y terminar el cierre `finished → postmatch`.
 - [x] **HECHO · Pantalla/flujo de lobby personalizada 5v5** con salas públicas/privadas, código, owner, equipos y slots.
-- [ ] **PENDIENTE · Pantalla/flujo real de selección de héroe.**
+- [ ] **PARCIAL · Pantalla/flujo real de selección de héroe.** Ya existe transición automática desde matchmaking/custom a HERO SELECT, estado server-authoritative, timer de 45 s, preview + LOCK IN, chat TEAM privado, equipos Dawn/Dusk, líneas NORTH/MID/SOUTH, roster alimentado por héroes reales y auto-lock al expirar. Alden es el único héroe actual, por lo que los duplicados de equipo se permiten temporalmente en development roster. Falta completar Draft/Ban real cuando exista roster suficiente y encadenar `hero_select.complete` con la Loading Screen multiusuario.
 - [ ] **PENDIENTE · Flujo de loading de 10 jugadores/héroes.**
 - [ ] **PARCIAL · Resultado/cierre de partida.** El trono ya termina funcionalmente la simulación y muestra victoria/derrota, pero todavía falta integrarlo declarativamente con `MatchState` y postpartida.
 - [ ] **PARCIAL · Disposal de recursos GPU.** Revisar geometrías/materiales/texturas compartidas y asegurar que todos se liberan al destruir la partida.
@@ -556,6 +556,8 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [ ] **PENDIENTE · Crear primero un MVP técnico pequeño** cuando el diseño esté cerrado: realm state, ventana de acceso, transición visual, Gates, objetivo del evento y sincronización autoritativa.
 
 ## 23.6 Pantallas de plataforma / referencias UI
+
+- [x] **HERO SELECT · primera versión funcional.** Pantalla canónica full-screen inspirada en la referencia Dawnreach: Dawn/Dusk, timer, hero focus, habilidades, ratings, roster inferior, LOCK IN, TEAM CHAT y presentación de bans reservada. Flujo server-authoritative con eventos `hero_select.start/update/complete`, auto-lock por timeout y reconexión mediante `session.ready.heroSelect`. Draft/Ban real queda diferido hasta disponer de un roster suficiente.
 
 - [x] **HECHO · Login/Auth.** Flujo funcional y persistencia de sesión.
 - [x] **HECHO · HOME.** Composición cinematográfica, hero feature, rail PARTY/FRIENDS, búsqueda social y chat directo/PARTY.
