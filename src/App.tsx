@@ -49,7 +49,7 @@ import {
   type ItemPickupResultDetail,
   type ItemUseDetail,
 } from './game/items/shopEvents';
-import { toMatchGameTimeMs } from './game/match/matchPauseRuntime';
+import { applyAuthoritativeMatchPause, toMatchGameTimeMs } from './game/match/matchPauseRuntime';
 import { publishMatchEvent, type MatchEventTeam } from './game/match/matchEvents';
 import { setMatchEventHeroDeathServerAuthority } from './game/match/matchEventRuntime';
 import {
@@ -109,6 +109,12 @@ type MatchConnectionPresentation = {
   deadlineAt: number | null;
   disconnectedUserIds: readonly string[];
   disconnectedPlayers: readonly Readonly<{ userId: string; username: string; team: 'blue' | 'red' }>[];
+};
+
+type MatchEndPresentation = {
+  winnerTeam: 'blue' | 'red' | null;
+  reason: string;
+  voided: boolean;
 };
 
 type RespawnPresentation = {
