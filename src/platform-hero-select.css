@@ -2154,3 +2154,231 @@
     height: 16px !important;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · team rail visual pass
+   Remove the heavy parent panel and let each player card carry
+   the team color. Portraits are larger and shown without dimming.
+   ========================================================= */
+
+.dr-hero-select-body {
+  grid-template-columns: 318px minmax(0, 1fr) 318px !important;
+}
+
+.dr-hero-select-team,
+.dr-hero-select-team.is-right {
+  padding: 12px 10px 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dr-hero-select-team.is-left {
+  border-right: 1px solid rgba(74, 112, 132, .20) !important;
+}
+
+.dr-hero-select-team.is-right {
+  border-left: 1px solid rgba(112, 75, 78, .20) !important;
+}
+
+.dr-hero-select-team > header {
+  height: 34px;
+  padding: 0 8px !important;
+  background: transparent !important;
+}
+
+.dr-hero-select-team > header span {
+  font-size: 9px !important;
+  letter-spacing: .13em !important;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.dr-hero-select-team > header strong {
+  font-size: 8px !important;
+}
+
+.dr-hero-select-team > div {
+  gap: 7px !important;
+}
+
+.dr-hero-select-player {
+  position: relative;
+  min-height: 102px !important;
+  height: 102px !important;
+  grid-template-columns: 88px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  padding: 6px 10px 6px 6px !important;
+  overflow: hidden;
+  border: 1px solid rgba(84, 130, 155, .38) !important;
+  background: rgba(7, 25, 37, .94) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.03),
+    0 5px 16px rgba(0,0,0,.16) !important;
+}
+
+.dr-hero-select-team.is-right .dr-hero-select-player {
+  grid-template-columns: minmax(0, 1fr) 88px !important;
+  padding: 6px 6px 6px 10px !important;
+}
+
+.dr-hero-select-player.is-blue,
+.dr-hero-select-player.is-blue.is-locked {
+  border-color: rgba(38, 137, 205, .54) !important;
+  background:
+    linear-gradient(90deg, rgba(13, 76, 118, .72), rgba(7, 29, 43, .95) 62%, rgba(5, 20, 30, .97)) !important;
+}
+
+.dr-hero-select-player.is-red,
+.dr-hero-select-player.is-red.is-locked {
+  border-color: rgba(191, 68, 70, .54) !important;
+  background:
+    linear-gradient(270deg, rgba(117, 33, 39, .72), rgba(45, 16, 24, .95) 62%, rgba(24, 10, 16, .97)) !important;
+}
+
+.dr-hero-select-player::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.dr-hero-select-team.is-left .dr-hero-select-player::before {
+  left: -1px;
+}
+
+.dr-hero-select-team.is-right .dr-hero-select-player::before {
+  right: -1px;
+}
+
+.dr-hero-select-player.is-blue::before {
+  color: #1598ee;
+  background: #1598ee;
+}
+
+.dr-hero-select-player.is-red::before {
+  color: #d64e52;
+  background: #d64e52;
+}
+
+.dr-hero-select-player.is-self {
+  border-color: #f0c95d !important;
+  box-shadow:
+    0 0 8px rgba(255, 215, 104, .88),
+    0 0 22px rgba(224, 171, 46, .42),
+    inset 0 0 0 1px rgba(255, 239, 180, .26) !important;
+}
+
+.dr-hero-select-player.is-self::before {
+  color: #f0c95d !important;
+  background: #f0c95d !important;
+  box-shadow: 0 0 12px rgba(240, 201, 93, .85) !important;
+}
+
+.dr-hero-select-player-portrait {
+  width: 86px !important;
+  height: 86px !important;
+  border: 1px solid rgba(167, 194, 205, .42) !important;
+  background: rgba(3, 11, 17, .72) !important;
+  box-shadow: 0 3px 12px rgba(0,0,0,.28);
+}
+
+.dr-hero-select-player-portrait img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  filter: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.dr-hero-select-player-copy {
+  gap: 7px !important;
+  align-content: center;
+}
+
+.dr-hero-select-player-copy > div {
+  gap: 7px !important;
+}
+
+.dr-hero-select-player-copy strong {
+  color: #f0f4f4 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.dr-hero-select-player-copy em {
+  font-size: 7px !important;
+}
+
+.dr-hero-select-player-copy > span {
+  color: #9cb7c3 !important;
+  font-size: 9px !important;
+}
+
+.dr-hero-select-player-copy > small {
+  color: #91aab5 !important;
+  font-size: 8.5px !important;
+}
+
+.dr-hero-select-player.is-locked .dr-hero-select-player-copy > small {
+  color: #68d493 !important;
+}
+
+.dr-hero-select-player.is-self .dr-hero-select-player-copy > small {
+  color: #f0c95d !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-body {
+    grid-template-columns: 270px minmax(0, 1fr) 270px !important;
+  }
+
+  .dr-hero-select-player {
+    min-height: 88px !important;
+    height: 88px !important;
+    grid-template-columns: 74px minmax(0, 1fr) !important;
+    gap: 9px !important;
+  }
+
+  .dr-hero-select-team.is-right .dr-hero-select-player {
+    grid-template-columns: minmax(0, 1fr) 74px !important;
+  }
+
+  .dr-hero-select-player-portrait {
+    width: 72px !important;
+    height: 72px !important;
+  }
+
+  .dr-hero-select-player-copy strong {
+    font-size: 10.5px !important;
+  }
+
+  .dr-hero-select-player-copy > span,
+  .dr-hero-select-player-copy > small {
+    font-size: 8px !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-player {
+    min-height: 78px !important;
+    height: 78px !important;
+    grid-template-columns: 66px minmax(0, 1fr) !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+  }
+
+  .dr-hero-select-team.is-right .dr-hero-select-player {
+    grid-template-columns: minmax(0, 1fr) 66px !important;
+  }
+
+  .dr-hero-select-player-portrait {
+    width: 64px !important;
+    height: 64px !important;
+  }
+}
