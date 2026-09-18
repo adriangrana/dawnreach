@@ -1624,6 +1624,7 @@ export default function App({
           amount: 'resolvedAmount' in event && Number.isFinite(Number(event.resolvedAmount))
             ? Number(event.resolvedAmount)
             : Number(event.amount || 0),
+          rawAmount: Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
           sourceEntityId: 'sourceEntityId' in event ? String(event.sourceEntityId || '') : undefined,
           respawnSeconds: 'respawnSeconds' in event && Number.isFinite(Number(event.respawnSeconds))
