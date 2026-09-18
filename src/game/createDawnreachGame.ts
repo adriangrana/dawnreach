@@ -19,6 +19,7 @@ import { connectLocalLaneProgression } from './gameplay/localLaneProgression';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden, type AldenRig } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
+import { triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
 import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { createMapCollisionWorld } from './map/collisionWorld';
@@ -34,7 +35,7 @@ import {
 import type { NavigationPath } from './navigation/navigationWorld';
 import { prepareHeavyRevealAssets } from './shared/prepareHeavyRevealAssets';
 import { createProceduralTextures } from './shared/textures';
-import { HERO_PROGRESSION_TUNING, type HeroStats, type MatchHeroState } from './match';
+import { HERO_PROGRESSION_TUNING, type AbilityKey, type HeroStats, type MatchHeroState } from './match';
 import { createVisionSystem } from './vision/visionSystem';
 
 type HeroOverlayState = {
@@ -1501,6 +1502,9 @@ export async function createDawnreachGame(
         level: overlay?.hero.level ?? localHeroEntity.level,
         alive: overlay ? overlay.hero.currentHp > 0 : localHeroEntity.alive,
       };
+    },
+    castLocalAbility(key: AbilityKey, rank: number, nowMs = performance.now()) {
+      return triggerAldenWorldAbility(scene, key, rank, nowMs);
     },
     applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
       if (state.userId === localPlayerId) return;
