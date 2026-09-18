@@ -1331,7 +1331,18 @@ export default function App({
 
     const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
       const type = typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
-      if (type === 'match.runtime.state' && 'matchId' in event && event.matchId === onlineMatch.id && 'state' in event) {
+      if (
+        type === 'match.runtime.authority'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'authorityUserId' in event
+      ) {
+        const authorityUserId = event.authorityUserId ? String(event.authorityUserId) : null;
+        runtimeAuthorityUserIdRef.current = authorityUserId;
+        const game = gameRef.current;
+        if (game) game.setNetworkAuthority(authorityUserId === localUser.id);
+        else pendingAuthorityUserIdRef.current = authorityUserId;
+      } else if (type === 'match.runtime.state' && 'matchId' in event && event.matchId === onlineMatch.id && 'state' in event) {
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
