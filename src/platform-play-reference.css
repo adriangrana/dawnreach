@@ -871,3 +871,465 @@
     right: 16px !important;
   }
 }
+
+
+/* =========================================================
+   PLAY MODE ART PASS · 2026-09-18
+   Dedicated backgrounds + blue/gold mode emblems.
+   This intentionally overrides the first PLAY prototype while
+   preserving the shared HOME header, social rail and footer.
+   ========================================================= */
+
+.dr-play-screen {
+  grid-template-columns: clamp(272px, 20.5vw, 332px) minmax(0, 1fr) !important;
+  background:
+    radial-gradient(ellipse at 54% 8%, rgba(47, 82, 104, .08), transparent 42%),
+    linear-gradient(180deg, #07131c 0%, #030a10 100%) !important;
+}
+
+.dr-play-modes {
+  padding: 14px 12px 16px 14px !important;
+  grid-template-rows: repeat(5, minmax(92px, 1fr)) auto !important;
+  gap: 10px !important;
+  border-right: 1px solid rgba(89, 124, 143, .28) !important;
+  background:
+    linear-gradient(90deg, rgba(3, 11, 17, .995) 0%, rgba(5, 16, 24, .975) 72%, rgba(6, 18, 27, .88) 100%) !important;
+  box-shadow:
+    inset -1px 0 0 rgba(222, 190, 102, .035),
+    18px 0 44px rgba(0, 0, 0, .24) !important;
+}
+
+.dr-play-modes-heading {
+  display: none !important;
+}
+
+.dr-play-mode-card {
+  --dr-play-card-background: none;
+  position: relative !important;
+  min-height: 92px !important;
+  display: grid !important;
+  grid-template-columns: clamp(64px, 5.2vw, 82px) minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 10px 16px 10px 10px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(93, 126, 146, .42) !important;
+  border-radius: 1px !important;
+  background-image:
+    linear-gradient(90deg,
+      rgba(3, 13, 20, .96) 0%,
+      rgba(5, 17, 26, .89) 31%,
+      rgba(5, 16, 24, .48) 65%,
+      rgba(3, 11, 18, .20) 100%),
+    var(--dr-play-card-background) !important;
+  background-size: 100% 100%, cover !important;
+  background-position: 0 0, center center !important;
+  background-repeat: no-repeat !important;
+  color: #d7e1e5 !important;
+  text-align: left !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    inset 0 -1px 0 rgba(61, 103, 129, .11),
+    0 6px 15px rgba(0, 0, 0, .12) !important;
+  filter: none !important;
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    transform .16s ease,
+    filter .16s ease !important;
+}
+
+.dr-play-mode-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(180deg, rgba(112, 160, 187, .035), transparent 38%),
+    linear-gradient(90deg, rgba(0, 6, 10, .22), transparent 68%) !important;
+}
+
+.dr-play-mode-card::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  border-left: 2px solid transparent !important;
+  background: none !important;
+}
+
+.dr-play-mode-card:hover:not(:disabled) {
+  transform: translateX(2px) !important;
+  border-color: rgba(116, 166, 191, .62) !important;
+  filter: brightness(1.07) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    inset 0 0 24px rgba(64, 130, 165, .055),
+    0 8px 20px rgba(0, 0, 0, .16) !important;
+}
+
+.dr-play-mode-card.is-selected {
+  border-color: rgba(245, 212, 124, .98) !important;
+  background-image:
+    linear-gradient(90deg,
+      rgba(19, 18, 14, .94) 0%,
+      rgba(35, 29, 18, .82) 32%,
+      rgba(43, 31, 15, .36) 67%,
+      rgba(24, 16, 8, .12) 100%),
+    var(--dr-play-card-background) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 233, 164, .18),
+    inset 0 1px 0 rgba(255, 248, 215, .22),
+    inset 0 0 30px rgba(224, 179, 69, .075),
+    0 0 4px rgba(255, 235, 172, .42),
+    0 0 15px rgba(229, 182, 69, .26) !important;
+  filter: brightness(1.06) saturate(1.04) !important;
+}
+
+.dr-play-mode-card.is-selected::after {
+  border-left-color: #e4bc5c !important;
+  box-shadow:
+    inset 0 0 16px rgba(225, 179, 70, .075) !important;
+}
+
+.dr-play-mode-card:disabled {
+  opacity: .52 !important;
+  cursor: default !important;
+}
+
+.dr-play-mode-icon,
+.dr-play-mode-copy {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.dr-play-mode-icon {
+  width: clamp(62px, 5vw, 78px) !important;
+  height: clamp(62px, 5vw, 78px) !important;
+  display: grid !important;
+  place-items: center !important;
+  color: inherit !important;
+  filter: none !important;
+}
+
+.dr-play-mode-icon img {
+  display: block !important;
+  width: 78% !important;
+  height: 78% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  user-select: none !important;
+  pointer-events: none !important;
+  filter:
+    drop-shadow(0 2px 4px rgba(0, 0, 0, .62))
+    drop-shadow(0 0 6px rgba(67, 157, 222, .16)) !important;
+}
+
+.dr-play-mode-card.is-selected .dr-play-mode-icon img {
+  width: 82% !important;
+  height: 82% !important;
+  filter:
+    drop-shadow(0 2px 4px rgba(0, 0, 0, .62))
+    drop-shadow(0 0 7px rgba(248, 210, 113, .30)) !important;
+}
+
+.dr-play-mode-copy {
+  display: grid !important;
+  align-content: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.dr-play-mode-copy strong {
+  color: #f0f1ed !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: clamp(17px, 1.22vw, 22px) !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: .055em !important;
+  text-shadow:
+    0 2px 7px rgba(0, 0, 0, .88),
+    0 0 12px rgba(0, 0, 0, .42) !important;
+}
+
+.dr-play-mode-copy em {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: #a5bac4 !important;
+  font-family: "Segoe UI", Arial, sans-serif !important;
+  font-size: clamp(8px, .63vw, 10px) !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+  line-height: 1.15 !important;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, .88) !important;
+}
+
+.dr-play-mode-card.is-selected .dr-play-mode-copy strong {
+  color: #fff2d1 !important;
+}
+
+.dr-play-mode-card.is-selected .dr-play-mode-copy em {
+  color: #c9d5d9 !important;
+}
+
+.dr-play-modes blockquote {
+  margin: 1px 0 0 !important;
+  padding: 13px 8px 0 !important;
+  border-top: 1px solid rgba(103, 134, 150, .16) !important;
+  color: #c0c4c1 !important;
+  font: 500 10px/1.55 Georgia, "Times New Roman", serif !important;
+  letter-spacing: .15em !important;
+  text-align: center !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .75) !important;
+}
+
+.dr-play-modes blockquote span {
+  margin-top: 5px !important;
+  color: #748995 !important;
+  font: 700 7px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .19em !important;
+}
+
+/* Main selected-mode artwork. Every generated image follows the same 16:9
+   composition, so they share one fixed framing and only the asset changes. */
+.dr-play-center {
+  padding: 12px 14px 16px 10px !important;
+  grid-template-rows: minmax(270px, 1fr) auto auto !important;
+}
+
+.dr-play-hero {
+  --dr-play-mode-background: none;
+  background-image:
+    linear-gradient(90deg,
+      rgba(2, 9, 15, .62) 0%,
+      rgba(3, 11, 17, .31) 25%,
+      rgba(3, 11, 17, .03) 55%,
+      rgba(3, 10, 16, .12) 100%),
+    var(--dr-play-mode-background) !important;
+  background-size: 100% 100%, cover !important;
+  background-repeat: no-repeat !important;
+  background-position: 0 0, center center !important;
+  filter: none !important;
+  border-color: rgba(102, 137, 156, .32) !important;
+  box-shadow:
+    inset 0 0 84px rgba(0, 0, 0, .10),
+    inset 0 -22px 40px rgba(1, 8, 13, .16) !important;
+}
+
+.dr-play-hero.is-ranked {
+  filter: none !important;
+}
+
+.dr-play-hero-shade {
+  background:
+    linear-gradient(90deg,
+      rgba(1, 7, 12, .80) 0%,
+      rgba(2, 9, 14, .47) 23%,
+      rgba(2, 9, 14, .10) 44%,
+      transparent 66%),
+    linear-gradient(0deg,
+      rgba(2, 8, 13, .84) 0%,
+      rgba(2, 8, 13, .30) 18%,
+      transparent 42%) !important;
+}
+
+.dr-play-hero-copy {
+  left: clamp(34px, 3.2vw, 58px) !important;
+  top: 47% !important;
+  transform: translateY(-52%) !important;
+}
+
+.dr-play-hero-copy > small {
+  color: #e4c66f !important;
+  font-size: clamp(12px, .9vw, 15px) !important;
+  letter-spacing: .13em !important;
+  text-shadow:
+    0 2px 7px rgba(0, 0, 0, .92),
+    0 0 12px rgba(0, 0, 0, .35) !important;
+}
+
+.dr-play-hero-copy h1 {
+  margin: 8px 0 10px !important;
+  color: #f8f0dc !important;
+  font-size: clamp(48px, 4.7vw, 74px) !important;
+  letter-spacing: .025em !important;
+  text-shadow:
+    0 3px 10px rgba(0, 0, 0, .96),
+    0 8px 28px rgba(0, 0, 0, .48) !important;
+}
+
+.dr-play-hero-copy p {
+  color: #c2d2d9 !important;
+  font-size: clamp(11px, .92vw, 15px) !important;
+  letter-spacing: .18em !important;
+  text-shadow:
+    0 2px 7px rgba(0, 0, 0, .96),
+    0 0 12px rgba(0, 0, 0, .46) !important;
+}
+
+.dr-play-ranked-note {
+  top: 20px !important;
+  right: 20px !important;
+  min-width: 142px !important;
+  border-color: rgba(216, 181, 86, .37) !important;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 24, .86), rgba(4, 12, 18, .90)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    0 8px 18px rgba(0, 0, 0, .18) !important;
+}
+
+.dr-play-match-facts {
+  height: 76px !important;
+  border-top-color: rgba(119, 153, 171, .22) !important;
+  background:
+    linear-gradient(180deg, rgba(4, 15, 22, .70), rgba(3, 11, 17, .94)) !important;
+}
+
+.dr-play-match-facts > div {
+  padding: 0 clamp(12px, 1.4vw, 22px) !important;
+}
+
+.dr-play-role-panel {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(51, 97, 121, .075), transparent 52%),
+    linear-gradient(180deg, rgba(5, 17, 25, .97), rgba(3, 12, 18, .99)) !important;
+}
+
+.dr-play-role-grid {
+  min-height: 136px !important;
+  padding: 10px 14px 12px !important;
+}
+
+.dr-play-role-grid > button {
+  min-height: 108px !important;
+}
+
+.dr-play-action-row {
+  min-height: 76px !important;
+  padding: 8px 14px 0 !important;
+}
+
+.dr-play-find-match {
+  height: 60px !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 224, 137, .18), transparent 52%),
+    linear-gradient(180deg, rgba(133, 99, 48, .97), rgba(72, 53, 30, .99)) !important;
+}
+
+.dr-play-ready-card {
+  height: 54px !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-play-screen {
+    grid-template-columns: 250px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-modes {
+    padding-left: 10px !important;
+    padding-right: 9px !important;
+    gap: 8px !important;
+  }
+
+  .dr-play-mode-card {
+    min-height: 78px !important;
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    padding-left: 7px !important;
+    padding-right: 10px !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  .dr-play-mode-copy {
+    gap: 5px !important;
+  }
+
+  .dr-play-mode-copy strong {
+    font-size: 16px !important;
+  }
+
+  .dr-play-mode-copy em {
+    font-size: 8px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-modes {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    grid-template-rows: repeat(5, minmax(66px, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .dr-play-mode-card {
+    min-height: 66px !important;
+    grid-template-columns: 50px minmax(0, 1fr) !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .dr-play-modes blockquote {
+    display: none !important;
+  }
+
+  .dr-play-center {
+    padding-top: 7px !important;
+    padding-bottom: 8px !important;
+    grid-template-rows: minmax(220px, 1fr) auto auto !important;
+  }
+
+  .dr-play-match-facts {
+    height: 64px !important;
+  }
+
+  .dr-play-role-grid {
+    min-height: 112px !important;
+    padding-top: 7px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .dr-play-role-grid > button {
+    min-height: 90px !important;
+  }
+
+  .dr-play-action-row {
+    min-height: 66px !important;
+    padding-top: 5px !important;
+  }
+
+  .dr-play-find-match {
+    height: 52px !important;
+  }
+
+  .dr-play-ready-card {
+    height: 48px !important;
+  }
+}
+
+@media (max-width: 1120px) {
+  .dr-play-screen {
+    grid-template-columns: 218px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-mode-card {
+    grid-template-columns: 50px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 48px !important;
+    height: 48px !important;
+  }
+}
