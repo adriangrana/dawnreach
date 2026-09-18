@@ -657,11 +657,11 @@ export function mountGameMenu() {
     const exit = kind === 'exit';
     return `
       <div class="game-menu-panel game-menu-panel--confirm">
-        ${renderHeader(exit ? 'Salir del juego' : 'Abandonar partida', exit ? 'Dawnreach se cerrará por completo.' : 'Dejarás de controlar a tu héroe en esta sesión.', 'back-main')}
+        ${renderHeader(exit ? 'Salir del juego' : 'Abandonar partida', exit ? 'Primero abandonarás la partida activa y después se cerrará Dawnreach.' : 'Tu salida se confirmará con el servidor antes de volver al cliente.', 'back-main')}
         <div class="game-confirm-body">
           <div class="game-confirm-emblem">${exit ? '×' : '!'}</div>
           <h2>${exit ? '¿Cerrar Dawnreach?' : '¿Abandonar la partida actual?'}</h2>
-          <p>${exit ? 'Los ajustes ya aplicados permanecerán guardados.' : 'Esta acción marca la sesión local como abandonada. En una partida online, el runtime de red puede usar este evento para procesar desconexión, penalización o reconexión.'}</p>
+          <p>${exit ? 'Si estás en una partida online, Dawnreach notificará tu abandono al servidor antes de intentar cerrar el cliente. Los ajustes ya aplicados permanecerán guardados.' : 'Abandonar elimina tu sesión activa en el servidor. Si tu equipo se queda sin jugadores, la partida terminará inmediatamente.'}</p>
           <div class="game-confirm-actions">
             <button type="button" class="game-menu-button game-menu-button--ghost" data-action="back-main" data-menu-autofocus ${abandonPending ? 'disabled' : ''}>Cancelar</button>
             <button type="button" class="game-menu-button game-menu-button--danger" data-action="${exit ? 'confirm-exit' : 'confirm-abandon'}" ${abandonPending ? 'disabled' : ''}>${abandonPending ? 'Procesando…' : exit ? 'Salir del juego' : 'Abandonar partida'}</button>
