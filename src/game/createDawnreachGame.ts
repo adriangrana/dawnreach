@@ -8,7 +8,6 @@ import {
   registerAuthoredMapEntities,
   VISION_RANGES,
   type GameEntity,
-  type TeamId,
 } from './entities/gameEntities';
 import { calculateTowerAuraAdjustedDamage } from './entities/towerAuras';
 import {
