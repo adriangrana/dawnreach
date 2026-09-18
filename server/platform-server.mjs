@@ -1613,7 +1613,19 @@ export function createPlatformServer(options = {}) {
       ? remainingDawn.length ? 'blue' : remainingDusk.length ? 'red' : null
       : null;
 
-    runtimeRoom(active.id).delete(userId);
+    // Do not delete a leaver's runtime row while the match continues. Their hero becomes an
+    // idle world entity and remains targetable/killable from the canonical server snapshot.
+    // Removing the row here made a partial abandon corrupt the ongoing match because the other
+    // clients still rendered the hero while the server no longer knew it existed.
+    const abandoningRuntime = runtimeRoom(active.id).get(userId) || null;
+    if (abandoningRuntime) {
+      runtimeRoom(active.id).set(userId, {
+        ...abandoningRuntime,
+        moving: false,
+        sequence: Number(abandoningRuntime.sequence || 0) + 1,
+        sentAt: Date.now(),
+      });
+    }
 
     const updated = store.updateMatch(active.id, {
       abandonedUserIds,
