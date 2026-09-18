@@ -1288,16 +1288,41 @@ export function createPlatformServer(options = {}) {
     const active = store.activeMatchForUser(userId);
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para combatir creeps.');
     if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El daño pertenece a otra partida.');
+
     const source = active.players.find(candidate => candidate.userId === userId);
     if (!source) throw new Error('No participas en esta partida.');
 
-    const authorityUserId = runtimeAuthorityUserId(active);
-    if (!authorityUserId || authorityUserId === userId) return null;
     const creepId = String(payload?.creepId || '');
-    if (!/^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(creepId)) throw new Error('Creep de destino inválido.');
+    const idMatch = /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.exec(creepId);
+    if (!idMatch) throw new Error('Creep de destino inválido.');
+    if (idMatch[1] === source.team) throw new Error('No se permite daño aliado a creeps.');
+
     const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
     if (amount <= 0) return null;
 
+    const previous = matchRuntimeCreepStates.get(active.id);
+    const target = previous?.creeps?.find(creep => creep.id === creepId) || null;
+    if (!previous || !target || target.alive === false || Number(target.currentHp || 0) <= 0) return null;
+
+    const nextHp = Math.max(0, Number(target.currentHp || 0) - amount);
+    const nextCreep = {
+      ...target,
+      currentHp: nextHp,
+      alive: nextHp > 0,
+      moving: nextHp > 0 ? Boolean(target.moving) : false,
+    };
+    const snapshot = {
+      ...previous,
+      type: 'match.runtime.creeps',
+      matchId: active.id,
+      authorityUserId: runtimeAuthorityUserId(active),
+      sequence: Number(previous.sequence || 0) + 1,
+      sentAt: Date.now(),
+      creeps: previous.creeps.map(creep => creep.id === creepId ? nextCreep : creep),
+    };
+    matchRuntimeCreepStates.set(active.id, snapshot);
+
+    const simulatorUserId = runtimeAuthorityUserId(active);
     const event = {
       type: 'match.runtime.creep.damage',
       matchId: active.id,
@@ -1306,7 +1331,11 @@ export function createPlatformServer(options = {}) {
       amount,
       at: Date.now(),
     };
-    send(authorityUserId, event);
+
+    // The server owns HP/death. The simulation producer only mirrors the accepted hit into
+    // its local AI world so future movement/attack proposals continue from the same state.
+    if (simulatorUserId && simulatorUserId !== userId) send(simulatorUserId, event);
+    broadcast(runtimeCreepSnapshot(active.id), active.players.map(candidate => candidate.userId));
     return event;
   }
 
