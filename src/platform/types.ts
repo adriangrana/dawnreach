@@ -374,6 +374,7 @@ export type MatchRuntimePauseStateEvent = Readonly<{
   matchId: string;
   paused: boolean;
   pausedByUserId: string | null;
+  pausedByUsername?: string | null;
   revision: number;
   changedAt: number;
   accumulatedPauseMs: number;
