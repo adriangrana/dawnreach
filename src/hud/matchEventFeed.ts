@@ -160,14 +160,14 @@ function systemEventCopy(event: FeedSystemEvent) {
   if (event.type === 'match_paused') {
     return {
       icon: 'Ⅱ',
-      text: `${localPlayerLabel(event.actorPlayerId)} pausó la partida`,
+      text: `${event.actorDisplayName || localPlayerLabel(event.actorPlayerId)} pausó la partida`,
       team: 'neutral' as const,
     };
   }
   if (event.type === 'match_resumed') {
     return {
       icon: '▶',
-      text: `${localPlayerLabel(event.actorPlayerId)} reanudó la partida`,
+      text: `${event.actorDisplayName || localPlayerLabel(event.actorPlayerId)} reanudó la partida`,
       team: 'neutral' as const,
     };
   }
