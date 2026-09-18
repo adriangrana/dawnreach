@@ -108,15 +108,28 @@ export function applyAuthoritativeMatchPause(
   paused: boolean,
   pausedByPlayerId: string | null,
   changedAtMs = realNowMs(),
+  authoritativeAccumulatedPauseMs?: number,
 ) {
-  if (state.paused === paused) return;
+  const hasAuthoritativeAccumulated = Number.isFinite(authoritativeAccumulatedPauseMs);
+  const authoritativeAccumulated = hasAuthoritativeAccumulated
+    ? Math.max(0, Number(authoritativeAccumulatedPauseMs))
+    : null;
+
+  if (state.paused === paused) {
+    if (authoritativeAccumulated !== null) state.accumulatedPauseMs = authoritativeAccumulated;
+    if (paused) state.pausedByPlayerId = pausedByPlayerId;
+    return;
+  }
 
   if (paused) {
+    if (authoritativeAccumulated !== null) state.accumulatedPauseMs = authoritativeAccumulated;
     state.paused = true;
     state.pausedByPlayerId = pausedByPlayerId;
     state.pauseStartedAtMs = changedAtMs;
   } else {
-    if (state.pauseStartedAtMs !== null) {
+    if (authoritativeAccumulated !== null) {
+      state.accumulatedPauseMs = authoritativeAccumulated;
+    } else if (state.pauseStartedAtMs !== null) {
       state.accumulatedPauseMs += Math.max(0, changedAtMs - state.pauseStartedAtMs);
     }
     state.paused = false;
