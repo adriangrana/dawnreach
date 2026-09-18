@@ -56,6 +56,7 @@ export function buildPauseMatchEvent(
   paused: boolean,
   actorPlayerId: string | null,
   atMs: number,
+  actorDisplayName: string | null = null,
 ): MatchPauseMatchEvent {
   const type = paused ? 'match_paused' : 'match_resumed';
   const resolvedAtMs = finiteTime(atMs);
@@ -64,6 +65,7 @@ export function buildPauseMatchEvent(
     eventId: `${type}:${actorPlayerId ?? 'system'}:${resolvedAtMs.toFixed(3)}`,
     atMs: resolvedAtMs,
     actorPlayerId,
+    actorDisplayName,
   };
 }
 
