@@ -1040,6 +1040,20 @@ export default function App({
         }
       }
 
+      const structureTarget = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/.test(event.entityId);
+      if (
+        structureTarget
+        && authorityUserId !== localUser.id
+        && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID
+        && amount > 0
+      ) {
+        platformRealtime.send('match.runtime.structure.damage', {
+          matchId: onlineMatch.id,
+          structureId: event.entityId,
+          amount,
+        });
+      }
+
       if (
         authorityUserId !== localUser.id
         && event.entityId.startsWith('lane-creep:')
