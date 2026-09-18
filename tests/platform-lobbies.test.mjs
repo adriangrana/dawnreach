@@ -123,3 +123,74 @@ test('custom lobby requires both teams and every player ready before host can st
   assert.equal(snapshot.players.every(player => player.ready), true);
   assert.doesNotThrow(() => lobbies.start(host.id));
 }));
+
+
+test('custom lobby settings persist, reset ready on gameplay changes, and control public visibility', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'SettingsHost');
+  const guest = addUser(store, 'SettingsGuest');
+  const lobby = lobbies.create(host, 'Settings room', 'public');
+  lobbies.join(guest, lobby.code);
+
+  lobbies.setReady(host.id, true);
+  lobbies.setReady(guest.id, true);
+  lobbies.updateSettings(host.id, { heroSelect: 'draft', bans: '2', region: 'eu' });
+
+  let snapshot = lobbies.lobbyForUser(host.id);
+  assert.equal(snapshot.settings.heroSelect, 'draft');
+  assert.equal(snapshot.settings.bans, '2');
+  assert.equal(snapshot.settings.region, 'eu');
+  assert.equal(snapshot.players.some(player => player.ready), false);
+
+  lobbies.updateSettings(host.id, { privacy: 'private' });
+  snapshot = lobbies.lobbyForUser(host.id);
+  assert.equal(snapshot.settings.privacy, 'private');
+  assert.equal(snapshot.privacy, 'private');
+  assert.equal(lobbies.listPublic().some(candidate => candidate.id === lobby.id), false);
+
+  lobbies.updateSettings(host.id, { privacy: 'public', teamSize: 2 });
+  snapshot = lobbies.lobbyForUser(host.id);
+  assert.equal(snapshot.settings.teamSize, 2);
+  assert.equal(snapshot.maxPlayers, 4);
+  assert.ok(lobbies.listPublic().some(candidate => candidate.id === lobby.id));
+}));
+
+test('custom lobby spectators have dedicated slots, do not block ready, and cannot read TEAM chat', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'SpectatorHost');
+  const player = addUser(store, 'SpectatorPlayer');
+  const watcher = addUser(store, 'SpectatorWatcher');
+
+  const lobby = lobbies.create(host, 'Spectator room', 'public');
+  lobbies.join(player, lobby.code);
+  lobbies.join(watcher, lobby.code);
+
+  lobbies.spectate(watcher.id);
+  let watcherView = lobbies.lobbyForUser(watcher.id);
+  assert.equal(watcherView.spectators.length, 1);
+  assert.equal(watcherView.spectators[0].userId, watcher.id);
+  assert.equal(watcherView.players.some(candidate => candidate.userId === watcher.id), false);
+
+  lobbies.sendMessage(host.id, 'Dawn secret', 'team');
+  lobbies.sendMessage(player.id, 'Public hello', 'all');
+  watcherView = lobbies.lobbyForUser(watcher.id);
+  assert.equal(watcherView.messages.some(message => message.text === 'Dawn secret'), false);
+  assert.ok(watcherView.messages.some(message => message.text === 'Public hello'));
+
+  lobbies.setReady(host.id, true);
+  lobbies.setReady(player.id, true);
+  assert.doesNotThrow(() => lobbies.start(host.id));
+}));
+
+test('custom lobby host can disable spectators only when no spectators are present', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'SpectatorToggleHost');
+  const guest = addUser(store, 'SpectatorToggleGuest');
+  const lobby = lobbies.create(host, 'Spectator toggle', 'public');
+  lobbies.join(guest, lobby.code);
+
+  lobbies.spectate(guest.id);
+  assert.throws(() => lobbies.updateSettings(host.id, { allowSpectators: false }), /alguien observando/);
+
+  lobbies.move(guest.id, 'red', 0);
+  lobbies.updateSettings(host.id, { allowSpectators: false });
+  assert.equal(lobbies.lobbyForUser(host.id).settings.allowSpectators, false);
+  assert.throws(() => lobbies.spectate(guest.id), /no permite espectadores/);
+}));
