@@ -429,11 +429,15 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
     return { ...runtime, match, nowMs, feedback: `${control.ability.name}: no disponible mientras estás muerto.` };
   }
   if (!control.canUse || control.rank <= 0) {
+    const unspent = getUnspentHeroAbilityPoints(match, castingHero.heroEntityId);
+    const blocked = control.rank <= 0 && unspent > 0
+      ? 'sin aprender · usa el botón + para asignarle un punto'
+      : control.blockedReason ?? 'no disponible';
     return {
       ...runtime,
       match,
       nowMs,
-      feedback: `${control.ability.name}: ${control.blockedReason ?? 'no disponible'}`,
+      feedback: `${control.ability.name}: ${blocked}`,
     };
   }
   const nextMatch = useHeroAbility(match, LOCAL_HERO_ENTITY_ID, action.key, nowMs);
