@@ -489,6 +489,13 @@ export function HeroSelectScreen({
       <BansStrip side="ally" count={state.bansPerTeam} />
 
       <div className="dr-hero-select-phase">
+        <img
+          className="dr-hero-select-phase-ornament"
+          src="/assets/images/filigrana_dorada_simetrica_sobre_transparente.webp"
+          alt=""
+          draggable={false}
+          aria-hidden="true"
+        />
         <strong>{title}</strong>
         <small>{state.phase === 'complete' ? 'SELECTION COMPLETE' : 'PICK PHASE'}</small>
         <time>{state.phase === 'complete' ? '00:00' : formatClock(state.expiresAt - now)}</time>
