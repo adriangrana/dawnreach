@@ -907,7 +907,8 @@ export function createVisionSystem(
   const isPointVisible = (point: VisionPoint, y = 0) => isPointVisibleAgainst(getSources(), point, y);
 
   const isEntityVisibleAgainst = (entity: GameEntity, sources: readonly GameEntity[]) => {
-    if (!entity.alive) return false;
+    // Hero corpses are public information and remain rendered for every player until respawn.
+    if (!entity.alive) return entity.kind === 'hero';
     if (entity.team === team) return true;
     if (entity.visibilityPolicy === 'always') return true;
     entity.root.getWorldPosition(targetPosition);
