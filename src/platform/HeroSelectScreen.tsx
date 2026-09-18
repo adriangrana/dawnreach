@@ -1,9 +1,12 @@
 import {
   Check,
+  LogOut,
   LockKeyhole,
   Search,
   Send,
   Swords,
+  TriangleAlert,
+  X,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -433,6 +436,9 @@ export function HeroSelectScreen({
   });
   const [search, setSearch] = useState('');
   const [abilityTooltip, setAbilityTooltip] = useState<{ ability: AbilityTooltipDefinition; anchor: DOMRect } | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
 
   const meState = state.players.find(player => player.userId === me.id) ?? null;
   const myTeam = meState?.team ?? 'blue';
@@ -458,6 +464,29 @@ export function HeroSelectScreen({
     if (!meState || meState.selection.heroId || !selectedHeroId || meState.selection.locked || state.phase === 'complete') return;
     platformRealtime.send('hero_select.preview', { heroId: selectedHeroId });
   }, [meState, selectedHeroId, state.phase]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (leaveConfirmOpen) {
+        setLeaveConfirmOpen(false);
+        setLeaveError('');
+      } else {
+        setLeaveConfirmOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [leaveConfirmOpen]);
+
+  const leaveHeroSelect = () => {
+    setLeaveError('');
+    setLeaving(true);
+    if (!platformRealtime.send('hero_select.cancel')) {
+      setLeaving(false);
+      setLeaveError('Realtime connection unavailable. Could not leave Hero Select.');
+    }
+  };
 
   const chooseHero = (heroId: string) => {
     if (isLocked || state.phase === 'complete') return;
@@ -506,6 +535,17 @@ export function HeroSelectScreen({
         <span>DIFFERENT HEROES.</span>
         <strong>A BRIGHTER TOMORROW.</strong>
       </div>
+
+      <button
+        type="button"
+        className="dr-hero-select-exit-trigger"
+        onClick={() => { setLeaveError(''); setLeaveConfirmOpen(true); }}
+        aria-label="Leave Hero Select"
+      >
+        <LogOut />
+        <span>LEAVE</span>
+        <kbd>ESC</kbd>
+      </button>
     </header>
 
     <section className="dr-hero-select-body">
@@ -599,5 +639,49 @@ export function HeroSelectScreen({
         <strong>NEW LEGENDS.</strong>
       </aside>
     </footer>
+
+    {leaveConfirmOpen && createPortal(
+      <div className="dr-hero-select-leave-backdrop" role="presentation" onMouseDown={event => {
+        if (event.target === event.currentTarget && !leaving) {
+          setLeaveConfirmOpen(false);
+          setLeaveError('');
+        }
+      }}>
+        <section className="dr-hero-select-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="hero-select-leave-title">
+          <button
+            type="button"
+            className="dr-hero-select-leave-close"
+            onClick={() => { if (!leaving) { setLeaveConfirmOpen(false); setLeaveError(''); } }}
+            aria-label="Close"
+            disabled={leaving}
+          >
+            <X />
+          </button>
+          <div className="dr-hero-select-leave-icon"><TriangleAlert /></div>
+          <small>{state.match.source === 'custom' ? 'CUSTOM MATCH' : state.match.mode === 'ranked' ? 'RANKED MATCH' : 'NORMAL MATCH'}</small>
+          <h2 id="hero-select-leave-title">LEAVE HERO SELECT?</h2>
+          <p>{state.match.source === 'custom'
+            ? 'The current launch will be cancelled. The other players will return to the custom lobby and you will leave that lobby.'
+            : 'Leaving now cancels this match for every player. You will return to the Play screen.'}</p>
+          {state.match.mode === 'ranked' && <p className="dr-hero-select-leave-warning">Competitive abandonment penalties can be applied here once the penalty system is enabled.</p>}
+          {leaveError && <p className="dr-hero-select-leave-error">{leaveError}</p>}
+          <div className="dr-hero-select-leave-actions">
+            <button
+              type="button"
+              className="is-cancel"
+              disabled={leaving}
+              onClick={() => { setLeaveConfirmOpen(false); setLeaveError(''); }}
+            >
+              STAY
+            </button>
+            <button type="button" className="is-leave" disabled={leaving} onClick={leaveHeroSelect}>
+              <LogOut />
+              {leaving ? 'LEAVING…' : state.match.source === 'custom' ? 'LEAVE LOBBY' : 'ABANDON MATCH'}
+            </button>
+          </div>
+        </section>
+      </div>,
+      document.body,
+    )}
   </main>;
 }
