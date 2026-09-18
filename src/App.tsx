@@ -723,33 +723,47 @@ function TeamPortraits({ team, side, localRespawn }: {
 
 function ReconnectGraceBanner({ state }: { state: MatchConnectionPresentation }) {
   const [wallClockMs, setWallClockMs] = useState(() => Date.now());
+  const hasDisconnectedPlayers = state.disconnectedPlayers.length > 0;
+  const graceActive = state.mode !== 'cleared' && state.deadlineAt !== null;
 
   useEffect(() => {
     setWallClockMs(Date.now());
-    if (state.mode === 'cleared' || state.deadlineAt === null) return;
+    if (!graceActive) return;
     const timer = window.setInterval(() => setWallClockMs(Date.now()), 250);
     return () => window.clearInterval(timer);
-  }, [state.mode, state.deadlineAt]);
+  }, [graceActive, state.deadlineAt]);
 
-  if (state.mode === 'cleared' || state.deadlineAt === null) return null;
-  const remainingSeconds = Math.max(0, Math.ceil((state.deadlineAt - wallClockMs) / 1000));
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  const countdown = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  // Announce isolated disconnects too. The terminal 60-second countdown only applies when
+  // an entire team, or every remaining player, is offline.
+  if (!hasDisconnectedPlayers && !graceActive) return null;
+
+  const remainingSeconds = graceActive
+    ? Math.max(0, Math.ceil(((state.deadlineAt ?? wallClockMs) - wallClockMs) / 1000))
+    : null;
+  const countdown = remainingSeconds === null
+    ? null
+    : `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`;
   const names = state.disconnectedPlayers.map(player => player.username).filter(Boolean);
   const playerText = names.length > 0 ? names.join(', ') : 'Jugadores desconectados';
+  const title = state.mode === 'all'
+    ? 'TODOS DESCONECTADOS'
+    : state.mode === 'team'
+      ? 'RECONEXIÓN EN CURSO'
+      : 'JUGADOR DESCONECTADO';
   const message = state.mode === 'all'
     ? `${playerText}. La partida se cancelará sin puntuar si nadie vuelve.`
-    : `${playerText}. El equipo ${state.team === 'blue' ? 'Dawn' : 'Dusk'} debe reconectarse antes de que termine el contador.`;
+    : state.mode === 'team'
+      ? `${playerText}. El equipo ${state.team === 'blue' ? 'Dawn' : 'Dusk'} debe reconectarse antes de que termine el contador.`
+      : `${playerText}. La partida continúa mientras su equipo conserve jugadores conectados.`;
 
   return (
     <aside className="reconnect-grace-banner" role="status" aria-live="polite">
       <WifiOff />
       <span>
-        <strong>{state.mode === 'all' ? 'TODOS DESCONECTADOS' : 'RECONEXIÓN EN CURSO'}</strong>
+        <strong>{title}</strong>
         <em>{message}</em>
       </span>
-      <b>{countdown}</b>
+      {countdown && <b>{countdown}</b>}
     </aside>
   );
 }
