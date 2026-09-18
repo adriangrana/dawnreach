@@ -1040,6 +1040,7 @@ export function createPlatformServer(options = {}) {
       authorityUserId,
       sequence,
       sentAt: Date.now(),
+      elapsedSeconds: Math.max(0, Math.min(86400, finite(payload?.elapsedSeconds, previous?.elapsedSeconds || 0))),
       creeps,
     };
     matchRuntimeCreepStates.set(active.id, snapshot);
