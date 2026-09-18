@@ -33,7 +33,13 @@ export class HeroSelectManager {
   begin(match) {
     const teamSize = Math.max(1, Math.min(5, Number(match.customSettings?.teamSize || Math.floor(match.players.length / 2) || 5)));
     const selectionType = match.customSettings?.heroSelect === 'draft' || match.mode === 'ranked' ? 'draft' : 'all_pick';
-    const bansPerTeam = match.customSettings?.bans === '4' ? 4 : match.customSettings?.bans === '2' ? 2 : 0;
+    const bansPerTeam = match.customSettings?.bans === '4'
+      ? 4
+      : match.customSettings?.bans === '2'
+        ? 2
+        : match.mode === 'ranked'
+          ? 3
+          : 0;
     const heroIds = [...this.options.heroIds];
     const rosterDevelopmentMode = heroIds.length < teamSize;
     const session = {
