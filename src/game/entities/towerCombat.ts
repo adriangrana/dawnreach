@@ -711,7 +711,7 @@ function updateProjectiles(
   for (let index = state.projectiles.length - 1; index >= 0; index--) {
     const projectile = state.projectiles[index];
     const target = projectile.target;
-    if (!target || !target.alive || target.currentHp <= 0) {
+    if (!target || !target.root.parent || !target.alive || target.currentHp <= 0) {
       releaseProjectile(projectile);
       state.projectiles.splice(index, 1);
       continue;
