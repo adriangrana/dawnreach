@@ -171,6 +171,11 @@ export function HeroSelectScreen({
     if (meState?.selection.heroId) setSelectedHeroId(meState.selection.heroId);
   }, [meState?.selection.heroId]);
 
+  useEffect(() => {
+    if (!meState || meState.selection.heroId || !selectedHeroId || meState.selection.locked || state.phase === 'complete') return;
+    platformRealtime.send('hero_select.preview', { heroId: selectedHeroId });
+  }, [meState, selectedHeroId, state.phase]);
+
   const chooseHero = (heroId: string) => {
     if (isLocked || state.phase === 'complete') return;
     setSelectedHeroId(heroId);
