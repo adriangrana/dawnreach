@@ -968,6 +968,18 @@ export function createPlatformServer(options = {}) {
     };
 
     runtimeRoom(active.id).set(userId, state);
+    if (serverRespawned) {
+      combatLocks.set(userId, {
+        ...(combatLock || {}),
+        hpCeiling: state.currentHp,
+        until: now + 1500,
+        deadUntil: null,
+        pendingLethal: false,
+        respawnSeconds: null,
+        serverResolved: true,
+        respawnGuard: true,
+      });
+    }
     const recipients = active.players.map(candidate => candidate.userId);
     broadcast({
       type: 'match.runtime.state',
