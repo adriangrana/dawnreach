@@ -13,6 +13,7 @@ import {
   createDawnreachGame,
   type DawnreachCreepNetworkSnapshot,
   type DawnreachRemoteHeroState,
+  type DawnreachStructureNetworkSnapshot,
 } from './game/createDawnreachGame';
 import {
   publishWorldEntityRuntime,
