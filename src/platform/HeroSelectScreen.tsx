@@ -582,7 +582,7 @@ export function HeroSelectScreen({
             <img src={HERO_SELECTION_ART[heroId] || HERO_FOCUS_ART[heroId]} alt="" draggable={false} />
             <span>{HERO_NAMES[heroId] || heroId}</span>
           </button>)}
-          {Array.from({ length: Math.max(0, 8 - filteredHeroes.length) }, (_, index) => <div className="dr-hero-select-roster-placeholder" key={index}><Shield /><span>COMING SOON</span></div>)}
+          {Array.from({ length: Math.max(0, 20 - filteredHeroes.length) }, (_, index) => <div className="dr-hero-select-roster-placeholder" key={index}><Shield /><span>COMING SOON</span></div>)}
         </div>
       </section>
 
