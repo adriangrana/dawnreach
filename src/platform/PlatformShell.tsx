@@ -266,12 +266,29 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setNotice('You left the match.');
       }
       if (type === 'match.ended' && 'match' in event && event.match) {
+        const endedMatch = event.match as ActiveMatchSession['match'];
+        const localTeam = endedMatch.players.find(player => player.userId === user.id)?.team ?? null;
+        const winnerTeam = 'winnerTeam' in event && (event.winnerTeam === 'blue' || event.winnerTeam === 'red')
+          ? event.winnerTeam
+          : null;
+        const voided = 'voided' in event && event.voided === true;
+        const reason = 'reason' in event ? String(event.reason || '') : '';
+
         setHeroSelect(null);
         setActiveMatch(null);
         setSharedGameVisible(false);
         setCurrentLobby(null);
         setSection('home');
-        setNotice('The match has ended.');
+
+        if (voided || reason === 'all_disconnected_timeout' || reason === 'all_players_abandoned') {
+          setNotice('Match cancelled. No result was recorded.');
+        } else if (winnerTeam && localTeam) {
+          setNotice(winnerTeam === localTeam
+            ? 'Victory. The opposing team left or failed to reconnect.'
+            : 'Defeat. Your team left or failed to reconnect.');
+        } else {
+          setNotice('The match has ended.');
+        }
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
         setActiveMatch(event.activeMatch as ActiveMatchSession);
