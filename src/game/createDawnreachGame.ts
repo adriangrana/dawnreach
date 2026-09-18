@@ -1010,10 +1010,14 @@ export async function createDawnreachGame(
     });
 
     const networkRemoteHero = target.kind === 'hero' && target.root.userData.networkRemoteHero === true;
-    if (networkRemoteHero) {
-      // Remote hero HP is owned by the target client/server reconciliation. Emit the hit
-      // immediately for networking/combat text, but never predict a remote death locally:
-      // that was the source of HP rollback and duplicate/false kill feed rows.
+    const networkRemoteStructure = creepNetworkMode === 'replica'
+      && (target.kind === 'tower' || target.kind === 'building')
+      && target.interaction === 'attackable-structure';
+
+    if (networkRemoteHero || networkRemoteStructure) {
+      // Remote heroes and shared structures are owned by their multiplayer authority.
+      // Emit the requested damage, but do not predict HP/death locally or a later
+      // authoritative snapshot can visibly resurrect the target.
       emitWorldCombatEvent({
         entityId: target.id,
         reason: 'damage',
