@@ -1533,6 +1533,11 @@ export async function createDawnreachGame(
 
     for (const remote of remoteHeroes.values()) {
       const root = remote.rig.root;
+      // Network packets must never bypass fog-of-war. The vision system owns "revealed";
+      // the render loop enforces it every frame so a remote state/respawn packet cannot
+      // make an enemy visible outside allied vision.
+      root.visible = remote.entity.team === localTeam
+        || (remote.entity.alive && remote.entity.revealed);
 
       if (!remote.entity.alive || remote.entity.currentHp <= 0) {
         remote.moving = false;
@@ -1679,7 +1684,7 @@ export async function createDawnreachGame(
       remote.entity.root.userData.alive = remote.entity.alive;
 
       if (!remote.entity.alive) {
-        remote.entity.root.visible = true;
+        remote.entity.root.visible = remote.entity.team === localTeam;
         remote.rig.model.visible = true;
         remote.rig.model.rotation.x = -Math.PI * 0.48;
       } else {
