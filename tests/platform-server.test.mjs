@@ -614,6 +614,98 @@ test('server serialization rejects late attacks from a hero already confirmed de
   });
 });
 
+test('server respawns a dead hero at its captured spawn and rejects a stale corpse packet', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-server-respawn',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'respawn-blue', username: 'Respawn Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'respawn-red', username: 'Respawn Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'respawn-blue': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'respawn-red': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+    platform.store.addMatch(match);
+
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 1,
+      position: { x: -12, y: 5.28, z: -20 },
+      yaw: 0,
+      moving: false,
+      currentHp: 50,
+      maxHp: 700,
+      currentResource: 120,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('respawn-red', {
+      matchId: match.id,
+      sequence: 1,
+      position: { x: -10, y: 5.28, z: -20 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+
+    platform.reportMatchRuntimeCombat('respawn-red', {
+      matchId: match.id,
+      targetUserId: 'respawn-blue',
+      reason: 'damage',
+      amount: 100,
+    });
+    let blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'respawn-blue');
+    assert.equal(blue.alive, false);
+    assert.equal(blue.currentHp, 0);
+    assert.equal(blue.deaths, 1);
+
+    await wait(60);
+    blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'respawn-blue');
+    assert.equal(blue.alive, true);
+    assert.equal(blue.currentHp, 700);
+    assert.equal(blue.currentResource, 300);
+    assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
+
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 99,
+      position: { x: 3, y: 0, z: 4 },
+      yaw: 2,
+      moving: false,
+      currentHp: 0,
+      maxHp: 700,
+      currentResource: 120,
+      maxResource: 300,
+      level: 1,
+      alive: false,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'respawn-blue');
+    assert.equal(blue.alive, true);
+    assert.equal(blue.currentHp, 700);
+    assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
+    assert.equal(blue.deaths, 1);
+  }, { heroRespawnBaseSeconds: 0.02, heroRespawnPerLevelSeconds: 0 });
+});
+
 test('server keeps creep and structure HP canonical against stale simulator snapshots', async () => {
   await withServer(async ({ platform }) => {
     const match = {
