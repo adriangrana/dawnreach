@@ -17,7 +17,7 @@ import { mountGameMenu } from '../hud/gameMenu';
 import { mountGameMenuQuickKeys } from '../hud/gameMenuQuickKeys';
 import { mountGameplayKeybindBridge } from '../hud/gameplayKeybindBridge';
 import { mountHeroFunctionKeyControls } from '../hud/heroFunctionKeyControls';
-import { mountInGameChat } from '../hud/inGameChat';
+import { mountInGameChat, type InGameChatRuntimeOptions } from '../hud/inGameChat';
 import { mountInventoryControls } from '../hud/inventoryControls';
 import { mountMatchEventBanner } from '../hud/matchEventBanner';
 import { mountMatchEventFeed } from '../hud/matchEventFeed';
@@ -34,7 +34,9 @@ import { mountTowerPortraitAssets } from '../hud/towerPortraitAssets';
  * Owns all imperative in-match runtimes. Keeping this lifecycle out of main.tsx prevents gameplay
  * hotkeys, chat, menus and world subscriptions from leaking into Login/Home or future Hero Select.
  */
-export function mountGameClientRuntime() {
+export type GameClientRuntimeOptions = InGameChatRuntimeOptions;
+
+export function mountGameClientRuntime(options: GameClientRuntimeOptions = {}) {
   const disposers: Array<() => void> = [];
   const own = (dispose: unknown) => {
     if (typeof dispose === 'function') disposers.push(dispose as () => void);
@@ -52,7 +54,7 @@ export function mountGameClientRuntime() {
   own(mountMatchEventFeed());
   own(mountMatchEventBanner());
   // Chat capture listeners intentionally mount before gameplay key handlers.
-  own(mountInGameChat());
+  own(mountInGameChat(options));
   own(mountAldenAudioRuntime());
   own(mountGameMenuQuickKeys());
   own(mountGameMenu());
