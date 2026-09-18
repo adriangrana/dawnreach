@@ -1659,14 +1659,22 @@ export async function createDawnreachGame(
     }
 
     // Apply authoritative ability mechanics/poses after locomotion so Q/R transforms are not
-    // overwritten by the generic walk/attack animation. Premium presentation is VFX-only here:
-    // worldAbilityRuntime owns the authored character pose, while the presentation layer restores
-    // the golden feathered effects that were previously installed only through a renderer hook.
+    // overwritten by the generic walk/attack animation. Remote hero transforms are exclusively
+    // network-owned: preserve the freshly interpolated positions across every local ability/VFX
+    // layer so Alden's Q dash (or any future presentation code) can never drag another player's
+    // replica on this client.
+    const remotePositionsBeforeAbilityFx = Array.from(remoteHeroes.values(), remote => [
+      remote,
+      remote.rig.root.position.clone(),
+    ] as const);
     const abilityFrameNowMs = toMatchGameTimeMs(performance.now());
     aldenAbilityRuntime?.update(abilityFrameNowMs);
     aldenAbilityPresentation?.update(abilityFrameNowMs, false);
     aldenAbilityEdgePolish?.update();
     aldenLineVfxPolish?.update();
+    for (const [remote, position] of remotePositionsBeforeAbilityFx) {
+      if (remote.rig.root.parent) remote.rig.root.position.copy(position);
+    }
 
     for (const marker of [targetMarker, attackMarker]) {
       if (!marker.visible) continue;
