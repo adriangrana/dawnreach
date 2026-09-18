@@ -221,8 +221,16 @@ test('hero select completion hands the match to loading with per-player progress
 });
 
 
-test('abandoning the last player on a team ends the active match and clears reconnect state', async () => {
-  await withServer(async ({ platform }) => {
+test('abandoning the last player on a team awards a connected surviving team', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AbandonBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'AbandonRed', password: 'Iron!Crown42' }),
+    });
     const match = {
       id: 'abandon-1v1',
       mode: 'normal',
@@ -232,28 +240,33 @@ test('abandoning the last player on a team ends the active match and clears reco
       createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
       players: [
-        { userId: 'blue-player', username: 'Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
-        { userId: 'red-player', username: 'Red', rating: 1000, joinedAt: 1, team: 'red', slot: 5 },
+        { userId: blue.body.user.id, username: 'AbandonBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'AbandonRed', rating: 1000, joinedAt: 1, team: 'red', slot: 5 },
       ],
       resultToken: 'secret',
       mapSha256: null,
       heroSelections: {
-        'blue-player': { heroId: 'H001', locked: true, lockedAt: Date.now() },
-        'red-player': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        [blue.body.user.id]: { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        [red.body.user.id]: { heroId: 'H001', locked: true, lockedAt: Date.now() },
       },
     };
 
     platform.store.addMatch(match);
-    const ended = platform.abandonActiveMatch('blue-player');
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+
+    const ended = platform.abandonActiveMatch(blue.body.user.id);
 
     assert.equal(ended.status, 'completed');
     assert.equal(ended.endReason, 'team_abandonment');
     assert.equal(ended.winnerTeam, 'red');
-    assert.deepEqual(ended.abandonedUserIds, ['blue-player']);
-    assert.equal(platform.store.activeMatchForUser('blue-player'), null);
-    assert.equal(platform.store.activeMatchForUser('red-player'), null);
+    assert.deepEqual(ended.abandonedUserIds, [blue.body.user.id]);
+    assert.equal(platform.store.activeMatchForUser(blue.body.user.id), null);
+    assert.equal(platform.store.activeMatchForUser(red.body.user.id), null);
+    redSocket.destroy();
   });
 });
+
 
 test('one abandonment in a multi-player team leaves the match active for everyone else', async () => {
   await withServer(async ({ platform }) => {
