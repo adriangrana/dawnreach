@@ -526,6 +526,7 @@ export function mountGameMenu() {
   let activeKeybind: string | null = null;
   let statusMessage = '';
   let abandoned = false;
+  let abandonPending = false;
 
   const publishOpenState = () => {
     document.body.dataset[MENU_OPEN_DATASET_KEY] = String(open);
@@ -670,14 +671,14 @@ export function mountGameMenu() {
 
   const renderAbandoned = () => `
     <div class="game-menu-panel game-menu-panel--confirm game-menu-panel--abandoned">
-      ${renderHeader('Partida abandonada', 'La sesión de juego local ha quedado cerrada.')}
+      ${renderHeader('Partida abandonada', 'La sesión online ha quedado cerrada.')}
       <div class="game-confirm-body">
         <div class="game-confirm-emblem">✓</div>
         <h2>Has abandonado la partida</h2>
-        <p>Dawnreach ha publicado el evento de abandono para que el runtime de sesión pueda procesarlo. El campo de batalla queda bloqueado en este cliente.</p>
+        <p>El servidor confirmó tu salida. Ya puedes volver al cliente o cerrar Dawnreach.</p>
         <div class="game-confirm-actions">
-          <button type="button" class="game-menu-button game-menu-button--ghost" data-action="restart-local" data-menu-autofocus>Reiniciar cliente local</button>
-          <button type="button" class="game-menu-button game-menu-button--danger" data-action="confirm-exit">Salir del juego</button>
+          <button type="button" class="game-menu-button game-menu-button--ghost" data-action="restart-local" data-menu-autofocus>Volver al cliente</button>
+          <button type="button" class="game-menu-button game-menu-button--danger" data-action="confirm-exit-local">Salir del juego</button>
         </div>
       </div>
     </div>`;
@@ -791,15 +792,16 @@ export function mountGameMenu() {
       });
     } else if (action === 'open-support') {
       window.open(SUPPORT_URL, '_blank', 'noopener,noreferrer');
-    } else if (action === 'confirm-exit') {
+    } else if (action === 'confirm-exit-local') {
       void closeApplication();
-    } else if (action === 'confirm-abandon') {
-      abandoned = true;
-      view = 'abandoned';
+    } else if (action === 'confirm-exit') {
       window.dispatchEvent(new CustomEvent(MATCH_ABANDON_REQUEST_EVENT, {
-        detail: { abandonedAtMs: performance.now(), reason: 'player-menu' },
+        detail: { abandonedAtMs: performance.now(), reason: 'exit-game', closeAfter: true },
       }));
-      render();
+    } else if (action === 'confirm-abandon') {
+      window.dispatchEvent(new CustomEvent(MATCH_ABANDON_REQUEST_EVENT, {
+        detail: { abandonedAtMs: performance.now(), reason: 'player-menu', closeAfter: false },
+      }));
     } else if (action === 'restart-local') {
       window.location.reload();
     }
@@ -890,6 +892,24 @@ export function mountGameMenu() {
     }
   };
 
+  const onAbandonConfirmed = () => {
+    abandoned = true;
+    abandonPending = false;
+    view = 'abandoned';
+    render();
+  };
+
+  const onAbandonFailed = (event: Event) => {
+    abandonPending = false;
+    const detail = (event as CustomEvent<{ message?: string }>).detail;
+    statusMessage = detail?.message || 'No se pudo abandonar la partida.';
+    view = 'main';
+    render();
+  };
+
+  window.addEventListener('dawnreach:match-abandon-confirmed', onAbandonConfirmed);
+  window.addEventListener('dawnreach:match-abandon-failed', onAbandonFailed as EventListener);
+
   root.addEventListener('click', onClick);
   root.addEventListener('input', onInput);
   root.addEventListener('change', onChange);
@@ -898,6 +918,8 @@ export function mountGameMenu() {
   publishOpenState();
 
   return () => {
+    window.removeEventListener('dawnreach:match-abandon-confirmed', onAbandonConfirmed);
+    window.removeEventListener('dawnreach:match-abandon-failed', onAbandonFailed as EventListener);
     root?.removeEventListener('click', onClick);
     root?.removeEventListener('input', onInput);
     root?.removeEventListener('change', onChange);
