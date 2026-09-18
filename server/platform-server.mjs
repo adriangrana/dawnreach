@@ -23,6 +23,8 @@ export function createPlatformServer(options = {}) {
   const rateLimiter = new AuthRateLimiter(config.auth);
   const peersByUser = new Map();
   const matchRuntimeStates = new Map();
+  const matchRuntimeCreepStates = new Map();
+  let matchChatSequence = 0;
 
   function isOnline(userId) {
     return peersByUser.has(userId);
@@ -117,7 +119,30 @@ export function createPlatformServer(options = {}) {
 
   function runtimeSnapshot(matchId) {
     const room = matchRuntimeStates.get(matchId);
-    return room ? [...room.values()].map(state => ({ ...state, position: { ...state.position } })) : [];
+    return room ? [...room.values()].map(state => ({
+      ...state,
+      position: { ...state.position },
+      inventory: Array.isArray(state.inventory) ? state.inventory.map(item => ({ ...item })) : [],
+    })) : [];
+  }
+
+  function runtimeAuthorityUserId(match) {
+    const abandoned = new Set(match?.abandonedUserIds || []);
+    return [...(match?.players || [])]
+      .filter(player => !abandoned.has(player.userId))
+      .sort((left, right) => {
+        const teamOrder = (left.team === 'blue' ? 0 : 1) - (right.team === 'blue' ? 0 : 1);
+        return teamOrder || Number(left.slot || 0) - Number(right.slot || 0) || String(left.userId).localeCompare(String(right.userId));
+      })[0]?.userId || null;
+  }
+
+  function runtimeCreepSnapshot(matchId) {
+    const snapshot = matchRuntimeCreepStates.get(matchId);
+    if (!snapshot) return null;
+    return {
+      ...snapshot,
+      creeps: snapshot.creeps.map(creep => ({ ...creep, position: { ...creep.position } })),
+    };
   }
 
   function reportMatchRuntimeState(userId, payload) {
@@ -134,6 +159,18 @@ export function createPlatformServer(options = {}) {
 
     const previous = runtimeRoom(active.id).get(userId);
     const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const inventory = Array.isArray(payload?.inventory)
+      ? payload.inventory.slice(0, 7).map((item, index) => {
+        const raw = item && typeof item === 'object' ? item : {};
+        return {
+          slot: Math.max(0, Math.min(6, Math.floor(finite(raw.slot, index)))),
+          definitionId: String(raw.definitionId || '').slice(0, 64),
+          displayName: String(raw.displayName || '').slice(0, 80),
+          quantity: Math.max(1, Math.min(99, Math.floor(finite(raw.quantity, 1)))),
+        };
+      }).filter(item => item.definitionId)
+      : (previous?.inventory || []);
+    const nonNegativeCounter = (value, fallback = 0) => Math.max(0, Math.min(999999, Math.floor(finite(value, fallback))));
     const state = {
       userId,
       username: player.username,
@@ -154,6 +191,13 @@ export function createPlatformServer(options = {}) {
       maxResource: clamp(payload?.maxResource, 0, 100000),
       level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, 1)))),
       alive: payload?.alive !== false,
+      kills: nonNegativeCounter(payload?.kills, previous?.kills),
+      deaths: nonNegativeCounter(payload?.deaths, previous?.deaths),
+      assists: nonNegativeCounter(payload?.assists, previous?.assists),
+      lastHits: nonNegativeCounter(payload?.lastHits, previous?.lastHits),
+      denies: nonNegativeCounter(payload?.denies, previous?.denies),
+      gold: nonNegativeCounter(payload?.gold, previous?.gold),
+      inventory,
       sentAt: Date.now(),
     };
 
@@ -179,6 +223,11 @@ export function createPlatformServer(options = {}) {
     const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
     if (amount <= 0) return null;
     const reason = payload?.reason === 'heal' ? 'heal' : 'damage';
+    const requestedSourceEntityId = String(payload?.sourceEntityId || '');
+    const authorityUserId = runtimeAuthorityUserId(active);
+    const sourceEntityId = userId === authorityUserId && /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(requestedSourceEntityId)
+      ? requestedSourceEntityId
+      : `player:${userId}:hero`;
 
     const room = runtimeRoom(active.id);
     const targetRuntime = room.get(target.userId);
@@ -200,6 +249,7 @@ export function createPlatformServer(options = {}) {
       matchId: active.id,
       sourceUserId: source.userId,
       sourceUsername: source.username,
+      sourceEntityId,
       targetUserId: target.userId,
       targetUsername: target.username,
       reason,
@@ -208,6 +258,123 @@ export function createPlatformServer(options = {}) {
     };
     broadcast(event, [source.userId, target.userId]);
     return event;
+  }
+
+  function reportMatchRuntimeCreeps(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para sincronizar creeps.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La oleada pertenece a otra partida.');
+    const authorityUserId = runtimeAuthorityUserId(active);
+    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo la autoridad de la partida puede publicar creeps.');
+
+    const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
+    const previous = matchRuntimeCreepStates.get(active.id);
+    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const allowedLanes = new Set(['top', 'mid', 'bot']);
+    const allowedTypes = new Set(['melee', 'ranged', 'flagbearer', 'siege']);
+    const allowedStates = new Set(['ATTACK_MOVE', 'COMBAT', 'AGGRO', 'RETURNING']);
+    const creeps = (Array.isArray(payload?.creeps) ? payload.creeps : []).slice(0, 240).flatMap(raw => {
+      if (!raw || typeof raw !== 'object') return [];
+      const id = String(raw.id || '');
+      const team = raw.team === 'red' ? 'red' : raw.team === 'blue' ? 'blue' : null;
+      const lane = String(raw.lane || '');
+      const type = String(raw.type || '');
+      const state = String(raw.state || '');
+      if (!/^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(id) || !team || !allowedLanes.has(lane) || !allowedTypes.has(type) || !allowedStates.has(state)) return [];
+      const position = raw.position && typeof raw.position === 'object' ? raw.position : {};
+      return [{
+        id,
+        team,
+        lane,
+        type,
+        position: {
+          x: clamp(position.x, -75, 75),
+          y: clamp(position.y, -5, 40),
+          z: clamp(position.z, -62.5, 62.5),
+        },
+        yaw: clamp(raw.yaw, -Math.PI * 8, Math.PI * 8),
+        currentHp: clamp(raw.currentHp, 0, 100000),
+        maxHp: clamp(raw.maxHp, 1, 100000),
+        alive: raw.alive !== false,
+        state,
+        moving: Boolean(raw.moving),
+        seed: Math.max(0, Math.min(1000000, Math.floor(finite(raw.seed, 0)))),
+      }];
+    });
+
+    const snapshot = {
+      type: 'match.runtime.creeps',
+      matchId: active.id,
+      authorityUserId,
+      sequence,
+      sentAt: Date.now(),
+      creeps,
+    };
+    matchRuntimeCreepStates.set(active.id, snapshot);
+    broadcast(snapshot, active.players.map(candidate => candidate.userId));
+    return snapshot;
+  }
+
+  function reportMatchRuntimeCreepDamage(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para combatir creeps.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El daño pertenece a otra partida.');
+    const source = active.players.find(candidate => candidate.userId === userId);
+    if (!source) throw new Error('No participas en esta partida.');
+
+    const authorityUserId = runtimeAuthorityUserId(active);
+    if (!authorityUserId || authorityUserId === userId) return null;
+    const creepId = String(payload?.creepId || '');
+    if (!/^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.test(creepId)) throw new Error('Creep de destino inválido.');
+    const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
+    if (amount <= 0) return null;
+
+    const event = {
+      type: 'match.runtime.creep.damage',
+      matchId: active.id,
+      sourceUserId: userId,
+      creepId,
+      amount,
+      at: Date.now(),
+    };
+    send(authorityUserId, event);
+    return event;
+  }
+
+  function reportMatchChatMessage(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para usar el chat.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El mensaje pertenece a otra partida.');
+    const player = active.players.find(candidate => candidate.userId === userId);
+    if (!player) throw new Error('No participas en esta partida.');
+
+    const text = String(payload?.text || '')
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 220);
+    if (!text) return null;
+    const channel = payload?.channel === 'team' ? 'team' : 'all';
+    matchChatSequence += 1;
+    const message = {
+      messageId: `${active.id}:${userId}:${Date.now()}:${matchChatSequence}`,
+      matchId: active.id,
+      playerId: userId,
+      playerName: player.username,
+      team: player.team,
+      channel,
+      text,
+      atMs: Date.now(),
+    };
+    const abandoned = new Set(active.abandonedUserIds || []);
+    const recipients = active.players
+      .filter(candidate => !abandoned.has(candidate.userId))
+      .filter(candidate => channel === 'all' || candidate.team === player.team)
+      .map(candidate => candidate.userId);
+    broadcast({ type: 'match.chat.message', message }, recipients);
+    return message;
   }
 
   function activeSessionForUser(userId) {
@@ -266,6 +433,7 @@ export function createPlatformServer(options = {}) {
 
     if (updated.source === 'custom') lobbies.markInGame(updated.id);
     matchRuntimeStates.set(updated.id, new Map());
+    matchRuntimeCreepStates.delete(updated.id);
 
     broadcast({
       type: 'match.start',
@@ -319,6 +487,7 @@ export function createPlatformServer(options = {}) {
         reason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
       }, participantIds);
       matchRuntimeStates.delete(active.id);
+      matchRuntimeCreepStates.delete(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
       return publicMatch(updated);
     }
@@ -361,6 +530,8 @@ export function createPlatformServer(options = {}) {
     if (active.stage === 'in_game') {
       peer.send({ type: 'match.rejoin.ready', activeMatch: active });
       peer.send({ type: 'match.runtime.snapshot', matchId: active.match.id, states: runtimeSnapshot(active.match.id) });
+      const creepSnapshot = runtimeCreepSnapshot(active.match.id);
+      if (creepSnapshot) peer.send(creepSnapshot);
       return;
     }
 
@@ -618,10 +789,15 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
           else if (type === 'match.runtime.state') reportMatchRuntimeState(user.id, message);
           else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
+          else if (type === 'match.runtime.creeps') reportMatchRuntimeCreeps(user.id, message);
+          else if (type === 'match.runtime.creep.damage') reportMatchRuntimeCreepDamage(user.id, message);
+          else if (type === 'match.chat.send') reportMatchChatMessage(user.id, message);
           else if (type === 'match.runtime.snapshot') {
             const active = store.activeMatchForUser(user.id);
             if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa.');
             peer.send({ type: 'match.runtime.snapshot', matchId: active.id, states: runtimeSnapshot(active.id) });
+            const creepSnapshot = runtimeCreepSnapshot(active.id);
+            if (creepSnapshot) peer.send(creepSnapshot);
           }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
           else if (type === 'lobby.create') {
@@ -702,5 +878,10 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat, runtimeSnapshot, start, close };
+  return {
+    config, server, store, sessions, parties, matchmaker, lobbies, heroSelect,
+    abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat,
+    reportMatchRuntimeCreeps, reportMatchRuntimeCreepDamage, reportMatchChatMessage,
+    runtimeSnapshot, runtimeCreepSnapshot, start, close,
+  };
 }
