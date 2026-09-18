@@ -712,9 +712,10 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
         : Math.max(0, runtime.nowMs - runtime.match.createdAtMs),
     };
   }
+  const clockAnchor = clockAnchorRef.current!;
   const matchElapsedMs = Math.max(
     0,
-    clockAnchorRef.current.elapsedAtMs + (runtime.nowMs - clockAnchorRef.current.matchTimeAtMs),
+    clockAnchor.elapsedAtMs + (runtime.nowMs - clockAnchor.matchTimeAtMs),
   );
 
   useEffect(() => {
