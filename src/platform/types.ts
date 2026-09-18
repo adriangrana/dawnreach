@@ -273,6 +273,17 @@ export type MatchRuntimePlayerState = Readonly<{
 }>;
 export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
 export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
+export type MatchRuntimeCombatEvent = Readonly<{
+  type: 'match.runtime.combat';
+  matchId: string;
+  sourceUserId: string;
+  sourceUsername: string;
+  targetUserId: string;
+  targetUsername: string;
+  reason: 'damage' | 'heal';
+  amount: number;
+  at: number;
+}>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
@@ -312,6 +323,7 @@ export type PlatformRealtimeEvent =
   | MatchEndedEvent
   | MatchRuntimeStateEvent
   | MatchRuntimeSnapshotEvent
+  | MatchRuntimeCombatEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
