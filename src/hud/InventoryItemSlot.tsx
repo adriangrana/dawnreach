@@ -65,12 +65,14 @@ export default function InventoryItemSlot({
   nowMs,
   onUse,
   onMove,
+  readOnly = false,
 }: {
   slot: InventorySlot;
   index: number;
   nowMs: number;
   onUse: (slot: number) => void;
   onMove: (fromSlot: number, toSlot: number) => void;
+  readOnly?: boolean;
 }) {
   const item = slot.item;
   const definition = item ? getItemDefinition(item.definitionId) : null;
@@ -95,7 +97,7 @@ export default function InventoryItemSlot({
   }, [teleportSlot]);
 
   useEffect(() => {
-    if (!item || !requiresGroundTarget) return;
+    if (readOnly || !item || !requiresGroundTarget) return;
 
     const onTargetConfirm = (event: Event) => {
       const detail = (event as CustomEvent<ItemTargetConfirmDetail>).detail;
@@ -105,10 +107,10 @@ export default function InventoryItemSlot({
 
     window.addEventListener(ITEM_TARGET_CONFIRM_EVENT, onTargetConfirm as EventListener);
     return () => window.removeEventListener(ITEM_TARGET_CONFIRM_EVENT, onTargetConfirm as EventListener);
-  }, [item?.instanceId, onUse, requiresGroundTarget, slot.slot]);
+  }, [item?.instanceId, onUse, readOnly, requiresGroundTarget, slot.slot]);
 
   useEffect(() => {
-    if (!validTeleportItem || !item) return;
+    if (readOnly || !validTeleportItem || !item) return;
     const instanceId = item.instanceId;
 
     const onCastRequest = (event: Event) => {
@@ -146,7 +148,7 @@ export default function InventoryItemSlot({
       window.removeEventListener(TELEPORT_TARGETING_STATE_EVENT, onTargetingState as EventListener);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [disabled, item?.instanceId, onUse, validTeleportItem]);
+  }, [disabled, item?.instanceId, onUse, readOnly, validTeleportItem]);
 
   useEffect(() => {
     const close = () => setTooltipStyle(null);
@@ -187,7 +189,7 @@ export default function InventoryItemSlot({
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!item || !definition?.active_effect || !active || disabled) return;
+    if (readOnly || !item || !definition?.active_effect || !active || disabled) return;
 
     if (teleportSlot) {
       requestTeleportTarget('slot');
@@ -210,7 +212,7 @@ export default function InventoryItemSlot({
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (teleportSlot) return;
+    if (readOnly || teleportSlot) return;
     if (!Array.from(event.dataTransfer.types).includes('application/x-dawnreach-inventory-item')) return;
     event.preventDefault();
     event.stopPropagation();
@@ -218,7 +220,7 @@ export default function InventoryItemSlot({
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (teleportSlot) return;
+    if (readOnly || teleportSlot) return;
     event.preventDefault();
     event.stopPropagation();
     const payload = readInventoryDragPayload(event.dataTransfer);
@@ -251,8 +253,9 @@ export default function InventoryItemSlot({
       onClick={handleClick}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      role={item ? 'button' : undefined}
+      role={item && !readOnly ? 'button' : undefined}
       tabIndex={item ? 0 : -1}
+      aria-disabled={readOnly || undefined}
       aria-describedby={tooltipOpen ? tooltipId : undefined}
       aria-label={item
         ? `${item.displayName}${quantity > 1 ? `, ${quantity} unidades` : ''}${active ? `, objeto activable con ${hotkey}` : ''}`
@@ -291,7 +294,7 @@ export default function InventoryItemSlot({
             <p><b>Activa — {definition.active_effect.name}:</b> {definition.active_effect.description}<em>CD {definition.active_effect.cooldown}s{definition.active_effect.mana_cost ? ` · ${definition.active_effect.mana_cost} maná` : ''}</em></p>
           )}
           <small>{definition.flavor_text}</small>
-          {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : `Click o ${hotkey} para activar`}</i>}
+          {definition.active_effect && <i>{remainingMs > 0 ? `Disponible en ${cooldownSeconds}s` : readOnly ? 'Inspección · solo lectura' : `Click o ${hotkey} para activar`}</i>}
         </div>,
         document.body,
       )}
