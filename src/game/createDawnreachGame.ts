@@ -1491,6 +1491,18 @@ export async function createDawnreachGame(
 
     for (const remote of remoteHeroes.values()) {
       const root = remote.rig.root;
+
+      if (!remote.entity.alive || remote.entity.currentHp <= 0) {
+        remote.moving = false;
+        remote.rig.model.visible = true;
+        remote.rig.model.rotation.x = -Math.PI * 0.48;
+        remote.entity.root.userData.currentHp = remote.entity.currentHp;
+        remote.entity.root.userData.maxHp = remote.entity.maxHp;
+        continue;
+      }
+
+      remote.rig.model.visible = true;
+      remote.rig.model.rotation.x = 0;
       const dx = remote.targetPosition.x - root.position.x;
       const dy = remote.targetPosition.y - root.position.y;
       const dz = remote.targetPosition.z - root.position.z;
