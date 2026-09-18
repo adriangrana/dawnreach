@@ -252,7 +252,7 @@ class LaneCreepManager {
   private readonly staticCandidates: GameEntity[] = [];
   private readonly staticById = new Map<string, GameEntity>();
   private readonly gameCanvas: HTMLCanvasElement | null;
-  private readonly networkMode: 'authority' | 'replica';
+  private networkMode: 'authority' | 'replica';
   private readonly replicaTargets = new Map<string, {
     position: THREE.Vector3;
     yaw: number;
@@ -324,6 +324,66 @@ class LaneCreepManager {
 
   isNetworkAuthority() {
     return this.networkMode === 'authority';
+  }
+
+  setNetworkAuthority(authority: boolean) {
+    if (this.disposed) return;
+    const nextMode = authority ? 'authority' : 'replica';
+    if (this.networkMode === nextMode) return;
+
+    const gameNowMs = toMatchGameTimeMs(performance.now());
+    const elapsed = Math.max(0, (gameNowMs - this.startedAtMs) / 1000);
+    this.networkMode = nextMode;
+    this.scene.userData.laneCreepNetworkMode = nextMode;
+    this.lastFrameMs = gameNowMs;
+
+    if (authority) {
+      // Promote the latest replicated world in place. Do not recreate the match or spawn
+      // old waves again: this client continues simulation from the last received snapshot.
+      let highestWave = -1;
+      let highestSeed = this.serial - 1;
+      for (const creep of this.creeps) {
+        const match = /^lane-creep:(?:blue|red):(?:top|mid|bot):(\d+):(\d+)$/.exec(creep.entity.id);
+        highestWave = Math.max(highestWave, Number(match?.[1] ?? -1));
+        highestSeed = Math.max(highestSeed, Number(match?.[2] ?? creep.seed));
+        creep.entity.root.userData.networkReplica = false;
+        creep.target = null;
+        creep.targetAcquiredAt = 0;
+        creep.state = 'ATTACK_MOVE';
+        creep.nextAttackAt = elapsed;
+        creep.nextScanAt = elapsed;
+        creep.aggroLockUntil = 0;
+        creep.spawnedAt = elapsed;
+        creep.moving = false;
+        this.clearNavigation(creep);
+        this.writeState(creep);
+      }
+      this.replicaTargets.clear();
+      this.serial = Math.max(this.serial, highestSeed + 1);
+      this.nextWaveIndex = Math.max(
+        highestWave + 1,
+        Math.floor(elapsed / LANE_CREEP_TUNING.waveIntervalSeconds) + 1,
+      );
+      this.lastReplicaSequence = -1;
+      this.refreshStaticCandidates();
+      this.rebalanceVisionLeaders();
+      return;
+    }
+
+    // Demotion is also in-place. The next authority snapshot will take over position/HP,
+    // while these targets let existing objects interpolate instead of being duplicated.
+    for (const creep of this.creeps) {
+      creep.entity.root.userData.networkReplica = true;
+      creep.entity.grantsVision = false;
+      creep.target = null;
+      creep.nextAttackAt = Number.POSITIVE_INFINITY;
+      creep.nextScanAt = Number.POSITIVE_INFINITY;
+      this.replicaTargets.set(creep.entity.id, {
+        position: creep.entity.root.position.clone(),
+        yaw: creep.entity.root.rotation.y,
+        moving: false,
+      });
+    }
   }
 
   getNetworkSnapshot(): LaneCreepNetworkSnapshot | null {
