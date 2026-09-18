@@ -910,6 +910,54 @@ export function createPlatformServer(options = {}) {
     return event;
   }
 
+  function reportMatchRuntimeCombatResolve(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para resolver combate.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La resolución pertenece a otra partida.');
+
+    const combatId = String(payload?.combatId || '');
+    const locks = runtimeCombatLocks(active.id);
+    const lock = locks.get(userId) || null;
+    const previous = runtimeRoom(active.id).get(userId) || null;
+    if (!combatId || !lock || lock.combatId !== combatId || !previous) return previous;
+
+    const maxHp = Math.max(1, Number(previous.maxHp) || 1);
+    const currentHp = Math.max(0, Math.min(maxHp, Number(payload?.currentHp) || 0));
+    const maxResource = Math.max(0, Number(previous.maxResource) || 0);
+    const currentResource = Math.max(
+      0,
+      Math.min(maxResource || 100000, Number(payload?.currentResource ?? previous.currentResource) || 0),
+    );
+
+    return reportMatchRuntimeState(userId, {
+      matchId: active.id,
+      sequence: Number(previous.sequence || 0) + 1,
+      position: { ...previous.position },
+      yaw: previous.yaw,
+      moving: currentHp > 0 ? Boolean(previous.moving) : false,
+      currentHp,
+      maxHp,
+      currentResource,
+      maxResource,
+      level: previous.level,
+      experience: previous.experience,
+      alive: payload?.alive !== false && currentHp > 0,
+      abilityRanks: previous.abilityRanks,
+      abilityCooldownRemainingMs: previous.abilityCooldownRemainingMs,
+      kills: previous.kills,
+      deaths: previous.deaths,
+      assists: previous.assists,
+      lastHits: previous.lastHits,
+      denies: previous.denies,
+      gold: previous.gold,
+      inventory: previous.inventory,
+      respawnRemainingMs: 0,
+      respawnDurationMs: currentHp <= 0
+        ? Math.max(0, Number(lock.respawnSeconds || 0) * 1000)
+        : 0,
+    });
+  }
+
   function reportMatchRuntimeCreeps(userId, payload) {
     const active = store.activeMatchForUser(userId);
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para sincronizar creeps.');
@@ -1532,6 +1580,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
           else if (type === 'match.runtime.state') reportMatchRuntimeState(user.id, message);
           else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
+          else if (type === 'match.runtime.combat.resolve') reportMatchRuntimeCombatResolve(user.id, message);
           else if (type === 'match.runtime.creeps') reportMatchRuntimeCreeps(user.id, message);
           else if (type === 'match.runtime.creep.damage') reportMatchRuntimeCreepDamage(user.id, message);
           else if (type === 'match.runtime.structures') reportMatchRuntimeStructures(user.id, message);
@@ -1638,7 +1687,7 @@ export function createPlatformServer(options = {}) {
 
   return {
     config, server, store, sessions, parties, matchmaker, lobbies, heroSelect,
-    abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat,
+    abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat, reportMatchRuntimeCombatResolve,
     reportMatchRuntimeCreeps, reportMatchRuntimeCreepDamage, reportMatchChatMessage,
     runtimeSnapshot, runtimeCreepSnapshot, start, close,
   };
