@@ -1,5 +1,5 @@
 import { getHeroDefinition } from '../heroes/catalog';
-import type { AbilityKey } from '../heroes/types';
+import type { AbilityKey, HeroId } from '../heroes/types';
 import { calculateAldenAbilityAtRank, performAbilityAction } from './combat';
 import {
     addPlayerToMatch, assignSelectedHeroToPlayer, createMatchState, getRequiredHero,
@@ -54,7 +54,7 @@ export type PlayableRosterEntry = Readonly<{
     displayName: string;
     team: TeamId;
     slotIndex: TeamSlotIndex;
-    heroId: string;
+    heroId: HeroId;
 }>;
 
 export function createPlayableRosterMatch(
