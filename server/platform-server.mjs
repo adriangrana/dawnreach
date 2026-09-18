@@ -347,29 +347,25 @@ export function createPlatformServer(options = {}) {
     const now = Date.now();
     let lethal = false;
     let respawnSeconds = null;
-    let previewTargetRuntime = null;
 
     if (targetRuntime) {
       const locks = runtimeCombatLocks(active.id);
       const existingLock = locks.get(target.userId) || null;
       const preDamageHp = existingLock?.preDamageHp ?? targetRuntime.currentHp;
+      const baseHp = reason === 'damage' && existingLock
+        ? Math.min(targetRuntime.currentHp, Math.max(0, Number(existingLock.hpCeiling ?? targetRuntime.currentHp)))
+        : targetRuntime.currentHp;
       const currentHp = reason === 'heal'
         ? Math.min(targetRuntime.maxHp, targetRuntime.currentHp + amount)
-        : Math.max(0, targetRuntime.currentHp - amount);
+        : Math.max(0, baseHp - amount);
       lethal = reason === 'damage' && currentHp <= 0;
       respawnSeconds = lethal
         ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2
         : null;
 
-      previewTargetRuntime = {
-        ...targetRuntime,
-        currentHp,
-        alive: currentHp > 0,
-        sequence: targetRuntime.sequence + 1,
-        sentAt: now,
-      };
-      room.set(target.userId, previewTargetRuntime);
-
+      // Do not broadcast a speculative target state. The victim applies the combat event
+      // and its next runtime packet becomes the authoritative HP/alive result. The lock
+      // only prevents an older pre-hit snapshot from restoring HP in the meantime.
       if (reason === 'damage') {
         const crossedLethal = lethal && !existingLock?.pendingLethal;
         locks.set(target.userId, {
@@ -390,14 +386,6 @@ export function createPlatformServer(options = {}) {
             : (existingLock?.sourceEntityId ?? sourceEntityId),
         });
       }
-    }
-
-    if (previewTargetRuntime) {
-      broadcast({
-        type: 'match.runtime.state',
-        matchId: active.id,
-        state: previewTargetRuntime,
-      }, active.players.map(candidate => candidate.userId));
     }
 
     const event = {
