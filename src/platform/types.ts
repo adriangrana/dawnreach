@@ -119,6 +119,10 @@ export type MatchSummary = Readonly<{
   heroSelections?: Readonly<Record<string, Readonly<{ heroId: string | null; locked: boolean; lockedAt: number | null }>>>;
   loadingProgress?: Readonly<Record<string, number>>;
   startedAt?: string;
+  endedAt?: string;
+  endReason?: 'loading_abandonment' | 'team_abandonment' | string;
+  winnerTeam?: Team | null;
+  abandonedUserIds?: readonly string[];
 }>;
 
 export type ActiveMatchSession = Readonly<{
@@ -245,6 +249,9 @@ export type MatchSessionPendingEvent = Readonly<{ type: 'match.session.pending';
 export type MatchRejoinReadyEvent = Readonly<{ type: 'match.rejoin.ready'; activeMatch: ActiveMatchSession }>;
 export type MatchLoadingUpdateEvent = Readonly<{ type: 'match.loading.update'; match: MatchSummary }>;
 export type MatchStartEvent = Readonly<{ type: 'match.start'; match: MatchSummary }>;
+export type MatchAbandonedEvent = Readonly<{ type: 'match.abandoned'; matchId: string; ended: boolean }>;
+export type MatchPlayerAbandonedEvent = Readonly<{ type: 'match.player.abandoned'; match: MatchSummary; userId: string; username: string }>;
+export type MatchEndedEvent = Readonly<{ type: 'match.ended'; match: MatchSummary; winnerTeam: Team | null; reason: string }>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
@@ -279,6 +286,9 @@ export type PlatformRealtimeEvent =
   | MatchRejoinReadyEvent
   | MatchLoadingUpdateEvent
   | MatchStartEvent
+  | MatchAbandonedEvent
+  | MatchPlayerAbandonedEvent
+  | MatchEndedEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
