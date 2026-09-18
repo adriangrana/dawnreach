@@ -20,6 +20,9 @@ import { ensureLaneCreepSystem, type LaneCreepNetworkSnapshot } from './gameplay
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden, type AldenRig } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
+import { ensureAldenAbilityPresentation } from './heroes/alden/abilityPresentation';
+import { ensureAldenAbilityEdgePolish } from './heroes/alden/abilityEdgePolish';
+import { ensureWorldLineVfxPolish } from './heroes/alden/lineVfxPolish';
 import { ensureAldenWorldAbilityRuntime, triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
 import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
@@ -428,6 +431,20 @@ export async function createDawnreachGame(
   const aldenAbilityRuntime = alden
     ? ensureAldenWorldAbilityRuntime(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
     : null;
+  const aldenAbilityPresentation = alden
+    ? ensureAldenAbilityPresentation(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
+    : null;
+  const aldenAbilityEdgePolish = alden
+    ? ensureAldenAbilityEdgePolish(scene)
+    : null;
+  const aldenLineVfxPolish = alden
+    ? ensureWorldLineVfxPolish(scene)
+    : null;
+
+  // The game scene now owns Alden's complete ability presentation explicitly. The older
+  // renderer bootstrap still handles generic graphics settings, but must not become the
+  // owner of ability mechanics/VFX for this scene or casts can fall back to legacy effects.
+  scene.userData.dawnreachExplicitAbilityRuntime = true;
 
   const surfaceRay = new THREE.Raycaster();
   surfaceRay.ray.direction.set(0, -1, 0);
@@ -1526,9 +1543,15 @@ export async function createDawnreachGame(
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
     }
 
-    // Apply ability movement/poses after locomotion so Q/R transforms and authored ability
-    // animations are not overwritten by the generic walk/attack animation for this frame.
-    aldenAbilityRuntime?.update(performance.now());
+    // Apply authoritative ability mechanics/poses after locomotion so Q/R transforms are not
+    // overwritten by the generic walk/attack animation. Premium presentation is VFX-only here:
+    // worldAbilityRuntime owns the authored character pose, while the presentation layer restores
+    // the golden feathered effects that were previously installed only through a renderer hook.
+    const abilityFrameNowMs = performance.now();
+    aldenAbilityRuntime?.update(abilityFrameNowMs);
+    aldenAbilityPresentation?.update(abilityFrameNowMs, false);
+    aldenAbilityEdgePolish?.update();
+    aldenLineVfxPolish?.update();
 
     for (const marker of [targetMarker, attackMarker]) {
       if (!marker.visible) continue;
@@ -1727,6 +1750,9 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
       disconnectLaneProgression();
+      aldenLineVfxPolish?.dispose();
+      aldenAbilityEdgePolish?.dispose();
+      aldenAbilityPresentation?.dispose();
       aldenAbilityRuntime?.dispose();
       selection.dispose();
       heroOverlay.dispose();
