@@ -34,6 +34,12 @@ export function createPlatformServer(options = {}) {
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
   const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
+  const HERO_RESPAWN_BASE_SECONDS = Number.isFinite(Number(options.heroRespawnBaseSeconds))
+    ? Math.max(0.01, Number(options.heroRespawnBaseSeconds))
+    : 6;
+  const HERO_RESPAWN_PER_LEVEL_SECONDS = Number.isFinite(Number(options.heroRespawnPerLevelSeconds))
+    ? Math.max(0, Number(options.heroRespawnPerLevelSeconds))
+    : 2;
   let matchChatSequence = 0;
   let matchCombatSequence = 0;
   let shuttingDown = false;
@@ -187,6 +193,11 @@ export function createPlatformServer(options = {}) {
       matchRuntimeCombatLocks.set(matchId, locks);
     }
     return locks;
+  }
+
+  function serverHeroRespawnSeconds(level) {
+    return HERO_RESPAWN_BASE_SECONDS
+      + Math.max(1, Math.floor(Number(level) || 1)) * HERO_RESPAWN_PER_LEVEL_SECONDS;
   }
 
   function runtimeHeroDamageCredits(matchId) {
@@ -843,7 +854,7 @@ export function createPlatformServer(options = {}) {
         0,
         payloadRespawnDurationMs > 0
           ? payloadRespawnDurationMs / 1000
-          : 6 + Math.max(1, Math.floor(Number(previous?.level || payload?.level || 1))) * 2,
+          : serverHeroRespawnSeconds(previous?.level || payload?.level || 1),
       );
 
       const existingDeathLock = combatLocks.get(userId) || null;
@@ -1078,7 +1089,7 @@ export function createPlatformServer(options = {}) {
       : Math.max(0, Number(targetRuntime.currentHp || 0) - finalDamage);
     const lethal = reason === 'damage' && nextHp <= 0;
     const respawnSeconds = lethal
-      ? 6 + Math.max(1, Math.floor(Number(targetRuntime.level) || 1)) * 2
+      ? serverHeroRespawnSeconds(targetRuntime.level)
       : null;
 
     if (
