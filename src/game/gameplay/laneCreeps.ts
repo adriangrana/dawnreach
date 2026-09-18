@@ -15,6 +15,7 @@ import {
   type NavigationPoint,
   type NavigationWorld,
 } from '../navigation/navigationWorld';
+import { toMatchGameTimeMs } from '../match/matchPauseRuntime';
 import {
   animateLaneCreepVisual,
   buildLaneCreepVisual,
@@ -257,7 +258,7 @@ class LaneCreepManager {
     yaw: number;
     moving: boolean;
   }>();
-  private readonly startedAtMs = performance.now();
+  private readonly startedAtMs = toMatchGameTimeMs(performance.now());
   private lastFrameMs = this.startedAtMs;
   private nextWaveIndex = 0;
   private lastAttackSequence = 0;
@@ -375,7 +376,7 @@ class LaneCreepManager {
       const nextAttackSequence = Math.max(0, Math.floor(Number(unit.attackSequence) || 0));
       if (nextAttackSequence > creep.attackSequence) {
         creep.attackSequence = nextAttackSequence;
-        triggerLaneCreepAttack(creep.visual, performance.now() / 1000);
+        triggerLaneCreepAttack(creep.visual, toMatchGameTimeMs(performance.now()) / 1000);
       }
       creep.entity.root.userData.currentHp = creep.entity.currentHp;
       creep.entity.root.userData.maxHp = creep.entity.maxHp;
@@ -398,7 +399,7 @@ class LaneCreepManager {
     this.rebalanceVisionLeaders();
   }
 
-  applyRemoteDamage(creepId: string, amount: number, sourceEntityId: string, atMs = performance.now()) {
+  applyRemoteDamage(creepId: string, amount: number, sourceEntityId: string, atMs = toMatchGameTimeMs(performance.now())) {
     if (this.networkMode !== 'authority' || this.disposed) return false;
     const creep = this.creepById.get(creepId);
     if (!creep || !creep.entity.alive || creep.entity.currentHp <= 0) return false;
@@ -452,12 +453,13 @@ class LaneCreepManager {
       return;
     }
 
-    const dt = Math.min(0.05, Math.max(0, (nowMs - this.lastFrameMs) / 1000));
-    this.lastFrameMs = nowMs;
-    const elapsed = Math.max(0, (nowMs - this.startedAtMs) / 1000);
+    const gameNowMs = toMatchGameTimeMs(nowMs);
+    const dt = Math.min(0.05, Math.max(0, (gameNowMs - this.lastFrameMs) / 1000));
+    this.lastFrameMs = gameNowMs;
+    const elapsed = Math.max(0, (gameNowMs - this.startedAtMs) / 1000);
 
     if (this.networkMode === 'replica') {
-      this.updateReplicaCreeps(nowMs / 1000, dt);
+      this.updateReplicaCreeps(gameNowMs / 1000, dt);
       this.animationFrame = requestAnimationFrame(this.frame);
       return;
     }
