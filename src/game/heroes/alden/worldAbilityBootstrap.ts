@@ -19,7 +19,6 @@ import {
   mountAldenWorldAbilityRuntime,
 } from './worldAbilityRuntime';
 
-const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const DEFAULT_SHADOW_EXTENT = 24;
 const DEFAULT_SHADOW_DISTANCE_PERCENT = 75;
 const MAX_RENDER_PIXEL_RATIO = 1.5;
@@ -208,7 +207,12 @@ export function mountAldenWorldAbilityBootstrap() {
         settings = getGameSettingsSnapshot();
         applyRenderScale(renderer, settings);
         const registry = scene.userData.entityRegistry as GameEntityRegistry | undefined;
-        const hero = registry?.values().find(entity => entity.id === LOCAL_WORLD_HERO_ENTITY_ID) ?? null;
+        const localHeroEntityId = typeof scene.userData.localHeroEntityId === 'string'
+          ? scene.userData.localHeroEntityId
+          : null;
+        const hero = registry && localHeroEntityId
+          ? registry.values().find(entity => entity.id === localHeroEntityId) ?? null
+          : registry?.values().find(entity => entity.kind === 'hero' && entity.root.userData.dawnreachLocalControlledHero === true) ?? null;
         if (registry && hero) {
           const runtime = ensureAldenWorldAbilityRuntime(
             scene,
