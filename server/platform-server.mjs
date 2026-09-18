@@ -392,17 +392,18 @@ export function createPlatformServer(options = {}) {
       };
     }
 
+    const effectiveCombatLock = combatLocks.get(userId) || combatLock;
     const authoritativeRespawnRemainingMs = requestedAlive
       ? 0
-      : combatLock?.deadUntil && now < combatLock.deadUntil
-        ? Math.max(0, combatLock.deadUntil - now)
+      : effectiveCombatLock?.deadUntil && now < effectiveCombatLock.deadUntil
+        ? Math.max(0, effectiveCombatLock.deadUntil - now)
         : payloadRespawnRemainingMs;
     const authoritativeRespawnDurationMs = requestedAlive
       ? 0
       : Math.max(
         authoritativeRespawnRemainingMs,
-        combatLock?.respawnSeconds
-          ? Math.max(0, Number(combatLock.respawnSeconds) * 1000)
+        effectiveCombatLock?.respawnSeconds
+          ? Math.max(0, Number(effectiveCombatLock.respawnSeconds) * 1000)
           : payloadRespawnDurationMs,
       );
 
