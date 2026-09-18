@@ -6,7 +6,6 @@ import {
   Globe2,
   Link2,
   Lock,
-  Map,
   Plus,
   RefreshCw,
   Search,
@@ -222,7 +221,7 @@ function EmptyLobbyRoom() {
 
 function LobbySettings({ lobby, me }: { lobby: CustomLobby | null; me: PlatformUser }) {
   const owner = Boolean(lobby && lobby.ownerId === me.id);
-  const running = lobby?.status !== 'open';
+  const running = Boolean(lobby && lobby.status !== 'open');
 
   return <aside className="dr-custom-settings-panel">
     <header className="dr-custom-panel-title"><div><strong>LOBBY SETTINGS</strong><small>{owner ? 'HOST CONTROLS' : 'MATCH RULES'}</small></div><Settings /></header>
