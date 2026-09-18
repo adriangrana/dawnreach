@@ -714,3 +714,11 @@
     height: 34px !important;
   }
 }
+
+
+/* CUSTOM blue/gold source files have slightly different internal transparent
+   margins. Normalize the visible emblem footprint without changing layout. */
+.dr-home-mode-ribbon button:last-child > .dr-home-mode-icon img.is-active {
+  transform: scale(1.015) !important;
+  transform-origin: center center !important;
+}
