@@ -13,6 +13,7 @@ export type MatchEventParticipant = Readonly<{
   team: MatchEventTeam;
   kind: MatchEventEntityKind;
   label: string;
+  heroId?: string | null;
 }>;
 
 type MatchEventBase = Readonly<{
