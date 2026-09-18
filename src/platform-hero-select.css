@@ -2382,3 +2382,50 @@
     height: 64px !important;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · seamless battlefield body
+   Team rails and hero focus share one continuous background.
+   No rail dividers and no extra overlay over the center stage.
+   ========================================================= */
+
+.dr-hero-select-body {
+  background: transparent !important;
+}
+
+.dr-hero-select-team,
+.dr-hero-select-team.is-left,
+.dr-hero-select-team.is-right {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Remove the visual seams between Dawn / focus / Dusk. */
+.dr-hero-select-team.is-left {
+  border-right: 0 !important;
+}
+
+.dr-hero-select-team.is-right {
+  border-left: 0 !important;
+}
+
+/* The center must show the same battlefield image as the side rails,
+   without dark gradients or a dedicated center veil. */
+.dr-hero-select-focus {
+  background: transparent !important;
+}
+
+.dr-hero-select-focus::before {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+}
+
+/* Keep the hero art readable without darkening the whole center. */
+.dr-hero-select-main-art {
+  filter:
+    drop-shadow(0 18px 24px rgba(0,0,0,.34))
+    drop-shadow(0 0 14px rgba(63,128,169,.12)) !important;
+}
