@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { LogIn, Shield, UserPlus, X } from 'lucide-react';
+import { LogIn, Shield, Swords, UserPlus, X } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
@@ -315,6 +315,14 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   return <>
     <main className="platform-home-surface platform-home-shell">
       <DawnreachHomeTopbar section={section} user={user} realtime={realtime} activeMatch={activeMatch} onReturnToMatch={returnToMatch} onHome={() => setSection('home')} onPlay={openPlay} onLogout={onLogout} />
+      {activeMatch?.stage === 'in_game' && !sharedGameVisible && <aside className="dr-active-match-recovery" role="status">
+        <Swords />
+        <div>
+          <small>MATCH IN PROGRESS</small>
+          <strong>You still have an active Dawnreach match.</strong>
+        </div>
+        <button type="button" onClick={returnToMatch}>RETURN TO MATCH</button>
+      </aside>}
       <div className="platform-home-grid">
         <section className="platform-main-workspace">
           {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="dr-play-overview">
