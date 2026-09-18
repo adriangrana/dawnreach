@@ -253,12 +253,12 @@ class AldenAbilityPresentation {
     this.camera = camera;
   }
 
-  update(nowMs: number) {
+  update(nowMs: number, applyPose = true) {
     if (this.disposed) return;
     this.runScheduled(nowMs);
     this.updateRangeVisual(nowMs);
     this.updateEffects(nowMs);
-    this.applyPresentationPose(nowMs);
+    if (applyPose) this.applyPresentationPose(nowMs);
     this.applyCameraShake(nowMs);
   }
 
