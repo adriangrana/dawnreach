@@ -56,12 +56,17 @@ export function createPlatformServer(options = {}) {
     }, match.players.map(player => player.userId));
   }
 
+  function handleHeroSelectCancel(match, player) {
+    if (match.source === 'custom') lobbies.cancelLaunch(match.id, player.userId);
+  }
+
   const heroSelect = new HeroSelectManager({
     heroIds: ['H001'],
     heroNames: { H001: 'Alden' },
     pickSeconds: 45,
     onEvent: (event, userIds) => broadcast(event, userIds),
     onComplete: handoffToGameSession,
+    onCancel: handleHeroSelectCancel,
   });
 
   function launchMatch(match) {
@@ -343,6 +348,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'hero_select.preview') heroSelect.preview(user.id, String(message.heroId || ''));
           else if (type === 'hero_select.lock') heroSelect.lock(user.id, String(message.heroId || ''));
           else if (type === 'hero_select.message') heroSelect.sendMessage(user.id, message.text);
+          else if (type === 'hero_select.cancel') heroSelect.cancel(user.id);
           else if (type === 'party.create') parties.create(user);
           else if (type === 'party.invite') parties.invite(user.id, String(message.username || ''));
           else if (type === 'party.accept') parties.accept(user.id, String(message.inviteId || ''));
