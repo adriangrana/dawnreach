@@ -89,6 +89,9 @@ type TeamHero = {
   portrait?: string;
   local?: boolean;
   level?: number;
+  dead?: boolean;
+  respawnRemainingMs?: number;
+  respawnDurationMs?: number;
 };
 
 type RespawnPresentation = {
@@ -115,18 +118,24 @@ type PendingAbilityCast = {
   atMs: number;
 };
 
-function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk'): TeamHero[] {
+function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk', nowMs: number): TeamHero[] {
   return match.slots
     .filter(slot => slot.team === team)
     .sort((a, b) => a.index - b.index)
     .map(slot => {
       const hero = slot.heroEntityId ? match.heroes[slot.heroEntityId] : null;
       if (!hero) return { initial: '' };
+      const syncedRemainingMs = Math.max(0, Number(hero.runtime.counters['network.respawnRemainingMs'] ?? 0));
+      const syncedAtMs = Math.max(0, Number(hero.runtime.counters['network.respawnSyncedAtMs'] ?? nowMs));
+      const elapsedSinceSyncMs = Math.max(0, nowMs - syncedAtMs);
       return {
         initial: hero.heroName?.slice(0, 1).toUpperCase() || '?',
         portrait: hero.definitionId === 'H001' ? ALDEN_PORTRAIT_SRC : undefined,
         local: hero.heroEntityId === LOCAL_HERO_ENTITY_ID,
         level: hero.level,
+        dead: hero.currentHp <= 0,
+        respawnRemainingMs: Math.max(0, syncedRemainingMs - elapsedSinceSyncMs),
+        respawnDurationMs: Math.max(0, Number(hero.runtime.counters['network.respawnDurationMs'] ?? 0)),
       };
     });
 }
@@ -255,6 +264,9 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
           'scoreboard.kills': Math.max(0, Math.floor(action.state.kills ?? 0)),
           'scoreboard.deaths': Math.max(0, Math.floor(action.state.deaths ?? 0)),
           'scoreboard.assists': Math.max(0, Math.floor(action.state.assists ?? 0)),
+          'network.respawnRemainingMs': action.state.alive ? 0 : Math.max(0, action.state.respawnRemainingMs ?? 0),
+          'network.respawnDurationMs': action.state.alive ? 0 : Math.max(0, action.state.respawnDurationMs ?? 0),
+          'network.respawnSyncedAtMs': nowMs,
         },
       },
     };
@@ -588,7 +600,14 @@ function TeamPortraits({ team, side, localRespawn }: {
     <div className={`team-portraits team-portraits--${side}`}>
       {team.map((hero, index) => {
         const localHero = Boolean(hero.local);
-        const respawn = localHero && localRespawn?.dead ? localRespawn : undefined;
+        const remoteRespawn = hero.dead
+          ? {
+            dead: true,
+            remainingMs: Math.max(0, hero.respawnRemainingMs ?? 0),
+            totalMs: Math.max(1, hero.respawnDurationMs || hero.respawnRemainingMs || 1),
+          }
+          : undefined;
+        const respawn = localHero && localRespawn?.dead ? localRespawn : remoteRespawn;
         return (
           <div className="top-hero-slot" key={`${side}-${index}`}>
             <div className="top-hero-face">
@@ -631,8 +650,8 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
     remainingMs: respawnRemainingMs,
     totalMs: Math.max(1, runtime.respawnDurationMs || respawnRemainingMs),
   };
-  const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn');
-  const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk');
+  const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn', runtime.nowMs);
+  const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk', runtime.nowMs);
   const onlineStartedMs = onlineStartedAt ? Date.parse(onlineStartedAt) : Number.NaN;
   const matchElapsedMs = Number.isFinite(onlineStartedMs)
     ? Date.now() - onlineStartedMs
@@ -1282,6 +1301,10 @@ export default function App({
           displayName: slot.item.displayName,
           quantity: slot.item.quantity ?? 1,
         }] : []),
+        respawnRemainingMs: snapshot.respawnReadyAtMs === null
+          ? 0
+          : Math.max(0, snapshot.respawnReadyAtMs - snapshot.nowMs),
+        respawnDurationMs: snapshot.respawnDurationMs,
       });
 
       const creeps = game.getCreepNetworkSnapshot();
