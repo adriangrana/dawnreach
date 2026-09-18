@@ -2043,8 +2043,10 @@ export function createPlatformServer(options = {}) {
 
   return {
     config, server, store, sessions, parties, matchmaker, lobbies, heroSelect,
-    abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat, reportMatchRuntimeCombatResolve,
-    reportMatchRuntimeCreeps, reportMatchRuntimeCreepDamage, reportMatchChatMessage,
-    runtimeSnapshot, runtimeCreepSnapshot, start, close,
+    abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeAbilityCast,
+    reportMatchRuntimeCombat, reportMatchRuntimeCombatResolve,
+    reportMatchRuntimeCreeps, reportMatchRuntimeCreepDamage,
+    reportMatchRuntimeStructures, reportMatchRuntimeStructureDamage, reportMatchChatMessage,
+    runtimeSnapshot, runtimeCreepSnapshot, runtimeStructureSnapshot, start, close,
   };
 }
