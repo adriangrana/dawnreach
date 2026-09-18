@@ -774,6 +774,43 @@ function ReconnectGraceBanner({ state }: { state: MatchConnectionPresentation })
   );
 }
 
+function MatchEndedOverlay({
+  result,
+  localTeam,
+}: {
+  result: MatchEndPresentation | null;
+  localTeam: 'blue' | 'red' | null;
+}) {
+  if (!result) return null;
+
+  const title = result.voided || result.winnerTeam === null
+    ? 'PARTIDA CANCELADA'
+    : result.winnerTeam === localTeam
+      ? 'VICTORIA'
+      : 'DERROTA';
+  const reason = result.reason === 'team_abandonment'
+    ? 'El equipo rival se quedó sin jugadores activos.'
+    : result.reason === 'team_disconnect_timeout'
+      ? 'El equipo rival agotó el tiempo de reconexión.'
+      : result.reason === 'all_disconnected_timeout'
+        ? 'Nadie regresó antes de terminar el tiempo de reconexión. La partida no puntúa.'
+        : result.reason === 'all_players_abandoned'
+          ? 'Todos los jugadores abandonaron la partida. La partida no puntúa.'
+          : result.reason === 'loading_abandonment'
+            ? 'La partida fue cancelada durante la carga.'
+            : 'La partida ha terminado.';
+
+  return (
+    <section className="match-ended-overlay" role="dialog" aria-modal="true" aria-live="assertive">
+      <div className="match-ended-card">
+        <small>DAWNREACH</small>
+        <h2>{title}</h2>
+        <p>{reason}</p>
+      </div>
+    </section>
+  );
+}
+
 function GameHud({
   minimapRef,
   minimapHeroRef,
@@ -1094,6 +1131,7 @@ export default function App({
     disconnectedUserIds: [],
     disconnectedPlayers: [],
   });
+  const [matchEnd, setMatchEnd] = useState<MatchEndPresentation | null>(null);
   useEffect(() => {
     setConnectionState({
       mode: 'cleared',
@@ -1102,6 +1140,7 @@ export default function App({
       disconnectedUserIds: [],
       disconnectedPlayers: [],
     });
+    setMatchEnd(null);
   }, [onlineMatch?.id]);
 
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
