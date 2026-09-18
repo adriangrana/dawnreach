@@ -1811,3 +1811,346 @@
     font-size: 9px;
   }
 }
+
+
+/* =========================================================
+   HERO SELECT · reference-layout compression pass
+   Brings the canonical Dawnreach screen closer to the supplied
+   composition: denser header/body/footer, stronger hero focus,
+   larger side cards, and a true two-row roster.
+   ========================================================= */
+
+.dr-hero-select-screen {
+  grid-template-rows: 92px minmax(0, 1fr) clamp(284px, 31vh, 320px) !important;
+}
+
+.dr-hero-select-header {
+  grid-template-columns: 275px minmax(185px, 1fr) 320px minmax(185px, 1fr) 275px !important;
+  padding: 0 24px !important;
+}
+
+.dr-hero-select-brand img {
+  width: 62px !important;
+  height: 62px !important;
+}
+
+.dr-hero-select-brand strong {
+  font-size: 27px !important;
+}
+
+.dr-hero-select-brand small {
+  font-size: 7.5px !important;
+}
+
+.dr-hero-select-phase strong {
+  font-size: 20px !important;
+}
+
+.dr-hero-select-phase time {
+  font-size: 34px !important;
+}
+
+.dr-hero-select-bans i {
+  width: 38px !important;
+  height: 38px !important;
+}
+
+.dr-hero-select-body {
+  grid-template-columns: 300px minmax(0, 1fr) 300px !important;
+}
+
+.dr-hero-select-team {
+  padding: 12px 11px !important;
+  grid-template-rows: 32px minmax(0, 1fr) !important;
+}
+
+.dr-hero-select-team > div {
+  gap: 8px !important;
+}
+
+.dr-hero-select-player {
+  min-height: 82px !important;
+  grid-template-columns: 70px minmax(0,1fr) !important;
+  gap: 10px !important;
+  padding: 6px !important;
+}
+
+.dr-hero-select-team.is-right .dr-hero-select-player {
+  grid-template-columns: minmax(0,1fr) 70px !important;
+}
+
+.dr-hero-select-player-portrait {
+  width: 66px !important;
+  height: 66px !important;
+}
+
+.dr-hero-select-player-copy strong {
+  font-size: 11px !important;
+}
+
+.dr-hero-select-player-copy > span,
+.dr-hero-select-player-copy > small {
+  font-size: 8px !important;
+}
+
+.dr-hero-select-hero-copy {
+  left: 78px !important;
+  top: 92px !important;
+  bottom: 78px !important;
+  width: 270px !important;
+}
+
+.dr-hero-select-hero-copy blockquote {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.dr-hero-select-name h1 {
+  font-size: 50px !important;
+}
+
+.dr-hero-select-name p {
+  font-size: 11px !important;
+}
+
+.dr-hero-select-main-art {
+  top: 49% !important;
+  height: min(75vh, calc(100% - 4px)) !important;
+  max-width: min(56vw, 860px) !important;
+}
+
+.dr-hero-select-overview {
+  top: 94px !important;
+  right: 42px !important;
+  width: min(340px, 31%) !important;
+}
+
+.dr-hero-select-lock {
+  width: min(370px, 36%) !important;
+  height: 62px !important;
+  bottom: 24px !important;
+  font-size: 27px !important;
+}
+
+.dr-hero-select-dev-note {
+  bottom: 94px !important;
+}
+
+.dr-hero-select-draft-note {
+  bottom: 108px !important;
+}
+
+/* Footer proportions now mirror the reference more closely. */
+.dr-hero-select-footer {
+  grid-template-columns: 292px minmax(0, 1fr) 260px !important;
+}
+
+.dr-hero-select-chat {
+  padding: 11px !important;
+  grid-template-rows: 30px minmax(0,1fr) 36px !important;
+}
+
+.dr-hero-select-chat > header span {
+  font-size: 9px !important;
+}
+
+.dr-hero-select-chat > header small {
+  font-size: 8px !important;
+}
+
+.dr-hero-select-chat p {
+  font-size: 9.5px !important;
+}
+
+.dr-hero-select-chat p time {
+  font-size: 8px !important;
+}
+
+.dr-hero-select-chat input {
+  font-size: 10px !important;
+}
+
+.dr-hero-select-roster {
+  padding: 10px 14px 12px !important;
+  grid-template-rows: 42px minmax(0,1fr) !important;
+}
+
+.dr-hero-select-roster-tabs button {
+  min-width: 82px !important;
+  font-size: 8px !important;
+}
+
+.dr-hero-select-roster > header label {
+  width: 210px !important;
+  height: 30px !important;
+}
+
+.dr-hero-select-roster > header input {
+  font-size: 9px !important;
+}
+
+/* Exactly ten columns on wide screens: two rows with the current
+   20-slot visual roster, matching the supplied reference rhythm. */
+.dr-hero-select-roster > div {
+  grid-template-columns: repeat(10, 82px) !important;
+  grid-auto-rows: 82px !important;
+  grid-auto-flow: row !important;
+  align-content: start !important;
+  justify-content: start !important;
+  gap: 8px !important;
+  padding-top: 10px !important;
+}
+
+.dr-hero-select-roster > div > button,
+.dr-hero-select-roster-placeholder {
+  width: 82px !important;
+  height: 82px !important;
+  min-height: 82px !important;
+}
+
+.dr-hero-select-roster > div > button img {
+  height: 64px !important;
+}
+
+.dr-hero-select-roster > div > button span {
+  height: 18px !important;
+}
+
+.dr-hero-select-footer-art svg {
+  width: 30px !important;
+  height: 30px !important;
+}
+
+.dr-hero-select-footer-art span,
+.dr-hero-select-footer-art strong {
+  font-size: 8px !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-screen {
+    grid-template-rows: 82px minmax(0,1fr) 270px !important;
+  }
+
+  .dr-hero-select-header {
+    grid-template-columns: 225px minmax(150px,1fr) 270px minmax(150px,1fr) 225px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .dr-hero-select-body {
+    grid-template-columns: 250px minmax(0,1fr) 250px !important;
+  }
+
+  .dr-hero-select-player {
+    min-height: 68px !important;
+    grid-template-columns: 56px minmax(0,1fr) !important;
+  }
+
+  .dr-hero-select-team.is-right .dr-hero-select-player {
+    grid-template-columns: minmax(0,1fr) 56px !important;
+  }
+
+  .dr-hero-select-player-portrait {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  .dr-hero-select-hero-copy {
+    left: 38px !important;
+    top: 64px !important;
+    bottom: 68px !important;
+    width: 220px !important;
+  }
+
+  .dr-hero-select-overview {
+    top: 58px !important;
+    right: 22px !important;
+    width: min(300px, 30%) !important;
+  }
+
+  .dr-hero-select-lock {
+    width: min(340px, 38%) !important;
+    height: 54px !important;
+    font-size: 23px !important;
+  }
+
+  .dr-hero-select-footer {
+    grid-template-columns: 245px minmax(0,1fr) 220px !important;
+  }
+
+  .dr-hero-select-roster > div {
+    grid-template-columns: repeat(auto-fill, 76px) !important;
+    grid-auto-rows: 76px !important;
+    gap: 7px !important;
+  }
+
+  .dr-hero-select-roster > div > button,
+  .dr-hero-select-roster-placeholder {
+    width: 76px !important;
+    height: 76px !important;
+    min-height: 76px !important;
+  }
+
+  .dr-hero-select-roster > div > button img {
+    height: 59px !important;
+  }
+
+  .dr-hero-select-roster > div > button span {
+    height: 17px !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-screen {
+    grid-template-rows: 72px minmax(0,1fr) 238px !important;
+  }
+
+  .dr-hero-select-main-art {
+    height: min(70vh, calc(100% - 2px)) !important;
+  }
+
+  .dr-hero-select-hero-copy {
+    top: 46px !important;
+    bottom: 58px !important;
+  }
+
+  .dr-hero-select-overview {
+    top: 34px !important;
+  }
+
+  .dr-hero-select-lock {
+    bottom: 14px !important;
+  }
+
+  .dr-hero-select-dev-note {
+    bottom: 72px !important;
+  }
+
+  .dr-hero-select-draft-note {
+    bottom: 83px !important;
+  }
+
+  .dr-hero-select-footer {
+    grid-template-columns: 230px minmax(0,1fr) 205px !important;
+  }
+
+  .dr-hero-select-roster > div {
+    grid-template-columns: repeat(auto-fill, 70px) !important;
+    grid-auto-rows: 70px !important;
+  }
+
+  .dr-hero-select-roster > div > button,
+  .dr-hero-select-roster-placeholder {
+    width: 70px !important;
+    height: 70px !important;
+    min-height: 70px !important;
+  }
+
+  .dr-hero-select-roster > div > button img {
+    height: 54px !important;
+  }
+
+  .dr-hero-select-roster > div > button span {
+    height: 16px !important;
+  }
+}
