@@ -552,6 +552,7 @@ export function createPlatformServer(options = {}) {
     let requestedCurrentResource = rawCurrentResource;
     let requestedAlive = rawAlive;
     let serverRespawned = false;
+    let suppressOwnerEcho = false;
     let deathIncrement = 0;
     let creditedKillerState = null;
     let confirmedHeroKillEvent = null;
@@ -664,6 +665,7 @@ export function createPlatformServer(options = {}) {
         if (combatLock.pendingLethal && !combatLock.deathAccounted) {
           requestedCurrentHp = previous?.currentHp ?? rawCurrentHp;
           requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
+          suppressOwnerEcho = true;
         } else {
           requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
           requestedAlive = requestedCurrentHp > 0;
@@ -807,7 +809,7 @@ export function createPlatformServer(options = {}) {
       type: 'match.runtime.state',
       matchId: active.id,
       state,
-    }, recipients);
+    }, suppressOwnerEcho ? recipients.filter(recipientUserId => recipientUserId !== userId) : recipients);
     if (creditedKillerState) {
       broadcast({
         type: 'match.runtime.state',
