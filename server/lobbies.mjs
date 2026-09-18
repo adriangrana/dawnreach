@@ -433,6 +433,28 @@ export class LobbyManager {
     return match;
   }
 
+  cancelLaunch(matchId, leaverUserId = null) {
+    const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
+    if (!lobby) return null;
+
+    lobby.status = 'open';
+    delete lobby.matchId;
+    lobby.players = lobby.players.map(player => ({ ...player, ready: false }));
+    this.addSystemMessage(lobby, 'Hero Select was cancelled. The lobby is open again.');
+
+    if (leaverUserId && (
+      lobby.players.some(player => player.userId === leaverUserId)
+      || lobby.spectators.some(spectator => spectator.userId === leaverUserId)
+    )) {
+      this.leave(leaverUserId);
+      return this.lobbyForUser(leaverUserId);
+    }
+
+    this.emitLobby(lobby);
+    this.emitList();
+    return copyLobby(lobby);
+  }
+
   closeByMatch(matchId) {
     const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
     if (!lobby) return;
