@@ -299,6 +299,7 @@ export type MatchRuntimeCombatEvent = Readonly<{
   sourceUserId: string;
   sourceUsername: string;
   sourceEntityId: string;
+  combatId?: string;
   targetUserId: string;
   targetUsername: string;
   reason: 'damage' | 'heal';
@@ -367,6 +368,14 @@ export type MatchRuntimeStructureDamageEvent = Readonly<{
   structureId: string;
   amount: number;
   at: number;
+}>;
+
+export type MatchConnectionGraceEvent = Readonly<{
+  type: 'match.connection.grace';
+  matchId: string;
+  mode: 'team' | 'all' | 'cleared';
+  team: Team | null;
+  deadlineAt: number | null;
 }>;
 
 export type MatchRuntimePauseStateEvent = Readonly<{
@@ -455,6 +464,7 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeCreepDamageEvent
   | MatchRuntimeStructureSnapshotEvent
   | MatchRuntimeStructureDamageEvent
+  | MatchConnectionGraceEvent
   | MatchRuntimePauseStateEvent
   | MatchRuntimeHeroKillEvent
   | MatchChatMessageEvent
