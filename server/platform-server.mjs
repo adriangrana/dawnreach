@@ -180,6 +180,21 @@ export function createPlatformServer(options = {}) {
     if (amount <= 0) return null;
     const reason = payload?.reason === 'heal' ? 'heal' : 'damage';
 
+    const room = runtimeRoom(active.id);
+    const targetRuntime = room.get(target.userId);
+    if (targetRuntime) {
+      const currentHp = reason === 'heal'
+        ? Math.min(targetRuntime.maxHp, targetRuntime.currentHp + amount)
+        : Math.max(0, targetRuntime.currentHp - amount);
+      room.set(target.userId, {
+        ...targetRuntime,
+        currentHp,
+        alive: currentHp > 0,
+        sequence: targetRuntime.sequence + 1,
+        sentAt: Date.now(),
+      });
+    }
+
     const event = {
       type: 'match.runtime.combat',
       matchId: active.id,
