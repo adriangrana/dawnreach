@@ -933,11 +933,14 @@ export function createPlatformServer(options = {}) {
     };
     const recipients = active.players.map(candidate => candidate.userId);
     if (synchronizedTargetState) {
+      // Observers and the attacker can render the predicted HP immediately, but the victim
+      // must apply the combat event against its own pre-hit state exactly once. Sending the
+      // prediction to the victim first made it subtract the same hit twice.
       broadcast({
         type: 'match.runtime.state',
         matchId: active.id,
         state: synchronizedTargetState,
-      }, recipients);
+      }, recipients.filter(recipientUserId => recipientUserId !== target.userId));
     }
     broadcast(event, [...new Set([source.userId, target.userId])]);
     return event;
