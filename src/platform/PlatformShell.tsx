@@ -3,6 +3,7 @@ import { LogIn, Shield, UserPlus, X } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
+import { HeroSelectScreen } from './HeroSelectScreen';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
 import { DawnreachPlayScreen, type PlayMode } from './DawnreachPlay';
@@ -15,6 +16,7 @@ import {
   platformRealtime,
   registerPlatformAccount,
   type CustomLobby,
+  type HeroSelectState,
   type PartySnapshot,
   type PlatformRealtimeEvent,
   type PlatformUser,
@@ -98,6 +100,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [ready, setReady] = useState<ReadyState | null>(null);
   const [lobbies, setLobbies] = useState<readonly CustomLobby[]>([]);
   const [currentLobby, setCurrentLobby] = useState<CustomLobby | null>(null);
+  const [heroSelect, setHeroSelect] = useState<HeroSelectState | null>(null);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
@@ -149,9 +152,15 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       if (type === 'match.found') {
         setReady(null);
         setQueue(current => ({ ...current, joined: false }));
-        setNotice('Match confirmed. The platform is preserving its players and teams.');
+        setNotice('');
       }
-      if (type === 'match.session.pending') setNotice('Match created. Preparing the next stage…');
+      if ((type === 'hero_select.start' || type === 'hero_select.update' || type === 'hero_select.complete') && 'heroSelect' in event && event.heroSelect) {
+        setHeroSelect(event.heroSelect as HeroSelectState);
+        setNotice('');
+      }
+      if (type === 'match.session.pending') {
+        setNotice('');
+      }
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
         setRealtime('online');
@@ -160,6 +169,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         if ('party' in event && event.party) setParty(event.party as PartySnapshot);
         if ('lobbies' in event && Array.isArray(event.lobbies)) setLobbies(event.lobbies as readonly CustomLobby[]);
         if ('lobby' in event) setCurrentLobby((event.lobby as CustomLobby | null) ?? null);
+        if ('heroSelect' in event) setHeroSelect((event.heroSelect as HeroSelectState | null) ?? null);
         if ('queue' in event && event.queue && typeof event.queue === 'object') {
           const snapshot = event.queue as { joined?: boolean; target?: number };
           setQueue(current => ({ ...current, joined: Boolean(snapshot.joined), target: Number(snapshot.target || current.target) }));
@@ -196,6 +206,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     setSection('play');
     setPlaySection('matchmaking');
   };
+
+  if (heroSelect) {
+    return <HeroSelectScreen state={heroSelect} me={user} />;
+  }
 
   return <>
     <main className="platform-home-surface platform-home-shell">
