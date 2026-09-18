@@ -2429,3 +2429,344 @@
     drop-shadow(0 18px 24px rgba(0,0,0,.34))
     drop-shadow(0 0 14px rgba(63,128,169,.12)) !important;
 }
+
+
+/* =========================================================
+   HERO SELECT · canonical header replication pass
+   ========================================================= */
+
+.dr-hero-select-screen {
+  grid-template-rows: 104px minmax(0, 1fr) clamp(284px, 31vh, 320px) !important;
+}
+
+.dr-hero-select-header {
+  position: relative;
+  z-index: 12;
+  grid-template-columns: 300px minmax(210px, 1fr) 330px minmax(210px, 1fr) 285px !important;
+  gap: 8px !important;
+  padding: 0 26px !important;
+  border-bottom: 1px solid rgba(118, 145, 157, .26) !important;
+  background:
+    radial-gradient(circle at 50% -40%, rgba(77, 113, 141, .16), transparent 46%),
+    linear-gradient(180deg, rgba(5, 15, 22, .985), rgba(5, 15, 22, .90)) !important;
+  box-shadow:
+    0 8px 26px rgba(0,0,0,.24),
+    inset 0 -1px 0 rgba(255,255,255,.02) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.dr-hero-select-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(206, 173, 86, .26) 22%, rgba(113, 157, 182, .18) 50%, rgba(206, 173, 86, .26) 78%, transparent);
+  pointer-events: none;
+}
+
+.dr-hero-select-brand {
+  align-self: stretch;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.dr-hero-select-brand img {
+  width: 72px !important;
+  height: 72px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 0 8px rgba(221, 181, 78, .20));
+}
+
+.dr-hero-select-brand > div {
+  gap: 5px !important;
+}
+
+.dr-hero-select-brand strong {
+  color: #e9dbb3 !important;
+  font: 500 30px/.95 Georgia, "Times New Roman", serif !important;
+  letter-spacing: .055em !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+
+.dr-hero-select-brand small {
+  color: #80929a !important;
+  font: 700 7.5px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .18em !important;
+}
+
+/* Bans sit as true header ornaments rather than floating micro labels. */
+.dr-hero-select-bans {
+  position: relative;
+  align-self: center;
+  min-width: 0;
+  display: grid !important;
+  justify-items: center !important;
+  gap: 7px !important;
+}
+
+.dr-hero-select-bans > span {
+  color: #91a0a7 !important;
+  font: 700 8px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .13em !important;
+  text-transform: uppercase;
+}
+
+.dr-hero-select-bans > div {
+  display: flex !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+.dr-hero-select-bans i {
+  width: 42px !important;
+  height: 42px !important;
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box;
+  border: 1px solid rgba(100, 131, 147, .28) !important;
+  background:
+    linear-gradient(180deg, rgba(8, 24, 34, .86), rgba(3, 12, 18, .96)) !important;
+  color: #6e8089 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
+}
+
+.dr-hero-select-bans i.is-ban {
+  border-color: rgba(169, 140, 67, .34) !important;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(205, 167, 72, .09), transparent 55%),
+    linear-gradient(180deg, rgba(12, 28, 39, .94), rgba(4, 14, 20, .98)) !important;
+}
+
+.dr-hero-select-bans i.is-placeholder {
+  position: relative;
+  color: transparent !important;
+}
+
+.dr-hero-select-bans i.is-placeholder::before,
+.dr-hero-select-bans i.is-placeholder::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: 50%;
+  height: 1px;
+  background: rgba(92, 112, 121, .42);
+}
+
+.dr-hero-select-bans i.is-placeholder::before { transform: rotate(45deg); }
+.dr-hero-select-bans i.is-placeholder::after { transform: rotate(-45deg); }
+
+.dr-hero-select-bans i svg {
+  width: 17px !important;
+  height: 17px !important;
+  stroke-width: 1.5;
+}
+
+.dr-hero-select-bans.is-empty > span,
+.dr-hero-select-bans.is-empty > div {
+  visibility: hidden !important;
+}
+
+/* Gold wings around the mode / phase block, matching the reference hierarchy. */
+.dr-hero-select-phase {
+  position: relative;
+  z-index: 2;
+  align-self: stretch;
+  display: grid !important;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  justify-items: center !important;
+  gap: 4px !important;
+  min-width: 300px;
+}
+
+.dr-hero-select-phase::before,
+.dr-hero-select-phase::after {
+  content: "";
+  position: absolute;
+  top: 43px;
+  width: 185px;
+  height: 30px;
+  pointer-events: none;
+  opacity: .9;
+}
+
+.dr-hero-select-phase::before {
+  right: calc(100% - 4px);
+  border-top: 1px solid rgba(218, 180, 82, .64);
+  border-radius: 65% 0 0 0;
+  transform: skewX(-28deg) rotate(4deg);
+  background:
+    linear-gradient(90deg, transparent 0 20%, rgba(218, 180, 82, .16) 58%, transparent 100%);
+}
+
+.dr-hero-select-phase::after {
+  left: calc(100% - 4px);
+  border-top: 1px solid rgba(218, 180, 82, .64);
+  border-radius: 0 65% 0 0;
+  transform: skewX(28deg) rotate(-4deg);
+  background:
+    linear-gradient(270deg, transparent 0 20%, rgba(218, 180, 82, .16) 58%, transparent 100%);
+}
+
+.dr-hero-select-phase strong {
+  order: 1;
+  color: #ded7c5 !important;
+  font: 500 22px/1 Georgia, "Times New Roman", serif !important;
+  letter-spacing: .055em !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,.36);
+}
+
+.dr-hero-select-phase small {
+  order: 2;
+  position: relative;
+  min-width: 150px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #9aa7ad !important;
+  font: 700 8px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .14em !important;
+}
+
+.dr-hero-select-phase small::before,
+.dr-hero-select-phase small::after {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(213, 178, 83, .72));
+}
+
+.dr-hero-select-phase small::after {
+  background: linear-gradient(90deg, rgba(213, 178, 83, .72), transparent);
+}
+
+.dr-hero-select-phase time {
+  order: 3;
+  margin-top: 1px;
+  color: #f0d589 !important;
+  font: 500 38px/.95 Georgia, "Times New Roman", serif !important;
+  letter-spacing: .055em !important;
+  text-shadow:
+    0 0 18px rgba(228, 187, 76, .17),
+    0 2px 8px rgba(0,0,0,.42) !important;
+}
+
+.dr-hero-select-motto {
+  align-self: center;
+  justify-self: end !important;
+  gap: 6px !important;
+  text-align: right !important;
+}
+
+.dr-hero-select-motto span,
+.dr-hero-select-motto strong {
+  font: 700 7.5px/1 "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: .18em !important;
+}
+
+.dr-hero-select-motto span {
+  color: #6d7e86 !important;
+}
+
+.dr-hero-select-motto strong {
+  color: #a7b1b4 !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-screen {
+    grid-template-rows: 92px minmax(0,1fr) 270px !important;
+  }
+
+  .dr-hero-select-header {
+    grid-template-columns: 235px minmax(180px,1fr) 285px minmax(180px,1fr) 225px !important;
+    padding: 0 16px !important;
+  }
+
+  .dr-hero-select-brand img {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .dr-hero-select-brand strong {
+    font-size: 24px !important;
+  }
+
+  .dr-hero-select-bans i {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .dr-hero-select-phase {
+    min-width: 260px;
+  }
+
+  .dr-hero-select-phase::before,
+  .dr-hero-select-phase::after {
+    width: 145px;
+    top: 39px;
+  }
+
+  .dr-hero-select-phase strong {
+    font-size: 19px !important;
+  }
+
+  .dr-hero-select-phase time {
+    font-size: 31px !important;
+  }
+
+  .dr-hero-select-motto span,
+  .dr-hero-select-motto strong {
+    font-size: 6.5px !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-screen {
+    grid-template-rows: 78px minmax(0,1fr) 238px !important;
+  }
+
+  .dr-hero-select-header {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
+
+  .dr-hero-select-brand img {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  .dr-hero-select-brand strong {
+    font-size: 21px !important;
+  }
+
+  .dr-hero-select-bans i {
+    width: 31px !important;
+    height: 31px !important;
+  }
+
+  .dr-hero-select-bans > span {
+    font-size: 6.5px !important;
+  }
+
+  .dr-hero-select-phase::before,
+  .dr-hero-select-phase::after {
+    top: 34px;
+  }
+
+  .dr-hero-select-phase strong {
+    font-size: 17px !important;
+  }
+
+  .dr-hero-select-phase small {
+    font-size: 6.5px !important;
+  }
+
+  .dr-hero-select-phase time {
+    font-size: 27px !important;
+  }
+}
