@@ -559,7 +559,7 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 - [x] **HECHO · Login/Auth.** Flujo funcional y persistencia de sesión.
 - [x] **HECHO · HOME.** Composición cinematográfica, hero feature, rail PARTY/FRIENDS, búsqueda social y chat directo/PARTY.
-- [ ] **PARCIAL · PLAY.** Primera versión de la pantalla de referencia ya integrada: selector Normal/Ranked/VS AI/Training/Custom, panel de modo, preferencias Primary/Secondary y botón `FIND MATCH`; Normal/Ranked conservan el matchmaking real existente. Falta refinado visual, persistir/enviar role preferences y cerrar navegación de todos los modos.
+- [ ] **PARCIAL · PLAY.** Primera versión de la pantalla de referencia ya integrada: selector Normal/Ranked/VS AI/Training/Custom, panel de modo, **Deployment Preference** propio de Dawnreach (`NORTH / MID / SOUTH`, reparto conceptual `2 / 1 / 2`, Primary/Secondary y `FILL IF NEEDED`) y botón `FIND MATCH`; Normal/Ranked conservan el matchmaking real existente. Se eliminó la dependencia visual de `TOP/JUNGLE/CARRY/SUPPORT`. Falta persistir/enviar las preferencias de despliegue al matchmaking y cerrar navegación de todos los modos.
 - [ ] **PENDIENTE · HEROES.** Catálogo, filtros/roles y detalle visual según referencia; solo Alden tiene gameplay real hoy.
 - [ ] **PENDIENTE · COLLECTION.** Inventario cosmético/skins y panel de preview según referencia.
 - [ ] **PENDIENTE · STORE.** Catálogo cosmético, bundles y economía premium; las monedas del header existen visualmente pero todavía no tienen backend de compras/balance persistente.
