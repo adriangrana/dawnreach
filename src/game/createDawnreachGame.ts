@@ -1647,7 +1647,7 @@ export async function createDawnreachGame(
         alive: overlay ? overlay.hero.currentHp > 0 : localHeroEntity.alive,
       };
     },
-    castLocalAbility(key: AbilityKey, rank: number, nowMs = performance.now()) {
+    castLocalAbility(key: AbilityKey, rank: number, nowMs = toMatchGameTimeMs(performance.now())) {
       syncLocalHeroEntityState();
       return triggerAldenWorldAbility(scene, key, rank, nowMs);
     },
@@ -1665,7 +1665,7 @@ export async function createDawnreachGame(
         input.creepId,
         input.amount,
         `player:${input.sourceUserId}:hero`,
-        input.atMs ?? performance.now(),
+        input.atMs ?? toMatchGameTimeMs(performance.now()),
       );
     },
     applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
@@ -1729,7 +1729,7 @@ export async function createDawnreachGame(
           currentHp: remote.entity.currentHp,
           currentResource: remote.entity.currentResource,
           alive: true,
-          atMs: performance.now(),
+          atMs: toMatchGameTimeMs(performance.now()),
         });
       }
     },
@@ -1773,7 +1773,7 @@ export async function createDawnreachGame(
         damageType: 'physical',
         isDirect: true,
         isFromFront: true,
-        atMs: performance.now(),
+        atMs: toMatchGameTimeMs(performance.now()),
       });
     },
     destroy() {
