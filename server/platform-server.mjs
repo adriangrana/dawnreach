@@ -961,11 +961,15 @@ export function createPlatformServer(options = {}) {
       Math.min(maxResource || 100000, Number(payload?.currentResource ?? previous.currentResource) || 0),
     );
 
+    const resolvedPosition = payload?.position && typeof payload.position === 'object'
+      ? payload.position
+      : previous.position;
+
     return reportMatchRuntimeState(userId, {
       matchId: active.id,
       sequence: Number(previous.sequence || 0) + 1,
-      position: { ...previous.position },
-      yaw: previous.yaw,
+      position: { ...resolvedPosition },
+      yaw: Number.isFinite(Number(payload?.yaw)) ? Number(payload.yaw) : previous.yaw,
       moving: currentHp > 0 ? Boolean(previous.moving) : false,
       currentHp,
       maxHp,
