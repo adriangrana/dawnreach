@@ -1765,6 +1765,7 @@ export function createPlatformServer(options = {}) {
         simulationUserId: runtimeAuthorityUserId(active.match),
       });
       peer.send(publicRuntimePauseState(active.match.id));
+      peer.send(runtimeConnectionGraceEvent(active.match));
       return;
     }
 
@@ -2047,6 +2048,7 @@ export function createPlatformServer(options = {}) {
               simulationUserId: runtimeAuthorityUserId(active),
             });
             peer.send(publicRuntimePauseState(active.id));
+            peer.send(runtimeConnectionGraceEvent(active));
           }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
           else if (type === 'lobby.create') {
