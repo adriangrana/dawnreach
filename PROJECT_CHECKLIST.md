@@ -517,7 +517,7 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [x] **HECHO · Identidad visual Dawnreach propia.** La plataforma reutiliza conceptos/estado, no la presentación visual TCL.
 - [ ] **PARCIAL · Shell prepartida Dawnreach.** Login, Home, PLAY y Social funcionan; Ranking y Perfil siguen pendientes.
 - [x] **HECHO · Superficie Party/Matchmaking/Ready**, integrada en Home/PLAY con rail social persistente.
-- [ ] **PARCIAL · Lobby personalizada 5v5.** Funciona con equipos internos `blue/red`; falta migrar naming/capa visible a Dawn/Dusk y terminar el acabado visual de referencia.
+- [ ] **PARCIAL · Lobby personalizada 5v5.** Ya tiene la UI canónica de Custom Lobbies: browser público, crear/join por código, sala activa, equipos visibles `DAWN / DUSK`, slots 5v5, código compartible, settings y `START GAME`; el backend real ya cubre create/join/move/leave/start. Faltan ready states, spectators, bots, lobby chat/invites directos y persistencia/edición real de reglas avanzadas.
 - [ ] **P1 · Hero Select.**
 - [ ] **P1 · Loading screen multiplayer.**
 - [ ] **P1 · PostMatch.**
@@ -559,7 +559,7 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 
 - [x] **HECHO · Login/Auth.** Flujo funcional y persistencia de sesión.
 - [x] **HECHO · HOME.** Composición cinematográfica, hero feature, rail PARTY/FRIENDS, búsqueda social y chat directo/PARTY.
-- [ ] **PARCIAL · PLAY.** Primera versión de la pantalla de referencia ya integrada: selector Normal/Ranked/VS AI/Training/Custom, panel de modo y **Deployment Preference** propio de Dawnreach (`NORTH / MID / SOUTH`, reparto conceptual `2 / 1 / 2`, Primary/Secondary y `FILL IF NEEDED`) para Normal/Ranked/VS AI. El CTA queda deshabilitado si esos modos no tienen ninguna línea seleccionada ni `FILL IF NEEDED`; Training y Custom sustituyen esa sección por contexto propio y no exigen despliegue. Normal/Ranked conservan el matchmaking real existente. Se eliminó la dependencia visual de `TOP/JUNGLE/CARRY/SUPPORT`. Falta persistir/enviar las preferencias de despliegue al matchmaking y cerrar navegación de todos los modos.
+- [ ] **PARCIAL · PLAY.** Primera versión de la pantalla de referencia ya integrada: selector Normal/Ranked/VS AI/Training/Custom, panel de modo y **Deployment Preference** propio de Dawnreach (`NORTH / MID / SOUTH`, reparto conceptual `2 / 1 / 2`, Primary/Secondary y `FILL IF NEEDED`) para Normal/Ranked/VS AI. El CTA queda deshabilitado si esos modos no tienen ninguna línea seleccionada ni `FILL IF NEEDED`; Training no exige despliegue; Custom abre ahora la pantalla canónica completa de Custom Lobbies con el mismo selector lateral de modos de PLAY. Normal/Ranked conservan el matchmaking real existente. Se eliminó la dependencia visual de `TOP/JUNGLE/CARRY/SUPPORT`. Falta persistir/enviar las preferencias de despliegue al matchmaking y cerrar navegación de todos los modos.
 - [ ] **PENDIENTE · HEROES.** Catálogo, filtros/roles y detalle visual según referencia; solo Alden tiene gameplay real hoy.
 - [ ] **PENDIENTE · COLLECTION.** Inventario cosmético/skins y panel de preview según referencia.
 - [ ] **PENDIENTE · STORE.** Catálogo cosmético, bundles y economía premium; las monedas del header existen visualmente pero todavía no tienen backend de compras/balance persistente.
