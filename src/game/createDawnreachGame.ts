@@ -1832,6 +1832,68 @@ export async function createDawnreachGame(
         input.atMs ?? toMatchGameTimeMs(performance.now()),
       );
     },
+    applyLocalAuthoritativeNetworkState(state: DawnreachRemoteHeroState) {
+      if (state.userId !== localPlayerId || state.sequence <= lastLocalAuthoritativeSequence) return false;
+      lastLocalAuthoritativeSequence = state.sequence;
+
+      const wasAlive = localHeroEntity.alive && localHeroEntity.currentHp > 0;
+      localHeroEntity.maxHp = Math.max(1, state.maxHp);
+      localHeroEntity.currentHp = THREE.MathUtils.clamp(state.currentHp, 0, localHeroEntity.maxHp);
+      localHeroEntity.maxResource = Math.max(0, state.maxResource);
+      localHeroEntity.currentResource = THREE.MathUtils.clamp(
+        state.currentResource,
+        0,
+        localHeroEntity.maxResource || state.currentResource,
+      );
+      localHeroEntity.level = Math.max(1, Math.floor(state.level));
+      localHeroEntity.alive = Boolean(state.alive) && localHeroEntity.currentHp > 0;
+      localVitalOverride = {
+        currentHp: localHeroEntity.currentHp,
+        currentResource: localHeroEntity.currentResource,
+        alive: localHeroEntity.alive,
+      };
+
+      localHeroEntity.root.userData.maxHp = localHeroEntity.maxHp;
+      localHeroEntity.root.userData.currentHp = localHeroEntity.currentHp;
+      localHeroEntity.root.userData.maxResource = localHeroEntity.maxResource;
+      localHeroEntity.root.userData.currentResource = localHeroEntity.currentResource;
+      localHeroEntity.root.userData.level = localHeroEntity.level;
+      localHeroEntity.root.userData.alive = localHeroEntity.alive;
+
+      if (!localHeroEntity.alive) {
+        hero.root.userData[RESPAWN_HOLD_KEY] = true;
+        clearHeroOrdersForLock();
+        hero.root.visible = true;
+        hero.model.visible = true;
+        hero.model.rotation.x = -Math.PI * 0.48;
+      } else {
+        hero.root.userData[RESPAWN_HOLD_KEY] = false;
+        hero.root.visible = true;
+        hero.model.visible = true;
+        hero.model.rotation.x = 0;
+        if (!wasAlive) {
+          // Only a dead -> alive transition may relocate the local hero. Normal echoed
+          // network packets never correct movement, avoiding self rubber-banding.
+          hero.root.position.set(state.position.x, state.position.y, state.position.z);
+          currentYaw = state.yaw;
+          targetYaw = state.yaw;
+          hero.model.rotation.y = state.yaw;
+          resetHeroLocomotionPose();
+          cameraAnchor.copy(hero.root.position);
+          clearHeroOrdersForLock();
+        }
+      }
+
+      publishWorldEntityRuntime(localWorldEntityId, {
+        level: localHeroEntity.level,
+        maxHp: localHeroEntity.maxHp,
+        currentHp: localHeroEntity.currentHp,
+        maxResource: localHeroEntity.maxResource,
+        currentResource: localHeroEntity.currentResource,
+        alive: localHeroEntity.alive,
+      });
+      return true;
+    },
     applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
       if (state.userId === localPlayerId) return;
       const remote = remoteHeroes.get(state.userId);
@@ -1904,12 +1966,13 @@ export async function createDawnreachGame(
       sourceEntityId?: string;
       respawnSeconds?: number;
     }) {
-      const overlay = getHeroState?.() ?? null;
-      if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return;
+      const overlay = syncLocalHeroEntityState();
+      if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return null;
       const maxHp = Math.max(1, overlay.stats.maxHp);
+      const beforeHp = THREE.MathUtils.clamp(localHeroEntity.currentHp, 0, maxHp);
       const currentHp = input.reason === 'heal'
-        ? Math.min(maxHp, overlay.hero.currentHp + input.amount)
-        : Math.max(0, overlay.hero.currentHp - input.amount);
+        ? Math.min(maxHp, beforeHp + input.amount)
+        : Math.max(0, beforeHp - input.amount);
       localHeroEntity.maxHp = maxHp;
       localHeroEntity.currentHp = currentHp;
       localHeroEntity.alive = currentHp > 0;
@@ -1920,14 +1983,14 @@ export async function createDawnreachGame(
         maxHp,
         currentHp,
         maxResource: overlay.stats.maxResource,
-        currentResource: overlay.hero.currentResource,
+        currentResource: localHeroEntity.currentResource,
         alive: currentHp > 0,
       });
       emitWorldCombatEvent({
         entityId: localWorldEntityId,
         reason: input.reason === 'heal' ? 'heal' : (currentHp > 0 ? 'damage' : 'death'),
         currentHp,
-        currentResource: overlay.hero.currentResource,
+        currentResource: localHeroEntity.currentResource,
         alive: currentHp > 0,
         respawnSeconds: currentHp <= 0 && Number.isFinite(input.respawnSeconds)
           ? Math.max(0, Number(input.respawnSeconds))
@@ -1939,6 +2002,24 @@ export async function createDawnreachGame(
         isFromFront: true,
         atMs: toMatchGameTimeMs(performance.now()),
       });
+
+      // Defensive abilities may have rewritten the incoming event through a combat guard.
+      // Resolve from the shared world snapshot after all guards ran, not from the raw hit.
+      const resolved = getWorldEntityRuntime(localWorldEntityId);
+      if (!resolved) return null;
+      localHeroEntity.currentHp = THREE.MathUtils.clamp(resolved.currentHp, 0, maxHp);
+      localHeroEntity.currentResource = resolved.currentResource;
+      localHeroEntity.alive = resolved.alive && localHeroEntity.currentHp > 0;
+      localVitalOverride = {
+        currentHp: localHeroEntity.currentHp,
+        currentResource: localHeroEntity.currentResource,
+        alive: localHeroEntity.alive,
+      };
+      return {
+        currentHp: localHeroEntity.currentHp,
+        currentResource: localHeroEntity.currentResource,
+        alive: localHeroEntity.alive,
+      };
     },
     destroy() {
       cancelAnimationFrame(animationFrame);
