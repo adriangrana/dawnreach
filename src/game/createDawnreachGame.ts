@@ -947,6 +947,27 @@ export async function createDawnreachGame(
       atMs: nowMs,
     });
 
+    const networkRemoteHero = target.kind === 'hero' && target.root.userData.networkRemoteHero === true;
+    if (networkRemoteHero) {
+      // Remote hero HP is owned by the target client/server reconciliation. Emit the hit
+      // immediately for networking/combat text, but never predict a remote death locally:
+      // that was the source of HP rollback and duplicate/false kill feed rows.
+      emitWorldCombatEvent({
+        entityId: target.id,
+        reason: 'damage',
+        currentHp: target.currentHp,
+        currentResource: target.currentResource,
+        alive: target.alive,
+        amount: damage,
+        sourceEntityId: localHeroEntity.id,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+        atMs: nowMs,
+      });
+      return;
+    }
+
     target.currentHp = Math.max(0, target.currentHp - damage);
     target.root.userData.currentHp = target.currentHp;
     const aliveAfterHit = target.currentHp > 0;
