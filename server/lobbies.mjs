@@ -465,6 +465,33 @@ export class LobbyManager {
     return copyLobby(lobby);
   }
 
+  removeParticipantFromInGame(matchId, userId) {
+    const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
+    if (!lobby) return null;
+
+    const leavingPlayer = lobby.players.find(player => player.userId === userId);
+    const leavingSpectator = lobby.spectators.find(spectator => spectator.userId === userId);
+    if (!leavingPlayer && !leavingSpectator) return copyLobby(lobby);
+
+    lobby.players = lobby.players.filter(player => player.userId !== userId);
+    lobby.spectators = lobby.spectators.filter(spectator => spectator.userId !== userId);
+    this.options.onEvent({ type: 'lobby.left', lobbyId: lobby.id }, [userId]);
+
+    const leaving = leavingPlayer || leavingSpectator;
+    if (leaving) this.addSystemMessage(lobby, `${leaving.username} abandoned the active match.`);
+
+    if (lobby.ownerId === userId && lobby.players.length) {
+      const next = lobby.players[0];
+      lobby.ownerId = next.userId;
+      lobby.ownerUsername = next.username;
+      this.addSystemMessage(lobby, `${next.username} is now the lobby host.`);
+    }
+
+    this.emitLobby(lobby);
+    this.emitList();
+    return copyLobby(lobby);
+  }
+
   closeByMatch(matchId) {
     const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
     if (!lobby) return;
