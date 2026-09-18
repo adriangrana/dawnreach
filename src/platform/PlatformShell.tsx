@@ -158,6 +158,20 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setHeroSelect(event.heroSelect as HeroSelectState);
         setNotice('');
       }
+      if (type === 'hero_select.cancelled') {
+        const cancelledByUserId = 'cancelledByUserId' in event ? String(event.cancelledByUserId || '') : '';
+        const cancelledByUsername = 'cancelledByUsername' in event ? String(event.cancelledByUsername || 'A player') : 'A player';
+        const source = 'source' in event && event.source === 'custom' ? 'custom' : 'matchmaking';
+        setHeroSelect(null);
+        setReady(null);
+        setQueue(current => ({ ...current, joined: false }));
+        setSection('play');
+        setPlaySection(source === 'custom' ? 'custom' : 'matchmaking');
+        if (source === 'custom') platformRealtime.send('lobby.list');
+        setNotice(cancelledByUserId === user.id
+          ? 'You left Hero Select.'
+          : `${cancelledByUsername} left Hero Select. The match was cancelled.`);
+      }
       if (type === 'match.session.pending') {
         setNotice('');
       }
