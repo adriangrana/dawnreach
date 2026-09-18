@@ -634,3 +634,83 @@
   }
 
 }
+
+/* =========================================================
+   HOME MODE RIBBON · shared PLAY mode emblems
+   ========================================================= */
+
+.dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon {
+  position: relative !important;
+  z-index: 3 !important;
+  width: 44px !important;
+  height: 44px !important;
+  flex: 0 0 44px !important;
+  display: grid !important;
+  place-items: center !important;
+  filter: none !important;
+}
+
+.dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 44px !important;
+  height: 44px !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  transition: opacity .16s ease, filter .16s ease !important;
+}
+
+.dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon img.is-idle {
+  opacity: 1 !important;
+  filter:
+    drop-shadow(0 2px 4px rgba(0, 0, 0, .52))
+    drop-shadow(0 0 5px rgba(58, 148, 211, .10)) !important;
+}
+
+.dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon img.is-active {
+  opacity: 0 !important;
+  filter:
+    drop-shadow(0 2px 4px rgba(0, 0, 0, .55))
+    drop-shadow(0 0 7px rgba(238, 198, 96, .26)) !important;
+}
+
+.dr-home-mode-ribbon button:not(.is-primary):hover > .dr-home-mode-icon img.is-idle {
+  opacity: 0 !important;
+}
+
+.dr-home-mode-ribbon button:not(.is-primary):hover > .dr-home-mode-icon img.is-active {
+  opacity: 1 !important;
+}
+
+/* The old Lucide rule must not interfere with the shared mode emblem wrapper. */
+.dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon svg {
+  display: none !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon {
+    width: 36px !important;
+    height: 36px !important;
+    flex-basis: 36px !important;
+  }
+
+  .dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon img {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon {
+    width: 34px !important;
+    height: 34px !important;
+    flex-basis: 34px !important;
+  }
+
+  .dr-home-mode-ribbon button:not(.is-primary) > .dr-home-mode-icon img {
+    width: 34px !important;
+    height: 34px !important;
+  }
+}
