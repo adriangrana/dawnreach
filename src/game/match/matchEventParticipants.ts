@@ -38,6 +38,8 @@ export function authoredWorldEntityName(entityId: string) {
 }
 
 export function matchEventTeamFromEntityId(entityId: string): MatchEventTeam {
+  const laneCreep = /^lane-creep:(blue|red):/.exec(entityId);
+  if (laneCreep) return laneCreep[1] as 'blue' | 'red';
   const authoredName = authoredWorldEntityName(entityId);
   if (authoredName.startsWith('blue-')) return 'blue';
   if (authoredName.startsWith('red-')) return 'red';
@@ -45,6 +47,8 @@ export function matchEventTeamFromEntityId(entityId: string): MatchEventTeam {
 }
 
 export function matchEventKindFromEntityId(entityId: string): MatchEventEntityKind {
+  if (/^player:[^:]+:hero$/.test(entityId)) return 'hero';
+  if (/^lane-creep:(blue|red):(top|mid|bot):/.test(entityId)) return 'creep';
   const generatedPrefix = entityId.includes(':') ? entityId.slice(0, entityId.indexOf(':')) : '';
   if (generatedPrefix === 'hero') return 'hero';
   if (generatedPrefix === 'creep') return 'creep';
@@ -63,6 +67,16 @@ export function matchEventKindFromEntityId(entityId: string): MatchEventEntityKi
 }
 
 export function matchEventLabelForEntityId(entityId: string, kind: MatchEventEntityKind) {
+  const playerHero = /^player:([^:]+):hero$/.exec(entityId);
+  if (playerHero) return 'Héroe';
+
+  const laneCreep = /^lane-creep:(blue|red):(top|mid|bot):/.exec(entityId);
+  if (laneCreep) {
+    const team = laneCreep[1] === 'blue' ? 'Dawn' : 'Dusk';
+    const lane = laneCreep[2] === 'top' ? 'superior' : laneCreep[2] === 'mid' ? 'central' : 'inferior';
+    return `Súbdito ${team} ${lane}`;
+  }
+
   const authoredName = authoredWorldEntityName(entityId);
 
   if (authoredName === 'blue-throne') return 'Trono del Alba';
