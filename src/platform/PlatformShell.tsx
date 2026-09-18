@@ -4,6 +4,7 @@ import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { HeroSelectScreen } from './HeroSelectScreen';
+import { MatchLoadingScreen } from './MatchLoadingScreen';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
 import { DawnreachPlayScreen, type PlayMode } from './DawnreachPlay';
@@ -182,8 +183,21 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
           : `${cancelledByUsername} left Hero Select. The match was cancelled.`);
       }
       if (type === 'match.session.pending') {
-        if ('match' in event && event.match) setActiveMatch({ stage: 'loading', match: event.match as ActiveMatchSession['match'] });
+        if ('match' in event && event.match) {
+          setHeroSelect(null);
+          setActiveMatch({ stage: 'loading', match: event.match as ActiveMatchSession['match'] });
+        }
         setNotice('');
+      }
+      if (type === 'match.loading.update' && 'match' in event && event.match) {
+        setHeroSelect(null);
+        setActiveMatch({ stage: 'loading', match: event.match as ActiveMatchSession['match'] });
+      }
+      if (type === 'match.start' && 'match' in event && event.match) {
+        setHeroSelect(null);
+        setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
+        setNotice('');
+        onLocalPlay();
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
         setActiveMatch(event.activeMatch as ActiveMatchSession);
@@ -244,6 +258,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     setSection('play');
     setPlaySection('matchmaking');
   };
+
+  if (activeMatch?.stage === 'loading') {
+    return <MatchLoadingScreen session={activeMatch} me={user} />;
+  }
 
   if (heroSelect) {
     return <HeroSelectScreen state={heroSelect} me={user} />;
