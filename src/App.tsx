@@ -1273,7 +1273,13 @@ export default function App({
     }
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
 
-    if (onlineMatch && localUser && event.reason !== 'heal' && Number(event.amount || 0) > 0) {
+    if (
+      onlineMatch
+      && localUser
+      && event.serverResolved !== true
+      && event.reason !== 'heal'
+      && Number(event.amount || 0) > 0
+    ) {
       const sourceEntityId = String(event.sourceEntityId || '');
       const authorityUserId = runtimeAuthorityUserIdRef.current ?? matchCreepAuthorityUserId(onlineMatch);
       const authoritativeLocalCreepHit = authorityUserId === localUser.id
