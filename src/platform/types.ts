@@ -236,6 +236,14 @@ export type MatchFoundEvent = Readonly<{ type: 'match.found'; match: MatchSummar
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
+export type HeroSelectCancelledEvent = Readonly<{
+  type: 'hero_select.cancelled';
+  matchId: string;
+  cancelledByUserId: string;
+  cancelledByUsername: string;
+  source: 'matchmaking' | 'custom';
+  mode: QueueMode | 'custom';
+}>;
 
 export type LobbiesUpdateEvent = Readonly<{ type: 'lobbies.update'; lobbies: readonly CustomLobby[] }>;
 export type LobbyUpdateEvent = Readonly<{ type: 'lobby.update'; lobby: CustomLobby }>;
@@ -258,6 +266,7 @@ export type PlatformRealtimeEvent =
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
+  | HeroSelectCancelledEvent
   | LobbiesUpdateEvent
   | LobbyUpdateEvent
   | LobbyLeftEvent
