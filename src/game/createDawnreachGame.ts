@@ -489,6 +489,11 @@ export async function createDawnreachGame(
     remote.targetPosition.copy(remote.rig.root.position);
   }
   const heroSpawnSurfaceY = hero.root.position.y;
+  localHeroEntity.root.userData.dawnreachRespawnPosition = {
+    x: hero.root.position.x,
+    y: hero.root.position.y,
+    z: hero.root.position.z,
+  };
 
   let destination: Point3 | null = null;
   let currentPath: Point3[] = [];
