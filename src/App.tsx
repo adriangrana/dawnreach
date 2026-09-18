@@ -50,7 +50,7 @@ import {
   type ItemUseDetail,
 } from './game/items/shopEvents';
 import { toMatchGameTimeMs } from './game/match/matchPauseRuntime';
-import { publishMatchEvent } from './game/match/matchEvents';
+import { publishMatchEvent, type MatchEventTeam } from './game/match/matchEvents';
 import { setMatchEventHeroDeathServerAuthority } from './game/match/matchEventRuntime';
 import {
   matchEventKindFromEntityId,
@@ -233,7 +233,9 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
     const player = match.players[action.state.userId];
     const heroEntityId = player?.ownedHeroEntityId ?? null;
     const hero = heroEntityId ? match.heroes[heroEntityId] ?? null : null;
-    if (!player || !hero || heroEntityId === LOCAL_HERO_ENTITY_ID) return { ...runtime, match, nowMs };
+    if (!player || !heroEntityId || !hero || heroEntityId === LOCAL_HERO_ENTITY_ID) {
+      return { ...runtime, match, nowMs };
+    }
 
     const remoteItems = new Map(
       (action.state.inventory ?? []).map(item => [item.slot, item] as const),
@@ -1291,7 +1293,7 @@ export default function App({
         const killerUserId = 'killerUserId' in event && event.killerUserId
           ? String(event.killerUserId)
           : null;
-        const killerTeam = 'killerTeam' in event && event.killerTeam === 'red'
+        const killerTeam: MatchEventTeam = 'killerTeam' in event && event.killerTeam === 'red'
           ? 'red'
           : 'killerTeam' in event && event.killerTeam === 'blue'
             ? 'blue'
