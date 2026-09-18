@@ -220,9 +220,9 @@ export function createPlatformServer(options = {}) {
       alive: requestedAlive,
       // Kills/deaths are server-owned. A client may report them for backwards compatibility,
       // but once a runtime row exists it cannot overwrite authoritative combat accounting.
-      kills: previous ? previous.kills : nonNegativeCounter(payload?.kills, 0),
-      deaths: previous ? previous.deaths : nonNegativeCounter(payload?.deaths, 0),
-      assists: nonNegativeCounter(payload?.assists, previous?.assists),
+      kills: previous ? previous.kills : 0,
+      deaths: previous ? previous.deaths : 0,
+      assists: previous ? nonNegativeCounter(payload?.assists, previous.assists) : 0,
       lastHits: nonNegativeCounter(payload?.lastHits, previous?.lastHits),
       denies: nonNegativeCounter(payload?.denies, previous?.denies),
       gold: nonNegativeCounter(payload?.gold, previous?.gold),
