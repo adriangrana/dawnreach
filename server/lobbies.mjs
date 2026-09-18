@@ -433,6 +433,16 @@ export class LobbyManager {
     return match;
   }
 
+  markInGame(matchId) {
+    const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
+    if (!lobby) return null;
+    lobby.status = 'in_game';
+    this.addSystemMessage(lobby, 'The match is now in progress.');
+    this.emitLobby(lobby);
+    this.emitList();
+    return copyLobby(lobby);
+  }
+
   cancelLaunch(matchId, leaverUserId = null) {
     const lobby = [...this.lobbies.values()].find(candidate => candidate.matchId === matchId);
     if (!lobby) return null;
