@@ -166,6 +166,35 @@ export function createPlatformServer(options = {}) {
     return state;
   }
 
+  function reportMatchRuntimeCombat(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para combatir.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El evento pertenece a otra partida.');
+
+    const source = active.players.find(candidate => candidate.userId === userId);
+    const targetUserId = String(payload?.targetUserId || '');
+    const target = active.players.find(candidate => candidate.userId === targetUserId);
+    if (!source || !target || source.userId === target.userId) throw new Error('Objetivo de combate inválido.');
+
+    const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
+    if (amount <= 0) return null;
+    const reason = payload?.reason === 'heal' ? 'heal' : 'damage';
+
+    const event = {
+      type: 'match.runtime.combat',
+      matchId: active.id,
+      sourceUserId: source.userId,
+      sourceUsername: source.username,
+      targetUserId: target.userId,
+      targetUsername: target.username,
+      reason,
+      amount,
+      at: Date.now(),
+    };
+    broadcast(event, [source.userId, target.userId]);
+    return event;
+  }
+
   function activeSessionForUser(userId) {
     const heroState = heroSelect.snapshotForUser(userId);
     if (heroState) {
@@ -573,6 +602,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
           else if (type === 'match.runtime.state') reportMatchRuntimeState(user.id, message);
+          else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
           else if (type === 'match.runtime.snapshot') {
             const active = store.activeMatchForUser(user.id);
             if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa.');
@@ -657,5 +687,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, reportMatchRuntimeState, runtimeSnapshot, start, close };
+  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, reportMatchRuntimeState, reportMatchRuntimeCombat, runtimeSnapshot, start, close };
 }
