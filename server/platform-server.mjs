@@ -762,110 +762,11 @@ export function createPlatformServer(options = {}) {
       requestedAlive = true;
       combatLocks.delete(userId);
     } else if (combatLock?.until && now < combatLock.until) {
-      if (combatLock.serverResolved) {
-        // During the short reconciliation window the server HP is immutable. Periodic
-        // client snapshots may be based on a frame rendered before/after the combat packet;
-        // accepting either value here reintroduces HP rollback and accidental resurrection.
-        requestedCurrentHp = Math.max(0, Number(previous?.currentHp ?? combatLock.hpCeiling ?? 0));
-        requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
-      } else {
-        const processedDamage = rawAlive === false
-          || rawCurrentHp < Math.max(0, Number(combatLock.preDamageHp || 0)) - 0.001;
-
-        if (processedDamage) {
-        requestedCurrentHp = rawCurrentHp;
-        requestedAlive = rawAlive;
-
-        if (!requestedAlive && combatLock.pendingLethal && !combatLock.deathAccounted) {
-          deathIncrement = 1;
-          const respawnSeconds = Math.max(0, Number(combatLock.respawnSeconds || 0));
-          combatLock.deathAccounted = true;
-          combatLock.hpCeiling = 0;
-          combatLock.deadUntil = now + respawnSeconds * 1000;
-          combatLock.until = Math.max(combatLock.until, combatLock.deadUntil);
-
-          const directKillerPlayer = combatLock.sourceUserId
-            ? active.players.find(candidate => candidate.userId === combatLock.sourceUserId) ?? null
-            : null;
-          const directHeroKiller = Boolean(
-            directKillerPlayer
-            && combatLock.sourceEntityId === `player:${combatLock.sourceUserId}:hero`,
-          );
-
-          const damageCredits = runtimeHeroDamageCredits(active.id);
-          const recentCredit = damageCredits.get(userId) || null;
-          const recentCreditedPlayer = recentCredit
-            && now - Number(recentCredit.at || 0) <= HERO_KILL_CREDIT_WINDOW_MS
-            ? active.players.find(candidate =>
-              candidate.userId === recentCredit.sourceUserId
-              && candidate.team !== player.team
-            ) ?? null
-            : null;
-          const killerPlayer = directHeroKiller
-            ? directKillerPlayer
-            : recentCreditedPlayer;
-          const heroKiller = Boolean(killerPlayer);
-
-          if (heroKiller && killerPlayer) {
-            const killerRuntime = runtimeRoom(active.id).get(killerPlayer.userId);
-            if (killerRuntime) {
-              creditedKillerState = {
-                ...killerRuntime,
-                kills: Number(killerRuntime.kills || 0) + 1,
-                sequence: killerRuntime.sequence + 1,
-                sentAt: now,
-              };
-              runtimeRoom(active.id).set(killerPlayer.userId, creditedKillerState);
-            }
-          }
-
-          damageCredits.delete(userId);
-
-          const killerTeam = heroKiller && killerPlayer
-            ? killerPlayer.team
-            : String(combatLock.sourceEntityId || '').includes(':red:')
-              ? 'red'
-              : String(combatLock.sourceEntityId || '').includes(':blue:')
-                ? 'blue'
-                : 'neutral';
-          const nextDeaths = Number(previous?.deaths || 0) + 1;
-          confirmedHeroKillEvent = {
-            type: 'match.runtime.hero.kill',
-            matchId: active.id,
-            eventId: `hero-kill:${active.id}:${userId}:${nextDeaths}`,
-            victimUserId: userId,
-            victimUsername: player.username,
-            victimTeam: player.team,
-            victimHeroId: active.heroSelections?.[userId]?.heroId || 'H001',
-            killerUserId: heroKiller && killerPlayer ? killerPlayer.userId : null,
-            killerUsername: heroKiller && killerPlayer ? killerPlayer.username : null,
-            killerTeam,
-            killerHeroId: heroKiller && killerPlayer
-              ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
-              : null,
-            killerEntityId: heroKiller && killerPlayer
-              ? `player:${killerPlayer.userId}:hero`
-              : String(combatLock.sourceEntityId || '') || null,
-            at: now,
-          };
-        } else if (requestedAlive) {
-          combatLocks.delete(userId);
-        }
-      } else {
-        // This packet was authored before the victim processed the combat event. A pending
-        // lethal prediction MUST NOT manufacture a death from this stale packet: Alden's
-        // guard/majesty can reduce the hit and keep the victim alive. Wait for the explicit
-        // victim combat resolution (or a genuinely processed state packet).
-        if (combatLock.pendingLethal && !combatLock.deathAccounted) {
-          requestedCurrentHp = previous?.currentHp ?? rawCurrentHp;
-          requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
-          suppressOwnerEcho = true;
-        } else {
-          requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
-          requestedAlive = requestedCurrentHp > 0;
-        }
-      }
-      }
+      // Canonical combat has already committed HP/death on the server. Periodic owner
+      // snapshots are movement/resource proposals only during this reconciliation window.
+      // Never let them restore pre-hit HP or resurrect the hero.
+      requestedCurrentHp = Math.max(0, Number(previous?.currentHp ?? combatLock.hpCeiling ?? 0));
+      requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
     } else if (combatLock) {
       combatLocks.delete(userId);
     }
