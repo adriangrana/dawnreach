@@ -276,6 +276,11 @@ test('one abandonment in a multi-player team leaves the match active for everyon
     };
 
     platform.store.addMatch(match);
+    platform.reportMatchRuntimeState('blue-a', {
+      matchId: match.id, sequence: 1, position: { x: -4, y: 5, z: 2 }, yaw: 0,
+      moving: true, currentHp: 500, maxHp: 700, currentResource: 250, maxResource: 300,
+      level: 1, alive: true,
+    });
     const active = platform.abandonActiveMatch('blue-a');
 
     assert.equal(active.status, 'in_game');
@@ -283,6 +288,11 @@ test('one abandonment in a multi-player team leaves the match active for everyon
     assert.equal(platform.store.activeMatchForUser('blue-a'), null);
     assert.equal(platform.store.activeMatchForUser('blue-b').id, match.id);
     assert.equal(platform.store.activeMatchForUser('red-a').id, match.id);
+    const abandonedHero = platform.runtimeSnapshot(match.id).find(state => state.userId === 'blue-a');
+    assert.ok(abandonedHero);
+    assert.equal(abandonedHero.currentHp, 500);
+    assert.equal(abandonedHero.alive, true);
+    assert.equal(abandonedHero.moving, false);
   });
 });
 
