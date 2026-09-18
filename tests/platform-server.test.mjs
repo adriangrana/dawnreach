@@ -22,7 +22,7 @@ async function withServer(run) {
   const platform = createPlatformServer({ config: testConfig(root), logger: { error() {} } });
   const address = await platform.start({ host: '127.0.0.1', port: 0 });
   try {
-    await run({ baseUrl: `http://127.0.0.1:${address.port}`, port: address.port });
+    await run({ baseUrl: `http://127.0.0.1:${address.port}`, port: address.port, platform });
   } finally {
     await platform.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -120,5 +120,49 @@ test('realtime websocket requires a valid authenticated bearer session', async (
     const authorized = await websocketHandshake(port, registered.body.token);
     assert.match(authorized, /^HTTP\/1\.1 101 Switching Protocols/m);
     assert.match(authorized, /Sec-WebSocket-Accept:/i);
+  });
+});
+
+
+test('hero select completion hands the match to loading with per-player progress', async () => {
+  await withServer(async ({ platform }) => {
+    const created = {
+      id: 'loading-match',
+      mode: 'custom',
+      source: 'custom',
+      rated: false,
+      status: 'launching',
+      createdAt: new Date().toISOString(),
+      players: [
+        { userId: 'dawn', username: 'Dawn', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'dusk', username: 'Dusk', rating: 1000, joinedAt: 1, team: 'red', slot: 1 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      customSettings: {
+        map: 'dawnreach',
+        gameMode: 'classic',
+        teamSize: 1,
+        heroSelect: 'all_pick',
+        bans: 'none',
+        allowSpectators: false,
+        privacy: 'public',
+        region: 'auto',
+      },
+    };
+
+    platform.store.addMatch(created);
+    platform.heroSelect.begin(created);
+    platform.heroSelect.lock('dawn', 'H001');
+    platform.heroSelect.lock('dusk', 'H001');
+
+    const loading = platform.store.match(created.id);
+    assert.equal(loading.status, 'loading');
+    assert.equal(loading.heroSelections.dawn.heroId, 'H001');
+    assert.equal(loading.heroSelections.dusk.heroId, 'H001');
+    assert.deepEqual(loading.loadingProgress, { dawn: 0, dusk: 0 });
+    assert.equal(platform.heroSelect.snapshotForUser('dawn'), null);
+    assert.equal(platform.heroSelect.snapshotForUser('dusk'), null);
+    assert.equal(platform.store.activeMatchForUser('dawn').id, created.id);
   });
 });
