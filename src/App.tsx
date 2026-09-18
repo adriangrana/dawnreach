@@ -1267,8 +1267,15 @@ export default function App({
     const game = gameRef.current;
     if (!game) return;
     game.castLocalAbility(pending.key, pending.rank, pending.atMs);
+    if (onlineMatch && localUser && onlineMatch.status === 'in_game') {
+      platformRealtime.send('match.runtime.ability.cast', {
+        matchId: onlineMatch.id,
+        key: pending.key,
+        rank: pending.rank,
+      });
+    }
     dispatch({ type: 'ability-world-clear', token: pending.token, nowMs: performance.now() });
-  }, [runtime.pendingAbilityCast?.token]);
+  }, [runtime.pendingAbilityCast?.token, onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
   useEffect(() => {
     if (!localHeroDead) return;
@@ -1586,22 +1593,10 @@ export default function App({
             ? Number(event.respawnSeconds)
             : undefined,
         });
-        if (
-          resolved
-          && 'combatId' in event
-          && event.combatId
-          && (!('reason' in event) || event.reason !== 'heal')
-        ) {
-          platformRealtime.send('match.runtime.combat.resolve', {
-            matchId: onlineMatch.id,
-            combatId: String(event.combatId),
-            currentHp: resolved.currentHp,
-            currentResource: resolved.currentResource,
-            alive: resolved.alive,
-            position: resolved.position,
-            yaw: resolved.yaw,
-          });
-        }
+        // Hero combat is server-canonical. The local application exists only for immediate
+        // hit/guard presentation; the following match.runtime.state packet owns HP, death and
+        // respawn. Never echo a client-side "resolution" back over server truth.
+        void resolved;
       }
     });
 
