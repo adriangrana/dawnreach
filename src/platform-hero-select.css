@@ -2978,3 +2978,52 @@
 .dr-hero-select-roster > header label {
   margin-right: 16px !important;
 }
+
+
+/* =========================================================
+   HERO SELECT · hero quote contrast pass
+   ========================================================= */
+
+.dr-hero-select-hero-copy blockquote {
+  position: relative;
+  width: fit-content;
+  max-width: 330px;
+  padding: 14px 24px 14px 16px !important;
+  margin-left: -16px !important;
+  gap: 8px !important;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 8, 14, .70) 0%,
+      rgba(2, 8, 14, .48) 58%,
+      rgba(2, 8, 14, .10) 86%,
+      transparent 100%
+    );
+  border-radius: 2px;
+  color: #c8d5dc !important;
+  text-shadow:
+    0 2px 10px rgba(0,0,0,.95),
+    0 0 2px rgba(0,0,0,.85);
+  backdrop-filter: blur(1px);
+}
+
+.dr-hero-select-hero-copy blockquote span {
+  color: #bacbd3 !important;
+  font-weight: 600 !important;
+}
+
+.dr-hero-select-hero-copy blockquote strong {
+  color: #f1eee4 !important;
+  font-weight: 700 !important;
+  text-shadow:
+    0 2px 12px rgba(0,0,0,.98),
+    0 0 4px rgba(0,0,0,.80);
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-hero-copy blockquote {
+    max-width: 280px;
+    padding: 12px 20px 12px 14px !important;
+    margin-left: -14px !important;
+  }
+}
