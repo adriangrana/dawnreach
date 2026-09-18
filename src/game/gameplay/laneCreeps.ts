@@ -835,7 +835,11 @@ class LaneCreepManager {
       const previousTarget = creep.target;
       const nextTarget = this.choosePriorityTarget(creep, now);
       creep.target = nextTarget;
-      if (nextTarget && nextTarget !== previousTarget) creep.targetAcquiredAt = now;
+      if (nextTarget && nextTarget !== previousTarget) {
+        creep.targetAcquiredAt = now;
+        this.clearNavigation(creep);
+        creep.blockedForSeconds = 0;
+      }
       if (!nextTarget) creep.targetAcquiredAt = 0;
       creep.state = nextTarget ? 'COMBAT' : 'ATTACK_MOVE';
       this.writeState(creep);
@@ -909,11 +913,15 @@ class LaneCreepManager {
         : 1;
 
       const currentTargetPinned = best === creep.target && priority === bestPriority;
+      const significantlyCloserThanPinnedTarget = currentTargetPinned
+        && distanceSq + 0.64 < bestDistanceSq;
       if (
         priority < bestPriority
-        || (!currentTargetPinned && priority === bestPriority && distanceSq < bestDistanceSq - 0.04)
-        || (!currentTargetPinned
-          && priority === bestPriority
+        || (priority === bestPriority
+          && (!currentTargetPinned || significantlyCloserThanPinnedTarget)
+          && distanceSq < bestDistanceSq - 0.04)
+        || (priority === bestPriority
+          && !currentTargetPinned
           && Math.abs(distanceSq - bestDistanceSq) <= 0.04
           && hpFraction < bestHpFraction - 1e-6)
       ) {
@@ -1083,6 +1091,8 @@ class LaneCreepManager {
   }
 
   private beginReturning(creep: LaneCreepRuntime) {
+    this.clearNavigation(creep);
+    creep.blockedForSeconds = 0;
     creep.target = null;
     creep.targetAcquiredAt = 0;
     creep.state = 'RETURNING';
@@ -1462,6 +1472,8 @@ class LaneCreepManager {
   }
 
   private clearTarget(creep: LaneCreepRuntime) {
+    this.clearNavigation(creep);
+    creep.blockedForSeconds = 0;
     creep.target = null;
     creep.targetAcquiredAt = 0;
     creep.state = 'ATTACK_MOVE';
