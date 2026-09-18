@@ -48,15 +48,25 @@ export function createPlatformServer(options = {}) {
   });
 
   function handoffToGameSession(match, heroSelections) {
-    const { resultToken: _secret, ...safe } = match;
+    const updated = store.updateMatch(match.id, {
+      status: 'loading',
+      heroSelections,
+      heroSelectCompletedAt: new Date().toISOString(),
+    }) || { ...match, status: 'loading', heroSelections };
+    const { resultToken: _secret, ...safe } = updated;
     broadcast({
       type: 'match.session.pending',
-      match: { ...safe, heroSelections },
+      match: safe,
       note: 'Hero Select complete. Preparing the shared Dawnreach game session.',
     }, match.players.map(player => player.userId));
   }
 
   function handleHeroSelectCancel(match, player) {
+    store.updateMatch(match.id, {
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelledByUserId: player.userId,
+    });
     if (match.source === 'custom') lobbies.cancelLaunch(match.id, player.userId);
   }
 
@@ -87,11 +97,82 @@ export function createPlatformServer(options = {}) {
     onLaunch: launchMatch,
   });
 
+  function publicMatch(match) {
+    if (!match) return null;
+    const { resultToken: _secret, ...safe } = match;
+    return safe;
+  }
+
+  function activeSessionForUser(userId) {
+    const heroState = heroSelect.snapshotForUser(userId);
+    if (heroState) {
+      return {
+        stage: heroState.phase === 'complete' ? 'loading' : 'hero_select',
+        match: heroState.match,
+      };
+    }
+
+    const lobby = lobbies.lobbyForUser(userId);
+    if (lobby?.matchId && (lobby.status === 'launching' || lobby.status === 'in_game')) {
+      const match = store.match(lobby.matchId);
+      if (match) {
+        return {
+          stage: lobby.status === 'in_game' ? 'in_game' : (match.status === 'loading' ? 'loading' : 'hero_select'),
+          match: publicMatch(match),
+        };
+      }
+    }
+
+    const persistent = store.activeMatchForUser(userId);
+    return persistent
+      ? { stage: persistent.status === 'in_game' ? 'in_game' : 'loading', match: publicMatch(persistent) }
+      : null;
+  }
+
+  function requireNoActiveSession(userId) {
+    if (activeSessionForUser(userId)) {
+      throw new Error('Ya tienes una partida activa. Usa RETURN TO MATCH para volver o abandónala desde la partida.');
+    }
+  }
+
+  function rejoinActiveSession(userId, peer) {
+    const heroState = heroSelect.snapshotForUser(userId);
+    if (heroState) {
+      peer.send({ type: 'hero_select.start', heroSelect: heroState, resumed: true });
+      return;
+    }
+
+    const lobby = lobbies.lobbyForUser(userId);
+    if (lobby?.matchId && lobby.status === 'launching') {
+      const rawMatch = store.match(lobby.matchId);
+      if (rawMatch && rawMatch.status === 'launching') {
+        heroSelect.begin(rawMatch);
+        return;
+      }
+    }
+
+    const active = activeSessionForUser(userId);
+    if (!active) throw new Error('No tienes una partida activa a la que volver.');
+
+    if (active.stage === 'in_game') {
+      peer.send({ type: 'match.rejoin.ready', activeMatch: active });
+      return;
+    }
+
+    peer.send({
+      type: 'match.session.pending',
+      match: active.match,
+      note: 'Reconnecting to the active Dawnreach match.',
+      resumed: true,
+    });
+  }
+
   function requireNotInLobby(userId) {
     if (lobbies.lobbyForUser(userId)) throw new Error('Sal de la sala personalizada antes de entrar en matchmaking.');
   }
 
   function queueParty(user, mode) {
+    requireNoActiveSession(user.id);
     const party = parties.partyForUser(user.id);
     if (!party) {
       requireNotInLobby(user.id);
@@ -328,7 +409,9 @@ export function createPlatformServer(options = {}) {
           if (type === 'queue.join' || type === 'party.queue') queueParty(user, message.mode === 'normal' ? 'normal' : 'ranked');
           else if (type === 'queue.leave') leaveQueue(user);
           else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
+          else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
           else if (type === 'lobby.create') {
+            requireNoActiveSession(user.id);
             leaveQueue(user);
             lobbies.create(user, String(message.name || ''), message.privacy === 'private' ? 'private' : 'public', Number(message.maxPlayers || 10));
           } else if (type === 'lobby.join') {
@@ -376,6 +459,7 @@ export function createPlatformServer(options = {}) {
         lobbies: lobbies.listPublic(),
         lobby: lobbies.lobbyForUser(user.id),
         heroSelect: heroSelect.snapshotForUser(user.id),
+        activeMatch: activeSessionForUser(user.id),
       });
       broadcastPresence();
     } catch {
