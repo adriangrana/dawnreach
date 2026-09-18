@@ -104,6 +104,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [currentLobby, setCurrentLobby] = useState<CustomLobby | null>(null);
   const [heroSelect, setHeroSelect] = useState<HeroSelectState | null>(null);
   const [activeMatch, setActiveMatch] = useState<ActiveMatchSession | null>(null);
+  const [sharedGameVisible, setSharedGameVisible] = useState(false);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
@@ -173,6 +174,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         const source = 'source' in event && event.source === 'custom' ? 'custom' : 'matchmaking';
         setHeroSelect(null);
         setActiveMatch(null);
+        setSharedGameVisible(false);
         setReady(null);
         setQueue(current => ({ ...current, joined: false }));
         setSection('play');
@@ -196,13 +198,13 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       if (type === 'match.start' && 'match' in event && event.match) {
         setHeroSelect(null);
         setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
+        setSharedGameVisible(true);
         setNotice('');
-        onLocalPlay();
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
         setActiveMatch(event.activeMatch as ActiveMatchSession);
+        setSharedGameVisible(true);
         setNotice('');
-        onLocalPlay();
       }
       if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
       if (type === 'session.ready') {
@@ -213,7 +215,11 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         if ('lobbies' in event && Array.isArray(event.lobbies)) setLobbies(event.lobbies as readonly CustomLobby[]);
         if ('lobby' in event) setCurrentLobby((event.lobby as CustomLobby | null) ?? null);
         if ('heroSelect' in event) setHeroSelect((event.heroSelect as HeroSelectState | null) ?? null);
-        if ('activeMatch' in event) setActiveMatch((event.activeMatch as ActiveMatchSession | null) ?? null);
+        if ('activeMatch' in event) {
+          const restoredActiveMatch = (event.activeMatch as ActiveMatchSession | null) ?? null;
+          setActiveMatch(restoredActiveMatch);
+          if (!restoredActiveMatch || restoredActiveMatch.stage !== 'in_game') setSharedGameVisible(false);
+        }
         if ('queue' in event && event.queue && typeof event.queue === 'object') {
           const snapshot = event.queue as { joined?: boolean; target?: number };
           setQueue(current => ({ ...current, joined: Boolean(snapshot.joined), target: Number(snapshot.target || current.target) }));
@@ -259,8 +265,11 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     setPlaySection('matchmaking');
   };
 
-  if (activeMatch?.stage === 'loading') {
-    return <MatchLoadingScreen session={activeMatch} me={user} />;
+  if (activeMatch?.stage === 'loading' || (activeMatch?.stage === 'in_game' && sharedGameVisible)) {
+    return <div className="platform-shared-match-runtime">
+      <LocalGameScreen />
+      {activeMatch.stage === 'loading' && <MatchLoadingScreen session={activeMatch} me={user} />}
+    </div>;
   }
 
   if (heroSelect) {
