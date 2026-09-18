@@ -72,6 +72,8 @@ const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWE
 type TeamHero = {
   initial: string;
   portrait?: string;
+  local?: boolean;
+  level?: number;
 };
 
 type RespawnPresentation = {
@@ -91,20 +93,28 @@ type PendingItemUse = {
   detail: ItemUseDetail;
 };
 
-const dawnTeam: TeamHero[] = [
-  { initial: 'A', portrait: ALDEN_PORTRAIT_SRC },
-  { initial: 'S' },
-  { initial: 'K' },
-  { initial: 'L' },
-  { initial: 'M' },
-];
-const duskTeam: TeamHero[] = [
-  { initial: 'V' },
-  { initial: 'N' },
-  { initial: 'D' },
-  { initial: 'T' },
-  { initial: 'R' },
-];
+function teamPortraitsFromMatch(match: MatchState, team: 'dawn' | 'dusk'): TeamHero[] {
+  return match.slots
+    .filter(slot => slot.team === team)
+    .sort((a, b) => a.index - b.index)
+    .map(slot => {
+      const hero = slot.heroEntityId ? match.heroes[slot.heroEntityId] : null;
+      if (!hero) return { initial: '' };
+      return {
+        initial: hero.heroName?.slice(0, 1).toUpperCase() || '?',
+        portrait: hero.definitionId === 'H001' ? ALDEN_PORTRAIT_SRC : undefined,
+        local: hero.heroEntityId === LOCAL_HERO_ENTITY_ID,
+        level: hero.level,
+      };
+    });
+}
+
+function formatMatchClock(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
 const heroImageCodes: Record<string, string> = { H001: 'H001' };
 const heroAttributeDisplay = [
@@ -446,16 +456,15 @@ function RespawnCooldownOverlay({ presentation, compact = false }: { presentatio
   );
 }
 
-function TeamPortraits({ team, side, heroLevel = 1, localRespawn }: {
+function TeamPortraits({ team, side, localRespawn }: {
   team: TeamHero[];
   side: 'dawn' | 'dusk';
-  heroLevel?: number;
   localRespawn?: RespawnPresentation;
 }) {
   return (
     <div className={`team-portraits team-portraits--${side}`}>
       {team.map((hero, index) => {
-        const localHero = index === 0 && side === 'dawn';
+        const localHero = Boolean(hero.local);
         const respawn = localHero && localRespawn?.dead ? localRespawn : undefined;
         return (
           <div className="top-hero-slot" key={`${side}-${index}`}>
@@ -468,7 +477,7 @@ function TeamPortraits({ team, side, heroLevel = 1, localRespawn }: {
               )}
               {respawn && <RespawnCooldownOverlay presentation={respawn} compact />}
             </div>
-            <span className="top-hero-level" style={respawn ? { zIndex: 5 } : undefined}>{localHero ? heroLevel : 1}</span>
+            <span className="top-hero-level" style={respawn ? { zIndex: 5 } : undefined}>{hero.level ?? 1}</span>
           </div>
         );
       })}
@@ -476,11 +485,12 @@ function TeamPortraits({ team, side, heroLevel = 1, localRespawn }: {
   );
 }
 
-function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
+function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedAt }: {
   minimapRef: RefObject<HTMLDivElement | null>;
   minimapHeroRef: RefObject<HTMLImageElement | null>;
   runtime: HudRuntime;
   dispatch: Dispatch<HudAction>;
+  onlineStartedAt?: string;
 }) {
   const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const definition = getHeroDefinition(hero.definitionId);
@@ -498,6 +508,12 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
     remainingMs: respawnRemainingMs,
     totalMs: Math.max(1, runtime.respawnDurationMs || respawnRemainingMs),
   };
+  const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn');
+  const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk');
+  const onlineStartedMs = onlineStartedAt ? Date.parse(onlineStartedAt) : Number.NaN;
+  const matchElapsedMs = Number.isFinite(onlineStartedMs)
+    ? Date.now() - onlineStartedMs
+    : runtime.nowMs - runtime.match.createdAtMs;
 
   useEffect(() => {
     setCombatHudStats({ lastHits: hero.lastHits, denies: hero.denies });
@@ -538,13 +554,13 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch }: {
   return (
     <div className="game-hud">
       <section className="scoreboard">
-        <TeamPortraits team={dawnTeam} side="dawn" heroLevel={hero.level} localRespawn={respawnPresentation} />
+        <TeamPortraits team={dawnTeam} side="dawn" localRespawn={respawnPresentation} />
         <div className="match-score">
           <strong className="score score--dawn">0</strong>
-          <div className="match-clock"><span>DAWNREACH</span><b>00:00</b></div>
+          <div className="match-clock"><span>DAWNREACH</span><b>{formatMatchClock(matchElapsedMs)}</b></div>
           <strong className="score score--dusk">0</strong>
         </div>
-        <TeamPortraits team={duskTeam} side="dusk" />
+        <TeamPortraits team={duskTeam} side="dusk" localRespawn={respawnPresentation} />
       </section>
 
       <section className="minimap-shell">
@@ -996,7 +1012,7 @@ export default function App({
   return (
     <main className="app-shell">
       <div ref={hostRef} className="game-host" onDragOver={onWorldDragOver} onDrop={onWorldDrop} />
-      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} />
+      <GameHud minimapRef={minimapRef} minimapHeroRef={minimapHeroRef} runtime={runtime} dispatch={dispatch} onlineStartedAt={onlineMatch?.startedAt} />
       <ScoreboardOverlay
         match={runtime.match}
         nowMs={runtime.nowMs}
