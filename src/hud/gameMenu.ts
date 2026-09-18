@@ -527,6 +527,7 @@ export function mountGameMenu() {
   let statusMessage = '';
   let abandoned = false;
   let abandonPending = false;
+  let closeAfterAbandon = false;
 
   const publishOpenState = () => {
     document.body.dataset[MENU_OPEN_DATASET_KEY] = String(open);
@@ -662,8 +663,8 @@ export function mountGameMenu() {
           <h2>${exit ? '¿Cerrar Dawnreach?' : '¿Abandonar la partida actual?'}</h2>
           <p>${exit ? 'Los ajustes ya aplicados permanecerán guardados.' : 'Esta acción marca la sesión local como abandonada. En una partida online, el runtime de red puede usar este evento para procesar desconexión, penalización o reconexión.'}</p>
           <div class="game-confirm-actions">
-            <button type="button" class="game-menu-button game-menu-button--ghost" data-action="back-main" data-menu-autofocus>Cancelar</button>
-            <button type="button" class="game-menu-button game-menu-button--danger" data-action="${exit ? 'confirm-exit' : 'confirm-abandon'}">${exit ? 'Salir del juego' : 'Abandonar partida'}</button>
+            <button type="button" class="game-menu-button game-menu-button--ghost" data-action="back-main" data-menu-autofocus ${abandonPending ? 'disabled' : ''}>Cancelar</button>
+            <button type="button" class="game-menu-button game-menu-button--danger" data-action="${exit ? 'confirm-exit' : 'confirm-abandon'}" ${abandonPending ? 'disabled' : ''}>${abandonPending ? 'Procesando…' : exit ? 'Salir del juego' : 'Abandonar partida'}</button>
           </div>
         </div>
       </div>`;
@@ -795,10 +796,18 @@ export function mountGameMenu() {
     } else if (action === 'confirm-exit-local') {
       void closeApplication();
     } else if (action === 'confirm-exit') {
+      if (abandonPending) return;
+      abandonPending = true;
+      closeAfterAbandon = true;
+      render();
       window.dispatchEvent(new CustomEvent(MATCH_ABANDON_REQUEST_EVENT, {
         detail: { abandonedAtMs: performance.now(), reason: 'exit-game', closeAfter: true },
       }));
     } else if (action === 'confirm-abandon') {
+      if (abandonPending) return;
+      abandonPending = true;
+      closeAfterAbandon = false;
+      render();
       window.dispatchEvent(new CustomEvent(MATCH_ABANDON_REQUEST_EVENT, {
         detail: { abandonedAtMs: performance.now(), reason: 'player-menu', closeAfter: false },
       }));
@@ -892,15 +901,23 @@ export function mountGameMenu() {
     }
   };
 
-  const onAbandonConfirmed = () => {
+  const onAbandonConfirmed = (event: Event) => {
+    const detail = (event as CustomEvent<{ closeAfter?: boolean }>).detail;
+    const shouldClose = Boolean(detail?.closeAfter ?? closeAfterAbandon);
     abandoned = true;
     abandonPending = false;
+    closeAfterAbandon = false;
+    if (shouldClose) {
+      void closeApplication();
+      return;
+    }
     view = 'abandoned';
     render();
   };
 
   const onAbandonFailed = (event: Event) => {
     abandonPending = false;
+    closeAfterAbandon = false;
     const detail = (event as CustomEvent<{ message?: string }>).detail;
     statusMessage = detail?.message || 'No se pudo abandonar la partida.';
     view = 'main';
