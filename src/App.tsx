@@ -239,6 +239,7 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
     );
     const inventory = hero.inventory.map(slot => {
       const item = remoteItems.get(slot.slot);
+      const definition = item ? getItemDefinition(item.definitionId) : null;
       return {
         ...slot,
         item: item
@@ -247,8 +248,8 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
             definitionId: item.definitionId,
             displayName: item.displayName,
             quantity: Math.max(1, item.quantity),
-            statModifiers: [],
-            cooldownReadyAtMs: 0,
+            statModifiers: definition ? itemStatsToHeroModifiers(definition.stats) : [],
+            cooldownReadyAtMs: nowMs + Math.max(0, item.cooldownRemainingMs ?? 0),
           }
           : null,
       };
@@ -263,6 +264,22 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
       lastHits: Math.max(0, Math.floor(action.state.lastHits ?? hero.lastHits)),
       denies: Math.max(0, Math.floor(action.state.denies ?? hero.denies)),
       inventory,
+      abilityRanks: action.state.abilityRanks
+        ? {
+          Q: Math.max(0, Math.floor(action.state.abilityRanks.Q ?? 0)),
+          W: Math.max(0, Math.floor(action.state.abilityRanks.W ?? 0)),
+          E: Math.max(0, Math.floor(action.state.abilityRanks.E ?? 0)),
+          R: Math.max(0, Math.floor(action.state.abilityRanks.R ?? 0)),
+        }
+        : hero.abilityRanks,
+      cooldownReadyAtMs: action.state.abilityCooldownRemainingMs
+        ? {
+          Q: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.Q ?? 0),
+          W: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.W ?? 0),
+          E: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.E ?? 0),
+          R: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.R ?? 0),
+        }
+        : hero.cooldownReadyAtMs,
       runtime: {
         ...hero.runtime,
         counters: {
