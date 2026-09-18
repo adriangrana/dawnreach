@@ -1267,10 +1267,12 @@ export default function App({
         return;
       }
       gameRef.current = game;
-      if (pendingAuthorityUserIdRef.current !== undefined) {
-        runtimeAuthorityUserIdRef.current = pendingAuthorityUserIdRef.current;
-        game.setNetworkAuthority(pendingAuthorityUserIdRef.current === localUser?.id);
-        pendingAuthorityUserIdRef.current = undefined;
+      const pendingAuthorityUserId = pendingAuthorityUserIdRef.current;
+      if (pendingAuthorityUserId !== undefined) {
+        runtimeAuthorityUserIdRef.current = pendingAuthorityUserId;
+        // Demotion must happen before applying a stored authority snapshot. Promotion happens
+        // after the snapshot below so a successor can inherit the last creep/structure world.
+        if (pendingAuthorityUserId !== localUser?.id) game.setNetworkAuthority(false);
       }
       if (pendingLocalAuthoritativeStateRef.current) {
         game.applyLocalAuthoritativeNetworkState(
@@ -1295,6 +1297,11 @@ export default function App({
       }
       for (const damage of pendingStructureDamageRef.current) game.applyRemoteStructureDamage(damage);
       pendingStructureDamageRef.current = [];
+
+      if (pendingAuthorityUserId !== undefined) {
+        if (pendingAuthorityUserId === localUser?.id) game.setNetworkAuthority(true);
+        pendingAuthorityUserIdRef.current = undefined;
+      }
 
       const pendingAbility = runtimeStateRef.current.pendingAbilityCast;
       if (pendingAbility) {
