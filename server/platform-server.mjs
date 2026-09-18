@@ -314,6 +314,84 @@ export function createPlatformServer(options = {}) {
       combatLocks.delete(userId);
     }
 
+    // A hero can die from a world source (lane creeps, towers, jungle, etc.) without there
+    // being a hero-vs-hero combat lock. The owner still publishes the authoritative
+    // alive -> dead transition, so account that transition exactly once here.
+    const transitionedToDead = Boolean(
+      previous
+      && previous.alive !== false
+      && Number(previous.currentHp || 0) > 0
+      && !requestedAlive,
+    );
+    if (transitionedToDead && deathIncrement === 0) {
+      deathIncrement = 1;
+      const fallbackRespawnSeconds = Math.max(
+        0,
+        payloadRespawnDurationMs > 0
+          ? payloadRespawnDurationMs / 1000
+          : 6 + Math.max(1, Math.floor(Number(previous?.level || payload?.level || 1))) * 2,
+      );
+
+      const existingDeathLock = combatLocks.get(userId) || null;
+      combatLocks.set(userId, {
+        ...(existingDeathLock || {}),
+        preDamageHp: Number(previous.currentHp || 0),
+        hpCeiling: 0,
+        until: now + fallbackRespawnSeconds * 1000,
+        deadUntil: now + fallbackRespawnSeconds * 1000,
+        pendingLethal: true,
+        deathAccounted: true,
+        respawnSeconds: fallbackRespawnSeconds,
+        sourceUserId: existingDeathLock?.sourceUserId ?? null,
+        sourceEntityId: existingDeathLock?.sourceEntityId ?? null,
+      });
+
+      const damageCredits = runtimeHeroDamageCredits(active.id);
+      const recentCredit = damageCredits.get(userId) || null;
+      const killerPlayer = recentCredit
+        && now - Number(recentCredit.at || 0) <= HERO_KILL_CREDIT_WINDOW_MS
+        ? active.players.find(candidate =>
+          candidate.userId === recentCredit.sourceUserId
+          && candidate.team !== player.team
+        ) ?? null
+        : null;
+
+      if (killerPlayer) {
+        const killerRuntime = runtimeRoom(active.id).get(killerPlayer.userId);
+        if (killerRuntime) {
+          creditedKillerState = {
+            ...killerRuntime,
+            kills: Number(killerRuntime.kills || 0) + 1,
+            sequence: killerRuntime.sequence + 1,
+            sentAt: now,
+          };
+          runtimeRoom(active.id).set(killerPlayer.userId, creditedKillerState);
+        }
+      }
+
+      damageCredits.delete(userId);
+      const nextDeaths = Number(previous?.deaths || 0) + 1;
+      confirmedHeroKillEvent = {
+        type: 'match.runtime.hero.kill',
+        matchId: active.id,
+        eventId: `hero-kill:${active.id}:${userId}:${nextDeaths}`,
+        victimUserId: userId,
+        victimUsername: player.username,
+        victimTeam: player.team,
+        victimHeroId: active.heroSelections?.[userId]?.heroId || 'H001',
+        killerUserId: killerPlayer?.userId ?? null,
+        killerUsername: killerPlayer?.username ?? null,
+        killerTeam: killerPlayer?.team ?? 'neutral',
+        killerHeroId: killerPlayer
+          ? (active.heroSelections?.[killerPlayer.userId]?.heroId || 'H001')
+          : null,
+        killerEntityId: killerPlayer
+          ? `player:${killerPlayer.userId}:hero`
+          : null,
+        at: now,
+      };
+    }
+
     const authoritativeRespawnRemainingMs = requestedAlive
       ? 0
       : combatLock?.deadUntil && now < combatLock.deadUntil
