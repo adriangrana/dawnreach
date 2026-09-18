@@ -485,6 +485,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
 
     if (name.endsWith('-tower') || name === `${team}-defense-tower`) {
       registry.register(object, {
+        id: name,
         displayName: titleCaseName(name),
         kind: 'tower',
         team,
