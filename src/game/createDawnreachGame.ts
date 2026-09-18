@@ -329,6 +329,14 @@ export async function createDawnreachGame(
       moving: false,
       lastSequence: -1,
     });
+    publishWorldEntityRuntime(entity.id, {
+      level: entity.level,
+      maxHp: entity.maxHp,
+      currentHp: entity.currentHp,
+      maxResource: entity.maxResource,
+      currentResource: entity.currentResource,
+      alive: entity.alive,
+    });
   }
 
   const disconnectLaneProgression = connectLocalLaneProgression(entityRegistry, localHeroEntity);
