@@ -585,5 +585,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, start, close };
+  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, start, close };
 }
