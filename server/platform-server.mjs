@@ -22,6 +22,7 @@ export function createPlatformServer(options = {}) {
   const sessions = new SessionManager(path.join(config.dataDir, 'sessions.json'), config.auth);
   const rateLimiter = new AuthRateLimiter(config.auth);
   const peersByUser = new Map();
+  const matchRuntimeStates = new Map();
 
   function isOnline(userId) {
     return peersByUser.has(userId);
@@ -105,6 +106,66 @@ export function createPlatformServer(options = {}) {
     return safe;
   }
 
+  function runtimeRoom(matchId) {
+    let room = matchRuntimeStates.get(matchId);
+    if (!room) {
+      room = new Map();
+      matchRuntimeStates.set(matchId, room);
+    }
+    return room;
+  }
+
+  function runtimeSnapshot(matchId) {
+    const room = matchRuntimeStates.get(matchId);
+    return room ? [...room.values()].map(state => ({ ...state, position: { ...state.position } })) : [];
+  }
+
+  function reportMatchRuntimeState(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para sincronizar.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La actualización pertenece a otra partida.');
+
+    const player = active.players.find(candidate => candidate.userId === userId);
+    if (!player) throw new Error('No participas en esta partida.');
+
+    const position = payload?.position && typeof payload.position === 'object' ? payload.position : {};
+    const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
+
+    const previous = runtimeRoom(active.id).get(userId);
+    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const state = {
+      userId,
+      username: player.username,
+      team: player.team,
+      slot: player.slot,
+      heroId: active.heroSelections?.[userId]?.heroId || 'H001',
+      sequence,
+      position: {
+        x: clamp(position.x, -75, 75),
+        y: clamp(position.y, -5, 40),
+        z: clamp(position.z, -62.5, 62.5),
+      },
+      yaw: clamp(payload?.yaw, -Math.PI * 8, Math.PI * 8),
+      moving: Boolean(payload?.moving),
+      currentHp: clamp(payload?.currentHp, 0, 100000),
+      maxHp: clamp(payload?.maxHp, 1, 100000),
+      currentResource: clamp(payload?.currentResource, 0, 100000),
+      maxResource: clamp(payload?.maxResource, 0, 100000),
+      level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, 1)))),
+      alive: payload?.alive !== false,
+      sentAt: Date.now(),
+    };
+
+    runtimeRoom(active.id).set(userId, state);
+    broadcast({
+      type: 'match.runtime.state',
+      matchId: active.id,
+      state,
+    }, active.players.map(candidate => candidate.userId));
+    return state;
+  }
+
   function activeSessionForUser(userId) {
     const heroState = heroSelect.snapshotForUser(userId);
     if (heroState) {
@@ -160,6 +221,7 @@ export function createPlatformServer(options = {}) {
     }) || { ...updated, status: 'in_game', loadingProgress };
 
     if (updated.source === 'custom') lobbies.markInGame(updated.id);
+    matchRuntimeStates.set(updated.id, new Map());
 
     broadcast({
       type: 'match.start',
@@ -186,6 +248,8 @@ export function createPlatformServer(options = {}) {
       ? remainingDawn.length ? 'blue' : remainingDusk.length ? 'red' : null
       : null;
 
+    runtimeRoom(active.id).delete(userId);
+
     const updated = store.updateMatch(active.id, {
       abandonedUserIds,
       ...(ended ? {
@@ -210,6 +274,7 @@ export function createPlatformServer(options = {}) {
         winnerTeam,
         reason: loadingCancelled ? 'loading_abandonment' : 'team_abandonment',
       }, participantIds);
+      matchRuntimeStates.delete(active.id);
       if (active.source === 'custom') lobbies.closeByMatch(active.id);
       return publicMatch(updated);
     }
@@ -251,6 +316,7 @@ export function createPlatformServer(options = {}) {
 
     if (active.stage === 'in_game') {
       peer.send({ type: 'match.rejoin.ready', activeMatch: active });
+      peer.send({ type: 'match.runtime.snapshot', matchId: active.match.id, states: runtimeSnapshot(active.match.id) });
       return;
     }
 
@@ -506,6 +572,12 @@ export function createPlatformServer(options = {}) {
           else if (type === 'ready.response') matchmaker.respond(user.id, String(message.readyId || ''), Boolean(message.accepted));
           else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
+          else if (type === 'match.runtime.state') reportMatchRuntimeState(user.id, message);
+          else if (type === 'match.runtime.snapshot') {
+            const active = store.activeMatchForUser(user.id);
+            if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa.');
+            peer.send({ type: 'match.runtime.snapshot', matchId: active.id, states: runtimeSnapshot(active.id) });
+          }
           else if (type === 'match.abandon') abandonActiveMatch(user.id);
           else if (type === 'lobby.create') {
             requireNoActiveSession(user.id);
@@ -585,5 +657,5 @@ export function createPlatformServer(options = {}) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 
-  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, start, close };
+  return { config, server, store, sessions, parties, matchmaker, lobbies, heroSelect, abandonActiveMatch, reportMatchRuntimeState, runtimeSnapshot, start, close };
 }
