@@ -19,7 +19,7 @@ import { connectLocalLaneProgression } from './gameplay/localLaneProgression';
 import { animateAlden } from './heroes/alden/animateAlden';
 import { buildAlden, type AldenRig } from './heroes/alden/buildAlden';
 import { createAldenMaterials } from './heroes/alden/materials';
-import { triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
+import { ensureAldenWorldAbilityRuntime, triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
 import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { createMapCollisionWorld } from './map/collisionWorld';
@@ -158,6 +158,9 @@ export async function createDawnreachGame(
   const localSpawn = playerSpawn(localTeam, localSharedPlayer?.slot ?? 0);
 
   const scene = new THREE.Scene();
+  // Team-relative presentation (health bars, fog/overheads) must know the viewer's side
+  // before authored entities are registered and their overheads are attached.
+  scene.userData.localTeam = localTeam;
   scene.background = new THREE.Color(0x758994);
   scene.fog = new THREE.Fog(0x758994, 42, 100);
 
@@ -283,6 +286,35 @@ export async function createDawnreachGame(
     selectionRadius: 0.78,
   });
 
+  // The React match state owns the authoritative local HP/resource/level. Keep the world
+  // GameEntity hydrated as well: Alden's world ability runtime uses this entity for healing,
+  // guard/mitigation, death checks and combat events.
+  const syncLocalHeroEntityState = () => {
+    const overlay = getHeroState?.() ?? null;
+    if (!overlay) return null;
+
+    const maxHp = Math.max(1, overlay.stats.maxHp);
+    const maxResource = Math.max(0, overlay.stats.maxResource);
+    localHeroEntity.maxHp = maxHp;
+    localHeroEntity.currentHp = THREE.MathUtils.clamp(overlay.hero.currentHp, 0, maxHp);
+    localHeroEntity.maxResource = maxResource;
+    localHeroEntity.currentResource = THREE.MathUtils.clamp(
+      overlay.hero.currentResource,
+      0,
+      Math.max(maxResource, overlay.hero.currentResource),
+    );
+    localHeroEntity.level = Math.max(1, Math.floor(overlay.hero.level));
+    localHeroEntity.alive = localHeroEntity.currentHp > 0;
+    localHeroEntity.root.userData.maxHp = localHeroEntity.maxHp;
+    localHeroEntity.root.userData.currentHp = localHeroEntity.currentHp;
+    localHeroEntity.root.userData.maxResource = localHeroEntity.maxResource;
+    localHeroEntity.root.userData.currentResource = localHeroEntity.currentResource;
+    localHeroEntity.root.userData.level = localHeroEntity.level;
+    localHeroEntity.root.userData.alive = localHeroEntity.alive;
+    return overlay;
+  };
+  syncLocalHeroEntityState();
+
   type RemoteHeroRuntime = {
     player: DawnreachSharedPlayer;
     rig: AldenRig;
@@ -364,6 +396,14 @@ export async function createDawnreachGame(
     localTeam,
   );
   vision.updateEntityVisibility();
+
+  // worldAbilityRuntime no longer auto-discovers a renderer. It must be mounted against
+  // this exact scene/registry/hero; otherwise HUD casts only start cooldowns and never reach
+  // Alden's animation, FX, damage, CC or healing implementation.
+  const aldenAbilityRuntime = alden
+    ? ensureAldenWorldAbilityRuntime(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
+    : null;
+
   const surfaceRay = new THREE.Raycaster();
   surfaceRay.ray.direction.set(0, -1, 0);
   const pointer = new THREE.Vector2();
@@ -1184,6 +1224,8 @@ export async function createDawnreachGame(
       openingAttackReady = true;
     }
 
+    syncLocalHeroEntityState();
+
     if (elapsed - lastVisionUpdate >= VISION_UPDATE_INTERVAL) {
       vision.updateEntityVisibility();
       lastVisionUpdate = elapsed;
@@ -1442,6 +1484,10 @@ export async function createDawnreachGame(
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
     }
 
+    // Apply ability movement/poses after locomotion so Q/R transforms and authored ability
+    // animations are not overwritten by the generic walk/attack animation for this frame.
+    aldenAbilityRuntime?.update(performance.now());
+
     for (const marker of [targetMarker, attackMarker]) {
       if (!marker.visible) continue;
       const kind = marker.userData.kind as CommandMarkerKind;
@@ -1504,6 +1550,7 @@ export async function createDawnreachGame(
       };
     },
     castLocalAbility(key: AbilityKey, rank: number, nowMs = performance.now()) {
+      syncLocalHeroEntityState();
       return triggerAldenWorldAbility(scene, key, rank, nowMs);
     },
     applyRemoteNetworkState(state: DawnreachRemoteHeroState) {
@@ -1575,6 +1622,7 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
       disconnectLaneProgression();
+      aldenAbilityRuntime?.dispose();
       selection.dispose();
       heroOverlay.dispose();
       disposeScene(scene);
