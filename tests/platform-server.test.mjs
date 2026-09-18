@@ -383,3 +383,209 @@ test('shared player combat updates the target runtime snapshot', async () => {
     assert.equal(target.alive, true);
   });
 });
+
+
+test('lethal hero prediction waits for victim resolution and respects mitigation', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-combat-resolve',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'resolve-blue', username: 'Resolve Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'resolve-red', username: 'Resolve Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'resolve-blue': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'resolve-red': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+    platform.store.addMatch(match);
+    platform.reportMatchRuntimeState('resolve-blue', {
+      matchId: match.id, sequence: 1, position: { x: 0, y: 5, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+    });
+    platform.reportMatchRuntimeState('resolve-red', {
+      matchId: match.id, sequence: 1, position: { x: 2, y: 5, z: 0 }, yaw: 0,
+      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+    });
+
+    const predictedLethal = platform.reportMatchRuntimeCombat('resolve-blue', {
+      matchId: match.id,
+      targetUserId: 'resolve-red',
+      reason: 'damage',
+      amount: 100,
+    });
+    assert.equal(predictedLethal.lethal, true);
+    assert.ok(predictedLethal.combatId);
+
+    platform.reportMatchRuntimeState('resolve-red', {
+      matchId: match.id, sequence: 2, position: { x: 2, y: 5, z: 0 }, yaw: 0,
+      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+    });
+    let red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
+    assert.equal(red.currentHp, 50);
+    assert.equal(red.alive, true);
+    assert.equal(red.deaths, 0);
+
+    platform.reportMatchRuntimeCombatResolve('resolve-red', {
+      matchId: match.id,
+      combatId: predictedLethal.combatId,
+      currentHp: 25,
+      currentResource: 300,
+      alive: true,
+    });
+    red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
+    assert.equal(red.currentHp, 25);
+    assert.equal(red.alive, true);
+    assert.equal(red.deaths, 0);
+
+    const confirmedLethal = platform.reportMatchRuntimeCombat('resolve-blue', {
+      matchId: match.id,
+      targetUserId: 'resolve-red',
+      reason: 'damage',
+      amount: 100,
+    });
+    platform.reportMatchRuntimeCombatResolve('resolve-red', {
+      matchId: match.id,
+      combatId: confirmedLethal.combatId,
+      currentHp: 0,
+      currentResource: 300,
+      alive: false,
+    });
+    red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
+    assert.equal(red.currentHp, 0);
+    assert.equal(red.alive, false);
+    assert.equal(red.deaths, 1);
+  });
+});
+
+test('one disconnected team gets a reconnect grace period before the other team wins', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'GraceBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'GraceRed', password: 'Iron!Crown42' }),
+    });
+    const match = {
+      id: 'disconnect-team-grace',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: true,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: blue.body.user.id, username: 'GraceBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'GraceRed', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    const blueSocket = await openWebsocket(port, blue.body.token);
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+    blueSocket.destroy();
+
+    await wait(80);
+    const ended = platform.store.match(match.id);
+    assert.equal(ended.status, 'completed');
+    assert.equal(ended.winnerTeam, 'red');
+    assert.equal(ended.endReason, 'team_disconnect_timeout');
+    redSocket.destroy();
+  }, { matchReconnectGraceMs: 40 });
+});
+
+test('all disconnected players void the match after the shared grace period', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'VoidBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'VoidRed', password: 'Iron!Crown42' }),
+    });
+    const match = {
+      id: 'disconnect-all-grace',
+      mode: 'ranked',
+      source: 'matchmaking',
+      rated: true,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: blue.body.user.id, username: 'VoidBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'VoidRed', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    const blueSocket = await openWebsocket(port, blue.body.token);
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+    blueSocket.destroy();
+    redSocket.destroy();
+
+    await wait(80);
+    const ended = platform.store.match(match.id);
+    assert.equal(ended.status, 'cancelled');
+    assert.equal(ended.winnerTeam, null);
+    assert.equal(ended.rated, false);
+    assert.equal(ended.endReason, 'all_disconnected_timeout');
+  }, { matchReconnectGraceMs: 40 });
+});
+
+test('reconnecting inside the grace period keeps the match alive', async () => {
+  await withServer(async ({ baseUrl, port, platform }) => {
+    const blue = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ReturnBlue', password: 'Iron!Crown42' }),
+    });
+    const red = await jsonFetch(`${baseUrl}/api/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ReturnRed', password: 'Iron!Crown42' }),
+    });
+    const match = {
+      id: 'disconnect-rejoin-grace',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: blue.body.user.id, username: 'ReturnBlue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: red.body.user.id, username: 'ReturnRed', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    let blueSocket = await openWebsocket(port, blue.body.token);
+    const redSocket = await openWebsocket(port, red.body.token);
+    await wait(10);
+    blueSocket.destroy();
+    await wait(20);
+    blueSocket = await openWebsocket(port, blue.body.token);
+
+    await wait(70);
+    assert.equal(platform.store.match(match.id).status, 'in_game');
+    blueSocket.destroy();
+    redSocket.destroy();
+  }, { matchReconnectGraceMs: 60 });
+});
