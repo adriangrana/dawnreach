@@ -336,6 +336,51 @@ export function createPlatformServer(options = {}) {
     return positions;
   }
 
+  function scheduleServerHeroRespawn(matchId, userId) {
+    const check = () => {
+      if (shuttingDown) return;
+      const match = store.match(matchId);
+      if (!match || match.status !== 'in_game') return;
+
+      const locks = runtimeCombatLocks(matchId);
+      const lock = locks.get(userId) || null;
+      const state = runtimeRoom(matchId).get(userId) || null;
+      if (!lock?.deadUntil || !state || state.alive !== false) return;
+
+      const now = Date.now();
+      const remainingMs = Number(lock.deadUntil) - now;
+      if (remainingMs > 0) {
+        setTimeout(check, Math.max(1, remainingMs));
+        return;
+      }
+
+      const spawn = runtimeSpawnPositions(matchId).get(userId) || state.position;
+      const respawned = {
+        ...state,
+        position: { ...spawn },
+        moving: false,
+        currentHp: Math.max(1, Number(state.maxHp) || 1),
+        currentResource: Math.max(0, Number(state.maxResource) || 0),
+        alive: true,
+        respawnRemainingMs: 0,
+        respawnDurationMs: 0,
+        sequence: Number(state.sequence || 0) + 1,
+        sentAt: now,
+      };
+      runtimeRoom(matchId).set(userId, respawned);
+      locks.delete(userId);
+      broadcast({
+        type: 'match.runtime.state',
+        matchId,
+        state: respawned,
+      }, match.players.map(player => player.userId));
+    };
+
+    const lock = runtimeCombatLocks(matchId).get(userId) || null;
+    const delayMs = lock?.deadUntil ? Math.max(1, Number(lock.deadUntil) - Date.now()) : 1;
+    setTimeout(check, delayMs);
+  }
+
   function clearMatchDisconnectGrace(matchId) {
     const state = matchDisconnectGraceStates.get(matchId);
     if (state?.timer) clearTimeout(state.timer);
