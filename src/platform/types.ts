@@ -342,6 +342,16 @@ export type MatchRuntimeCreepDamageEvent = Readonly<{
   at: number;
 }>;
 
+export type MatchRuntimePauseStateEvent = Readonly<{
+  type: 'match.runtime.pause';
+  matchId: string;
+  paused: boolean;
+  pausedByUserId: string | null;
+  revision: number;
+  changedAt: number;
+  accumulatedPauseMs: number;
+}>;
+
 export type MatchRuntimeHeroKillEvent = Readonly<{
   type: 'match.runtime.hero.kill';
   matchId: string;
@@ -415,6 +425,7 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeCombatEvent
   | MatchRuntimeCreepSnapshotEvent
   | MatchRuntimeCreepDamageEvent
+  | MatchRuntimePauseStateEvent
   | MatchRuntimeHeroKillEvent
   | MatchChatMessageEvent
   | HeroSelectStartEvent
