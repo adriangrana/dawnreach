@@ -1454,3 +1454,49 @@
     height: 44px !important;
   }
 }
+
+
+/* Keep every mode emblem on the same visual footprint. */
+.dr-play-mode-icon {
+  width: 58px !important;
+  height: 58px !important;
+  flex: 0 0 58px !important;
+}
+
+.dr-play-mode-icon img,
+.dr-play-mode-card.is-selected .dr-play-mode-icon img {
+  width: 50px !important;
+  height: 50px !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain !important;
+  transform: none !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-play-mode-icon {
+    width: 52px !important;
+    height: 52px !important;
+    flex-basis: 52px !important;
+  }
+
+  .dr-play-mode-icon img,
+  .dr-play-mode-card.is-selected .dr-play-mode-icon img {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-mode-icon {
+    width: 48px !important;
+    height: 48px !important;
+    flex-basis: 48px !important;
+  }
+
+  .dr-play-mode-icon img,
+  .dr-play-mode-card.is-selected .dr-play-mode-icon img {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
