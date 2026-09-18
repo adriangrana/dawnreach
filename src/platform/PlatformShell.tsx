@@ -5,7 +5,7 @@ import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
-import { DawnreachPlayScreen } from './DawnreachPlay';
+import { DawnreachPlayScreen, type PlayMode } from './DawnreachPlay';
 import {
   getAuthToken,
   getCurrentPlatformUser,
@@ -90,6 +90,7 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
 function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: () => void; onLogout: () => void }) {
   const [section, setSection] = useState<HomeSection>('home');
   const [playSection, setPlaySection] = useState<PlaySection>('matchmaking');
+  const [requestedPlayMode, setRequestedPlayMode] = useState<PlayMode | null>(null);
   const [online, setOnline] = useState<readonly PlatformUser[]>([user]);
   const [social, setSocial] = useState<SocialSnapshot>(EMPTY_SOCIAL);
   const [party, setParty] = useState<PartySnapshot>(EMPTY_PARTY);
@@ -175,10 +176,20 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     if (!platformRealtime.send('queue.leave')) { setNotice('Realtime connection unavailable.'); return; }
     setQueue(current => ({ ...current, joined: false }));
   };
-  const openPlay = () => { setSection('play'); setPlaySection('matchmaking'); };
-  const openNormal = () => { chooseMode('normal'); setSection('play'); setPlaySection('matchmaking'); };
-  const openRanked = () => { chooseMode('ranked'); setSection('play'); setPlaySection('matchmaking'); };
-  const openCustom = () => { setSection('play'); setPlaySection('custom'); platformRealtime.send('lobby.list'); };
+  const openPlay = () => { setRequestedPlayMode(null); setSection('play'); setPlaySection('matchmaking'); };
+  const openNormal = () => { chooseMode('normal'); setRequestedPlayMode('normal'); setSection('play'); setPlaySection('matchmaking'); };
+  const openRanked = () => { chooseMode('ranked'); setRequestedPlayMode('ranked'); setSection('play'); setPlaySection('matchmaking'); };
+  const openCustom = () => { setRequestedPlayMode('custom'); setSection('play'); setPlaySection('custom'); platformRealtime.send('lobby.list'); };
+  const openPlayMode = (mode: PlayMode) => {
+    if (mode === 'custom') {
+      openCustom();
+      return;
+    }
+    if (mode === 'normal' || mode === 'ranked') chooseMode(mode);
+    setRequestedPlayMode(mode);
+    setSection('play');
+    setPlaySection('matchmaking');
+  };
 
   return <>
     <main className="platform-home-surface platform-home-shell">
@@ -187,12 +198,11 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         <section className="platform-main-workspace">
           {section === 'home' ? <DawnreachHomeOverview user={user} party={party} online={online} social={social} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} onPlay={openPlay} onLocalPlay={onLocalPlay} onNormal={openNormal} onRanked={openRanked} onCustom={openCustom} /> : <section className="dr-play-overview">
             {playSection === 'matchmaking' ? <>
-              <DawnreachPlayScreen me={user} party={party} queue={queue} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
+              <DawnreachPlayScreen me={user} party={party} queue={queue} initialMode={requestedPlayMode ?? undefined} onMode={chooseMode} onJoin={joinQueue} onLeave={leaveQueue} onLocalPlay={onLocalPlay} onCustom={openCustom} />
               {notice && <p className="platform-workspace-notice dr-play-notice" role="status">{notice}</p>}
             </> : <section className="platform-play-custom-shell">
-              <header><div><p className="platform-eyebrow">PLAY · CUSTOM</p><h1>Create your own battle</h1></div><div className="platform-play-tabs"><button onClick={() => setPlaySection('matchmaking')}>Matchmaking</button><button className="is-active" onClick={openCustom}>Custom</button></div></header>
-              <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} />
-              {notice && <p className="platform-workspace-notice" role="status">{notice}</p>}
+              <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} onSelectMode={openPlayMode} />
+              {notice && <p className="platform-workspace-notice dr-custom-notice" role="status">{notice}</p>}
             </section>}
             <DawnreachSharedFooter user={user} online={online} social={social} party={party} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} />
           </section>}
