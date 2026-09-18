@@ -164,6 +164,184 @@ export function createPlatformServer(options = {}) {
     return credits;
   }
 
+  function runtimeSpawnPositions(matchId) {
+    let positions = matchRuntimeSpawnPositions.get(matchId);
+    if (!positions) {
+      positions = new Map();
+      matchRuntimeSpawnPositions.set(matchId, positions);
+    }
+    return positions;
+  }
+
+  function clearMatchDisconnectGrace(matchId) {
+    const state = matchDisconnectGraceStates.get(matchId);
+    if (state?.timer) clearTimeout(state.timer);
+    matchDisconnectGraceStates.delete(matchId);
+  }
+
+  function clearMatchRuntime(matchId) {
+    matchRuntimeStates.delete(matchId);
+    matchRuntimeCreepStates.delete(matchId);
+    matchRuntimeStructureStates.delete(matchId);
+    matchRuntimeCombatLocks.delete(matchId);
+    matchRuntimeHeroDamageCredits.delete(matchId);
+    matchRuntimePauseStates.delete(matchId);
+    matchRuntimeSpawnPositions.delete(matchId);
+    clearMatchDisconnectGrace(matchId);
+  }
+
+  function finishMatch(active, { winnerTeam = null, reason, voided = false } = {}) {
+    if (!active || !['loading', 'in_game'].includes(active.status)) return active ? publicMatch(active) : null;
+    const endedAt = new Date().toISOString();
+    const updated = store.updateMatch(active.id, {
+      status: voided ? 'cancelled' : 'completed',
+      endedAt,
+      endReason: String(reason || (voided ? 'cancelled' : 'completed')),
+      winnerTeam: voided ? null : winnerTeam,
+      ...(voided ? { rated: false } : {}),
+    }) || {
+      ...active,
+      status: voided ? 'cancelled' : 'completed',
+      endedAt,
+      endReason: String(reason || (voided ? 'cancelled' : 'completed')),
+      winnerTeam: voided ? null : winnerTeam,
+      ...(voided ? { rated: false } : {}),
+    };
+
+    broadcast({
+      type: 'match.ended',
+      match: publicMatch(updated),
+      winnerTeam: voided ? null : winnerTeam,
+      reason: updated.endReason,
+      voided,
+    }, active.players.map(candidate => candidate.userId));
+
+    clearMatchRuntime(active.id);
+    if (active.source === 'custom') lobbies.closeByMatch(active.id);
+    return publicMatch(updated);
+  }
+
+  function matchConnectivity(match) {
+    const abandoned = new Set(match?.abandonedUserIds || []);
+    const activePlayers = (match?.players || []).filter(player => !abandoned.has(player.userId));
+    const blue = activePlayers.filter(player => player.team === 'blue');
+    const red = activePlayers.filter(player => player.team === 'red');
+    return {
+      blue,
+      red,
+      blueConnected: blue.filter(player => isOnline(player.userId)),
+      redConnected: red.filter(player => isOnline(player.userId)),
+    };
+  }
+
+  function evaluateMatchConnectivity(matchId) {
+    const match = store.match(matchId);
+    if (!match || match.status !== 'in_game' || shuttingDown) {
+      clearMatchDisconnectGrace(matchId);
+      return null;
+    }
+
+    const connectivity = matchConnectivity(match);
+    if (!connectivity.blue.length || !connectivity.red.length) {
+      clearMatchDisconnectGrace(matchId);
+      if (!connectivity.blue.length && !connectivity.red.length) {
+        return finishMatch(match, { reason: 'all_players_abandoned', voided: true });
+      }
+      return finishMatch(match, {
+        winnerTeam: connectivity.blue.length ? 'blue' : 'red',
+        reason: 'team_abandonment',
+      });
+    }
+
+    const now = Date.now();
+    const previous = matchDisconnectGraceStates.get(matchId) || {};
+    const state = {
+      blueSince: connectivity.blueConnected.length ? null : (previous.blueSince ?? now),
+      redSince: connectivity.redConnected.length ? null : (previous.redSince ?? now),
+      allSince: null,
+      timer: previous.timer || null,
+      token: Number(previous.token || 0),
+      mode: null,
+      team: null,
+      deadlineAt: null,
+    };
+    if (!connectivity.blueConnected.length && !connectivity.redConnected.length) {
+      state.allSince = previous.allSince ?? now;
+    }
+    if (state.timer) clearTimeout(state.timer);
+
+    let mode = null;
+    let team = null;
+    let deadlineAt = null;
+    if (!connectivity.blueConnected.length && !connectivity.redConnected.length) {
+      mode = 'all';
+      deadlineAt = state.allSince + MATCH_RECONNECT_GRACE_MS;
+    } else if (!connectivity.blueConnected.length) {
+      mode = 'team';
+      team = 'blue';
+      deadlineAt = state.blueSince + MATCH_RECONNECT_GRACE_MS;
+    } else if (!connectivity.redConnected.length) {
+      mode = 'team';
+      team = 'red';
+      deadlineAt = state.redSince + MATCH_RECONNECT_GRACE_MS;
+    }
+
+    if (!mode || deadlineAt === null) {
+      matchDisconnectGraceStates.delete(matchId);
+      broadcast({
+        type: 'match.connection.grace',
+        matchId,
+        mode: 'cleared',
+        team: null,
+        deadlineAt: null,
+      }, match.players.map(player => player.userId));
+      return null;
+    }
+
+    state.mode = mode;
+    state.team = team;
+    state.deadlineAt = deadlineAt;
+    state.token += 1;
+    const token = state.token;
+    state.timer = setTimeout(() => {
+      const latest = matchDisconnectGraceStates.get(matchId);
+      if (!latest || latest.token !== token || shuttingDown) return;
+      const current = store.match(matchId);
+      if (!current || current.status !== 'in_game') {
+        clearMatchDisconnectGrace(matchId);
+        return;
+      }
+      const next = matchConnectivity(current);
+      if (latest.mode === 'all') {
+        if (!next.blueConnected.length && !next.redConnected.length) {
+          finishMatch(current, { reason: 'all_disconnected_timeout', voided: true });
+          return;
+        }
+      } else if (latest.team === 'blue') {
+        if (!next.blueConnected.length && next.redConnected.length) {
+          finishMatch(current, { winnerTeam: 'red', reason: 'team_disconnect_timeout' });
+          return;
+        }
+      } else if (latest.team === 'red') {
+        if (!next.redConnected.length && next.blueConnected.length) {
+          finishMatch(current, { winnerTeam: 'blue', reason: 'team_disconnect_timeout' });
+          return;
+        }
+      }
+      evaluateMatchConnectivity(matchId);
+    }, Math.max(0, deadlineAt - now));
+
+    matchDisconnectGraceStates.set(matchId, state);
+    broadcast({
+      type: 'match.connection.grace',
+      matchId,
+      mode,
+      team,
+      deadlineAt,
+    }, match.players.map(player => player.userId));
+    return { mode, team, deadlineAt };
+  }
+
   function runtimePauseState(matchId) {
     let pause = matchRuntimePauseStates.get(matchId);
     if (!pause) {
