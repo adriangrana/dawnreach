@@ -316,6 +316,9 @@ export function createPlatformServer(options = {}) {
           } else if (type === 'lobby.join') {
             leaveQueue(user);
             lobbies.join(user, String(message.code || message.lobbyId || ''));
+          } else if (type === 'lobby.join.spectator') {
+            leaveQueue(user);
+            lobbies.joinSpectator(user, String(message.code || message.lobbyId || ''));
           } else if (type === 'lobby.move') lobbies.move(user.id, message.team === 'red' ? 'red' : 'blue', Number(message.slot));
           else if (type === 'lobby.spectate') lobbies.spectate(user.id);
           else if (type === 'lobby.ready') lobbies.setReady(user.id, Boolean(message.ready));
