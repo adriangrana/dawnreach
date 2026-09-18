@@ -5,7 +5,12 @@ import { installMatchEndRuntime } from './match/matchEndRuntime';
 import { installMatchEventAnnouncementRuntime } from './match/matchEventAnnouncements';
 import { installMatchEventLifecycleRuntime } from './match/matchEventLifecycleRuntime';
 import { installMatchEventRuntime } from './match/matchEventRuntime';
-import { installMatchPauseRuntime } from './match/matchPauseRuntime';
+import {
+  applyAuthoritativeMatchPause,
+  installMatchPauseRuntime,
+  MATCH_PAUSE_REQUEST_EVENT,
+  type MatchPauseRequestDetail,
+} from './match/matchPauseRuntime';
 import { installRuntimePerformanceTuning } from './performance/runtimePerformanceTuning';
 import { installShadowInvalidationBridge } from './performance/shadowInvalidationBridge';
 import { mountAbilityRangeSettingsGuard } from '../hud/abilityRangeSettingsGuard';
@@ -29,12 +34,61 @@ import { mountSelectionHudNameLayout } from '../hud/selectionHudNameLayout';
 import { mountSettingsAvailability } from '../hud/settingsAvailability';
 import { mountSettingsSliderValueGuard } from '../hud/settingsSliderValueGuard';
 import { mountTowerPortraitAssets } from '../hud/towerPortraitAssets';
+import { platformRealtime } from '../platform/realtimeClient';
+import type { PlatformRealtimeEvent } from '../platform/types';
 
 /**
  * Owns all imperative in-match runtimes. Keeping this lifecycle out of main.tsx prevents gameplay
  * hotkeys, chat, menus and world subscriptions from leaking into Login/Home or future Hero Select.
  */
 export type GameClientRuntimeOptions = InGameChatRuntimeOptions;
+
+function mountNetworkMatchPause(options: GameClientRuntimeOptions) {
+  const matchId = options.matchId?.trim() || null;
+  const playerId = options.playerId?.trim() || null;
+  if (!matchId || !playerId) return () => undefined;
+
+  let lastRevision = -1;
+
+  const onPauseRequest = (event: Event) => {
+    const detail = (event as CustomEvent<MatchPauseRequestDetail>).detail;
+    if (!detail || typeof detail.paused !== 'boolean') return;
+    platformRealtime.send('match.runtime.pause', {
+      matchId,
+      paused: detail.paused,
+    });
+  };
+
+  const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
+    if (
+      typeof event !== 'object'
+      || event === null
+      || !('type' in event)
+      || event.type !== 'match.runtime.pause'
+      || !('matchId' in event)
+      || event.matchId !== matchId
+      || !('paused' in event)
+    ) return;
+
+    const revision = 'revision' in event ? Number(event.revision || 0) : 0;
+    if (revision < lastRevision) return;
+    lastRevision = revision;
+
+    applyAuthoritativeMatchPause(
+      Boolean(event.paused),
+      Boolean(event.paused) && 'pausedByUserId' in event && event.pausedByUserId
+        ? String(event.pausedByUserId)
+        : null,
+      performance.now(),
+    );
+  });
+
+  window.addEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
+  return () => {
+    window.removeEventListener(MATCH_PAUSE_REQUEST_EVENT, onPauseRequest as EventListener);
+    unsubscribe();
+  };
+}
 
 export function mountGameClientRuntime(options: GameClientRuntimeOptions = {}) {
   const disposers: Array<() => void> = [];
@@ -46,6 +100,7 @@ export function mountGameClientRuntime(options: GameClientRuntimeOptions = {}) {
   own(installMatchEventAnnouncementRuntime());
   own(installMatchEndRuntime());
   own(installMatchPauseRuntime());
+  own(mountNetworkMatchPause(options));
   own(installMatchEventLifecycleRuntime());
   own(installRuntimePerformanceTuning());
   own(installShadowInvalidationBridge());
