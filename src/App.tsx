@@ -722,8 +722,17 @@ function TeamPortraits({ team, side, localRespawn }: {
 }
 
 function ReconnectGraceBanner({ state }: { state: MatchConnectionPresentation }) {
+  const [wallClockMs, setWallClockMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    setWallClockMs(Date.now());
+    if (state.mode === 'cleared' || state.deadlineAt === null) return;
+    const timer = window.setInterval(() => setWallClockMs(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [state.mode, state.deadlineAt]);
+
   if (state.mode === 'cleared' || state.deadlineAt === null) return null;
-  const remainingSeconds = Math.max(0, Math.ceil((state.deadlineAt - Date.now()) / 1000));
+  const remainingSeconds = Math.max(0, Math.ceil((state.deadlineAt - wallClockMs) / 1000));
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
   const countdown = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
