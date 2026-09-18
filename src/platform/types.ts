@@ -276,6 +276,7 @@ export type MatchRuntimePlayerState = Readonly<{
   currentResource: number;
   maxResource: number;
   level: number;
+  experience?: number;
   alive: boolean;
   respawnRemainingMs?: number;
   respawnDurationMs?: number;
