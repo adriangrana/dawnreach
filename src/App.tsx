@@ -731,7 +731,7 @@ function ReconnectGraceBanner({ state }: { state: MatchConnectionPresentation })
   const playerText = names.length > 0 ? names.join(', ') : 'Jugadores desconectados';
   const message = state.mode === 'all'
     ? `${playerText}. La partida se cancelará sin puntuar si nadie vuelve.`
-    : `${playerText}. El equipo ${state.team === 'blue' ? 'Dawn' : 'Dusk'} tiene 1 minuto para reconectarse.`;
+    : `${playerText}. El equipo ${state.team === 'blue' ? 'Dawn' : 'Dusk'} debe reconectarse antes de que termine el contador.`;
 
   return (
     <aside className="reconnect-grace-banner" role="status" aria-live="polite">
