@@ -559,6 +559,19 @@ export function createPlatformServer(options = {}) {
     };
   }
 
+  function runtimeMatchElapsedMs(match, now = Date.now()) {
+    const startedAt = Date.parse(String(match?.startedAt || ''));
+    if (!Number.isFinite(startedAt)) return 0;
+    const pause = runtimePauseState(match.id);
+    const activePauseMs = pause.paused && pause.pauseStartedAt !== null
+      ? Math.max(0, now - Number(pause.pauseStartedAt))
+      : 0;
+    return Math.max(
+      0,
+      now - startedAt - Math.max(0, Number(pause.accumulatedPauseMs || 0)) - activePauseMs,
+    );
+  }
+
   function shiftRuntimeTimersForPause(matchId, durationMs) {
     if (!(durationMs > 0)) return;
 
@@ -1290,7 +1303,7 @@ export function createPlatformServer(options = {}) {
       sentAt: Date.now(),
       elapsedSeconds: Math.max(
         Number(previous?.elapsedSeconds || 0),
-        Math.max(0, Math.min(86400, finite(payload?.elapsedSeconds, previous?.elapsedSeconds || 0))),
+        runtimeMatchElapsedMs(active, Date.now()) / 1000,
       ),
       creeps,
     };
