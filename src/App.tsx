@@ -1232,7 +1232,9 @@ export default function App({
         const sourceEntityId = String(event.sourceEntityId || '');
         const localHeroDamage = sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID;
         const authoritativeCreepDamage = authorityUserId === localUser.id && sourceEntityId.startsWith('lane-creep:');
-        if (localHeroDamage || authoritativeCreepDamage) {
+        const authoritativeTowerDamage = authorityUserId === localUser.id
+          && /^(blue|red)-[a-z0-9-]+-tower$/.test(sourceEntityId);
+        if (localHeroDamage || authoritativeCreepDamage || authoritativeTowerDamage) {
           platformRealtime.send('match.runtime.combat', {
             matchId: onlineMatch.id,
             targetUserId: remoteMatch[1],
