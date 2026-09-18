@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { LogIn, Shield, Swords, UserPlus, X } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
@@ -106,6 +106,8 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [heroSelect, setHeroSelect] = useState<HeroSelectState | null>(null);
   const [activeMatch, setActiveMatch] = useState<ActiveMatchSession | null>(null);
   const [sharedGameVisible, setSharedGameVisible] = useState(false);
+  const abandonPendingRef = useRef(false);
+  const closeAfterAbandonRef = useRef(false);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [notice, setNotice] = useState('');
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
@@ -122,13 +124,29 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   }, [notice]);
 
   useEffect(() => {
-    const onMatchAbandonRequest = () => {
-      if (activeMatch?.stage !== 'in_game') return;
-      if (!platformRealtime.send('match.abandon')) {
-        setNotice('Realtime connection unavailable. Could not abandon the match.');
+    const onMatchAbandonRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ closeAfter?: boolean }>).detail;
+      if (activeMatch?.stage !== 'in_game') {
+        window.dispatchEvent(new CustomEvent('dawnreach:match-abandon-failed', {
+          detail: { message: 'No active online match was found.' },
+        }));
         return;
       }
-      setSharedGameVisible(false);
+      if (abandonPendingRef.current) return;
+
+      abandonPendingRef.current = true;
+      closeAfterAbandonRef.current = Boolean(detail?.closeAfter);
+
+      if (!platformRealtime.send('match.abandon')) {
+        abandonPendingRef.current = false;
+        closeAfterAbandonRef.current = false;
+        setNotice('Realtime connection unavailable. Could not abandon the match.');
+        window.dispatchEvent(new CustomEvent('dawnreach:match-abandon-failed', {
+          detail: { message: 'Realtime connection unavailable. Could not abandon the match.' },
+        }));
+        return;
+      }
+
       setNotice('Leaving the active match…');
     };
     window.addEventListener(MATCH_ABANDON_REQUEST_EVENT, onMatchAbandonRequest);
@@ -222,6 +240,12 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setNotice(`${username} abandoned the match.`);
       }
       if (type === 'match.abandoned') {
+        const closeAfter = closeAfterAbandonRef.current;
+        abandonPendingRef.current = false;
+        closeAfterAbandonRef.current = false;
+        window.dispatchEvent(new CustomEvent('dawnreach:match-abandon-confirmed', {
+          detail: { closeAfter },
+        }));
         setHeroSelect(null);
         setActiveMatch(null);
         setSharedGameVisible(false);
@@ -242,7 +266,17 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setSharedGameVisible(true);
         setNotice('');
       }
-      if (type === 'error' && 'message' in event) setNotice(String(event.message || 'Could not complete the action.'));
+      if (type === 'error' && 'message' in event) {
+        const message = String(event.message || 'Could not complete the action.');
+        setNotice(message);
+        if (abandonPendingRef.current) {
+          abandonPendingRef.current = false;
+          closeAfterAbandonRef.current = false;
+          window.dispatchEvent(new CustomEvent('dawnreach:match-abandon-failed', {
+            detail: { message },
+          }));
+        }
+      }
       if (type === 'session.ready') {
         setRealtime('online');
         if ('presence' in event && Array.isArray(event.presence)) setOnline(event.presence as readonly PlatformUser[]);
