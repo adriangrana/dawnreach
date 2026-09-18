@@ -335,7 +335,10 @@ export type MatchRuntimeCreepState = Readonly<{
 export type MatchRuntimeCreepSnapshotEvent = Readonly<{
   type: 'match.runtime.creeps';
   matchId: string;
-  authorityUserId: string;
+  /** Canonical authority is always the server. Kept for backwards compatibility. */
+  authorityUserId: null;
+  /** Connected client used only as a disposable simulation worker for NPC movement. */
+  simulationUserId?: string | null;
   sequence: number;
   sentAt: number;
   elapsedSeconds?: number;
@@ -363,7 +366,9 @@ export type MatchRuntimeStructureState = Readonly<{
 export type MatchRuntimeStructureSnapshotEvent = Readonly<{
   type: 'match.runtime.structures';
   matchId: string;
-  authorityUserId: string;
+  /** Canonical authority is always the server. Kept for backwards compatibility. */
+  authorityUserId: null;
+  simulationUserId?: string | null;
   sequence: number;
   sentAt: number;
   structures: readonly MatchRuntimeStructureState[];
@@ -381,7 +386,10 @@ export type MatchRuntimeStructureDamageEvent = Readonly<{
 export type MatchRuntimeAuthorityEvent = Readonly<{
   type: 'match.runtime.authority';
   matchId: string;
-  authorityUserId: string | null;
+  /** Shared state authority is the server; clients never own canonical combat/world state. */
+  authorityUserId: null;
+  /** Optional client worker that computes NPC movement proposals. It is migratable/disposable. */
+  simulationUserId: string | null;
 }>;
 
 export type MatchConnectionGraceEvent = Readonly<{
