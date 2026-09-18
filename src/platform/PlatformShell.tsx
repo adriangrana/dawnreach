@@ -33,6 +33,7 @@ const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const EMPTY_SOCIAL: SocialSnapshot = { friends: [], incoming: [], outgoing: [] };
 const EMPTY_PARTY: PartySnapshot = { party: null, invites: [], messages: [] };
 const EMPTY_QUEUE: QueueState = { joined: false, mode: 'ranked', count: 0, target: 10 };
+const MATCH_ABANDON_REQUEST_EVENT = 'dawnreach:match-abandon-request';
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
@@ -121,6 +122,20 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   }, [notice]);
 
   useEffect(() => {
+    const onMatchAbandonRequest = () => {
+      if (activeMatch?.stage !== 'in_game') return;
+      if (!platformRealtime.send('match.abandon')) {
+        setNotice('Realtime connection unavailable. Could not abandon the match.');
+        return;
+      }
+      setSharedGameVisible(false);
+      setNotice('Leaving the active match…');
+    };
+    window.addEventListener(MATCH_ABANDON_REQUEST_EVENT, onMatchAbandonRequest);
+    return () => window.removeEventListener(MATCH_ABANDON_REQUEST_EVENT, onMatchAbandonRequest);
+  }, [activeMatch?.stage, activeMatch?.match.id]);
+
+  useEffect(() => {
     void refreshSocial().catch(() => undefined);
     const unsubscribe = platformRealtime.subscribe(event => {
       const type = eventType(event);
@@ -200,6 +215,27 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
         setSharedGameVisible(true);
         setNotice('');
+      }
+      if (type === 'match.player.abandoned' && 'match' in event && event.match) {
+        const username = 'username' in event ? String(event.username || 'A player') : 'A player';
+        setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
+        setNotice(`${username} abandoned the match.`);
+      }
+      if (type === 'match.abandoned') {
+        setHeroSelect(null);
+        setActiveMatch(null);
+        setSharedGameVisible(false);
+        setCurrentLobby(null);
+        setSection('home');
+        setNotice('You left the match.');
+      }
+      if (type === 'match.ended' && 'match' in event && event.match) {
+        setHeroSelect(null);
+        setActiveMatch(null);
+        setSharedGameVisible(false);
+        setCurrentLobby(null);
+        setSection('home');
+        setNotice('The match has ended.');
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
         setActiveMatch(event.activeMatch as ActiveMatchSession);
