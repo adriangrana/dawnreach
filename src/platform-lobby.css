@@ -907,3 +907,70 @@
   .dr-custom-settings-line { min-height: 29px; }
   .dr-custom-start { height: 42px; font-size: 15px; }
 }
+
+
+/* =========================================================
+   CUSTOM LOBBY · reference proportion / legibility pass
+   ========================================================= */
+
+.dr-custom-stage {
+  grid-template-columns:
+    minmax(330px, .98fr)
+    minmax(520px, 1.48fr)
+    minmax(280px, .82fr);
+}
+
+.dr-custom-stage::before {
+  background:
+    linear-gradient(180deg, rgba(2, 9, 15, .48), rgba(2, 8, 13, .72)),
+    linear-gradient(90deg, rgba(3, 12, 19, .64), rgba(3, 12, 19, .18) 48%, rgba(3, 10, 16, .58)),
+    url('/assets/images/dawnreach_custom_background.webp') center 42% / cover no-repeat;
+  filter: saturate(.88) contrast(1.03);
+}
+
+.dr-custom-browser-panel,
+.dr-custom-settings-panel {
+  background:
+    linear-gradient(180deg, rgba(7, 22, 32, .94), rgba(3, 12, 19, .96));
+}
+
+.dr-custom-room-panel {
+  background:
+    linear-gradient(180deg, rgba(7, 22, 32, .88), rgba(3, 12, 19, .94));
+}
+
+.dr-custom-room-panel.is-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  padding: 28px;
+}
+
+.dr-custom-room-panel.is-empty::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(73, 126, 151, .09), transparent 30%),
+    linear-gradient(180deg, transparent, rgba(1, 7, 11, .26));
+}
+
+@media (max-width: 1500px) {
+  .dr-custom-stage {
+    grid-template-columns:
+      minmax(280px, .95fr)
+      minmax(440px, 1.45fr)
+      minmax(240px, .78fr);
+  }
+}
+
+@media (max-width: 1320px) {
+  .dr-custom-stage {
+    grid-template-columns: 260px minmax(430px, 1fr);
+    grid-template-rows: minmax(520px, 1fr) auto;
+  }
+}
