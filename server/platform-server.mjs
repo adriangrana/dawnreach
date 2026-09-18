@@ -750,6 +750,83 @@ export function createPlatformServer(options = {}) {
     return event;
   }
 
+  function reportMatchRuntimeStructures(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para sincronizar estructuras.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('Las estructuras pertenecen a otra partida.');
+
+    const authorityUserId = runtimeAuthorityUserId(active);
+    if (!authorityUserId || userId !== authorityUserId) throw new Error('Solo la autoridad de la partida puede publicar estructuras.');
+
+    const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
+    const structureIdPattern = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/;
+    const previous = matchRuntimeStructureStates.get(active.id);
+    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+
+    const structures = (Array.isArray(payload?.structures) ? payload.structures : []).slice(0, 32).flatMap(raw => {
+      if (!raw || typeof raw !== 'object') return [];
+      const id = String(raw.id || '');
+      const match = structureIdPattern.exec(id);
+      if (!match) return [];
+      const team = match[1];
+      const kind = id.endsWith('-tower') ? 'tower' : 'building';
+      const maxHp = clamp(raw.maxHp, 1, 100000);
+      const currentHp = clamp(raw.currentHp, 0, maxHp);
+      return [{
+        id,
+        team,
+        kind,
+        currentHp,
+        maxHp,
+        alive: raw.alive !== false && currentHp > 0,
+      }];
+    });
+
+    const snapshot = {
+      type: 'match.runtime.structures',
+      matchId: active.id,
+      authorityUserId,
+      sequence,
+      sentAt: Date.now(),
+      structures,
+    };
+    matchRuntimeStructureStates.set(active.id, snapshot);
+    broadcast(snapshot, active.players.map(candidate => candidate.userId));
+    return snapshot;
+  }
+
+  function reportMatchRuntimeStructureDamage(userId, payload) {
+    const active = store.activeMatchForUser(userId);
+    if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para dañar estructuras.');
+    if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('El daño de estructura pertenece a otra partida.');
+
+    const source = active.players.find(candidate => candidate.userId === userId);
+    if (!source) throw new Error('No participas en esta partida.');
+
+    const authorityUserId = runtimeAuthorityUserId(active);
+    if (!authorityUserId || authorityUserId === userId) return null;
+
+    const structureId = String(payload?.structureId || '');
+    const match = /^(blue|red)-(?:(top|mid|bot)-(\d+)-tower|throne)$/.exec(structureId);
+    if (!match) throw new Error('Estructura de destino inválida.');
+    if (match[1] === source.team) throw new Error('No se permite daño aliado a estructuras.');
+
+    const amount = Math.max(0, Math.min(50000, Number(payload?.amount) || 0));
+    if (amount <= 0) return null;
+
+    const event = {
+      type: 'match.runtime.structure.damage',
+      matchId: active.id,
+      sourceUserId: userId,
+      structureId,
+      amount,
+      at: Date.now(),
+    };
+    send(authorityUserId, event);
+    return event;
+  }
+
   function reportMatchChatMessage(userId, payload) {
     const active = store.activeMatchForUser(userId);
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para usar el chat.');
