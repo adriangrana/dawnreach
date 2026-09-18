@@ -1333,3 +1333,121 @@
     height: 48px !important;
   }
 }
+
+
+/* =========================================================
+   PLAY MODE CARD PROPORTIONS · compact horizontal pass
+   ========================================================= */
+
+.dr-play-screen {
+  grid-template-columns: clamp(310px, 22.5vw, 372px) minmax(0, 1fr) !important;
+}
+
+.dr-play-modes {
+  grid-template-rows: repeat(5, clamp(72px, 8.2vh, 86px)) auto !important;
+  align-content: start !important;
+  gap: 9px !important;
+}
+
+.dr-play-mode-card {
+  min-height: 0 !important;
+  height: 100% !important;
+  grid-template-columns: clamp(58px, 4.6vw, 72px) minmax(0, 1fr) !important;
+  padding: 7px 18px 7px 10px !important;
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    filter .16s ease !important;
+}
+
+.dr-play-mode-card:hover:not(:disabled) {
+  transform: none !important;
+}
+
+.dr-play-mode-icon {
+  width: clamp(54px, 4.4vw, 68px) !important;
+  height: clamp(54px, 4.4vw, 68px) !important;
+}
+
+.dr-play-mode-icon img,
+.dr-play-mode-card.is-selected .dr-play-mode-icon img {
+  width: 76% !important;
+  height: 76% !important;
+}
+
+.dr-play-mode-copy {
+  gap: 5px !important;
+}
+
+.dr-play-mode-copy strong {
+  font-size: clamp(17px, 1.18vw, 21px) !important;
+}
+
+.dr-play-mode-copy em {
+  font-size: clamp(8px, .60vw, 9.5px) !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-play-screen {
+    grid-template-columns: 292px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-modes {
+    grid-template-rows: repeat(5, 68px) auto !important;
+    gap: 8px !important;
+  }
+
+  .dr-play-mode-card {
+    min-height: 0 !important;
+    height: 68px !important;
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    padding: 6px 13px 6px 8px !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 50px !important;
+    height: 50px !important;
+  }
+
+  .dr-play-mode-copy strong {
+    font-size: 16px !important;
+  }
+
+  .dr-play-mode-copy em {
+    font-size: 8px !important;
+  }
+}
+
+@media (max-height: 850px) {
+  .dr-play-modes {
+    grid-template-rows: repeat(5, 60px) auto !important;
+    gap: 6px !important;
+  }
+
+  .dr-play-mode-card {
+    height: 60px !important;
+    min-height: 0 !important;
+    grid-template-columns: 48px minmax(0, 1fr) !important;
+    padding: 5px 12px 5px 7px !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+@media (max-width: 1120px) {
+  .dr-play-screen {
+    grid-template-columns: 252px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-mode-card {
+    grid-template-columns: 46px minmax(0, 1fr) !important;
+  }
+
+  .dr-play-mode-icon {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
