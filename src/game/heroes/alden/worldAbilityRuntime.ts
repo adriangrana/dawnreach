@@ -98,6 +98,7 @@ type AbilityJoints = {
 
 export type AldenWorldAbilityRuntimeHandle = Readonly<{
   update(nowMs: number): void;
+  castAbility(key: AbilityKey, rank: number, nowMs: number): void;
   dispose(): void;
 }>;
 
@@ -134,6 +135,18 @@ export function mountAldenWorldAbilityRuntime() {
     for (const runtime of [...activeRuntimes]) runtime.dispose();
     activeRuntimes.clear();
   };
+}
+
+export function triggerAldenWorldAbility(
+  scene: THREE.Scene,
+  key: AbilityKey,
+  rank: number,
+  nowMs = performance.now(),
+) {
+  const runtime = installedScenes.get(scene);
+  if (!runtime) return false;
+  runtime.castAbility(key, rank, nowMs);
+  return true;
 }
 
 class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
@@ -289,12 +302,14 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     return Number.isFinite(value) ? Math.max(0, value) : 0;
   }
 
-  private castAbility(key: AbilityKey, rank: number, nowMs: number) {
+  castAbility(key: AbilityKey, rank: number, nowMs: number) {
+    const safeRank = Math.max(1, Math.floor(rank));
+    this.cooldownWasActive.set(key, true);
     switch (key) {
-      case 'Q': this.castQ(rank, nowMs); break;
-      case 'W': this.castW(rank, nowMs); break;
-      case 'E': this.castE(rank, nowMs); break;
-      case 'R': this.castR(rank, nowMs); break;
+      case 'Q': this.castQ(safeRank, nowMs); break;
+      case 'W': this.castW(safeRank, nowMs); break;
+      case 'E': this.castE(safeRank, nowMs); break;
+      case 'R': this.castR(safeRank, nowMs); break;
     }
   }
 
