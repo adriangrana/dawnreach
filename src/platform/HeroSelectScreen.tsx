@@ -378,9 +378,9 @@ function BansStrip({ side, count }: { side: 'ally' | 'enemy'; count: number }) {
   return <div className={`dr-hero-select-bans is-${side}${count <= 0 ? ' is-empty' : ''}`}>
     <span>{side === 'ally' ? 'YOUR TEAM BANS' : 'ENEMY TEAM BANS'}</span>
     <div>
-      {count > 0
-        ? Array.from({ length: count }, (_, index) => <i key={index}><LockKeyhole /></i>)
-        : Array.from({ length: 4 }, (_, index) => <i className="is-placeholder" key={index} />)}
+      {Array.from({ length: 4 }, (_, index) => index < count
+        ? <i className="is-ban" key={index}><LockKeyhole /></i>
+        : <i className="is-placeholder" key={index} />)}
     </div>
   </div>;
 }
