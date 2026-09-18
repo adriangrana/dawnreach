@@ -778,15 +778,31 @@ function pushTrailPoint(projectile: TowerProjectile, point: THREE.Vector3): void
 function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntity, elapsed: number): void {
   if (!target.alive || target.currentHp <= 0) return;
 
-  // Replicated units never own their HP locally. A client may still render the tower
-  // projectile, but mutating a remote hero/creep here creates visible HP rollback when the
-  // canonical server snapshot arrives.
-  if (
-    (target.kind === 'creep' && target.root.userData.networkReplica === true)
-    || (target.kind === 'hero' && target.root.userData.networkRemoteHero === true)
-  ) return;
+  // Replicated creeps never own their HP locally.
+  if (target.kind === 'creep' && target.root.userData.networkReplica === true) return;
 
   const damage = calculateTowerAuraAdjustedDamage(source, target, TOWER_COMBAT_TUNING.damage);
+  const networkSession = getWorldRoot(target.root).userData.dawnreachNetworkSession === true;
+  if (target.kind === 'hero' && networkSession) {
+    // Online hero HP/death is server-canonical. Tower simulation reports a hit intent only;
+    // the following server combat/state packets perform the actual health transition.
+    emitWorldCombatEvent({
+      entityId: target.id,
+      reason: 'damage',
+      currentHp: target.currentHp,
+      currentResource: target.currentResource,
+      alive: target.alive,
+      atMs: worldNowMs(),
+      amount: damage,
+      rawAmount: damage,
+      sourceEntityId: source?.id,
+      damageType: 'physical',
+      isDirect: true,
+      isFromFront: true,
+    });
+    return;
+  }
+
   target.currentHp = Math.max(0, target.currentHp - damage);
   target.alive = target.currentHp > 0;
   target.root.userData.currentHp = target.currentHp;
@@ -824,8 +840,7 @@ function applyTowerProjectileDamage(source: GameEntity | null, target: GameEntit
   } else {
     target.root.visible = false;
   }
-  const networkSession = getWorldRoot(target.root).userData.dawnreachNetworkSession === true;
-  const respawnSeconds = target.kind === 'hero' && !networkSession
+  const respawnSeconds = target.kind === 'hero'
     ? scheduleHeroRespawn(target, elapsed)
     : undefined;
 
