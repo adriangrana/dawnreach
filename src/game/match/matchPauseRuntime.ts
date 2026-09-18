@@ -113,6 +113,7 @@ export function applyAuthoritativeMatchPause(
   changedAtMs = realNowMs(),
   authoritativeAccumulatedPauseMs?: number,
   pausedByDisplayName: string | null = null,
+  presentPauseUi = true,
 ) {
   const hasAuthoritativeAccumulated = Number.isFinite(authoritativeAccumulatedPauseMs);
   const authoritativeAccumulated = hasAuthoritativeAccumulated
@@ -148,11 +149,19 @@ export function applyAuthoritativeMatchPause(
   state.changedAtMs = changedAtMs;
 
   document.body.dataset.dawnreachMatchPaused = String(state.paused);
-  renderPauseOverlay();
-  refreshMenuPauseAction();
-  window.dispatchEvent(new CustomEvent<MatchPauseStateDetail>(MATCH_PAUSE_STATE_EVENT, {
-    detail: getMatchPauseSnapshot(),
-  }));
+  if (presentPauseUi) {
+    renderPauseOverlay();
+    refreshMenuPauseAction();
+    window.dispatchEvent(new CustomEvent<MatchPauseStateDetail>(MATCH_PAUSE_STATE_EVENT, {
+      detail: getMatchPauseSnapshot(),
+    }));
+  } else {
+    const pauseOverlay = document.getElementById(PAUSE_OVERLAY_ID);
+    if (pauseOverlay) {
+      pauseOverlay.hidden = true;
+      pauseOverlay.classList.remove('is-visible');
+    }
+  }
 }
 
 function ensurePauseOverlay() {
