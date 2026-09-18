@@ -1711,7 +1711,7 @@ export async function createDawnreachGame(
 
   return {
     getLocalNetworkState() {
-      const overlay = getHeroState?.() ?? null;
+      const overlay = syncLocalHeroEntityState();
       return {
         position: {
           x: hero.root.position.x,
@@ -1720,12 +1720,12 @@ export async function createDawnreachGame(
         },
         yaw: currentYaw,
         moving: localHeroMoving,
-        currentHp: overlay?.hero.currentHp ?? localHeroEntity.currentHp,
+        currentHp: localHeroEntity.currentHp,
         maxHp: overlay?.stats.maxHp ?? Math.max(1, localHeroEntity.maxHp),
-        currentResource: overlay?.hero.currentResource ?? localHeroEntity.currentResource,
+        currentResource: localHeroEntity.currentResource,
         maxResource: overlay?.stats.maxResource ?? localHeroEntity.maxResource,
         level: overlay?.hero.level ?? localHeroEntity.level,
-        alive: overlay ? overlay.hero.currentHp > 0 : localHeroEntity.alive,
+        alive: localHeroEntity.alive && localHeroEntity.currentHp > 0,
       };
     },
     castLocalAbility(key: AbilityKey, rank: number, nowMs = toMatchGameTimeMs(performance.now())) {
