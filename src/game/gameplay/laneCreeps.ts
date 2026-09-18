@@ -835,12 +835,13 @@ class LaneCreepManager {
       const previousTarget = creep.target;
       const nextTarget = this.choosePriorityTarget(creep, now);
       creep.target = nextTarget;
-      if (nextTarget && nextTarget !== previousTarget) {
-        creep.targetAcquiredAt = now;
+      if (nextTarget !== previousTarget) {
         this.clearNavigation(creep);
         creep.blockedForSeconds = 0;
+        creep.targetAcquiredAt = nextTarget ? now : 0;
+      } else if (!nextTarget) {
+        creep.targetAcquiredAt = 0;
       }
-      if (!nextTarget) creep.targetAcquiredAt = 0;
       creep.state = nextTarget ? 'COMBAT' : 'ATTACK_MOVE';
       this.writeState(creep);
     }
@@ -1067,27 +1068,57 @@ class LaneCreepManager {
     if (creep.route.length < 2) return false;
     if (creep.routeIndex >= creep.route.length) creep.routeIndex = creep.route.length - 1;
 
-    let waypoint = creep.route[creep.routeIndex];
-    let dx = waypoint[0] - creep.entity.root.position.x;
-    let dz = waypoint[1] - creep.entity.root.position.z;
-    let distanceSq = dx * dx + dz * dz;
     const arrivalSq = LANE_CREEP_TUNING.laneNodeArrivalDistance ** 2;
-
-    if (distanceSq <= arrivalSq && creep.routeIndex < creep.route.length - 1) {
+    while (
+      creep.routeIndex < creep.route.length - 1
+      && this.routeNodeReachedOrPassed(creep, creep.routeIndex, arrivalSq)
+    ) {
       creep.routeIndex += 1;
-      waypoint = creep.route[creep.routeIndex];
-      dx = waypoint[0] - creep.entity.root.position.x;
-      dz = waypoint[1] - creep.entity.root.position.z;
-      distanceSq = dx * dx + dz * dz;
+      this.clearNavigation(creep);
     }
 
-    if (creep.routeIndex === creep.route.length - 1 && distanceSq <= arrivalSq) {
+    const waypoint = creep.route[creep.routeIndex];
+    const dx = waypoint[0] - creep.entity.root.position.x;
+    const dz = waypoint[1] - creep.entity.root.position.z;
+    const distanceSq = dx * dx + dz * dz;
+
+    if (
+      creep.routeIndex === creep.route.length - 1
+      && this.routeNodeReachedOrPassed(creep, creep.routeIndex, arrivalSq)
+    ) {
       if (creep.reachedEndAt === null) creep.reachedEndAt = now;
       return false;
     }
 
     creep.reachedEndAt = null;
     return this.moveToward(creep, waypoint[0], waypoint[1], dt, false, now);
+  }
+
+  private routeNodeReachedOrPassed(
+    creep: LaneCreepRuntime,
+    nodeIndex: number,
+    arrivalSq: number,
+  ) {
+    const node = creep.route[nodeIndex];
+    if (!node) return true;
+    const px = creep.entity.root.position.x;
+    const pz = creep.entity.root.position.z;
+    const dx = node[0] - px;
+    const dz = node[1] - pz;
+    if (dx * dx + dz * dz <= arrivalSq) return true;
+    if (nodeIndex <= 0) return false;
+
+    const previous = creep.route[nodeIndex - 1];
+    const vx = node[0] - previous[0];
+    const vz = node[1] - previous[1];
+    const lengthSq = vx * vx + vz * vz;
+    if (lengthSq <= 1e-9) return true;
+
+    // A creep can be pushed around a waypoint by collision avoidance. Once it crosses the
+    // perpendicular plane beyond that waypoint, continuing forward is correct; forcing it to
+    // turn around and touch the exact authored point creates loops and traffic jams.
+    const progress = ((px - previous[0]) * vx + (pz - previous[1]) * vz) / lengthSq;
+    return progress >= 1;
   }
 
   private beginReturning(creep: LaneCreepRuntime) {
