@@ -751,12 +751,13 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     if (adjustedDamage <= EPSILON) return 0;
 
     const networkRemoteHero = target.kind === 'hero' && target.root.userData.networkRemoteHero === true;
+    const networkRemoteCreep = target.kind === 'creep' && target.root.userData.networkReplica === true;
     const networkRemoteStructure = this.scene.userData.laneCreepNetworkMode === 'replica'
       && (target.kind === 'tower' || target.kind === 'building')
       && target.interaction === 'attackable-structure';
 
-    if (networkRemoteHero || networkRemoteStructure) {
-      // Multiplayer heroes and shared structures are resolved by their network authority.
+    if (networkRemoteHero || networkRemoteCreep || networkRemoteStructure) {
+      // Multiplayer heroes and shared world units are reconciled by server canonical state.
       // Keep the cast responsive, but never predict HP/death locally or the next snapshot
       // can visibly restore a destroyed structure.
       emitWorldCombatEvent({
