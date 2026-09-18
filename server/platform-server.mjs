@@ -175,15 +175,16 @@ export function createPlatformServer(options = {}) {
   function broadcastRuntimeAuthority(match) {
     if (!match || match.status !== 'in_game') return null;
     const previous = matchRuntimeAuthorityUsers.get(match.id) || null;
-    const authorityUserId = runtimeAuthorityUserId(match);
-    if (authorityUserId !== previous || authorityUserId) {
+    const simulationUserId = runtimeAuthorityUserId(match);
+    if (simulationUserId !== previous || simulationUserId) {
       broadcast({
         type: 'match.runtime.authority',
         matchId: match.id,
-        authorityUserId,
+        authorityUserId: null,
+        simulationUserId,
       }, match.players.map(player => player.userId));
     }
-    return authorityUserId;
+    return simulationUserId;
   }
 
   function runtimeCombatLocks(matchId) {
@@ -1306,7 +1307,8 @@ export function createPlatformServer(options = {}) {
     const snapshot = {
       type: 'match.runtime.creeps',
       matchId: active.id,
-      authorityUserId,
+      authorityUserId: null,
+      simulationUserId: authorityUserId,
       sequence,
       sentAt: Date.now(),
       elapsedSeconds: Math.max(
@@ -1351,7 +1353,8 @@ export function createPlatformServer(options = {}) {
       ...previous,
       type: 'match.runtime.creeps',
       matchId: active.id,
-      authorityUserId: runtimeAuthorityUserId(active),
+      authorityUserId: null,
+      simulationUserId: runtimeAuthorityUserId(active),
       sequence: Number(previous.sequence || 0) + 1,
       sentAt: Date.now(),
       creeps: previous.creeps.map(creep => creep.id === creepId ? nextCreep : creep),
@@ -1420,7 +1423,8 @@ export function createPlatformServer(options = {}) {
     const snapshot = {
       type: 'match.runtime.structures',
       matchId: active.id,
-      authorityUserId,
+      authorityUserId: null,
+      simulationUserId: authorityUserId,
       sequence,
       sentAt: Date.now(),
       structures,
@@ -1460,7 +1464,8 @@ export function createPlatformServer(options = {}) {
       ...previous,
       type: 'match.runtime.structures',
       matchId: active.id,
-      authorityUserId: runtimeAuthorityUserId(active),
+      authorityUserId: null,
+      simulationUserId: runtimeAuthorityUserId(active),
       sequence: Number(previous.sequence || 0) + 1,
       sentAt: Date.now(),
       structures: previous.structures.map(structure =>
@@ -1727,7 +1732,8 @@ export function createPlatformServer(options = {}) {
       peer.send({
         type: 'match.runtime.authority',
         matchId: active.match.id,
-        authorityUserId: runtimeAuthorityUserId(active.match),
+        authorityUserId: null,
+        simulationUserId: runtimeAuthorityUserId(active.match),
       });
       peer.send(publicRuntimePauseState(active.match.id));
       return;
@@ -2008,7 +2014,8 @@ export function createPlatformServer(options = {}) {
             peer.send({
               type: 'match.runtime.authority',
               matchId: active.id,
-              authorityUserId: runtimeAuthorityUserId(active),
+              authorityUserId: null,
+              simulationUserId: runtimeAuthorityUserId(active),
             });
             peer.send(publicRuntimePauseState(active.id));
           }
