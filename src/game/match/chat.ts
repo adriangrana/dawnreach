@@ -6,6 +6,7 @@ export const MAX_CHAT_MESSAGE_LENGTH = 220;
 export type InGameChatMessage = Readonly<{
   messageId: string;
   playerId: string;
+  playerName?: string;
   team: InGameChatTeam;
   channel: InGameChatChannel;
   text: string;
@@ -44,6 +45,7 @@ export function normalizeChatText(value: string): string {
 
 export function isValidInGameChatMessage(message: InGameChatMessage): boolean {
   if (!message.messageId.trim() || !message.playerId.trim()) return false;
+  if (message.playerName !== undefined && (!message.playerName.trim() || message.playerName.length > 64)) return false;
   if (message.team !== 'blue' && message.team !== 'red') return false;
   if (message.channel !== 'team' && message.channel !== 'all') return false;
   if (!Number.isFinite(message.atMs) || message.atMs < 0) return false;
