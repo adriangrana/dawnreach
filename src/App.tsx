@@ -650,14 +650,24 @@ function TeamPortraits({ team, side, localRespawn }: {
   );
 }
 
-function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedAt }: {
+function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedAt, inspectedHeroOwnerUserId }: {
   minimapRef: RefObject<HTMLDivElement | null>;
   minimapHeroRef: RefObject<HTMLImageElement | null>;
   runtime: HudRuntime;
   dispatch: Dispatch<HudAction>;
   onlineStartedAt?: string;
+  inspectedHeroOwnerUserId?: string | null;
 }) {
-  const hero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
+  const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
+  const inspectedPlayer = inspectedHeroOwnerUserId
+    ? runtime.match.players[inspectedHeroOwnerUserId] ?? null
+    : null;
+  const inspectedHeroEntityId = inspectedPlayer?.ownedHeroEntityId ?? null;
+  const inspectedHero = inspectedHeroEntityId
+    ? runtime.match.heroes[inspectedHeroEntityId] ?? null
+    : null;
+  const hero = inspectedHero ?? localHero;
+  const readOnly = hero.heroEntityId !== LOCAL_HERO_ENTITY_ID;
   const definition = getHeroDefinition(hero.definitionId);
   const stats = calculateHeroStats(runtime.match, hero.heroEntityId, { nowMs: runtime.nowMs });
   const attributes = calculateHeroAttributes(runtime.match, hero.heroEntityId);
@@ -665,29 +675,57 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
   const activeStatuses = Object.values(hero.runtime.statuses).filter(status => status.expiresAtMs > runtime.nowMs);
   const hasStatusEntries = Boolean(definition.innate || activeStatuses.length > 0);
   const experience = getHeroExperienceProgress(runtime.match, hero.heroEntityId);
-  const unspentAbilityPoints = getUnspentHeroAbilityPoints(runtime.match, hero.heroEntityId);
+  const unspentAbilityPoints = readOnly ? 0 : getUnspentHeroAbilityPoints(runtime.match, hero.heroEntityId);
   const heroDead = hero.currentHp <= 0;
-  const respawnRemainingMs = runtime.respawnReadyAtMs === null ? 0 : Math.max(0, runtime.respawnReadyAtMs - runtime.nowMs);
-  const respawnPresentation: RespawnPresentation = {
-    dead: heroDead,
-    remainingMs: respawnRemainingMs,
-    totalMs: Math.max(1, runtime.respawnDurationMs || respawnRemainingMs),
+  const localHeroDead = localHero.currentHp <= 0;
+  const localRespawnRemainingMs = runtime.respawnReadyAtMs === null ? 0 : Math.max(0, runtime.respawnReadyAtMs - runtime.nowMs);
+  const localRespawnPresentation: RespawnPresentation = {
+    dead: localHeroDead,
+    remainingMs: localRespawnRemainingMs,
+    totalMs: Math.max(1, runtime.respawnDurationMs || localRespawnRemainingMs),
   };
+  const remoteRespawnSyncedRemainingMs = Math.max(0, Number(hero.runtime.counters['network.respawnRemainingMs'] ?? 0));
+  const remoteRespawnSyncedAtMs = Math.max(0, Number(hero.runtime.counters['network.respawnSyncedAtMs'] ?? runtime.nowMs));
+  const remoteRespawnRemainingMs = Math.max(0, remoteRespawnSyncedRemainingMs - Math.max(0, runtime.nowMs - remoteRespawnSyncedAtMs));
+  const respawnPresentation: RespawnPresentation = readOnly
+    ? {
+      dead: heroDead,
+      remainingMs: remoteRespawnRemainingMs,
+      totalMs: Math.max(1, Number(hero.runtime.counters['network.respawnDurationMs'] ?? remoteRespawnRemainingMs) || remoteRespawnRemainingMs || 1),
+    }
+    : localRespawnPresentation;
   const dawnTeam = teamPortraitsFromMatch(runtime.match, 'dawn', runtime.nowMs);
   const duskTeam = teamPortraitsFromMatch(runtime.match, 'dusk', runtime.nowMs);
-  const onlineStartedMs = onlineStartedAt ? Date.parse(onlineStartedAt) : Number.NaN;
-  const matchElapsedMs = Number.isFinite(onlineStartedMs)
-    ? Date.now() - onlineStartedMs
-    : runtime.nowMs - runtime.match.createdAtMs;
+
+  // Anchor the global match clock once to the server start timestamp, then advance it only
+  // with Dawnreach's monotonic match-time clock. This prevents Date.now()/performance.now()
+  // sources from alternately rewriting the same DOM text once per second.
+  const clockKey = `${runtime.match.matchId}|${onlineStartedAt ?? 'local'}`;
+  const clockAnchorRef = useRef<{ key: string; matchTimeAtMs: number; elapsedAtMs: number } | null>(null);
+  if (!clockAnchorRef.current || clockAnchorRef.current.key !== clockKey) {
+    const onlineStartedMs = onlineStartedAt ? Date.parse(onlineStartedAt) : Number.NaN;
+    clockAnchorRef.current = {
+      key: clockKey,
+      matchTimeAtMs: runtime.nowMs,
+      elapsedAtMs: Number.isFinite(onlineStartedMs)
+        ? Math.max(0, Date.now() - onlineStartedMs)
+        : Math.max(0, runtime.nowMs - runtime.match.createdAtMs),
+    };
+  }
+  const matchElapsedMs = Math.max(
+    0,
+    clockAnchorRef.current.elapsedAtMs + (runtime.nowMs - clockAnchorRef.current.matchTimeAtMs),
+  );
 
   useEffect(() => {
-    setCombatHudStats({ lastHits: hero.lastHits, denies: hero.denies });
-  }, [hero.lastHits, hero.denies]);
+    setCombatHudStats({ lastHits: localHero.lastHits, denies: localHero.denies });
+  }, [localHero.lastHits, localHero.denies]);
 
   useEffect(() => {
     const timer = window.setInterval(() => dispatch({ type: 'tick', nowMs: performance.now() }), 100);
     const onKeyDown = (event: KeyboardEvent) => {
       if (document.querySelector('.shop-overlay')) return;
+      if (readOnly) return;
       if (event.repeat || event.isComposing || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
       const target = event.target;
       if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
@@ -714,18 +752,18 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
       window.clearInterval(timer);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [hero.inventory]);
+  }, [hero.inventory, readOnly]);
 
   return (
     <div className="game-hud">
       <section className="scoreboard">
-        <TeamPortraits team={dawnTeam} side="dawn" localRespawn={respawnPresentation} />
+        <TeamPortraits team={dawnTeam} side="dawn" localRespawn={localRespawnPresentation} />
         <div className="match-score">
           <strong className="score score--dawn">0</strong>
           <div className="match-clock"><span>DAWNREACH</span><b>{formatMatchClock(matchElapsedMs)}</b></div>
           <strong className="score score--dusk">0</strong>
         </div>
-        <TeamPortraits team={duskTeam} side="dusk" localRespawn={respawnPresentation} />
+        <TeamPortraits team={duskTeam} side="dusk" localRespawn={localRespawnPresentation} />
       </section>
 
       <section className="minimap-shell">
@@ -733,7 +771,7 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
           <div ref={minimapRef} className="minimap-live"
             style={{ position: 'absolute', inset: 0, zIndex: 10, overflow: 'hidden', background: '#07100e' }} />
           <img ref={minimapHeroRef} className="minimap-hero-icon" src={ALDEN_MINIMAP_SRC} alt="" draggable={false}
-            onError={hideMissingImage} style={{ opacity: heroDead ? 0 : 1 }} />
+            onError={hideMissingImage} style={{ opacity: localHeroDead ? 0 : 1 }} />
         </div>
         <div className="minimap-tools"><span><ZoomIn /></span><span><Eye /></span><span><Crosshair /></span></div>
         <Diamond className="minimap-ornament" />
