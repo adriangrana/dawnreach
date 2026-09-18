@@ -798,7 +798,7 @@ class LaneCreepManager {
     if (creep.state === 'AGGRO' && now >= creep.aggroLockUntil) this.clearTarget(creep);
 
     if (creep.state === 'RETURNING') {
-      const moving = this.updateReturning(creep, dt);
+      const moving = this.updateReturning(creep, dt, now);
       this.updateSurfaceHeight(creep, dt, moving);
       this.animateCreep(creep, now, moving);
       return true;
@@ -852,7 +852,7 @@ class LaneCreepManager {
         this.faceVector(creep, dx, dz);
         if (now >= creep.nextAttackAt) this.attackTarget(creep, creep.target, now);
       } else {
-        moving = this.moveToward(creep, targetPosition.x, targetPosition.z, dt, true);
+        moving = this.moveToward(creep, targetPosition.x, targetPosition.z, dt, true, now);
       }
       creep.reachedEndAt = null;
     } else {
@@ -870,8 +870,29 @@ class LaneCreepManager {
     const originZ = creep.entity.root.position.z;
     let best: GameEntity | null = null;
     let bestPriority = Number.POSITIVE_INFINITY;
-    let bestHpFraction = Number.POSITIVE_INFINITY;
     let bestDistanceSq = Number.POSITIVE_INFINITY;
+    let bestHpFraction = Number.POSITIVE_INFINITY;
+
+    // Keep an already valid target unless something with a genuinely higher combat priority
+    // appears. Re-picking the "best" creep every 200 ms made entire waves oscillate between
+    // wounded targets and repeatedly try to walk through their own frontline.
+    if (creep.target && this.isTargetValid(creep, creep.target)) {
+      const currentPosition = this.getEntityPosition(creep.target, TEMP_B);
+      const currentDx = currentPosition.x - originX;
+      const currentDz = currentPosition.z - originZ;
+      const currentDistanceSq = currentDx * currentDx + currentDz * currentDz;
+      if (currentDistanceSq <= ACQUISITION_RANGE_SQ * 1.25) {
+        const currentPriority = this.targetPriority(creep, creep.target, currentDistanceSq, now);
+        if (currentPriority !== null) {
+          best = creep.target;
+          bestPriority = currentPriority;
+          bestDistanceSq = currentDistanceSq;
+          bestHpFraction = creep.target.maxHp > 0
+            ? THREE.MathUtils.clamp(creep.target.currentHp / creep.target.maxHp, 0, 1)
+            : 1;
+        }
+      }
+    }
 
     const consider = (candidate: GameEntity) => {
       if (!this.isHostileCombatTarget(creep, candidate) || !this.isVisibleToCreep(creep, candidate)) return;
@@ -887,15 +908,19 @@ class LaneCreepManager {
         ? THREE.MathUtils.clamp(candidate.currentHp / candidate.maxHp, 0, 1)
         : 1;
 
+      const currentTargetPinned = best === creep.target && priority === bestPriority;
       if (
         priority < bestPriority
-        || (priority === bestPriority && hpFraction < bestHpFraction - 1e-6)
-        || (priority === bestPriority && Math.abs(hpFraction - bestHpFraction) <= 1e-6 && distanceSq < bestDistanceSq)
+        || (!currentTargetPinned && priority === bestPriority && distanceSq < bestDistanceSq - 0.04)
+        || (!currentTargetPinned
+          && priority === bestPriority
+          && Math.abs(distanceSq - bestDistanceSq) <= 0.04
+          && hpFraction < bestHpFraction - 1e-6)
       ) {
         best = candidate;
         bestPriority = priority;
-        bestHpFraction = hpFraction;
         bestDistanceSq = distanceSq;
+        bestHpFraction = hpFraction;
       }
     };
 
@@ -922,8 +947,11 @@ class LaneCreepManager {
     if (candidate.kind === 'hero' && attackingAlly) return 3;
     if ((candidate.kind === 'tower' || candidate.kind === 'building') && attackingAlly) return 4;
 
-    const reach = this.combatReach(creep, candidate);
-    if (distanceSq > reach * reach) return null;
+    // Attack-move acquisition is intentionally wider than attack range. Creeps must acquire
+    // an enemy before their collision circles meet, then walk into range and fight. Restricting
+    // this to combat reach was the main cause of opposing waves physically blocking each other
+    // without ever committing to an attack.
+    if (distanceSq > ACQUISITION_RANGE_SQ) return null;
     if (candidate.kind === 'creep') return 5;
     if (candidate.kind === 'hero') return 6;
     if (candidate.kind === 'tower' || candidate.kind === 'building') return 7;
@@ -1051,7 +1079,7 @@ class LaneCreepManager {
     }
 
     creep.reachedEndAt = null;
-    return this.moveToward(creep, waypoint[0], waypoint[1], dt, false);
+    return this.moveToward(creep, waypoint[0], waypoint[1], dt, false, now);
   }
 
   private beginReturning(creep: LaneCreepRuntime) {
@@ -1067,7 +1095,7 @@ class LaneCreepManager {
     this.writeState(creep);
   }
 
-  private updateReturning(creep: LaneCreepRuntime, dt: number) {
+  private updateReturning(creep: LaneCreepRuntime, dt: number, now: number) {
     const node = creep.route[creep.returnNodeIndex] ?? creep.route[0];
     const dx = node[0] - creep.entity.root.position.x;
     const dz = node[1] - creep.entity.root.position.z;
@@ -1078,7 +1106,7 @@ class LaneCreepManager {
       this.writeState(creep);
       return false;
     }
-    return this.moveToward(creep, node[0], node[1], dt, false);
+    return this.moveToward(creep, node[0], node[1], dt, false, now);
   }
 
   private moveToward(
@@ -1087,6 +1115,7 @@ class LaneCreepManager {
     z: number,
     dt: number,
     enforceLeash: boolean,
+    now: number,
   ) {
     const root = creep.entity.root;
     const dx = x - root.position.x;
