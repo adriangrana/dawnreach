@@ -167,7 +167,10 @@ export function DawnreachPlayScreen({
   const partySize = party.party?.members.length ?? 1;
   const queueProgress = Math.min(100, Math.round(queue.count / Math.max(queue.target, 1) * 100));
   const rankedCalibration = !me.calibrated;
-  const readyToQueue = selectedMode === 'normal' || selectedMode === 'ranked';
+  const usesDeploymentPreference = selectedMode === 'normal' || selectedMode === 'ranked' || selectedMode === 'vs_ai';
+  const hasDeploymentPreference = Boolean(primaryDeployment || secondaryDeployment || fillIfNeeded);
+  const deploymentRequired = usesDeploymentPreference && !hasDeploymentPreference;
+  const actionDisabled = !queue.joined && deploymentRequired;
 
   const deploymentSummary = useMemo(() => {
     const primary = DEPLOYMENTS.find(deployment => deployment.id === primaryDeployment)?.label;
@@ -209,6 +212,7 @@ export function DawnreachPlayScreen({
       onLeave();
       return;
     }
+    if (deploymentRequired) return;
     if (selectedMode === 'normal' || selectedMode === 'ranked') {
       onJoin(selectedMode);
       return;
@@ -268,11 +272,11 @@ export function DawnreachPlayScreen({
         </div>
       </section>
 
-      <section className="dr-play-deployment-panel">
+      {usesDeploymentPreference ? <section className={`dr-play-deployment-panel${deploymentRequired ? ' is-invalid' : ''}`}>
         <header>
           <div className="dr-play-deployment-heading">
             <div><strong>DEPLOYMENT PREFERENCE</strong><span>Choose up to two preferred lanes.</span></div>
-            <small>{readyToQueue ? 'Dawnreach deploys five heroes across three fronts · 2 / 1 / 2' : 'These preferences are kept for your next online queue.'}</small>
+            <small>Dawnreach deploys five heroes across three fronts · 2 / 1 / 2</small>
           </div>
           <button
             type="button"
@@ -312,21 +316,55 @@ export function DawnreachPlayScreen({
             </button>;
           })}
         </div>
-      </section>
+        {deploymentRequired && <div className="dr-play-deployment-warning">Select a lane or enable <strong>Fill If Needed</strong> to continue.</div>}
+      </section> : <section className={`dr-play-mode-context-panel is-${selectedMode}`}>
+        <span className="dr-play-mode-context-icon" aria-hidden="true">{selectedMode === 'training' ? <Swords /> : <Users />}</span>
+        <div className="dr-play-mode-context-copy">
+          <small>{selectedMode === 'training' ? 'TRAINING SESSION' : 'CUSTOM LOBBY'}</small>
+          <strong>{selectedMode === 'training' ? 'NO DEPLOYMENT REQUIRED' : 'DEPLOYMENT IS ASSIGNED IN THE LOBBY'}</strong>
+          <span>{selectedMode === 'training'
+            ? 'Enter directly and practice freely. Lane preference does not restrict a training session.'
+            : 'Custom games control teams, slots and starting positions from the lobby instead of matchmaking preferences.'}</span>
+        </div>
+        <span className="dr-play-mode-context-badge">{selectedMode === 'training' ? 'FREE PRACTICE' : 'LOBBY RULES'}</span>
+      </section>}
 
       <section className="dr-play-action-row">
         <button
           type="button"
           className={`dr-play-find-match${queue.joined ? ' is-searching' : ''}`}
           onClick={activate}
+          disabled={actionDisabled}
+          aria-disabled={actionDisabled}
+          title={actionDisabled ? 'Select a lane or enable Fill If Needed.' : undefined}
         >
           {queue.joined ? <><X /> LEAVE QUEUE</> : <>{copy.action}</>}
         </button>
-        <div className={`dr-play-ready-card${queue.joined ? ' is-searching' : ''}`}>
+        <div className={`dr-play-ready-card${queue.joined ? ' is-searching' : ''}${deploymentRequired ? ' is-invalid' : ''}`}>
           {queue.joined ? <Swords /> : <CheckCircle2 />}
           <span>
-            <strong>{queue.joined ? `Searching · ${queue.count}/${queue.target}` : selectedMode === 'ranked' && rankedCalibration ? 'Calibration ready' : selectedMode === 'custom' ? 'Custom rules' : selectedMode === 'training' ? 'Practice ready' : selectedMode === 'vs_ai' ? 'Bots ready' : 'Ready to queue'}</strong>
-            <small>{queue.joined ? `${queue.mode.toUpperCase()} · party ${partySize}/5` : `${deploymentSummary} · party ${partySize}/5`}</small>
+            <strong>{queue.joined
+              ? `Searching · ${queue.count}/${queue.target}`
+              : deploymentRequired
+                ? 'Deployment required'
+                : selectedMode === 'ranked' && rankedCalibration
+                  ? 'Calibration ready'
+                  : selectedMode === 'custom'
+                    ? 'Custom lobby ready'
+                    : selectedMode === 'training'
+                      ? 'Practice ready'
+                      : selectedMode === 'vs_ai'
+                        ? 'Bots ready'
+                        : 'Ready to queue'}</strong>
+            <small>{queue.joined
+              ? `${queue.mode.toUpperCase()} · party ${partySize}/5`
+              : deploymentRequired
+                ? 'Select a lane or enable Fill If Needed'
+                : usesDeploymentPreference
+                  ? `${deploymentSummary} · party ${partySize}/5`
+                  : selectedMode === 'training'
+                    ? `FREE PRACTICE · party ${partySize}/5`
+                    : `LOBBY ASSIGNMENT · party ${partySize}/5`}</small>
           </span>
           {queue.joined && <i style={{ '--dr-queue-progress': `${queueProgress}%` } as CSSProperties} />}
         </div>
