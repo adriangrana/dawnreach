@@ -331,6 +331,7 @@ export type MatchRuntimeCreepSnapshotEvent = Readonly<{
   authorityUserId: string;
   sequence: number;
   sentAt: number;
+  elapsedSeconds?: number;
   creeps: readonly MatchRuntimeCreepState[];
 }>;
 
