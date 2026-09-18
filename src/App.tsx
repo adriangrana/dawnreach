@@ -1612,7 +1612,9 @@ export default function App({
         const game = gameRef.current;
         const resolved = game?.applyLocalNetworkCombat({
           reason: 'reason' in event && event.reason === 'heal' ? 'heal' : 'damage',
-          amount: Number(event.amount || 0),
+          amount: 'resolvedAmount' in event && Number.isFinite(Number(event.resolvedAmount))
+            ? Number(event.resolvedAmount)
+            : Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
           sourceEntityId: 'sourceEntityId' in event ? String(event.sourceEntityId || '') : undefined,
           respawnSeconds: 'respawnSeconds' in event && Number.isFinite(Number(event.respawnSeconds))
