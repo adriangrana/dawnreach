@@ -533,6 +533,28 @@ No debe bloquear el vertical slice local, pero sí es obligatorio antes de consi
 - [ ] **Fase F · Game session multiplayer / authoritative networking.**
 - [ ] **Fase G · Resultado nativo → historial/MMR/postpartida/reconnect.**
 
+## 23.6A Concepto de gameplay · The Veil (provisional)
+
+> **Estado:** dirección aprobada para seguir explorando; reglas finales del evento y recompensa todavía pendientes. No implementar gameplay definitivo hasta cerrar el diseño.
+
+- [x] **The Veil será una segunda capa/realm superpuesta al mismo campo de batalla**, con identidad visual propia y reutilizando la geometría base siempre que sea posible.
+- [x] **No será una herramienta disponible a voluntad durante toda la partida.** El acceso al Veil se habilitará únicamente en ventanas/eventos concretos anunciados previamente.
+- [x] **Cada apertura del Veil tendrá duración limitada.** Al terminar el evento, el acceso se cerrará y los jugadores deberán regresar al Realm material mediante las reglas que se definan.
+- [x] **El Veil debe existir por un objetivo/evento propio**, no solo como ruta de escape, rotación o atajo entre carriles.
+- [x] **Debe producir conflicto PvP real dentro del Veil** y ofrecer una recompensa suficientemente valiosa como para que ambos equipos quieran disputarlo.
+- [x] **La recompensa NO debe basarse en modificar físicamente el mapa ni activar/cambiar rutas permanentes o temporales** como núcleo del sistema.
+- [x] **Evitar convertirlo en otra jungla o en un clon de Dragon/Baron/Roshan:** no resolver el evento simplemente como “matar boss → buff estadístico”.
+- [x] **Entrada/salida y telegraph deben ofrecer counterplay.** La idea de Gates sigue siendo válida como mecanismo controlado de transición, pero su regla exacta queda pendiente de cerrar junto al evento.
+- [x] **Visión del Veil:** misma referencia espacial del mapa, estética espectral diferenciada; la información del Realm material no debe revelarse gratuitamente.
+- [x] **Dirección visual provisional:** iluminación fría/espectral, cielo propio sin depender de un Sol normal, arquitectura material parcialmente fantasma y rutas/elementos del Veil claramente legibles.
+- [ ] **PENDIENTE · Definir el evento principal del Veil:** nombre final, cuándo se abre, frecuencia, duración, condición de victoria y condición de cierre.
+- [ ] **PENDIENTE · Definir el objetivo concreto dentro del evento** (captura, transporte, control, extracción u otra mecánica).
+- [ ] **PENDIENTE · Definir la recompensa del evento** sin recurrir a cambio de mapa, buff genérico o árbol/runas.
+- [ ] **PENDIENTE · Definir reglas exactas de entrada/salida**, incluyendo si se entra por activación contextual, punto físico, tecla dedicada o combinación de ellas durante la ventana del evento.
+- [ ] **PENDIENTE · Definir tratamiento de muerte/respawn dentro del Veil** y qué ocurre si el evento termina con héroes aún dentro.
+- [ ] **PENDIENTE · Definir si existirán entidades ambientales/NPCs**; evitar creeps farmeables que reintroduzcan una jungla.
+- [ ] **PENDIENTE · Crear primero un MVP técnico pequeño** cuando el diseño esté cerrado: realm state, ventana de acceso, transición visual, Gates, objetivo del evento y sincronización autoritativa.
+
 ## 23.6 Pantallas de plataforma / referencias UI
 
 - [x] **HECHO · Login/Auth.** Flujo funcional y persistencia de sesión.
