@@ -54,7 +54,11 @@ import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
 import ScoreboardOverlay from './hud/ScoreboardOverlay';
 import ShopOverlay from './hud/ShopOverlay';
-import { getCombatHudStatsSnapshot, setCombatHudStats } from './hud/combatStatsOverlay';
+import {
+  getCombatHudStatsSnapshot,
+  setCombatHudServerAuthority,
+  setCombatHudStats,
+} from './hud/combatStatsOverlay';
 import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
@@ -864,6 +868,12 @@ export default function App({
   const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
   const localHeroDead = localHero.currentHp <= 0;
   const inventoryFull = !localHero.inventory.some(slot => slot.item === null);
+
+  useEffect(() => {
+    const online = Boolean(onlineMatch && localUser && onlineMatch.status === 'in_game');
+    setCombatHudServerAuthority(online);
+    return () => setCombatHudServerAuthority(false);
+  }, [onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
   useEffect(() => {
     const overlay = getOverlayState();
