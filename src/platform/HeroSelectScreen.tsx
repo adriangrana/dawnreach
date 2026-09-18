@@ -1,6 +1,5 @@
 import {
   Check,
-  Clock3,
   LockKeyhole,
   Search,
   Send,
@@ -375,11 +374,14 @@ function TeamColumn({
   </aside>;
 }
 
-function BansStrip({ team, count }: { team: Team; count: number }) {
-  if (count <= 0) return <div className={`dr-hero-select-bans is-${team}`}><span>{team === 'blue' ? 'YOUR TEAM BANS' : 'ENEMY TEAM BANS'}</span><div><i className="is-disabled" /></div></div>;
-  return <div className={`dr-hero-select-bans is-${team}`}>
-    <span>{team === 'blue' ? 'YOUR TEAM BANS' : 'ENEMY TEAM BANS'}</span>
-    <div>{Array.from({ length: count }, (_, index) => <i key={index}><LockKeyhole /></i>)}</div>
+function BansStrip({ side, count }: { side: 'ally' | 'enemy'; count: number }) {
+  return <div className={`dr-hero-select-bans is-${side}${count <= 0 ? ' is-empty' : ''}`}>
+    <span>{side === 'ally' ? 'YOUR TEAM BANS' : 'ENEMY TEAM BANS'}</span>
+    <div>
+      {count > 0
+        ? Array.from({ length: count }, (_, index) => <i key={index}><LockKeyhole /></i>)
+        : Array.from({ length: 4 }, (_, index) => <i className="is-placeholder" key={index} />)}
+    </div>
   </div>;
 }
 
@@ -484,15 +486,15 @@ export function HeroSelectScreen({
         <div><strong>DAWNREACH</strong><small>A BRIGHTER TOMORROW</small></div>
       </div>
 
-      <BansStrip team="blue" count={state.bansPerTeam} />
+      <BansStrip side="ally" count={state.bansPerTeam} />
 
       <div className="dr-hero-select-phase">
-        <small>{state.phase === 'complete' ? 'SELECTION COMPLETE' : 'PICK PHASE'}</small>
         <strong>{title}</strong>
-        <time><Clock3 />{state.phase === 'complete' ? '00:00' : formatClock(state.expiresAt - now)}</time>
+        <small>{state.phase === 'complete' ? 'SELECTION COMPLETE' : 'PICK PHASE'}</small>
+        <time>{state.phase === 'complete' ? '00:00' : formatClock(state.expiresAt - now)}</time>
       </div>
 
-      <BansStrip team="red" count={state.bansPerTeam} />
+      <BansStrip side="enemy" count={state.bansPerTeam} />
 
       <div className="dr-hero-select-motto">
         <span>DIFFERENT HEROES.</span>
