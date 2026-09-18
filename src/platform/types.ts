@@ -258,6 +258,7 @@ export type MatchRuntimeInventoryItem = Readonly<{
   definitionId: string;
   displayName: string;
   quantity: number;
+  cooldownRemainingMs?: number;
 }>;
 
 export type MatchRuntimePlayerState = Readonly<{
@@ -278,6 +279,8 @@ export type MatchRuntimePlayerState = Readonly<{
   alive: boolean;
   respawnRemainingMs?: number;
   respawnDurationMs?: number;
+  abilityRanks?: Readonly<{ Q: number; W: number; E: number; R: number }>;
+  abilityCooldownRemainingMs?: Readonly<{ Q: number; W: number; E: number; R: number }>;
   kills: number;
   deaths: number;
   assists: number;
