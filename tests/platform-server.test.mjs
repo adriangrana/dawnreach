@@ -17,9 +17,13 @@ function testConfig(dataDir) {
   };
 }
 
-async function withServer(run) {
+async function withServer(run, serverOptions = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dawnreach-server-'));
-  const platform = createPlatformServer({ config: testConfig(root), logger: { error() {} } });
+  const platform = createPlatformServer({
+    config: testConfig(root),
+    logger: { error() {} },
+    ...serverOptions,
+  });
   const address = await platform.start({ host: '127.0.0.1', port: 0 });
   try {
     await run({ baseUrl: `http://127.0.0.1:${address.port}`, port: address.port, platform });
@@ -107,6 +111,54 @@ function websocketHandshake(port, token) {
     });
   });
 }
+
+function openWebsocket(port, token) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    const key = crypto.randomBytes(16).toString('base64');
+    let buffer = Buffer.alloc(0);
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('WebSocket handshake timed out'));
+    }, 2_000);
+    const onError = error => {
+      clearTimeout(timeout);
+      reject(error);
+    };
+    const onData = chunk => {
+      buffer = Buffer.concat([buffer, chunk]);
+      const marker = buffer.indexOf('\r\n\r\n');
+      if (marker < 0) return;
+      const header = buffer.subarray(0, marker).toString('utf8');
+      if (!/^HTTP\/1\.1 101 Switching Protocols/m.test(header)) {
+        clearTimeout(timeout);
+        socket.destroy();
+        reject(new Error(`WebSocket rejected: ${header.split('\r\n')[0] || 'unknown'}`));
+        return;
+      }
+      clearTimeout(timeout);
+      socket.off('error', onError);
+      socket.off('data', onData);
+      socket.on('data', () => {});
+      resolve(socket);
+    };
+    socket.once('error', onError);
+    socket.on('data', onData);
+    socket.once('connect', () => {
+      socket.write([
+        `GET /ws?token=${encodeURIComponent(token)} HTTP/1.1`,
+        `Host: 127.0.0.1:${port}`,
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        `Sec-WebSocket-Key: ${key}`,
+        'Sec-WebSocket-Version: 13',
+        '', '',
+      ].join('\r\n'));
+    });
+  });
+}
+
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 test('realtime websocket requires a valid authenticated bearer session', async () => {
   await withServer(async ({ baseUrl, port }) => {
