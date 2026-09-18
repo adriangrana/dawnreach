@@ -204,10 +204,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
               <CustomLobbyPanel me={user} lobbies={lobbies} currentLobby={currentLobby} onSelectMode={openPlayMode} />
               {notice && <p className="platform-workspace-notice dr-custom-notice" role="status">{notice}</p>}
             </section>}
-            <DawnreachSharedFooter user={user} online={online} social={social} party={party} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} />
+            {playSection === 'matchmaking' && <DawnreachSharedFooter user={user} online={online} social={social} party={party} selectedChatFriendId={chatFriendId} refreshSocial={refreshSocial} onActiveChatFriendChange={setChatFriendId} />}
           </section>}
         </section>
-        <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={chatFriendId} onOpenConversation={setChatFriendId} />
+        {!(section === 'play' && playSection === 'custom') && <DawnreachHomeRightRail me={user} online={online} snapshot={social} party={party} refresh={refreshSocial} activeConversationId={chatFriendId} onOpenConversation={setChatFriendId} />}
       </div>
     </main>
     {ready && <ReadyCheckOverlay ready={ready} me={user} />}
