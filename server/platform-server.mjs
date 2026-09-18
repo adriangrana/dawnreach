@@ -27,6 +27,7 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeStructureStates = new Map();
   const matchRuntimeCombatLocks = new Map();
   const matchRuntimeHeroDamageCredits = new Map();
+  const matchRuntimeHeroAbilityStates = new Map();
   const matchRuntimePauseStates = new Map();
   const matchRuntimeSpawnPositions = new Map();
   const matchRuntimeAuthorityUsers = new Map();
@@ -216,6 +217,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimeStructureStates.delete(matchId);
     matchRuntimeCombatLocks.delete(matchId);
     matchRuntimeHeroDamageCredits.delete(matchId);
+    matchRuntimeHeroAbilityStates.delete(matchId);
     matchRuntimePauseStates.delete(matchId);
     matchRuntimeSpawnPositions.delete(matchId);
     matchRuntimeAuthorityUsers.delete(matchId);
@@ -1271,6 +1273,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimeStructureStates.delete(updated.id);
     matchRuntimeCombatLocks.delete(updated.id);
     matchRuntimeHeroDamageCredits.delete(updated.id);
+    matchRuntimeHeroAbilityStates.delete(updated.id);
     matchRuntimePauseStates.delete(updated.id);
     matchRuntimeSpawnPositions.delete(updated.id);
     matchRuntimeAuthorityUsers.delete(updated.id);
