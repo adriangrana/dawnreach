@@ -335,6 +335,22 @@ export type MatchRuntimeCreepDamageEvent = Readonly<{
   at: number;
 }>;
 
+export type MatchRuntimeHeroKillEvent = Readonly<{
+  type: 'match.runtime.hero.kill';
+  matchId: string;
+  eventId: string;
+  victimUserId: string;
+  victimUsername: string;
+  victimTeam: Team;
+  victimHeroId: string;
+  killerUserId: string | null;
+  killerUsername: string | null;
+  killerTeam: Team | 'neutral';
+  killerHeroId: string | null;
+  killerEntityId: string | null;
+  at: number;
+}>;
+
 export type MatchChatMessage = Readonly<{
   messageId: string;
   matchId: string;
@@ -392,6 +408,7 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeCombatEvent
   | MatchRuntimeCreepSnapshotEvent
   | MatchRuntimeCreepDamageEvent
+  | MatchRuntimeHeroKillEvent
   | MatchChatMessageEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
