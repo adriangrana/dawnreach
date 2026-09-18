@@ -180,12 +180,23 @@ export function createPlatformServer(options = {}) {
           definitionId: String(raw.definitionId || '').slice(0, 64),
           displayName: String(raw.displayName || '').slice(0, 80),
           quantity: Math.max(1, Math.min(99, Math.floor(finite(raw.quantity, 1)))),
+          cooldownRemainingMs: clamp(raw.cooldownRemainingMs, 0, 120000),
         };
       }).filter(item => item.definitionId)
       : (previous?.inventory || []);
     const nonNegativeCounter = (value, fallback = 0) => Math.max(0, Math.min(999999, Math.floor(finite(value, fallback))));
     const payloadRespawnRemainingMs = clamp(payload?.respawnRemainingMs, 0, 120000);
     const payloadRespawnDurationMs = clamp(payload?.respawnDurationMs, 0, 120000);
+    const abilityRanks = {};
+    const abilityCooldownRemainingMs = {};
+    for (const key of ['Q', 'W', 'E', 'R']) {
+      abilityRanks[key] = Math.max(0, Math.min(4, Math.floor(finite(payload?.abilityRanks?.[key], previous?.abilityRanks?.[key] || 0))));
+      abilityCooldownRemainingMs[key] = clamp(
+        payload?.abilityCooldownRemainingMs?.[key],
+        0,
+        120000,
+      );
+    }
     const requestedMaxHp = clamp(payload?.maxHp, 1, 100000);
     const rawCurrentHp = clamp(payload?.currentHp, 0, requestedMaxHp);
     const rawAlive = payload?.alive !== false && rawCurrentHp > 0;
@@ -310,6 +321,8 @@ export function createPlatformServer(options = {}) {
       alive: requestedAlive,
       respawnRemainingMs: authoritativeRespawnRemainingMs,
       respawnDurationMs: authoritativeRespawnDurationMs,
+      abilityRanks,
+      abilityCooldownRemainingMs,
       // Kills/deaths are server-owned. A client may report them for backwards compatibility,
       // but once a runtime row exists it cannot overwrite authoritative combat accounting.
       kills: previous ? previous.kills : 0,
