@@ -57,6 +57,9 @@ export class HeroSelectManager {
     this.sessions.set(match.id, session);
     for (const player of match.players) this.byUser.set(player.userId, match.id);
     this.emit(session, 'hero_select.start');
+    const timer = setTimeout(() => this.expire(match.id), Math.max(1, session.expiresAt - Date.now()) + 25);
+    timer.unref?.();
+    session.timer = timer;
     return this.snapshotForMatch(match.id);
   }
 
@@ -121,10 +124,29 @@ export class HeroSelectManager {
     this.emit(session, 'hero_select.update');
   }
 
+  expire(matchId) {
+    const session = this.sessions.get(matchId);
+    if (!session || session.completed || Date.now() < session.expiresAt) return;
+    const fallbackHeroId = session.heroIds[0];
+    if (!fallbackHeroId) throw new Error('No hay héroes disponibles para completar la selección.');
+
+    for (const player of session.match.players) {
+      const selection = session.selections.get(player.userId);
+      if (!selection || selection.locked) continue;
+      selection.heroId = selection.heroId || fallbackHeroId;
+      selection.locked = true;
+      selection.lockedAt = Date.now();
+      this.addSystem(session, player.team, `${player.username} was auto-locked.`);
+    }
+    this.emit(session, 'hero_select.update');
+    this.complete(session);
+  }
+
   complete(session) {
     if (session.completed) return;
     session.completed = true;
     session.phase = 'complete';
+    if (session.timer) clearTimeout(session.timer);
     const selections = Object.fromEntries([...session.selections.entries()].map(([userId, selection]) => [userId, { ...selection }]));
     session.match.heroSelections = selections;
     this.emit(session, 'hero_select.complete');
