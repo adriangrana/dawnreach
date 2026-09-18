@@ -85,6 +85,7 @@ export type ShutdownMatchEvent = MatchEventBase & Readonly<{
 export type MatchPauseMatchEvent = MatchEventBase & Readonly<{
   type: 'match_paused' | 'match_resumed';
   actorPlayerId: string | null;
+  actorDisplayName?: string | null;
 }>;
 
 export type PlayerConnectionMatchEvent = MatchEventBase & Readonly<{
