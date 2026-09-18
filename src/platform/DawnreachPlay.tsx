@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  BookOpen,
-  Bot,
   CheckCircle2,
   Clock3,
   Compass,
   Crosshair,
   Map,
   Shield,
-  Sparkles,
   Swords,
   Trophy,
   Users,
@@ -18,15 +15,16 @@ import {
 } from 'lucide-react';
 import type { PartySnapshot, PlatformUser, QueueMode, QueueState } from './types';
 
-type PlayMode = QueueMode | 'vs_ai' | 'training';
+type PlayMode = QueueMode | 'vs_ai' | 'training' | 'custom';
 type RoleId = 'top' | 'jungle' | 'mid' | 'carry' | 'support';
 
 type ModeDefinition = Readonly<{
   id: PlayMode;
   title: string;
   subtitle: string;
-  eyebrow: string;
-  icon: LucideIcon;
+  icon: string;
+  activeIcon: string;
+  background: string;
 }>;
 
 type RoleDefinition = Readonly<{
@@ -36,10 +34,46 @@ type RoleDefinition = Readonly<{
 }>;
 
 const MODES: readonly ModeDefinition[] = [
-  { id: 'normal', title: 'NORMAL', subtitle: '5v5 on Dawnreach', eyebrow: 'STANDARD', icon: Swords },
-  { id: 'ranked', title: 'RANKED', subtitle: 'Compete for a Higher Tomorrow.', eyebrow: 'COMPETITIVE', icon: Trophy },
-  { id: 'vs_ai', title: 'VS AI', subtitle: 'Play Against AI Bots', eyebrow: 'CO-OP', icon: Bot },
-  { id: 'training', title: 'TRAINING', subtitle: 'Learn. Practice. Improve.', eyebrow: 'PRACTICE', icon: BookOpen },
+  {
+    id: 'normal',
+    title: 'NORMAL',
+    subtitle: '5v5 on Dawnreach',
+    icon: '/assets/icon/normal.png',
+    activeIcon: '/assets/icon/normal-active.png',
+    background: '/assets/images/dawnreach_normal_background.webp',
+  },
+  {
+    id: 'ranked',
+    title: 'RANKED',
+    subtitle: 'Compete for a Higher Tomorrow.',
+    icon: '/assets/icon/ranked.png',
+    activeIcon: '/assets/icon/ranked-active.png',
+    background: '/assets/images/dawnreach_ranked_background.webp',
+  },
+  {
+    id: 'vs_ai',
+    title: 'VS AI',
+    subtitle: 'Play Against AI Bots',
+    icon: '/assets/icon/vsAI.png',
+    activeIcon: '/assets/icon/vsAI-active.png',
+    background: '/assets/images/dawnreach_vsai_background.webp',
+  },
+  {
+    id: 'training',
+    title: 'TRAINING',
+    subtitle: 'Learn. Practice. Improve.',
+    icon: '/assets/icon/training.png',
+    activeIcon: '/assets/icon/training-active.png',
+    background: '/assets/images/dawnreach_training_background.webp',
+  },
+  {
+    id: 'custom',
+    title: 'CUSTOM',
+    subtitle: 'Create Your Own Game.',
+    icon: '/assets/icon/custom.png',
+    activeIcon: '/assets/icon/custom-active.png',
+    background: '/assets/images/dawnreach_custom_background.webp',
+  },
 ];
 
 const ROLES: readonly RoleDefinition[] = [
@@ -85,10 +119,18 @@ const MODE_COPY: Record<PlayMode, Readonly<{
   training: {
     kicker: 'PRACTICE',
     title: 'TRAINING',
-    lines: ['MASTER ALDEN', 'AND THE BATTLEFIELD.'],
+    lines: ['MASTER YOUR HERO', 'MASTER THE BATTLEFIELD.'],
     estimate: 'No limit',
     heroSelect: 'Alden',
     action: 'ENTER TRAINING',
+  },
+  custom: {
+    kicker: 'CUSTOM',
+    title: 'CUSTOM',
+    lines: ['YOUR RULES.', 'YOUR BATTLEFIELD.'],
+    estimate: 'Player defined',
+    heroSelect: 'Custom rules',
+    action: 'CUSTOM LOBBIES',
   },
 };
 
@@ -126,6 +168,7 @@ export function DawnreachPlayScreen({
   }, [queue.joined, queue.mode]);
 
   const copy = MODE_COPY[selectedMode];
+  const selectedModeDefinition = MODES.find(mode => mode.id === selectedMode) ?? MODES[0];
   const partySize = party.party?.members.length ?? 1;
   const queueProgress = Math.min(100, Math.round(queue.count / Math.max(queue.target, 1) * 100));
   const rankedCalibration = !me.calibrated;
@@ -175,6 +218,10 @@ export function DawnreachPlayScreen({
       onJoin(selectedMode);
       return;
     }
+    if (selectedMode === 'custom') {
+      onCustom();
+      return;
+    }
     onLocalPlay();
   };
 
@@ -182,28 +229,36 @@ export function DawnreachPlayScreen({
     <aside className="dr-play-modes" aria-label="Game modes">
       <div className="dr-play-modes-heading"><small>PLAY</small><strong>CHOOSE YOUR BATTLE</strong></div>
       {MODES.map(mode => {
-        const Icon = mode.icon;
         const active = selectedMode === mode.id;
+        const cardStyle = {
+          '--dr-play-card-background': `url("${mode.background}")`,
+        } as CSSProperties;
         return <button
           type="button"
           key={mode.id}
           className={`dr-play-mode-card is-${mode.id}${active ? ' is-selected' : ''}`}
+          style={cardStyle}
           disabled={queue.joined && !active}
           onClick={() => selectMode(mode.id)}
+          aria-pressed={active}
         >
-          <span className="dr-play-mode-icon"><Icon /></span>
-          <span className="dr-play-mode-copy"><small>{mode.eyebrow}</small><strong>{mode.title}</strong><em>{mode.subtitle}</em></span>
+          <span className="dr-play-mode-icon">
+            <img src={active ? mode.activeIcon : mode.icon} alt="" draggable={false} />
+          </span>
+          <span className="dr-play-mode-copy">
+            <strong>{mode.title}</strong>
+            <em>{mode.subtitle}</em>
+          </span>
         </button>;
       })}
-      <button type="button" className="dr-play-mode-card is-custom" disabled={queue.joined} onClick={onCustom}>
-        <span className="dr-play-mode-icon"><Sparkles /></span>
-        <span className="dr-play-mode-copy"><small>PLAYER MADE</small><strong>CUSTOM</strong><em>Create Your Own Game.</em></span>
-      </button>
       <blockquote>“GREAT PLAYERS<br />BUILD A BRIGHTER WORLD.”<span>— DAWNREACH</span></blockquote>
     </aside>
 
     <div className="dr-play-center">
-      <section className={`dr-play-hero is-${selectedMode}`}>
+      <section
+        className={`dr-play-hero is-${selectedMode}`}
+        style={{ '--dr-play-mode-background': `url("${selectedModeDefinition.background}")` } as CSSProperties}
+      >
         <div className="dr-play-hero-shade" />
         <div className="dr-play-hero-copy">
           <small>{copy.kicker}</small>
@@ -254,7 +309,7 @@ export function DawnreachPlayScreen({
         <div className={`dr-play-ready-card${queue.joined ? ' is-searching' : ''}`}>
           {queue.joined ? <Swords /> : <CheckCircle2 />}
           <span>
-            <strong>{queue.joined ? `Searching · ${queue.count}/${queue.target}` : selectedMode === 'ranked' && rankedCalibration ? 'Calibration ready' : 'Ready to queue'}</strong>
+            <strong>{queue.joined ? `Searching · ${queue.count}/${queue.target}` : selectedMode === 'ranked' && rankedCalibration ? 'Calibration ready' : selectedMode === 'custom' ? 'Custom rules' : selectedMode === 'training' ? 'Practice ready' : selectedMode === 'vs_ai' ? 'Bots ready' : 'Ready to queue'}</strong>
             <small>{queue.joined ? `${queue.mode.toUpperCase()} · party ${partySize}/5` : `${roleSummary} · party ${partySize}/5`}</small>
           </span>
           {queue.joined && <i style={{ '--dr-queue-progress': `${queueProgress}%` } as CSSProperties} />}
