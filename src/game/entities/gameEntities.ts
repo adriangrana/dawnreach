@@ -428,7 +428,7 @@ function teamFromName(name: string): TeamId | null {
   return null;
 }
 
-export function registerAuthoredMapEntities(registry: GameEntityRegistry, battlefield: THREE.Object3D) {
+export function registerAuthoredMapEntities(registry: GameEntityRegistry, battlefield: THREE.Object3D, perspectiveTeam: 'blue' | 'red' = 'blue') {
   battlefield.traverse((object) => {
     if (!(object instanceof THREE.Group)) return;
     const name = object.name.toLowerCase();
@@ -466,7 +466,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         kind: 'building',
         team,
         selectable: true,
-        targetable: team === 'red',
+        targetable: team !== perspectiveTeam,
         grantsVision: true,
         visionRadius: VISION_RANGES.building,
         visionHeight: 5.2,
@@ -487,7 +487,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
         kind: 'tower',
         team,
         selectable: true,
-        targetable: team === 'red',
+        targetable: team !== perspectiveTeam,
         grantsVision: true,
         visionRadius: TOWER_GAMEPLAY.vision.radius,
         visionHeight: TOWER_GAMEPLAY.vision.height,
@@ -524,7 +524,7 @@ export function registerAuthoredMapEntities(registry: GameEntityRegistry, battle
 
   const scene = findSceneRoot(battlefield);
   if (scene) {
-    ensureWorldShopSystem(scene, registry, battlefield, 'blue');
+    ensureWorldShopSystem(scene, registry, battlefield, perspectiveTeam);
     ensureItemActiveWorldSystem(scene, registry, battlefield);
     ensureTeleportScrollSystem(scene, registry);
     ensureItemUnitSlowWorldSystem(scene, registry);
