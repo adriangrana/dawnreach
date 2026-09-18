@@ -1942,7 +1942,7 @@
   position: absolute;
   left: 18px;
   right: 18px;
-  bottom: 7px;
+  bottom: 3px;
   z-index: 4;
   pointer-events: none;
   color: #a87968;
@@ -2171,6 +2171,6 @@
   }
 
   .dr-play-deployment-warning {
-    bottom: 4px;
+    bottom: 2px;
   }
 }
