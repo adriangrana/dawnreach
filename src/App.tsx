@@ -58,7 +58,7 @@ import {
   matchEventTeamFromEntityId,
 } from './game/match/matchEventParticipants';
 import { platformRealtime } from './platform/realtimeClient';
-import type { MatchConnectionGraceEvent, MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
+import type { MatchConnectionGraceEvent, MatchEndedEvent, MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
@@ -1528,19 +1528,17 @@ export default function App({
 
     const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
       const type = typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
-      if (
-        type === 'match.ended'
-        && 'match' in event
-        && event.match?.id === onlineMatch.id
-      ) {
-        const winnerTeam = 'winnerTeam' in event && (event.winnerTeam === 'blue' || event.winnerTeam === 'red')
-          ? event.winnerTeam
+      if (type === 'match.ended' && 'match' in event) {
+        const ended = event as MatchEndedEvent;
+        if (ended.match.id !== onlineMatch.id) return;
+        const winnerTeam = ended.winnerTeam === 'blue' || ended.winnerTeam === 'red'
+          ? ended.winnerTeam
           : null;
         matchEndedRef.current = true;
         setMatchEnd({
           winnerTeam,
-          reason: 'reason' in event ? String(event.reason || 'completed') : 'completed',
-          voided: Boolean('voided' in event && event.voided),
+          reason: String(ended.reason || 'completed'),
+          voided: Boolean(ended.voided),
         });
         setConnectionState({
           mode: 'cleared',
