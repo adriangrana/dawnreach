@@ -760,7 +760,11 @@ function GameHud({ minimapRef, minimapHeroRef, runtime, dispatch, onlineStartedA
         <TeamPortraits team={dawnTeam} side="dawn" localRespawn={localRespawnPresentation} />
         <div className="match-score">
           <strong className="score score--dawn">0</strong>
-          <div className="match-clock"><span>DAWNREACH</span><b>{formatMatchClock(matchElapsedMs)}</b></div>
+          <div className="match-clock">
+            <span>DAWNREACH</span>
+            <b className="match-clock-legacy" aria-hidden="true" style={{ display: 'none' }} />
+            <time className="match-clock-value">{formatMatchClock(matchElapsedMs)}</time>
+          </div>
           <strong className="score score--dusk">0</strong>
         </div>
         <TeamPortraits team={duskTeam} side="dusk" localRespawn={localRespawnPresentation} />
