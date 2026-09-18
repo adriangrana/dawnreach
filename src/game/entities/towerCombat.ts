@@ -267,7 +267,12 @@ function synchronizeWorldRuntime(
       entity.root.userData.currentHp = entity.currentHp;
     }
 
-    if (!entity.alive && entity.kind === 'hero' && !hasPendingRespawn(entity)) {
+    if (
+      !entity.alive
+      && entity.kind === 'hero'
+      && entity.root.userData.networkRemoteHero !== true
+      && !hasPendingRespawn(entity)
+    ) {
       const respawnSeconds = scheduleHeroRespawn(entity, elapsed);
       emitWorldCombatEvent({
         entityId: entity.id,
@@ -324,7 +329,7 @@ function updateHeroDeathPresentationOnce(
 
 function updateHeroRespawns(registry: GameEntityRegistry, elapsed: number): void {
   for (const entity of registry.values()) {
-    if (entity.kind !== 'hero' || entity.alive) continue;
+    if (entity.kind !== 'hero' || entity.alive || entity.root.userData.networkRemoteHero === true) continue;
     const respawnAt = Number(entity.root.userData[RESPAWN_AT_KEY] ?? Number.POSITIVE_INFINITY);
     if (!Number.isFinite(respawnAt) || elapsed < respawnAt) continue;
 
