@@ -580,6 +580,24 @@ export function createPlatformServer(options = {}) {
         });
       }
     }
+
+    const abilityStates = matchRuntimeHeroAbilityStates.get(matchId);
+    if (abilityStates) {
+      for (const [userId, abilityState] of abilityStates) {
+        abilityStates.set(userId, {
+          ...abilityState,
+          guardUntil: Number.isFinite(Number(abilityState.guardUntil))
+            ? Number(abilityState.guardUntil) + durationMs
+            : abilityState.guardUntil,
+          majestyStartsAt: Number.isFinite(Number(abilityState.majestyStartsAt))
+            ? Number(abilityState.majestyStartsAt) + durationMs
+            : abilityState.majestyStartsAt,
+          majestyUntil: Number.isFinite(Number(abilityState.majestyUntil))
+            ? Number(abilityState.majestyUntil) + durationMs
+            : abilityState.majestyUntil,
+        });
+      }
+    }
   }
 
   function reportMatchRuntimePause(userId, payload) {
@@ -1852,6 +1870,7 @@ export function createPlatformServer(options = {}) {
           else if (type === 'match.rejoin') rejoinActiveSession(user.id, peer);
           else if (type === 'match.loading.progress') reportMatchLoadingProgress(user.id, message.progress);
           else if (type === 'match.runtime.state') reportMatchRuntimeState(user.id, message);
+          else if (type === 'match.runtime.ability.cast') reportMatchRuntimeAbilityCast(user.id, message);
           else if (type === 'match.runtime.combat') reportMatchRuntimeCombat(user.id, message);
           else if (type === 'match.runtime.combat.resolve') reportMatchRuntimeCombatResolve(user.id, message);
           else if (type === 'match.runtime.creeps') reportMatchRuntimeCreeps(user.id, message);
