@@ -157,8 +157,10 @@ export function createPlatformServer(options = {}) {
       : null;
     if (current && isOnline(current.userId)) return current.userId;
 
-    // Authority is sticky while connected. If it disappears, migrate to the first remaining
-    // connected participant. Reconnecting an old lobby host never steals authority back.
+    // Legacy name: this is now only a migratable simulation lease for creep/world AI.
+    // Canonical HP/death/structure/combat/session state lives on the server. If the current
+    // simulator disappears, migrate the lease to a connected participant; an old lobby host
+    // never regains special ownership merely by reconnecting.
     const next = eligible.find(player => isOnline(player.userId)) || current || eligible[0];
     matchRuntimeAuthorityUsers.set(match.id, next.userId);
     return next.userId;
