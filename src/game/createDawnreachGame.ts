@@ -12,6 +12,7 @@ import {
 import { calculateTowerAuraAdjustedDamage } from './entities/towerAuras';
 import {
   emitWorldCombatEvent,
+  getWorldEntityRuntime,
   publishWorldAttackEvent,
   publishWorldEntityRuntime,
 } from './entities/worldCombatBridge';
@@ -330,6 +331,13 @@ export async function createDawnreachGame(
   // The React match state owns the authoritative local HP/resource/level. Keep the world
   // GameEntity hydrated as well: Alden's world ability runtime uses this entity for healing,
   // guard/mitigation, death checks and combat events.
+  let localVitalOverride: {
+    currentHp: number;
+    currentResource: number;
+    alive: boolean;
+  } | null = null;
+  let lastLocalAuthoritativeSequence = -1;
+
   const syncLocalHeroEntityState = () => {
     const overlay = getHeroState?.() ?? null;
     if (!overlay) return null;
@@ -337,15 +345,28 @@ export async function createDawnreachGame(
     const maxHp = Math.max(1, overlay.stats.maxHp);
     const maxResource = Math.max(0, overlay.stats.maxResource);
     localHeroEntity.maxHp = maxHp;
-    localHeroEntity.currentHp = THREE.MathUtils.clamp(overlay.hero.currentHp, 0, maxHp);
     localHeroEntity.maxResource = maxResource;
+
+    if (localVitalOverride) {
+      const overlayMatches = Math.abs(overlay.hero.currentHp - localVitalOverride.currentHp) <= 0.001
+        && Math.abs(overlay.hero.currentResource - localVitalOverride.currentResource) <= 0.001;
+      if (overlayMatches) localVitalOverride = null;
+    }
+
+    localHeroEntity.currentHp = THREE.MathUtils.clamp(
+      localVitalOverride?.currentHp ?? overlay.hero.currentHp,
+      0,
+      maxHp,
+    );
     localHeroEntity.currentResource = THREE.MathUtils.clamp(
-      overlay.hero.currentResource,
+      localVitalOverride?.currentResource ?? overlay.hero.currentResource,
       0,
       Math.max(maxResource, overlay.hero.currentResource),
     );
     localHeroEntity.level = Math.max(1, Math.floor(overlay.hero.level));
-    localHeroEntity.alive = localHeroEntity.currentHp > 0;
+    localHeroEntity.alive = localVitalOverride
+      ? localVitalOverride.alive && localHeroEntity.currentHp > 0
+      : localHeroEntity.currentHp > 0;
     localHeroEntity.root.userData.maxHp = localHeroEntity.maxHp;
     localHeroEntity.root.userData.currentHp = localHeroEntity.currentHp;
     localHeroEntity.root.userData.maxResource = localHeroEntity.maxResource;
