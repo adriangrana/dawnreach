@@ -194,6 +194,7 @@ export async function createDawnreachGame(
     : 'authority';
 
   const scene = new THREE.Scene();
+  scene.userData.dawnreachNetworkSession = sharedPlayers.length > 1;
   scene.userData.laneCreepNetworkMode = creepNetworkMode;
   scene.userData.laneCreepAuthorityPlayerId = creepAuthorityId;
   // Team-relative presentation (health bars, fog/overheads) must know the viewer's side
