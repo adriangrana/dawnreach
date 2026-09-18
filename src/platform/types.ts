@@ -117,6 +117,8 @@ export type MatchSummary = Readonly<{
   mapSha256: string | null;
   customSettings?: LobbySettings;
   heroSelections?: Readonly<Record<string, Readonly<{ heroId: string | null; locked: boolean; lockedAt: number | null }>>>;
+  loadingProgress?: Readonly<Record<string, number>>;
+  startedAt?: string;
 }>;
 
 export type ActiveMatchSession = Readonly<{
@@ -241,6 +243,8 @@ export type ReadyCancelledEvent = Readonly<{ type: 'ready.cancelled'; readyId: s
 export type MatchFoundEvent = Readonly<{ type: 'match.found'; match: MatchSummary }>;
 export type MatchSessionPendingEvent = Readonly<{ type: 'match.session.pending'; match: MatchSummary; note?: string; resumed?: boolean }>;
 export type MatchRejoinReadyEvent = Readonly<{ type: 'match.rejoin.ready'; activeMatch: ActiveMatchSession }>;
+export type MatchLoadingUpdateEvent = Readonly<{ type: 'match.loading.update'; match: MatchSummary }>;
+export type MatchStartEvent = Readonly<{ type: 'match.start'; match: MatchSummary }>;
 export type HeroSelectStartEvent = Readonly<{ type: 'hero_select.start'; heroSelect: HeroSelectState }>;
 export type HeroSelectUpdateEvent = Readonly<{ type: 'hero_select.update'; heroSelect: HeroSelectState }>;
 export type HeroSelectCompleteEvent = Readonly<{ type: 'hero_select.complete'; heroSelect: HeroSelectState }>;
@@ -273,6 +277,8 @@ export type PlatformRealtimeEvent =
   | MatchFoundEvent
   | MatchSessionPendingEvent
   | MatchRejoinReadyEvent
+  | MatchLoadingUpdateEvent
+  | MatchStartEvent
   | HeroSelectStartEvent
   | HeroSelectUpdateEvent
   | HeroSelectCompleteEvent
