@@ -23,6 +23,7 @@ type AbilityButtonProps = {
   onUse?: () => void;
   canUpgrade?: boolean;
   onUpgrade?: () => void;
+  readOnly?: boolean;
 };
 
 const kindLabels = { active: 'Activa', passive: 'Pasiva', active_with_passive: 'Activa + pasiva', ultimate: 'Definitiva' };
@@ -30,7 +31,7 @@ const kindLabels = { active: 'Activa', passive: 'Pasiva', active_with_passive: '
 export default function AbilityButton({
   hotkey, name, kind, description, lore, rank, maxRank = 4, nextLevel,
   remainingMs = 0, cooldownSeconds = 0, resourceCost = 0, resourceName,
-  blockedReason, image, art, children, onUse, canUpgrade = false, onUpgrade,
+  blockedReason, image, art, children, onUse, canUpgrade = false, onUpgrade, readOnly = false,
 }: AbilityButtonProps) {
   const passive = kind === 'passive';
   const tooltipId = useId();
@@ -84,7 +85,7 @@ export default function AbilityButton({
       aria-label={passive ? `${name}, pasiva` : undefined}
       aria-describedby={passive && tooltipOpen ? tooltipId : undefined}
     >
-      {canUpgrade && !passive && (
+      {canUpgrade && !passive && !readOnly && (
         <button
           type="button"
           className="ability-upgrade"
@@ -101,14 +102,14 @@ export default function AbilityButton({
       <button
         type="button"
         className={`ability-slot ability-slot--${art}${cooling ? ' is-cooling' : ''}${passive ? ' is-passive' : ''}${rank === 0 ? ' is-locked' : ''}`}
-        disabled={passive}
-        aria-disabled={blockedReason !== null}
+        disabled={passive || readOnly}
+        aria-disabled={readOnly || blockedReason !== null}
         aria-label={`${name}${rank !== undefined ? `, rango ${rank} de ${maxRank}` : ''}`}
         aria-keyshortcuts={passive ? undefined : hotkey}
         aria-describedby={tooltipOpen ? tooltipId : undefined}
         data-cooldown={remainingMs}
         data-cost={resourceCost}
-        onClick={() => { if (!blockedReason) onUse?.(); }}
+        onClick={() => { if (!readOnly && !blockedReason) onUse?.(); }}
       >
         {image ? <img className="ability-image" src={image} alt="" draggable={false} /> : children}
         {cooling && (
@@ -136,7 +137,7 @@ export default function AbilityButton({
           <p>{description}</p>
           {lore && <p className="ability-tooltip-lore">{lore}</p>}
           <footer>
-            <span>{blockedReason ?? 'Disponible'}{cooling ? ` (${Math.ceil(remainingMs / 1000)} s)` : ''}</span>
+            <span>{readOnly ? 'Inspección · solo lectura' : (blockedReason ?? 'Disponible')}{cooling ? ` (${Math.ceil(remainingMs / 1000)} s)` : ''}</span>
             {nextLevel !== undefined && <span>Siguiente rango: nivel {nextLevel}</span>}
           </footer>
         </div>, document.body,
