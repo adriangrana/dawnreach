@@ -126,6 +126,7 @@ export function MatchLoadingScreen({
     };
 
     const prepare = async () => {
+      const visibleSince = performance.now();
       report(8);
       const selectedHeroIds = Object.values(match.heroSelections || {})
         .map(selection => selection.heroId)
@@ -150,6 +151,9 @@ export function MatchLoadingScreen({
       }
       report(90);
 
+      const minimumVisibleMs = 1350;
+      const remaining = minimumVisibleMs - (performance.now() - visibleSince);
+      if (remaining > 0) await new Promise(resolve => window.setTimeout(resolve, remaining));
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       report(100);
     };
@@ -158,11 +162,12 @@ export function MatchLoadingScreen({
     return () => { disposed = true; };
   }, [match.id, me.id]);
 
+  const actualTeamSize = Math.max(dawn.length, dusk.length, 1);
   const modeLabel = match.mode === 'ranked'
-    ? 'RANKED 5V5'
+    ? `RANKED ${actualTeamSize}V${actualTeamSize}`
     : match.mode === 'normal'
-      ? 'CLASSIC 5V5'
-      : `CUSTOM ${match.customSettings?.teamSize || Math.max(dawn.length, dusk.length)}V${match.customSettings?.teamSize || Math.max(dawn.length, dusk.length)}`;
+      ? `CLASSIC ${actualTeamSize}V${actualTeamSize}`
+      : `CUSTOM ${match.customSettings?.teamSize || actualTeamSize}V${match.customSettings?.teamSize || actualTeamSize}`;
   const region = match.customSettings?.region && match.customSettings.region !== 'auto'
     ? match.customSettings.region.toUpperCase()
     : 'EUROPE';
