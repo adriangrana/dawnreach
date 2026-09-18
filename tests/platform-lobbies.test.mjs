@@ -38,8 +38,11 @@ test('custom lobby creates public/private rooms, joins by code and transfers hos
   assert.equal(joined.players.length, 2);
   assert.equal(joined.players[1].team, 'red');
 
+  lobbies.setReady(guest.id, true);
+  assert.equal(lobbies.lobbyForUser(guest.id).players.find(player => player.userId === guest.id).ready, true);
   lobbies.move(guest.id, 'blue', 1);
   assert.equal(lobbies.lobbyForUser(guest.id).players.find(player => player.userId === guest.id).slot, 1);
+  assert.equal(lobbies.lobbyForUser(guest.id).players.find(player => player.userId === guest.id).ready, false);
 
   lobbies.leave(host.id);
   assert.equal(lobbies.lobbyForUser(guest.id).ownerId, guest.id);
@@ -63,6 +66,9 @@ test('custom lobby keeps five slots per team and launches a non-rated custom mat
   assert.equal(new Set(full.players.filter(player => player.team === 'blue').map(player => player.slot)).size, 5);
   assert.equal(new Set(full.players.filter(player => player.team === 'red').map(player => player.slot)).size, 5);
 
+  assert.throws(() => lobbies.start(users[0].id), /deben estar listos/);
+  for (const user of users) lobbies.setReady(user.id, true);
+
   const match = lobbies.start(users[0].id);
   assert.equal(match.mode, 'custom');
   assert.equal(match.source, 'custom');
@@ -73,4 +79,47 @@ test('custom lobby keeps five slots per team and launches a non-rated custom mat
   assert.equal(store.matches().at(-1).id, match.id);
   assert.ok(events.some(item => item.event.type === 'match.found'));
   assert.throws(() => lobbies.leave(users[1].id), /ya fue creada/);
+}));
+
+
+test('custom lobby chat keeps TEAM private and ALL visible to everyone in the lobby', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'ChatHost');
+  const dusk = addUser(store, 'ChatDusk');
+  const dawn = addUser(store, 'ChatDawn');
+
+  const lobby = lobbies.create(host, 'Chat room', 'public');
+  lobbies.join(dusk, lobby.code);
+  lobbies.join(dawn, lobby.code);
+
+  lobbies.sendMessage(host.id, 'Dawn only plan', 'team');
+  lobbies.sendMessage(dusk.id, 'Hello everyone', 'all');
+
+  const hostView = lobbies.lobbyForUser(host.id);
+  const dawnView = lobbies.lobbyForUser(dawn.id);
+  const duskView = lobbies.lobbyForUser(dusk.id);
+
+  assert.ok(hostView.messages.some(message => message.text === 'Dawn only plan' && message.channel === 'team'));
+  assert.ok(dawnView.messages.some(message => message.text === 'Dawn only plan' && message.channel === 'team'));
+  assert.equal(duskView.messages.some(message => message.text === 'Dawn only plan'), false);
+
+  assert.ok(hostView.messages.some(message => message.text === 'Hello everyone' && message.channel === 'all'));
+  assert.ok(dawnView.messages.some(message => message.text === 'Hello everyone' && message.channel === 'all'));
+  assert.ok(duskView.messages.some(message => message.text === 'Hello everyone' && message.channel === 'all'));
+}));
+
+test('custom lobby requires both teams and every player ready before host can start', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'ReadyHost');
+  const guest = addUser(store, 'ReadyGuest');
+  const lobby = lobbies.create(host, 'Ready room', 'public');
+
+  assert.throws(() => lobbies.start(host.id), /al menos dos jugadores/);
+  lobbies.join(guest, lobby.code);
+
+  lobbies.setReady(host.id, true);
+  assert.throws(() => lobbies.start(host.id), /deben estar listos/);
+
+  lobbies.setReady(guest.id, true);
+  const snapshot = lobbies.lobbyForUser(host.id);
+  assert.equal(snapshot.players.every(player => player.ready), true);
+  assert.doesNotThrow(() => lobbies.start(host.id));
 }));
