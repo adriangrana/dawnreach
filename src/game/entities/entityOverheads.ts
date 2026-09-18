@@ -7,9 +7,26 @@ const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
   import: 'default',
 });
 
+// addHeroOverlay is parented under the 0.68-scaled local Alden root, so its 4.8-unit
+// sprite is 3.264 world units wide. Generic/network heroes compensate parent scaling;
+// use the same final world width so remote/enemy bars do not appear oversized.
+const HERO_OVERHEAD_WORLD_WIDTH = 4.8 * 0.68;
+
+type LocalTeamId = Exclude<TeamId, 'neutral'>;
+
+function localTeamFor(entity: GameEntity): LocalTeamId | null {
+  let object: THREE.Object3D | null = entity.root;
+  while (object) {
+    const team = object.userData.localTeam;
+    if (team === 'blue' || team === 'red') return team;
+    object = object.parent;
+  }
+  return null;
+}
+
 function worldBarWidth(kind: GameEntityKind) {
   switch (kind) {
-    case 'hero': return 4.8;
+    case 'hero': return HERO_OVERHEAD_WORLD_WIDTH;
     case 'creep': return 1.82;
     case 'tower': return 3.15;
     case 'building': return 4.0;
@@ -33,15 +50,38 @@ function resourceFraction(current: number, maximum: number) {
   return THREE.MathUtils.clamp(current / maximum, 0, 1);
 }
 
-function healthPalette(team: TeamId) {
-  switch (team) {
-    case 'blue':
-      return { top: '#8aeb4b', bottom: '#43bb29', dark: '#1c2916' };
-    case 'red':
-      return { top: '#ff6559', bottom: '#c52f2a', dark: '#30110f' };
-    case 'neutral':
-      return { top: '#efcf57', bottom: '#c5922e', dark: '#30270f' };
+function healthPalette(team: TeamId, localTeam: LocalTeamId | null) {
+  if (team === 'neutral') {
+    return {
+      top: '#efcf57',
+      bottom: '#c5922e',
+      dark: '#30270f',
+      flat: '#cea83c',
+      highlight: 'rgba(247, 214, 95, 0.42)',
+      divider: 'rgba(45, 32, 4, 0.42)',
+    };
   }
+
+  // Health color communicates relationship to the local player, never absolute faction.
+  // Keep the old Dawn/blue interpretation only as a safe fallback outside a live scene.
+  const allied = localTeam ? team === localTeam : team === 'blue';
+  return allied
+    ? {
+      top: '#8aeb4b',
+      bottom: '#43bb29',
+      dark: '#1c2916',
+      flat: '#55c936',
+      highlight: 'rgba(154, 238, 91, 0.42)',
+      divider: 'rgba(5, 30, 4, 0.4)',
+    }
+    : {
+      top: '#ff6559',
+      bottom: '#c52f2a',
+      dark: '#30110f',
+      flat: '#d7473e',
+      highlight: 'rgba(255, 119, 106, 0.42)',
+      divider: 'rgba(45, 4, 4, 0.42)',
+    };
 }
 
 function drawHeroHealth(
@@ -49,8 +89,9 @@ function drawHeroHealth(
   hp: number,
   maxHp: number,
   team: TeamId,
+  localTeam: LocalTeamId | null,
 ) {
-  const palette = healthPalette(team);
+  const palette = healthPalette(team, localTeam);
   ctx.fillStyle = '#050805';
   ctx.fillRect(78, 12, 302, 37);
   ctx.fillStyle = palette.dark;
@@ -60,11 +101,7 @@ function drawHeroHealth(
   health.addColorStop(1, palette.bottom);
   ctx.fillStyle = health;
   ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
-  ctx.fillStyle = team === 'red'
-    ? 'rgba(45, 4, 4, 0.42)'
-    : team === 'neutral'
-      ? 'rgba(45, 32, 4, 0.42)'
-      : 'rgba(5, 30, 4, 0.4)';
+  ctx.fillStyle = palette.divider;
   for (let segment = 1; segment < 3; segment++) {
     ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
   }
@@ -96,6 +133,7 @@ function drawHeroFrame(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   icon: HTMLImageElement | null,
+  localTeam: LocalTeamId | null,
 ) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const frame = ctx.createLinearGradient(0, 8, 0, 72);
@@ -113,7 +151,7 @@ function drawHeroFrame(
   ctx.closePath();
   ctx.fill();
 
-  drawHeroHealth(ctx, entity.currentHp, entity.maxHp, entity.team);
+  drawHeroHealth(ctx, entity.currentHp, entity.maxHp, entity.team, localTeam);
   drawHeroResource(ctx, entity.currentResource, entity.maxResource);
   drawHeroLevel(ctx, entity.level);
 
@@ -135,10 +173,11 @@ function drawHealthOnlyFrame(
   entity: GameEntity,
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
+  localTeam: LocalTeamId | null,
 ) {
   const fraction = resourceFraction(entity.currentHp, entity.maxHp);
   const segments = healthSegments(entity.kind);
-  const palette = healthPalette(entity.team);
+  const palette = healthPalette(entity.team, localTeam);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Non-hero bars intentionally stay flat and quiet. The previous metallic shell used
@@ -162,19 +201,11 @@ function drawHealthOnlyFrame(
 
   const fillWidth = innerWidth * fraction;
   if (fillWidth > 0) {
-    ctx.fillStyle = entity.team === 'blue'
-      ? '#55c936'
-      : entity.team === 'red'
-        ? '#d7473e'
-        : '#cea83c';
+    ctx.fillStyle = palette.flat;
     ctx.fillRect(innerX, innerY, fillWidth, innerHeight);
 
     // A one-pixel highlight keeps the fill readable without reintroducing a bevel/frame.
-    ctx.fillStyle = entity.team === 'blue'
-      ? 'rgba(154, 238, 91, 0.42)'
-      : entity.team === 'red'
-        ? 'rgba(255, 119, 106, 0.42)'
-        : 'rgba(247, 214, 95, 0.42)';
+    ctx.fillStyle = palette.highlight;
     ctx.fillRect(innerX, innerY, fillWidth, 1);
   }
 
@@ -185,7 +216,7 @@ function drawHealthOnlyFrame(
   }
 }
 
-function entitySignature(entity: GameEntity) {
+function entitySignature(entity: GameEntity, localTeam: LocalTeamId | null) {
   if (entity.kind === 'hero') {
     return [
       entity.displayName,
@@ -196,9 +227,10 @@ function entitySignature(entity: GameEntity) {
       entity.currentResource,
       entity.maxResource,
       entity.team,
+      localTeam ?? '',
     ].join('|');
   }
-  return `${entity.currentHp}|${entity.maxHp}|${entity.team}`;
+  return `${entity.currentHp}|${entity.maxHp}|${entity.team}|${localTeam ?? ''}`;
 }
 
 function heroIconPath(entity: GameEntity) {
@@ -282,12 +314,13 @@ export function attachEntityOverhead(entity: GameEntity) {
 
   const redraw = () => {
     ensureIcon();
-    const nextSignature = entitySignature(entity);
+    const localTeam = localTeamFor(entity);
+    const nextSignature = entitySignature(entity, localTeam);
     if (!dirty && nextSignature === lastSignature) return;
     lastSignature = nextSignature;
     dirty = false;
-    if (hero) drawHeroFrame(entity, ctx, canvas, icon);
-    else drawHealthOnlyFrame(entity, ctx, canvas);
+    if (hero) drawHeroFrame(entity, ctx, canvas, icon, localTeam);
+    else drawHealthOnlyFrame(entity, ctx, canvas, localTeam);
     texture.needsUpdate = true;
   };
 
@@ -295,7 +328,9 @@ export function attachEntityOverhead(entity: GameEntity) {
   sprite.onBeforeRender = (_renderer, _scene, camera) => {
     // Overhead UI belongs to the gameplay camera, not the top-down minimap render.
     const minimapCamera = camera.position.y > 60 && camera.up.z < -0.5;
-    const revealed = entity.team === 'blue' || entity.revealed;
+    const localTeam = localTeamFor(entity);
+    const allied = localTeam ? entity.team === localTeam : entity.team === 'blue';
+    const revealed = allied || entity.revealed;
     material.opacity = !minimapCamera && revealed && entity.alive && entity.maxHp > 0 ? 1 : 0;
     if (material.opacity > 0) redraw();
   };
