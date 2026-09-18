@@ -596,3 +596,33 @@
     bottom: 9px;
   }
 }
+
+
+/* Loading composition adapts to the actual number of players without tiny 1v1 cards. */
+.dr-loading-team-row.is-count-1 .dr-loading-team-cards > .dr-loading-player-card {
+  width: clamp(210px, 15vw, 255px);
+  flex: 0 0 clamp(210px, 15vw, 255px);
+}
+
+.dr-loading-team-row.is-count-2 .dr-loading-team-cards > .dr-loading-player-card {
+  width: clamp(185px, 13.5vw, 225px);
+  flex: 0 0 clamp(185px, 13.5vw, 225px);
+}
+
+.dr-loading-team-row.is-count-3 .dr-loading-team-cards > .dr-loading-player-card {
+  width: clamp(170px, 12.5vw, 210px);
+  flex: 0 0 clamp(170px, 12.5vw, 210px);
+}
+
+.dr-loading-team-row.is-count-4 .dr-loading-team-cards > .dr-loading-player-card,
+.dr-loading-team-row.is-count-5 .dr-loading-team-cards > .dr-loading-player-card {
+  flex-shrink: 1;
+}
+
+.dr-loading-team-row.is-count-1 .dr-loading-player-card {
+  height: clamp(250px, 29vh, 315px);
+}
+
+.dr-loading-screen {
+  z-index: 2147482000;
+}
