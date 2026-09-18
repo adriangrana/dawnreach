@@ -1168,6 +1168,11 @@ export function createPlatformServer(options = {}) {
     };
 
     const recipients = active.players.map(candidate => candidate.userId);
+
+    // Presentation first, canonical state immediately after. WebSocket ordering guarantees
+    // the victim can play its local hit/guard feedback before the authoritative state
+    // reconciles HP; this prevents both double-hit flicker and stale client resurrection.
+    broadcast(event, [...new Set([reporter.userId, target.userId])]);
     broadcast({
       type: 'match.runtime.state',
       matchId: active.id,
@@ -1181,7 +1186,6 @@ export function createPlatformServer(options = {}) {
       }, recipients);
     }
     if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);
-    broadcast(event, [...new Set([reporter.userId, target.userId])]);
     return event;
   }
 
@@ -1190,51 +1194,9 @@ export function createPlatformServer(options = {}) {
     if (!active || active.status !== 'in_game') throw new Error('No tienes una partida activa para resolver combate.');
     if (payload?.matchId && String(payload.matchId) !== active.id) throw new Error('La resolución pertenece a otra partida.');
 
-    const combatId = String(payload?.combatId || '');
-    const locks = runtimeCombatLocks(active.id);
-    const lock = locks.get(userId) || null;
-    const previous = runtimeRoom(active.id).get(userId) || null;
-    if (!combatId || !lock || lock.combatId !== combatId || !previous) return previous;
-
-    const maxHp = Math.max(1, Number(previous.maxHp) || 1);
-    const currentHp = Math.max(0, Math.min(maxHp, Number(payload?.currentHp) || 0));
-    const maxResource = Math.max(0, Number(previous.maxResource) || 0);
-    const currentResource = Math.max(
-      0,
-      Math.min(maxResource || 100000, Number(payload?.currentResource ?? previous.currentResource) || 0),
-    );
-
-    const resolvedPosition = payload?.position && typeof payload.position === 'object'
-      ? payload.position
-      : previous.position;
-
-    return reportMatchRuntimeState(userId, {
-      matchId: active.id,
-      sequence: Number(previous.sequence || 0) + 1,
-      position: { ...resolvedPosition },
-      yaw: Number.isFinite(Number(payload?.yaw)) ? Number(payload.yaw) : previous.yaw,
-      moving: currentHp > 0 ? Boolean(previous.moving) : false,
-      currentHp,
-      maxHp,
-      currentResource,
-      maxResource,
-      level: previous.level,
-      experience: previous.experience,
-      alive: payload?.alive !== false && currentHp > 0,
-      abilityRanks: previous.abilityRanks,
-      abilityCooldownRemainingMs: previous.abilityCooldownRemainingMs,
-      kills: previous.kills,
-      deaths: previous.deaths,
-      assists: previous.assists,
-      lastHits: previous.lastHits,
-      denies: previous.denies,
-      gold: previous.gold,
-      inventory: previous.inventory,
-      respawnRemainingMs: 0,
-      respawnDurationMs: currentHp <= 0
-        ? Math.max(0, Number(lock.respawnSeconds || 0) * 1000)
-        : 0,
-    });
+    // Backwards-compatible no-op. Hero HP/death is now server-canonical in
+    // reportMatchRuntimeCombat; an old client response must never overwrite it.
+    return runtimeRoom(active.id).get(userId) || null;
   }
 
   function reportMatchRuntimeCreeps(userId, payload) {
