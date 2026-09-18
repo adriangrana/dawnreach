@@ -8,9 +8,9 @@ import {
   Swords,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ALDEN_ART from '../game/heroes/alden/images/H001.webp';
-import ALDEN_ICON from '../game/heroes/alden/images/H001I.webp';
-import ALDEN_PASSIVE from '../game/heroes/alden/images/H001F.png';
+import ALDEN_SELECTION_ART from '../game/heroes/alden/images/H001.webp';
+import ALDEN_PASSIVE from '../game/heroes/alden/images/H001I.webp';
+import ALDEN_FOCUS_ART from '../game/heroes/alden/images/H001F.png';
 import ALDEN_Q from '../game/heroes/alden/images/H001Q.webp';
 import ALDEN_W from '../game/heroes/alden/images/H001W.webp';
 import ALDEN_E from '../game/heroes/alden/images/H001E.webp';
@@ -19,12 +19,12 @@ import { ALDEN } from '../game/heroes/alden/gameplay';
 import { platformRealtime } from './realtimeClient';
 import type { HeroSelectPlayer, HeroSelectState, PlatformUser, Team } from './types';
 
-const HERO_ART: Record<string, string> = {
-  H001: ALDEN_ART,
+const HERO_FOCUS_ART: Record<string, string> = {
+  H001: ALDEN_FOCUS_ART,
 };
 
-const HERO_ICON: Record<string, string> = {
-  H001: ALDEN_ICON,
+const HERO_SELECTION_ART: Record<string, string> = {
+  H001: ALDEN_SELECTION_ART,
 };
 
 const HERO_NAMES: Record<string, string> = {
@@ -62,7 +62,7 @@ function HeroSelectPlayerCard({
   const heroName = selected ? HERO_NAMES[selected] || selected : null;
   return <article className={`dr-hero-select-player is-${player.team}${player.userId === me.id ? ' is-self' : ''}${player.selection.locked ? ' is-locked' : ''}`}>
     {side === 'left' && <div className="dr-hero-select-player-portrait">
-      {selected ? <img src={HERO_ICON[selected] || HERO_ART[selected]} alt="" draggable={false} /> : <span />}
+      {selected ? <img src={HERO_SELECTION_ART[selected] || HERO_FOCUS_ART[selected]} alt="" draggable={false} /> : <span />}
     </div>}
     <div className="dr-hero-select-player-copy">
       <div><strong>{player.username}</strong>{player.userId === me.id && <em>YOU</em>}</div>
@@ -70,7 +70,7 @@ function HeroSelectPlayerCard({
       <small>{player.selection.locked ? `LOCKED · ${heroName}` : selected ? `PICKING · ${heroName}` : 'WAITING…'}</small>
     </div>
     {side === 'right' && <div className="dr-hero-select-player-portrait">
-      {selected ? <img src={HERO_ICON[selected] || HERO_ART[selected]} alt="" draggable={false} /> : <span />}
+      {selected ? <img src={HERO_SELECTION_ART[selected] || HERO_FOCUS_ART[selected]} alt="" draggable={false} /> : <span />}
     </div>}
   </article>;
 }
@@ -231,7 +231,7 @@ export function HeroSelectScreen({
           </div>
         </div>
 
-        {selected && <img className="dr-hero-select-main-art" src={HERO_ART[selected] || HERO_ICON[selected]} alt={HERO_NAMES[selected] || selected} draggable={false} />}
+        {selected && <img className="dr-hero-select-main-art" src={HERO_FOCUS_ART[selected] || HERO_SELECTION_ART[selected]} alt={HERO_NAMES[selected] || selected} draggable={false} />}
 
         <aside className="dr-hero-select-overview">
           <nav><button type="button" className="is-active">OVERVIEW</button><button type="button" disabled>SKINS</button></nav>
@@ -287,7 +287,7 @@ export function HeroSelectScreen({
             disabled={isLocked}
             onClick={() => chooseHero(heroId)}
           >
-            <img src={HERO_ICON[heroId] || HERO_ART[heroId]} alt="" draggable={false} />
+            <img src={HERO_SELECTION_ART[heroId] || HERO_FOCUS_ART[heroId]} alt="" draggable={false} />
             <span>{HERO_NAMES[heroId] || heroId}</span>
           </button>)}
           {Array.from({ length: Math.max(0, 8 - filteredHeroes.length) }, (_, index) => <div className="dr-hero-select-roster-placeholder" key={index}><Shield /><span>COMING SOON</span></div>)}
