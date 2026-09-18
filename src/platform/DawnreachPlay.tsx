@@ -2,21 +2,16 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   CheckCircle2,
   Clock3,
-  Compass,
-  Crosshair,
   Map,
-  Shield,
   Swords,
   Trophy,
   Users,
   X,
-  Zap,
-  type LucideIcon,
 } from 'lucide-react';
 import type { PartySnapshot, PlatformUser, QueueMode, QueueState } from './types';
 
 type PlayMode = QueueMode | 'vs_ai' | 'training' | 'custom';
-type RoleId = 'top' | 'jungle' | 'mid' | 'carry' | 'support';
+type DeploymentId = 'north' | 'mid' | 'south';
 
 type ModeDefinition = Readonly<{
   id: PlayMode;
@@ -27,10 +22,11 @@ type ModeDefinition = Readonly<{
   background: string;
 }>;
 
-type RoleDefinition = Readonly<{
-  id: RoleId;
+type DeploymentDefinition = Readonly<{
+  id: DeploymentId;
   label: string;
-  icon: LucideIcon;
+  subtitle: string;
+  slots: number;
 }>;
 
 const MODES: readonly ModeDefinition[] = [
@@ -76,12 +72,10 @@ const MODES: readonly ModeDefinition[] = [
   },
 ];
 
-const ROLES: readonly RoleDefinition[] = [
-  { id: 'top', label: 'TOP', icon: Shield },
-  { id: 'jungle', label: 'JUNGLE', icon: Compass },
-  { id: 'mid', label: 'MID', icon: Zap },
-  { id: 'carry', label: 'CARRY', icon: Crosshair },
-  { id: 'support', label: 'SUPPORT', icon: Users },
+const DEPLOYMENTS: readonly DeploymentDefinition[] = [
+  { id: 'north', label: 'NORTH', subtitle: 'Northern lane', slots: 2 },
+  { id: 'mid', label: 'MID', subtitle: 'Central lane', slots: 1 },
+  { id: 'south', label: 'SOUTH', subtitle: 'Southern lane', slots: 2 },
 ];
 
 const MODE_COPY: Record<PlayMode, Readonly<{
@@ -134,9 +128,9 @@ const MODE_COPY: Record<PlayMode, Readonly<{
   },
 };
 
-function selectedRoleLabel(role: RoleId, primary: RoleId | null, secondary: RoleId | null) {
-  if (role === primary) return 'Primary';
-  if (role === secondary) return 'Secondary';
+function selectedDeploymentLabel(deployment: DeploymentId, primary: DeploymentId | null, secondary: DeploymentId | null) {
+  if (deployment === primary) return 'Primary';
+  if (deployment === secondary) return 'Secondary';
   return '';
 }
 
@@ -160,8 +154,9 @@ export function DawnreachPlayScreen({
   onCustom: () => void;
 }) {
   const [selectedMode, setSelectedMode] = useState<PlayMode>(queue.mode);
-  const [primaryRole, setPrimaryRole] = useState<RoleId | null>('mid');
-  const [secondaryRole, setSecondaryRole] = useState<RoleId | null>('support');
+  const [primaryDeployment, setPrimaryDeployment] = useState<DeploymentId | null>('mid');
+  const [secondaryDeployment, setSecondaryDeployment] = useState<DeploymentId | null>('south');
+  const [fillIfNeeded, setFillIfNeeded] = useState(true);
 
   useEffect(() => {
     if (queue.joined) setSelectedMode(queue.mode);
@@ -174,12 +169,12 @@ export function DawnreachPlayScreen({
   const rankedCalibration = !me.calibrated;
   const readyToQueue = selectedMode === 'normal' || selectedMode === 'ranked';
 
-  const roleSummary = useMemo(() => {
-    const primary = ROLES.find(role => role.id === primaryRole)?.label;
-    const secondary = ROLES.find(role => role.id === secondaryRole)?.label;
-    if (primary && secondary) return `${primary} · ${secondary}`;
-    return primary || secondary || 'ANY ROLE';
-  }, [primaryRole, secondaryRole]);
+  const deploymentSummary = useMemo(() => {
+    const primary = DEPLOYMENTS.find(deployment => deployment.id === primaryDeployment)?.label;
+    const secondary = DEPLOYMENTS.find(deployment => deployment.id === secondaryDeployment)?.label;
+    const preference = primary && secondary ? `${primary} · ${secondary}` : primary || secondary || 'NO LANE';
+    return fillIfNeeded ? `${preference} · FILL ON` : preference;
+  }, [fillIfNeeded, primaryDeployment, secondaryDeployment]);
 
   const selectMode = (mode: PlayMode) => {
     if (queue.joined) return;
@@ -187,26 +182,26 @@ export function DawnreachPlayScreen({
     if (mode === 'normal' || mode === 'ranked') onMode(mode);
   };
 
-  const selectRole = (role: RoleId) => {
+  const selectDeployment = (deployment: DeploymentId) => {
     if (queue.joined) return;
-    if (primaryRole === role) {
-      setPrimaryRole(secondaryRole);
-      setSecondaryRole(null);
+    if (primaryDeployment === deployment) {
+      setPrimaryDeployment(secondaryDeployment);
+      setSecondaryDeployment(null);
       return;
     }
-    if (secondaryRole === role) {
-      setSecondaryRole(null);
+    if (secondaryDeployment === deployment) {
+      setSecondaryDeployment(null);
       return;
     }
-    if (!primaryRole) {
-      setPrimaryRole(role);
+    if (!primaryDeployment) {
+      setPrimaryDeployment(deployment);
       return;
     }
-    if (!secondaryRole) {
-      setSecondaryRole(role);
+    if (!secondaryDeployment) {
+      setSecondaryDeployment(deployment);
       return;
     }
-    setSecondaryRole(role);
+    setSecondaryDeployment(deployment);
   };
 
   const activate = () => {
@@ -273,26 +268,47 @@ export function DawnreachPlayScreen({
         </div>
       </section>
 
-      <section className="dr-play-role-panel">
+      <section className="dr-play-deployment-panel">
         <header>
-          <div><strong>ROLE PREFERENCE</strong><span>Select up to two preferred roles.</span></div>
-          <small>{readyToQueue ? 'Primary and secondary roles help define your preferred lane.' : 'Role preference is kept for your next online queue.'}</small>
+          <div className="dr-play-deployment-heading">
+            <div><strong>DEPLOYMENT PREFERENCE</strong><span>Choose up to two preferred lanes.</span></div>
+            <small>{readyToQueue ? 'Dawnreach deploys five heroes across three fronts · 2 / 1 / 2' : 'These preferences are kept for your next online queue.'}</small>
+          </div>
+          <button
+            type="button"
+            className={`dr-play-fill-toggle${fillIfNeeded ? ' is-active' : ''}`}
+            aria-pressed={fillIfNeeded}
+            disabled={queue.joined}
+            onClick={() => setFillIfNeeded(current => !current)}
+          >
+            <span className="dr-play-fill-check" aria-hidden="true"><i /></span>
+            <span><strong>FILL IF NEEDED</strong><small>Allow another lane when required</small></span>
+          </button>
         </header>
-        <div className="dr-play-role-grid">
-          {ROLES.map(role => {
-            const Icon = role.icon;
-            const roleState = selectedRoleLabel(role.id, primaryRole, secondaryRole);
+        <div className="dr-play-deployment-grid">
+          {DEPLOYMENTS.map(deployment => {
+            const deploymentState = selectedDeploymentLabel(deployment.id, primaryDeployment, secondaryDeployment);
             return <button
               type="button"
-              key={role.id}
+              key={deployment.id}
               disabled={queue.joined}
-              className={roleState ? `is-selected is-${roleState.toLowerCase()}` : ''}
-              onClick={() => selectRole(role.id)}
+              className={deploymentState ? `is-selected is-${deploymentState.toLowerCase()}` : ''}
+              onClick={() => selectDeployment(deployment.id)}
             >
-              <span className="dr-play-role-gem"><Icon /></span>
-              <strong>{role.label}</strong>
-              <small>{roleState || 'Select'}</small>
-              <i />
+              <span className="dr-play-lane-map" data-lane={deployment.id} aria-hidden="true">
+                <i className="dr-play-lane-map-frame" />
+                <i className="dr-play-lane-route is-north" />
+                <i className="dr-play-lane-route is-mid" />
+                <i className="dr-play-lane-route is-south" />
+                <b />
+              </span>
+              <span className="dr-play-deployment-copy">
+                <small>{deployment.subtitle}</small>
+                <strong>{deployment.label}</strong>
+                <em>{deployment.slots} {deployment.slots === 1 ? 'SLOT' : 'SLOTS'}</em>
+              </span>
+              <span className="dr-play-deployment-state">{deploymentState || 'SELECT'}</span>
+              <i className="dr-play-deployment-radio" aria-hidden="true" />
             </button>;
           })}
         </div>
@@ -310,7 +326,7 @@ export function DawnreachPlayScreen({
           {queue.joined ? <Swords /> : <CheckCircle2 />}
           <span>
             <strong>{queue.joined ? `Searching · ${queue.count}/${queue.target}` : selectedMode === 'ranked' && rankedCalibration ? 'Calibration ready' : selectedMode === 'custom' ? 'Custom rules' : selectedMode === 'training' ? 'Practice ready' : selectedMode === 'vs_ai' ? 'Bots ready' : 'Ready to queue'}</strong>
-            <small>{queue.joined ? `${queue.mode.toUpperCase()} · party ${partySize}/5` : `${roleSummary} · party ${partySize}/5`}</small>
+            <small>{queue.joined ? `${queue.mode.toUpperCase()} · party ${partySize}/5` : `${deploymentSummary} · party ${partySize}/5`}</small>
           </span>
           {queue.joined && <i style={{ '--dr-queue-progress': `${queueProgress}%` } as CSSProperties} />}
         </div>
