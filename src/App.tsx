@@ -230,6 +230,45 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
 
   if (action.type === 'tick') return { ...runtime, match, nowMs };
 
+  if (action.type === 'local-server-sync') {
+    const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
+    const stats = calculateHeroStats(match, hero.heroEntityId, { nowMs });
+    const currentHp = Math.max(0, Math.min(stats.maxHp, action.state.currentHp));
+    const currentResource = Math.max(
+      0,
+      Math.min(stats.maxResource, action.state.currentResource),
+    );
+    const nextHero = {
+      ...hero,
+      level: Math.max(1, Math.floor(action.state.level || hero.level)),
+      experience: Math.max(0, Number(action.state.experience ?? hero.experience)),
+      currentHp,
+      currentResource,
+    };
+    const remainingMs = action.state.alive
+      ? 0
+      : Math.max(0, action.state.respawnRemainingMs ?? 0);
+    const durationMs = action.state.alive
+      ? 0
+      : Math.max(
+        remainingMs,
+        action.state.respawnDurationMs ?? remainingMs,
+      );
+    return {
+      ...runtime,
+      match: {
+        ...match,
+        heroes: {
+          ...match.heroes,
+          [LOCAL_HERO_ENTITY_ID]: nextHero,
+        },
+      },
+      nowMs,
+      respawnReadyAtMs: action.state.alive ? null : nowMs + remainingMs,
+      respawnDurationMs: durationMs,
+    };
+  }
+
   if (action.type === 'remote-player-sync') {
     const player = match.players[action.state.userId];
     const heroEntityId = player?.ownedHeroEntityId ?? null;
