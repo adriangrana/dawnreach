@@ -1065,6 +1065,16 @@ export default function App({
     disconnectedUserIds: [],
     disconnectedPlayers: [],
   });
+  useEffect(() => {
+    setConnectionState({
+      mode: 'cleared',
+      team: null,
+      deadlineAt: null,
+      disconnectedUserIds: [],
+      disconnectedPlayers: [],
+    });
+  }, [onlineMatch?.id]);
+
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
