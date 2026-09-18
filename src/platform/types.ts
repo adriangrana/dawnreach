@@ -127,6 +127,24 @@ export type LobbyPlayer = Readonly<{
   ready: boolean;
 }>;
 
+export type LobbySpectator = Readonly<{
+  userId: string;
+  username: string;
+  rating: number;
+  joinedAt: number;
+}>;
+
+export type LobbySettings = Readonly<{
+  map: 'dawnreach';
+  gameMode: 'classic';
+  teamSize: 1 | 2 | 3 | 4 | 5;
+  heroSelect: 'all_pick' | 'draft';
+  bans: 'none' | '2' | '4';
+  allowSpectators: boolean;
+  privacy: 'public' | 'private';
+  region: 'auto' | 'eu' | 'na' | 'sa';
+}>;
+
 export type LobbyMessage = Readonly<{
   id: string;
   lobbyId: string;
@@ -146,9 +164,12 @@ export type CustomLobby = Readonly<{
   ownerUsername: string;
   privacy: 'public' | 'private';
   maxPlayers: number;
+  maxSpectators: number;
   status: 'open' | 'launching' | 'in_game';
   createdAt: string;
+  settings: LobbySettings;
   players: readonly LobbyPlayer[];
+  spectators: readonly LobbySpectator[];
   messages: readonly LobbyMessage[];
   matchId?: string;
 }>;
