@@ -473,6 +473,14 @@ export function createPlatformServer(options = {}) {
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
 
     const previous = runtimeRoom(active.id).get(userId);
+    const reportedPosition = {
+      x: clamp(position.x, -75, 75),
+      y: clamp(position.y, -5, 40),
+      z: clamp(position.z, -62.5, 62.5),
+    };
+    if (!previous && !runtimeSpawnPositions(active.id).has(userId)) {
+      runtimeSpawnPositions(active.id).set(userId, { ...reportedPosition });
+    }
     const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
     const now = Date.now();
     const combatLocks = runtimeCombatLocks(active.id);
@@ -503,10 +511,14 @@ export function createPlatformServer(options = {}) {
       );
     }
     const requestedMaxHp = clamp(payload?.maxHp, 1, 100000);
+    const requestedMaxResource = clamp(payload?.maxResource, 0, 100000);
+    const rawCurrentResource = clamp(payload?.currentResource, 0, requestedMaxResource || 100000);
     const rawCurrentHp = clamp(payload?.currentHp, 0, requestedMaxHp);
     const rawAlive = payload?.alive !== false && rawCurrentHp > 0;
     let requestedCurrentHp = rawCurrentHp;
+    let requestedCurrentResource = rawCurrentResource;
     let requestedAlive = rawAlive;
+    let serverRespawned = false;
     let deathIncrement = 0;
     let creditedKillerState = null;
     let confirmedHeroKillEvent = null;
@@ -514,6 +526,20 @@ export function createPlatformServer(options = {}) {
     if (combatLock?.deadUntil && now < combatLock.deadUntil) {
       requestedCurrentHp = 0;
       requestedAlive = false;
+    } else if (
+      combatLock?.deadUntil
+      && now >= combatLock.deadUntil
+      && previous
+      && previous.alive === false
+    ) {
+      // Respawn is server-owned. Never let a stale client packet resurrect the hero at the
+      // death location with its pre-death HP; the server explicitly restores full resources
+      // and the captured team/slot spawn position when the death lock expires.
+      serverRespawned = true;
+      requestedCurrentHp = requestedMaxHp;
+      requestedCurrentResource = requestedMaxResource;
+      requestedAlive = true;
+      combatLocks.delete(userId);
     } else if (combatLock?.until && now < combatLock.until) {
       const processedDamage = rawAlive === false
         || rawCurrentHp < Math.max(0, Number(combatLock.preDamageHp || 0)) - 0.001;
@@ -598,11 +624,17 @@ export function createPlatformServer(options = {}) {
           combatLocks.delete(userId);
         }
       } else {
-        // This packet was authored before the target processed the combat event. Preserve
-        // movement/inventory updates but keep the server's predicted HP so the attacker
-        // never sees health jump back up and then down again.
-        requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
-        requestedAlive = requestedCurrentHp > 0;
+        // This packet was authored before the victim processed the combat event. A pending
+        // lethal prediction MUST NOT manufacture a death from this stale packet: Alden's
+        // guard/majesty can reduce the hit and keep the victim alive. Wait for the explicit
+        // victim combat resolution (or a genuinely processed state packet).
+        if (combatLock.pendingLethal && !combatLock.deathAccounted) {
+          requestedCurrentHp = previous?.currentHp ?? rawCurrentHp;
+          requestedAlive = previous?.alive !== false && requestedCurrentHp > 0;
+        } else {
+          requestedCurrentHp = Math.min(rawCurrentHp, Math.max(0, Number(combatLock.hpCeiling || 0)));
+          requestedAlive = requestedCurrentHp > 0;
+        }
       }
     } else if (combatLock) {
       combatLocks.delete(userId);
@@ -708,17 +740,15 @@ export function createPlatformServer(options = {}) {
       slot: player.slot,
       heroId: active.heroSelections?.[userId]?.heroId || 'H001',
       sequence,
-      position: {
-        x: clamp(position.x, -75, 75),
-        y: clamp(position.y, -5, 40),
-        z: clamp(position.z, -62.5, 62.5),
-      },
+      position: serverRespawned
+        ? { ...(runtimeSpawnPositions(active.id).get(userId) || reportedPosition) }
+        : reportedPosition,
       yaw: clamp(payload?.yaw, -Math.PI * 8, Math.PI * 8),
-      moving: Boolean(payload?.moving),
+      moving: serverRespawned ? false : Boolean(payload?.moving),
       currentHp: requestedCurrentHp,
       maxHp: requestedMaxHp,
-      currentResource: clamp(payload?.currentResource, 0, 100000),
-      maxResource: clamp(payload?.maxResource, 0, 100000),
+      currentResource: requestedCurrentResource,
+      maxResource: requestedMaxResource,
       level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, 1)))),
       experience: Math.max(0, Math.min(1000000000, finite(payload?.experience, previous?.experience || 0))),
       alive: requestedAlive,
