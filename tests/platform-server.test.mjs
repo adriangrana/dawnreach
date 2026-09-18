@@ -166,3 +166,69 @@ test('hero select completion hands the match to loading with per-player progress
     assert.equal(platform.store.activeMatchForUser('dawn').id, created.id);
   });
 });
+
+
+test('abandoning the last player on a team ends the active match and clears reconnect state', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'abandon-1v1',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'blue-player', username: 'Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'red-player', username: 'Red', rating: 1000, joinedAt: 1, team: 'red', slot: 5 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'blue-player': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'red-player': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+      },
+    };
+
+    platform.store.addMatch(match);
+    const ended = platform.abandonActiveMatch('blue-player');
+
+    assert.equal(ended.status, 'completed');
+    assert.equal(ended.endReason, 'team_abandonment');
+    assert.equal(ended.winnerTeam, 'red');
+    assert.deepEqual(ended.abandonedUserIds, ['blue-player']);
+    assert.equal(platform.store.activeMatchForUser('blue-player'), null);
+    assert.equal(platform.store.activeMatchForUser('red-player'), null);
+  });
+});
+
+test('one abandonment in a multi-player team leaves the match active for everyone else', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'abandon-2v2',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'blue-a', username: 'Blue A', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'blue-b', username: 'Blue B', rating: 1000, joinedAt: 1, team: 'blue', slot: 1 },
+        { userId: 'red-a', username: 'Red A', rating: 1000, joinedAt: 1, team: 'red', slot: 5 },
+        { userId: 'red-b', username: 'Red B', rating: 1000, joinedAt: 1, team: 'red', slot: 6 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+
+    platform.store.addMatch(match);
+    const active = platform.abandonActiveMatch('blue-a');
+
+    assert.equal(active.status, 'in_game');
+    assert.deepEqual(active.abandonedUserIds, ['blue-a']);
+    assert.equal(platform.store.activeMatchForUser('blue-a'), null);
+    assert.equal(platform.store.activeMatchForUser('blue-b').id, match.id);
+    assert.equal(platform.store.activeMatchForUser('red-a').id, match.id);
+  });
+});
