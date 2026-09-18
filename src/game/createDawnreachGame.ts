@@ -347,6 +347,8 @@ export async function createDawnreachGame(
     if (player.userId === localPlayerId) continue;
     const remoteRig = buildAlden(createAldenMaterials());
     remoteRig.root.scale.setScalar(GAME_HERO_SCALE);
+    remoteRig.root.userData.networkRemoteHero = true;
+    remoteRig.root.userData.networkOwnerUserId = player.userId;
     const spawn = playerSpawn(player.team, player.slot);
     remoteRig.root.position.set(spawn.x, HERO_GROUND_OFFSET, spawn.z);
     scene.add(remoteRig.root);
@@ -1598,6 +1600,7 @@ export async function createDawnreachGame(
       if (state.userId === localPlayerId) return;
       const remote = remoteHeroes.get(state.userId);
       if (!remote || state.sequence <= remote.lastSequence) return;
+      const wasAlive = remote.entity.alive;
       remote.lastSequence = state.sequence;
       remote.targetPosition.set(state.position.x, state.position.y, state.position.z);
       remote.targetYaw = state.yaw;
@@ -1610,7 +1613,32 @@ export async function createDawnreachGame(
       remote.entity.alive = state.alive && remote.entity.currentHp > 0;
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
       remote.entity.root.userData.currentHp = remote.entity.currentHp;
+      remote.entity.root.userData.maxResource = remote.entity.maxResource;
+      remote.entity.root.userData.currentResource = remote.entity.currentResource;
       remote.entity.root.userData.level = remote.entity.level;
+      remote.entity.root.userData.alive = remote.entity.alive;
+
+      if (!remote.entity.alive) {
+        remote.entity.root.visible = true;
+        remote.rig.model.visible = true;
+        remote.rig.model.rotation.x = -Math.PI * 0.48;
+      } else {
+        // Replica heroes do not own their respawn lifecycle. When the owner's authoritative
+        // state becomes alive again, restore the render state immediately instead of waiting
+        // for locomotion/animation to touch the model on the next movement command.
+        remote.entity.root.visible = remote.entity.team === localTeam || remote.entity.revealed;
+        remote.rig.model.visible = true;
+        remote.rig.model.rotation.x = 0;
+        remote.entity.root.userData.dawnreachRespawnAtSeconds = undefined;
+        remote.entity.root.userData.dawnreachRespawnHold = false;
+        remote.entity.root.userData.dawnreachDeathPosition = undefined;
+        if (!wasAlive) {
+          remote.entity.root.position.copy(remote.targetPosition);
+          remote.rig.gait.phase = 0;
+          remote.rig.gait.weight = 0;
+        }
+      }
+
       publishWorldEntityRuntime(remote.entity.id, {
         level: remote.entity.level,
         maxHp: remote.entity.maxHp,
@@ -1619,12 +1647,24 @@ export async function createDawnreachGame(
         currentResource: remote.entity.currentResource,
         alive: remote.entity.alive,
       });
+
+      if (!wasAlive && remote.entity.alive) {
+        emitWorldCombatEvent({
+          entityId: remote.entity.id,
+          reason: 'respawn',
+          currentHp: remote.entity.currentHp,
+          currentResource: remote.entity.currentResource,
+          alive: true,
+          atMs: performance.now(),
+        });
+      }
     },
     applyLocalNetworkCombat(input: {
       reason: 'damage' | 'heal';
       amount: number;
       sourceUserId: string;
       sourceEntityId?: string;
+      respawnSeconds?: number;
     }) {
       const overlay = getHeroState?.() ?? null;
       if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return;
@@ -1651,6 +1691,9 @@ export async function createDawnreachGame(
         currentHp,
         currentResource: overlay.hero.currentResource,
         alive: currentHp > 0,
+        respawnSeconds: currentHp <= 0 && Number.isFinite(input.respawnSeconds)
+          ? Math.max(0, Number(input.respawnSeconds))
+          : undefined,
         amount: input.amount,
         sourceEntityId: input.sourceEntityId || `player:${input.sourceUserId}:hero`,
         damageType: 'physical',
