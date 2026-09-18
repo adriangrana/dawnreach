@@ -959,6 +959,8 @@ export default function App({
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
   const pendingCreepSnapshotRef = useRef<DawnreachCreepNetworkSnapshot | null>(null);
   const pendingCreepDamageRef = useRef<Array<{ creepId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
+  const pendingStructureSnapshotRef = useRef<DawnreachStructureNetworkSnapshot | null>(null);
+  const pendingStructureDamageRef = useRef<Array<{ structureId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
