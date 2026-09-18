@@ -9,7 +9,12 @@ import {
   removeWorldEntityRuntime,
 } from '../entities/worldCombatBridge';
 import { createMapCollisionWorld, type CollisionWorld } from '../map/collisionWorld';
-import { DAWNREACH_LAYOUT, type MapPoint } from '../map/mapLayout';
+import { DAWNREACH_LAYOUT, MAP_BOUNDS, type MapPoint } from '../map/mapLayout';
+import {
+  createNavigationWorld,
+  type NavigationPoint,
+  type NavigationWorld,
+} from '../navigation/navigationWorld';
 import {
   animateLaneCreepVisual,
   buildLaneCreepVisual,
@@ -84,6 +89,14 @@ type LaneCreepRuntime = {
   heightCellKey: number;
   targetY: number;
   moving: boolean;
+  navWaypoints: NavigationPoint[];
+  navIndex: number;
+  navTargetX: number;
+  navTargetZ: number;
+  navPartial: boolean;
+  blockedForSeconds: number;
+  nextRepathAt: number;
+  avoidanceSide: -1 | 1;
 };
 
 type LaneTeamBucket = Record<CombatTeam, Set<LaneCreepRuntime>>;
@@ -94,6 +107,13 @@ const ACQUISITION_RANGE_SQ = WORLD_UNITS(500) ** 2;
 const LEASH_DISTANCE_SQ = WORLD_UNITS(400) ** 2;
 const HERO_COLLISION_RADIUS = 0.48;
 const UNIT_SEPARATION_PADDING = 0.045;
+const CREEP_NAV_REPATH_STUCK_SECONDS = 0.28;
+const CREEP_NAV_REPATH_INTERVAL_SECONDS = 0.55;
+const CREEP_NAV_TARGET_DRIFT_SQ = 0.8 ** 2;
+const CREEP_NAV_WAYPOINT_ARRIVAL_SQ = 0.24 ** 2;
+const CREEP_NAV_MAX_EXPANDED_NODES = 1100;
+const CREEP_MOVE_PROGRESS_EPSILON = 0.0025;
+const CREEP_AVOIDANCE_ANGLES = [0.42, 0.78, 1.08] as const;
 const SPATIAL_CELL_SIZE = 1.25;
 const SPATIAL_STRIDE = 4096;
 const SPATIAL_OFFSET = 1024;
@@ -217,6 +237,8 @@ class LaneCreepManager {
   private readonly commandSurfaces: THREE.Mesh[] = [];
   private readonly visualResources = createLaneCreepVisualResources();
   private readonly collisionWorld: CollisionWorld;
+  private readonly creepNavigation: NavigationWorld;
+  private readonly siegeNavigation: NavigationWorld;
   private readonly spatialCells = new Map<number, Set<LaneCreepRuntime>>();
   private readonly heightCache = new Map<number, number>();
   private readonly buckets: Record<LaneName, LaneTeamBucket> = {
@@ -266,6 +288,22 @@ class LaneCreepManager {
       }
     });
     this.collisionWorld = createMapCollisionWorld(battlefield);
+    this.creepNavigation = createNavigationWorld({
+      bounds: MAP_BOUNDS,
+      collisionWorld: this.collisionWorld,
+      agentRadius: 0.36,
+      cellSize: 0.45,
+      clearance: 0.02,
+      nearestSearchRadius: 4.5,
+    });
+    this.siegeNavigation = createNavigationWorld({
+      bounds: MAP_BOUNDS,
+      collisionWorld: this.collisionWorld,
+      agentRadius: CREEP_STATS.siege.collisionRadius,
+      cellSize: 0.48,
+      clearance: 0.025,
+      nearestSearchRadius: 5,
+    });
 
     this.refreshStaticCandidates();
     const canvases = document.querySelectorAll<HTMLCanvasElement>('.game-canvas');
@@ -502,6 +540,14 @@ class LaneCreepManager {
       heightCellKey: heightKey(root.position.x, root.position.z),
       targetY: root.position.y,
       moving: Boolean(unit.moving),
+      navWaypoints: [],
+      navIndex: 0,
+      navTargetX: unit.position.x,
+      navTargetZ: unit.position.z,
+      navPartial: false,
+      blockedForSeconds: 0,
+      nextRepathAt: 0,
+      avoidanceSide: unit.seed % 2 === 0 ? 1 : -1,
     };
     this.creeps.push(runtime);
     this.creepById.set(entity.id, runtime);
@@ -657,6 +703,14 @@ class LaneCreepManager {
       heightCellKey: heightKey(root.position.x, root.position.z),
       targetY: initialSurface,
       moving: false,
+      navWaypoints: [],
+      navIndex: 0,
+      navTargetX: spawn.x,
+      navTargetZ: spawn.z,
+      navPartial: false,
+      blockedForSeconds: 0,
+      nextRepathAt: 0,
+      avoidanceSide: seed % 2 === 0 ? 1 : -1,
     };
 
     this.creeps.push(runtime);
