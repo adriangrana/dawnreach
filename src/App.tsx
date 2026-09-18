@@ -1366,6 +1366,35 @@ export default function App({
         if (game?.isCreepNetworkAuthority()) game.applyRemoteCreepDamage(damage);
         else if (!game) pendingCreepDamageRef.current.push(damage);
       } else if (
+        type === 'match.runtime.structures'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'structures' in event
+        && Array.isArray(event.structures)
+      ) {
+        const snapshot = event as unknown as DawnreachStructureNetworkSnapshot;
+        const game = gameRef.current;
+        if (game) game.applyRemoteStructureNetworkSnapshot(snapshot);
+        else pendingStructureSnapshotRef.current = snapshot;
+      } else if (
+        type === 'match.runtime.structure.damage'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'sourceUserId' in event
+        && event.sourceUserId !== localUser.id
+        && 'structureId' in event
+        && 'amount' in event
+      ) {
+        const damage = {
+          structureId: String(event.structureId || ''),
+          amount: Number(event.amount || 0),
+          sourceUserId: String(event.sourceUserId || ''),
+          atMs: toMatchGameTimeMs(performance.now()),
+        };
+        const game = gameRef.current;
+        if (game?.isCreepNetworkAuthority()) game.applyRemoteStructureDamage(damage);
+        else if (!game) pendingStructureDamageRef.current.push(damage);
+      } else if (
         type === 'match.runtime.combat'
         && 'matchId' in event
         && event.matchId === onlineMatch.id
@@ -1435,6 +1464,16 @@ export default function App({
           sequence: creeps.sequence,
           sentAt: creeps.sentAt,
           creeps: creeps.creeps,
+        });
+      }
+
+      const structures = game.getStructureNetworkSnapshot();
+      if (structures) {
+        platformRealtime.send('match.runtime.structures', {
+          matchId: onlineMatch.id,
+          sequence: structures.sequence,
+          sentAt: structures.sentAt,
+          structures: structures.structures,
         });
       }
     };
