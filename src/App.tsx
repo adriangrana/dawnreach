@@ -1323,7 +1323,15 @@ export default function App({
           definitionId: slot.item.definitionId,
           displayName: slot.item.displayName,
           quantity: slot.item.quantity ?? 1,
+          cooldownRemainingMs: Math.max(0, slot.item.cooldownReadyAtMs - snapshot.nowMs),
         }] : []),
+        abilityRanks: { ...hero.abilityRanks },
+        abilityCooldownRemainingMs: {
+          Q: Math.max(0, hero.cooldownReadyAtMs.Q - snapshot.nowMs),
+          W: Math.max(0, hero.cooldownReadyAtMs.W - snapshot.nowMs),
+          E: Math.max(0, hero.cooldownReadyAtMs.E - snapshot.nowMs),
+          R: Math.max(0, hero.cooldownReadyAtMs.R - snapshot.nowMs),
+        },
         respawnRemainingMs: snapshot.respawnReadyAtMs === null
           ? 0
           : Math.max(0, snapshot.respawnReadyAtMs - snapshot.nowMs),
