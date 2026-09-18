@@ -35,6 +35,7 @@ let lastRecordedDeathAtMs = -1;
 let lastRecordedKillKey = '';
 let lastRecordedAssistKey = '';
 let worldSubscriptionStarted = false;
+let serverAuthoritativeKda = false;
 
 function snapshot(): CombatHudStats {
   return { ...stats };
@@ -42,6 +43,10 @@ function snapshot(): CombatHudStats {
 
 export function getCombatHudStatsSnapshot(): CombatHudStats {
   return snapshot();
+}
+
+export function setCombatHudServerAuthority(enabled: boolean) {
+  serverAuthoritativeKda = enabled;
 }
 
 function publish() {
@@ -91,7 +96,7 @@ function startWorldCombatSubscription() {
   if (worldSubscriptionStarted) return;
   worldSubscriptionStarted = true;
   subscribeWorldCombatEvents((event) => {
-    if (event.reason !== 'death') return;
+    if (serverAuthoritativeKda || event.reason !== 'death') return;
 
     if (event.entityId === LOCAL_WORLD_HERO_ENTITY_ID) {
       if (event.atMs === lastRecordedDeathAtMs) return;
