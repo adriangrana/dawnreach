@@ -1259,6 +1259,12 @@ export default function App({
         return;
       }
       gameRef.current = game;
+      if (pendingLocalAuthoritativeStateRef.current) {
+        game.applyLocalAuthoritativeNetworkState(
+          pendingLocalAuthoritativeStateRef.current as DawnreachRemoteHeroState,
+        );
+        pendingLocalAuthoritativeStateRef.current = null;
+      }
       for (const state of pendingRemoteStatesRef.current.values()) {
         game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
       }
