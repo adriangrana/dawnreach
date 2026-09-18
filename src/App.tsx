@@ -58,7 +58,7 @@ import {
   matchEventTeamFromEntityId,
 } from './game/match/matchEventParticipants';
 import { platformRealtime } from './platform/realtimeClient';
-import type { MatchConnectionGraceEvent, MatchEndedEvent, MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
+import type { MatchConnectionGraceEvent, MatchEndedEvent, MatchRuntimeAbilityCastEvent, MatchRuntimePlayerState, MatchSummary, PlatformRealtimeEvent, PlatformUser } from './platform/types';
 import AbilityButton from './hud/AbilityButton';
 import HeroStatusBar from './hud/HeroStatusBar';
 import InventoryItemSlot from './hud/InventoryItemSlot';
@@ -1151,6 +1151,7 @@ export default function App({
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
   const gameRef = useRef<Awaited<ReturnType<typeof createDawnreachGame>> | null>(null);
   const pendingRemoteStatesRef = useRef(new Map<string, MatchRuntimePlayerState>());
+  const pendingRemoteAbilityCastsRef = useRef<MatchRuntimeAbilityCastEvent[]>([]);
   const pendingLocalAuthoritativeStateRef = useRef<MatchRuntimePlayerState | null>(null);
   const pendingCreepSnapshotRef = useRef<DawnreachCreepNetworkSnapshot | null>(null);
   const pendingCreepDamageRef = useRef<Array<{ creepId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
@@ -1163,6 +1164,7 @@ export default function App({
     authorityMatchIdRef.current = onlineMatch?.id ?? null;
     runtimeAuthorityUserIdRef.current = matchCreepAuthorityUserId(onlineMatch);
     pendingAuthorityUserIdRef.current = undefined;
+    pendingRemoteAbilityCastsRef.current = [];
   }
   const networkSequenceRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
@@ -1468,6 +1470,15 @@ export default function App({
         game.applyRemoteNetworkState(state as DawnreachRemoteHeroState);
       }
       pendingRemoteStatesRef.current.clear();
+      for (const cast of pendingRemoteAbilityCastsRef.current) {
+        game.presentRemoteAbilityCast(
+          cast.sourceUserId,
+          cast.key,
+          toMatchGameTimeMs(performance.now()),
+          cast.facingYaw,
+        );
+      }
+      pendingRemoteAbilityCastsRef.current = [];
       if (pendingCreepSnapshotRef.current) {
         game.applyRemoteCreepNetworkSnapshot(pendingCreepSnapshotRef.current);
         pendingCreepSnapshotRef.current = null;
@@ -1581,6 +1592,29 @@ export default function App({
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+      } else if (
+        type === 'match.runtime.ability.cast'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'sourceUserId' in event
+        && 'key' in event
+      ) {
+        const cast = event as MatchRuntimeAbilityCastEvent;
+        if (cast.sourceUserId === localUser.id) return;
+        const game = gameRef.current;
+        if (game) {
+          game.presentRemoteAbilityCast(
+            cast.sourceUserId,
+            cast.key,
+            toMatchGameTimeMs(performance.now()),
+            cast.facingYaw,
+          );
+        } else {
+          pendingRemoteAbilityCastsRef.current.push(cast);
+          if (pendingRemoteAbilityCastsRef.current.length > 16) {
+            pendingRemoteAbilityCastsRef.current.splice(0, pendingRemoteAbilityCastsRef.current.length - 16);
+          }
+        }
       } else if (
         type === 'match.runtime.hero.kill'
         && 'matchId' in event

@@ -299,6 +299,18 @@ export type MatchRuntimePlayerState = Readonly<{
 }>;
 export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
 export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
+export type MatchRuntimeAbilityCastEvent = Readonly<{
+  type: 'match.runtime.ability.cast';
+  matchId: string;
+  sourceUserId: string;
+  sourceUsername: string;
+  sourceHeroId: string;
+  key: 'Q' | 'W' | 'E' | 'R';
+  rank: number;
+  facingYaw: number;
+  at: number;
+}>;
+
 export type MatchRuntimeCombatEvent = Readonly<{
   type: 'match.runtime.combat';
   matchId: string;
@@ -484,6 +496,7 @@ export type PlatformRealtimeEvent =
   | MatchEndedEvent
   | MatchRuntimeStateEvent
   | MatchRuntimeSnapshotEvent
+  | MatchRuntimeAbilityCastEvent
   | MatchRuntimeCombatEvent
   | MatchRuntimeCreepSnapshotEvent
   | MatchRuntimeCreepDamageEvent

@@ -267,6 +267,24 @@ export function createPlatformServer(options = {}) {
     }
 
     runtimeHeroAbilityStates(active.id).set(userId, next);
+
+    // Ability mechanics stay server-authoritative, but every other client needs the accepted
+    // cast as an ephemeral presentation event so it can play the caster's animation/VFX.
+    // Do not echo to the source: that client already presents its cast immediately.
+    broadcast({
+      type: 'match.runtime.ability.cast',
+      matchId: active.id,
+      sourceUserId: userId,
+      sourceUsername: player.username,
+      sourceHeroId: heroId,
+      key,
+      rank,
+      facingYaw: Number.isFinite(Number(runtime.yaw)) ? Number(runtime.yaw) : 0,
+      at: now,
+    }, active.players
+      .map(candidate => candidate.userId)
+      .filter(candidateUserId => candidateUserId !== userId));
+
     return next;
   }
 

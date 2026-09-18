@@ -66,7 +66,19 @@ type RangeVisual = {
   edgeMaterial: THREE.MeshBasicMaterial;
 };
 
-const installed = new WeakMap<THREE.Scene, AldenAbilityPresentation>();
+export type AldenAbilityPresentationOptions = Readonly<{
+  interactive?: boolean;
+  cameraShake?: boolean;
+}>;
+
+export type AldenAbilityPresentationHandle = Readonly<{
+  setCamera(camera: THREE.Camera): void;
+  update(nowMs: number, applyPose?: boolean): void;
+  presentCast(key: AbilityKey, nowMs: number, facingYaw?: number): void;
+  dispose(): void;
+}>;
+
+const installed = new WeakMap<THREE.Object3D, AldenAbilityPresentation>();
 const active = new Set<AldenAbilityPresentation>();
 
 function material(color: number, opacity: number, additive = true) {
@@ -183,11 +195,12 @@ export function ensureAldenAbilityPresentation(
   hero: GameEntity,
   canvas: HTMLCanvasElement,
   camera: THREE.Camera,
-) {
-  let presentation = installed.get(scene);
+  options: AldenAbilityPresentationOptions = {},
+): AldenAbilityPresentationHandle {
+  let presentation = installed.get(hero.root);
   if (!presentation) {
-    presentation = new AldenAbilityPresentation(scene, registry, hero, canvas, camera);
-    installed.set(scene, presentation);
+    presentation = new AldenAbilityPresentation(scene, registry, hero, canvas, camera, options);
+    installed.set(hero.root, presentation);
     active.add(presentation);
   } else {
     presentation.setCamera(camera);
@@ -200,7 +213,7 @@ export function disposeAldenAbilityPresentations() {
   active.clear();
 }
 
-class AldenAbilityPresentation {
+class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
   private readonly effects: FxEntry[] = [];
   private readonly scheduled: ScheduledFx[] = [];
   private readonly cooldownWasActive = new Map<AbilityKey, boolean>();
@@ -215,13 +228,15 @@ class AldenAbilityPresentation {
   private readonly rangeVisual = buildRangeVisual();
 
   private camera: THREE.Camera;
+  private readonly interactive: boolean;
+  private readonly cameraShakeEnabled: boolean;
   private pointerSeen = false;
   private hoverKey: AbilityKey | null = null;
   private pose: AbilityPose | null = null;
   private disposed = false;
   private cameraShakeUntilMs = 0;
   private cameraShakeAmplitude = 0;
-  private readonly observer: MutationObserver;
+  private readonly observer: MutationObserver | null;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -229,25 +244,32 @@ class AldenAbilityPresentation {
     private readonly hero: GameEntity,
     private readonly canvas: HTMLCanvasElement,
     camera: THREE.Camera,
+    options: AldenAbilityPresentationOptions,
   ) {
     this.camera = camera;
+    this.interactive = options.interactive !== false;
+    this.cameraShakeEnabled = options.cameraShake !== false;
     scene.traverse(object => {
       if (object instanceof THREE.Mesh && object.userData.commandSurface) this.commandSurfaces.push(object);
     });
     this.joints = this.resolveJoints();
-    scene.add(this.rangeVisual.root);
 
-    this.canvas.addEventListener('pointermove', this.onPointerMove, { passive: true });
-    document.addEventListener('mouseover', this.onAbilityMouseOver, true);
-    document.addEventListener('mouseout', this.onAbilityMouseOut, true);
+    if (this.interactive) {
+      scene.add(this.rangeVisual.root);
+      this.canvas.addEventListener('pointermove', this.onPointerMove, { passive: true });
+      document.addEventListener('mouseover', this.onAbilityMouseOver, true);
+      document.addEventListener('mouseout', this.onAbilityMouseOut, true);
 
-    this.observer = new MutationObserver(this.onHudMutation);
-    this.observer.observe(document.body, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['data-cooldown'],
-    });
-    this.captureCooldownState();
+      this.observer = new MutationObserver(this.onHudMutation);
+      this.observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-cooldown'],
+      });
+      this.captureCooldownState();
+    } else {
+      this.observer = null;
+    }
   }
 
   setCamera(camera: THREE.Camera) {
@@ -257,19 +279,21 @@ class AldenAbilityPresentation {
   update(nowMs: number, applyPose = true) {
     if (this.disposed) return;
     this.runScheduled(nowMs);
-    this.updateRangeVisual(nowMs);
+    if (this.interactive) this.updateRangeVisual(nowMs);
     this.updateEffects(nowMs);
     if (applyPose) this.applyPresentationPose(nowMs);
-    this.applyCameraShake(nowMs);
+    if (this.cameraShakeEnabled) this.applyCameraShake(nowMs);
   }
 
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.canvas.removeEventListener('pointermove', this.onPointerMove);
-    document.removeEventListener('mouseover', this.onAbilityMouseOver, true);
-    document.removeEventListener('mouseout', this.onAbilityMouseOut, true);
-    this.observer.disconnect();
+    if (this.interactive) {
+      this.canvas.removeEventListener('pointermove', this.onPointerMove);
+      document.removeEventListener('mouseover', this.onAbilityMouseOver, true);
+      document.removeEventListener('mouseout', this.onAbilityMouseOut, true);
+    }
+    this.observer?.disconnect();
     this.rangeVisual.root.removeFromParent();
     this.disposeObject(this.rangeVisual.root, [
       this.rangeVisual.fillMaterial,
@@ -279,6 +303,7 @@ class AldenAbilityPresentation {
     for (const effect of [...this.effects]) this.disposeEffect(effect);
     this.effects.length = 0;
     this.scheduled.length = 0;
+    installed.delete(this.hero.root);
     active.delete(this);
   }
 
@@ -336,17 +361,20 @@ class AldenAbilityPresentation {
     return document.querySelector<HTMLButtonElement>(`.ability-control[data-ability="${key}"] .ability-slot`);
   }
 
-  private presentCast(key: AbilityKey, nowMs: number) {
+  presentCast(key: AbilityKey, nowMs: number, facingYaw?: number) {
+    if (this.disposed || !this.hero.alive || this.hero.currentHp <= 0) return;
     switch (key) {
-      case 'Q': this.presentQ(nowMs); break;
-      case 'W': this.presentW(nowMs); break;
+      case 'Q': this.presentQ(nowMs, facingYaw); break;
+      case 'W': this.presentW(nowMs, facingYaw); break;
       case 'E': this.presentE(nowMs); break;
       case 'R': this.presentR(nowMs); break;
     }
   }
 
-  private presentQ(nowMs: number) {
-    const direction = this.resolveAimDirection();
+  private presentQ(nowMs: number, facingYaw?: number) {
+    const direction = Number.isFinite(facingYaw)
+      ? new THREE.Vector2(Math.sin(facingYaw as number), Math.cos(facingYaw as number)).normalize()
+      : this.resolveAimDirection();
     const yaw = yawFromDirection(direction);
     const start = this.hero.root.getWorldPosition(new THREE.Vector3());
     const end = start.clone().add(new THREE.Vector3(direction.x * Q_DASH_RANGE, 0, direction.y * Q_DASH_RANGE));
@@ -388,8 +416,8 @@ class AldenAbilityPresentation {
     });
   }
 
-  private presentW(nowMs: number) {
-    const yaw = this.currentFacingYaw();
+  private presentW(nowMs: number, facingYaw?: number) {
+    const yaw = Number.isFinite(facingYaw) ? Number(facingYaw) : this.currentFacingYaw();
     this.pose = { key: 'W', startedAtMs: nowMs, durationMs: ALDEN.w.guardDurationSeconds * 1000 };
 
     const root = new THREE.Group();

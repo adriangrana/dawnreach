@@ -382,6 +382,7 @@ export async function createDawnreachGame(
     player: DawnreachSharedPlayer;
     rig: AldenRig;
     entity: GameEntity;
+    abilityPresentation: ReturnType<typeof ensureAldenAbilityPresentation> | null;
     targetPosition: THREE.Vector3;
     targetYaw: number;
     moving: boolean;
@@ -422,6 +423,7 @@ export async function createDawnreachGame(
       player,
       rig: remoteRig,
       entity,
+      abilityPresentation: null,
       targetPosition: remoteRig.root.position.clone(),
       targetYaw: 0,
       moving: false,
@@ -513,6 +515,17 @@ export async function createDawnreachGame(
   const aldenAbilityPresentation = alden
     ? ensureAldenAbilityPresentation(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
     : null;
+  for (const remote of remoteHeroes.values()) {
+    if (remote.player.heroId !== 'H001') continue;
+    remote.abilityPresentation = ensureAldenAbilityPresentation(
+      scene,
+      entityRegistry,
+      remote.entity,
+      renderer.domElement,
+      camera,
+      { interactive: false, cameraShake: false },
+    );
+  }
   const aldenAbilityEdgePolish = alden
     ? ensureAldenAbilityEdgePolish(scene)
     : null;
@@ -1620,6 +1633,7 @@ export async function createDawnreachGame(
       }
     }
 
+    const abilityFrameNowMs = toMatchGameTimeMs(performance.now());
     for (const remote of remoteHeroes.values()) {
       const root = remote.rig.root;
       // Network packets must never bypass fog-of-war. The vision system owns "revealed";
@@ -1635,6 +1649,7 @@ export async function createDawnreachGame(
         remote.rig.model.rotation.x = -Math.PI * 0.48;
         remote.entity.root.userData.currentHp = remote.entity.currentHp;
         remote.entity.root.userData.maxHp = remote.entity.maxHp;
+        remote.abilityPresentation?.update(abilityFrameNowMs, false);
         continue;
       }
 
@@ -1655,6 +1670,7 @@ export async function createDawnreachGame(
       remote.rig.model.rotation.y += yawDelta * Math.min(1, dt * 12);
       const remoteMoving = remote.moving || distance > 0.035 || Math.abs(dy) > 0.05;
       animateAlden(remote.rig, elapsed, remoteMoving, dt, heroAnimationSpeed);
+      remote.abilityPresentation?.update(abilityFrameNowMs, true);
       remote.entity.root.userData.currentHp = remote.entity.currentHp;
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
     }
@@ -1668,7 +1684,6 @@ export async function createDawnreachGame(
       remote,
       remote.rig.root.position.clone(),
     ] as const);
-    const abilityFrameNowMs = toMatchGameTimeMs(performance.now());
     aldenAbilityRuntime?.update(abilityFrameNowMs);
     aldenAbilityPresentation?.update(abilityFrameNowMs, false);
     aldenAbilityEdgePolish?.update();
@@ -1741,6 +1756,24 @@ export async function createDawnreachGame(
     castLocalAbility(key: AbilityKey, rank: number, nowMs = toMatchGameTimeMs(performance.now())) {
       syncLocalHeroEntityState();
       return triggerAldenWorldAbility(scene, key, rank, nowMs);
+    },
+    presentRemoteAbilityCast(
+      userId: string,
+      key: AbilityKey,
+      nowMs = toMatchGameTimeMs(performance.now()),
+      facingYaw?: number,
+    ) {
+      const remote = remoteHeroes.get(userId);
+      if (!remote?.abilityPresentation || !remote.entity.alive || remote.entity.currentHp <= 0) return false;
+      // Replication must never become a fog-of-war side channel. Allied casts are always
+      // presentable; enemy casts only render while the caster is actually revealed.
+      if (remote.entity.team !== localTeam && !remote.entity.revealed) return false;
+      remote.abilityPresentation.presentCast(
+        key,
+        nowMs,
+        Number.isFinite(facingYaw) ? facingYaw : remote.targetYaw,
+      );
+      return true;
     },
     isCreepNetworkAuthority() {
       return laneCreepSystem.isNetworkAuthority();
@@ -1895,6 +1928,9 @@ export async function createDawnreachGame(
           targetYaw = state.yaw;
           hero.model.rotation.y = state.yaw;
           resetHeroLocomotionPose();
+          // Respawn/reconnect is an explicit camera recenter. A stale pan focus (commonly the
+          // death location) must not pull the camera back after the server moves the hero home.
+          cameraFocus = null;
           cameraAnchor.copy(hero.root.position);
           clearHeroOrdersForLock();
         }
@@ -2055,6 +2091,7 @@ export async function createDawnreachGame(
       minimapHost?.removeEventListener('pointerdown', onMinimapPointerDown);
       window.removeEventListener('keydown', onKeyDown);
       disconnectLaneProgression();
+      for (const remote of remoteHeroes.values()) remote.abilityPresentation?.dispose();
       aldenLineVfxPolish?.dispose();
       aldenAbilityEdgePolish?.dispose();
       aldenAbilityPresentation?.dispose();
