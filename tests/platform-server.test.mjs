@@ -139,6 +139,7 @@ function openWebsocket(port, token) {
       clearTimeout(timeout);
       socket.off('error', onError);
       socket.off('data', onData);
+      socket.on('error', () => {});
       socket.on('data', () => {});
       resolve(socket);
     };
