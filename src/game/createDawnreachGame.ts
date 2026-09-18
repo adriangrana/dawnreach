@@ -283,7 +283,11 @@ export async function createDawnreachGame(
   const heroAnimationSpeed = alden ? heroMoveSpeed / heroPresentationScale : heroMoveSpeed;
 
   hero.root.scale.setScalar(heroPresentationScale);
-  const heroOverlay = addHeroOverlay(hero.root);
+  const heroOverlay = addHeroOverlay(
+    hero.root,
+    1,
+    localSharedPlayer?.username || (sharedPlayers.length > 0 ? localPlayerId : 'Player'),
+  );
   hero.root.position.set(localSpawn.x, HERO_GROUND_OFFSET, localSpawn.z);
   scene.add(hero.root);
 
@@ -1763,7 +1767,10 @@ function addLighting(scene: THREE.Scene) {
   return sun;
 }
 
-function addHeroOverlay(root: THREE.Group, scale = 1) {
+const LOCAL_HERO_OVERHEAD_FRAME_Y = 30;
+const LOCAL_HERO_OVERHEAD_CANVAS_HEIGHT = 116;
+
+function addHeroOverlay(root: THREE.Group, scale = 1, playerName = 'Player') {
   const selection = new THREE.Mesh(
     new THREE.RingGeometry(0.62 * scale, 0.72 * scale, 64),
     new THREE.MeshBasicMaterial({
@@ -1779,7 +1786,7 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
 
   const canvas = document.createElement('canvas');
   canvas.width = 440;
-  canvas.height = 88;
+  canvas.height = LOCAL_HERO_OVERHEAD_CANVAS_HEIGHT;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
@@ -1793,7 +1800,7 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
   const sprite = new THREE.Sprite(material);
   sprite.name = 'hero-status-overlay';
   sprite.scale.set(4.8 * scale, 4.8 * canvas.height / canvas.width * scale, 1);
-  sprite.position.set(0, 5.75 * scale, 0);
+  sprite.position.set(0, 5.91 * scale, 0);
   sprite.renderOrder = 10;
   sprite.visible = false;
   root.add(sprite);
@@ -1820,25 +1827,26 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
           icon.src = iconPath;
         }
       }
-      const values = [hero.heroName, hero.definitionId, hero.level,
+      const values = [playerName, hero.heroName, hero.definitionId, hero.level,
         hero.currentHp, stats.maxHp, hero.currentResource, stats.maxResource];
       if (!dirty && values.every((value, index) => value === lastValues[index])) return;
       lastValues = values;
       dirty = false;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const frame = ctx.createLinearGradient(0, 8, 0, 72);
+      drawLocalPlayerName(ctx, playerName);
+      const frame = ctx.createLinearGradient(0, LOCAL_HERO_OVERHEAD_FRAME_Y, 0, LOCAL_HERO_OVERHEAD_FRAME_Y + 64);
       frame.addColorStop(0, '#fafafa');
       frame.addColorStop(1, '#9caaa7');
       ctx.fillStyle = frame;
       ctx.beginPath();
-      ctx.moveTo(48, 8);
-      ctx.lineTo(436, 8);
-      ctx.lineTo(436, 68);
-      ctx.lineTo(276, 68);
-      ctx.lineTo(canvas.width / 2, 82);
-      ctx.lineTo(164, 68);
-      ctx.lineTo(48, 68);
+      ctx.moveTo(48, LOCAL_HERO_OVERHEAD_FRAME_Y);
+      ctx.lineTo(436, LOCAL_HERO_OVERHEAD_FRAME_Y);
+      ctx.lineTo(436, LOCAL_HERO_OVERHEAD_FRAME_Y + 60);
+      ctx.lineTo(276, LOCAL_HERO_OVERHEAD_FRAME_Y + 60);
+      ctx.lineTo(canvas.width / 2, LOCAL_HERO_OVERHEAD_FRAME_Y + 74);
+      ctx.lineTo(164, LOCAL_HERO_OVERHEAD_FRAME_Y + 60);
+      ctx.lineTo(48, LOCAL_HERO_OVERHEAD_FRAME_Y + 60);
       ctx.closePath();
       ctx.fill();
 
@@ -1849,13 +1857,13 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
         const size = Math.min(80 / icon.naturalWidth, 80 / icon.naturalHeight);
         const width = icon.naturalWidth * size;
         const height = icon.naturalHeight * size;
-        ctx.drawImage(icon, (80 - width) / 2, (80 - height) / 2, width, height);
+        ctx.drawImage(icon, (80 - width) / 2, LOCAL_HERO_OVERHEAD_FRAME_Y + (80 - height) / 2, width, height);
       } else {
         ctx.font = 'bold 38px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(hero.heroName?.charAt(0) ?? '?', 38, 40);
+        ctx.fillText(hero.heroName?.charAt(0) ?? '?', 38, LOCAL_HERO_OVERHEAD_FRAME_Y + 40);
       }
       texture.needsUpdate = true;
     },
@@ -1866,12 +1874,27 @@ function addHeroOverlay(root: THREE.Group, scale = 1) {
   };
 }
 
+function drawLocalPlayerName(ctx: CanvasRenderingContext2D, playerName: string) {
+  const safeName = playerName.trim() || 'Player';
+  ctx.save();
+  ctx.font = '700 22px "Trebuchet MS", "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(2, 5, 7, 0.96)';
+  ctx.lineWidth = 5;
+  ctx.strokeText(safeName, 229, 15, 300);
+  ctx.fillStyle = '#f2ead5';
+  ctx.fillText(safeName, 229, 15, 300);
+  ctx.restore();
+}
+
 function buildLevelLabel(ctx: CanvasRenderingContext2D, level: number) {
   ctx.font = 'bold 38px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#080b09';
-  ctx.fillText(String(level), 406, 40, 50);
+  ctx.fillText(String(level), 406, LOCAL_HERO_OVERHEAD_FRAME_Y + 32, 50);
 }
 
 function resourceFraction(current: number, maximum: number) {
@@ -1881,26 +1904,26 @@ function resourceFraction(current: number, maximum: number) {
 
 function buildManaLabel(ctx: CanvasRenderingContext2D, mana: number, maxMana: number) {
   ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 46, 302, 18);
+  ctx.fillRect(78, LOCAL_HERO_OVERHEAD_FRAME_Y + 38, 302, 18);
   ctx.fillStyle = '#14213a';
-  ctx.fillRect(82, 49, 294, 11);
+  ctx.fillRect(82, LOCAL_HERO_OVERHEAD_FRAME_Y + 41, 294, 11);
   ctx.fillStyle = '#367eff';
-  ctx.fillRect(82, 49, 294 * resourceFraction(mana, maxMana), 11);
+  ctx.fillRect(82, LOCAL_HERO_OVERHEAD_FRAME_Y + 41, 294 * resourceFraction(mana, maxMana), 11);
 }
 
 function buildHeroLabel(ctx: CanvasRenderingContext2D, hp: number, maxHp: number) {
   ctx.fillStyle = '#050805';
-  ctx.fillRect(78, 12, 302, 37);
+  ctx.fillRect(78, LOCAL_HERO_OVERHEAD_FRAME_Y + 4, 302, 37);
   ctx.fillStyle = '#1c2916';
-  ctx.fillRect(82, 16, 294, 29);
-  const health = ctx.createLinearGradient(0, 16, 0, 45);
+  ctx.fillRect(82, LOCAL_HERO_OVERHEAD_FRAME_Y + 8, 294, 29);
+  const health = ctx.createLinearGradient(0, LOCAL_HERO_OVERHEAD_FRAME_Y + 8, 0, LOCAL_HERO_OVERHEAD_FRAME_Y + 37);
   health.addColorStop(0, '#83e844');
   health.addColorStop(1, '#46c526');
   ctx.fillStyle = health;
-  ctx.fillRect(82, 16, 294 * resourceFraction(hp, maxHp), 29);
+  ctx.fillRect(82, LOCAL_HERO_OVERHEAD_FRAME_Y + 8, 294 * resourceFraction(hp, maxHp), 29);
   ctx.fillStyle = 'rgba(5, 30, 4, 0.4)';
   for (let segment = 1; segment < 3; segment++) {
-    ctx.fillRect(82 + 294 * segment / 3, 16, 2, 29);
+    ctx.fillRect(82 + 294 * segment / 3, LOCAL_HERO_OVERHEAD_FRAME_Y + 8, 2, 29);
   }
 }
 
