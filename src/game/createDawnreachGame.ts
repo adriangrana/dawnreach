@@ -1620,7 +1620,12 @@ export async function createDawnreachGame(
         alive: remote.entity.alive,
       });
     },
-    applyLocalNetworkCombat(input: { reason: 'damage' | 'heal'; amount: number; sourceUserId: string }) {
+    applyLocalNetworkCombat(input: {
+      reason: 'damage' | 'heal';
+      amount: number;
+      sourceUserId: string;
+      sourceEntityId?: string;
+    }) {
       const overlay = getHeroState?.() ?? null;
       if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return;
       const maxHp = Math.max(1, overlay.stats.maxHp);
@@ -1647,7 +1652,7 @@ export async function createDawnreachGame(
         currentResource: overlay.hero.currentResource,
         alive: currentHp > 0,
         amount: input.amount,
-        sourceEntityId: `player:${input.sourceUserId}:hero`,
+        sourceEntityId: input.sourceEntityId || `player:${input.sourceUserId}:hero`,
         damageType: 'physical',
         isDirect: true,
         isFromFront: true,
