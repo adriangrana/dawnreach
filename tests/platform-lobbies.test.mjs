@@ -207,3 +207,25 @@ test('custom lobby supports direct spectator join without consuming a team slot'
   assert.equal(watched.spectators[0].userId, watcher.id);
   assert.equal(lobbies.lobbyForUser(watcher.id).id, lobby.id);
 }));
+
+
+test('custom lobby reopens and removes the leaver when Hero Select is cancelled', () => withLobbies(({ store, lobbies }) => {
+  const host = addUser(store, 'CancelHost');
+  const guest = addUser(store, 'CancelGuest');
+  const lobby = lobbies.create(host, 'Cancel launch', 'public');
+  lobbies.join(guest, lobby.code);
+  lobbies.setReady(host.id, true);
+  lobbies.setReady(guest.id, true);
+
+  const match = lobbies.start(host.id);
+  assert.equal(lobbies.lobbyForUser(host.id).status, 'launching');
+
+  lobbies.cancelLaunch(match.id, guest.id);
+
+  const reopened = lobbies.lobbyForUser(host.id);
+  assert.equal(reopened.status, 'open');
+  assert.equal(reopened.matchId, undefined);
+  assert.equal(reopened.players.some(player => player.userId === guest.id), false);
+  assert.equal(reopened.players.every(player => player.ready === false), true);
+  assert.equal(lobbies.lobbyForUser(guest.id), null);
+}));
