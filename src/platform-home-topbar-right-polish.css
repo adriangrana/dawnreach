@@ -315,3 +315,96 @@
     display: none;
   }
 }
+
+
+/* Narrow-window recovery surface for an active match. */
+.dr-active-match-recovery {
+  position: fixed;
+  z-index: 120;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 28px));
+  min-height: 54px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px 8px 12px;
+  border: 1px solid rgba(216, 178, 79, .58);
+  background:
+    linear-gradient(180deg, rgba(29, 25, 15, .97), rgba(8, 15, 19, .97));
+  box-shadow:
+    0 13px 34px rgba(0,0,0,.46),
+    0 0 18px rgba(202, 163, 67, .10),
+    inset 0 1px 0 rgba(255,255,255,.025);
+  color: #d7c788;
+  backdrop-filter: blur(8px);
+}
+
+.dr-active-match-recovery > svg {
+  width: 22px;
+  height: 22px;
+  color: #d6b24f;
+  stroke-width: 1.55;
+}
+
+.dr-active-match-recovery > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.dr-active-match-recovery small {
+  color: #b49a59;
+  font: 800 7px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .13em;
+}
+
+.dr-active-match-recovery strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e4e7e4;
+  font: 700 10px/1.1 "Segoe UI", Arial, sans-serif;
+}
+
+.dr-active-match-recovery button {
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(224, 188, 90, .62);
+  background: linear-gradient(180deg, rgba(121, 91, 30, .74), rgba(62, 45, 16, .86));
+  color: #f1e4b9;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .075em;
+  cursor: pointer;
+}
+
+.dr-active-match-recovery button:hover {
+  border-color: rgba(242, 208, 114, .90);
+  filter: brightness(1.08);
+}
+
+@media (max-width: 820px) {
+  .dr-active-match-recovery {
+    top: 62px;
+    width: calc(100vw - 16px);
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    padding-left: 9px;
+  }
+
+  .dr-active-match-recovery > svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .dr-active-match-recovery strong {
+    font-size: 9px;
+  }
+
+  .dr-active-match-recovery button {
+    padding-inline: 9px;
+    font-size: 7px;
+  }
+}
