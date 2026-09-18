@@ -3014,3 +3014,122 @@
     0 1px 0 rgba(255, 255, 255, .08) !important;
 }
 
+
+
+/* =========================================================
+   HERO SELECT · final readability micro-polish
+   ========================================================= */
+
+/* OVERVIEW: preserve panel size but improve normal viewing legibility. */
+.dr-hero-select-overview nav button {
+  font-size: 9.5px !important;
+}
+
+.dr-hero-select-overview > p {
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  color: #aebfc6 !important;
+}
+
+.dr-hero-select-abilities small {
+  font-size: 8.5px !important;
+  color: #a9bac1 !important;
+}
+
+.dr-hero-select-abilities span {
+  font-size: 7.25px !important;
+  color: #8197a1 !important;
+}
+
+.dr-hero-select-ratings label > span {
+  font-size: 8.5px !important;
+  color: #8ea3ac !important;
+}
+
+/* HEADER CENTER: slightly stronger contrast without changing the composition. */
+.dr-hero-select-phase strong {
+  color: #f0e8d5 !important;
+  font-size: 21px !important;
+  text-shadow:
+    0 2px 8px rgba(0,0,0,.68),
+    0 0 10px rgba(225,190,100,.10) !important;
+}
+
+.dr-hero-select-phase small {
+  color: #d7d2c4 !important;
+  text-shadow:
+    0 2px 7px rgba(0,0,0,.72),
+    0 0 8px rgba(0,0,0,.34) !important;
+}
+
+.dr-hero-select-phase time {
+  color: #f3d88d !important;
+  text-shadow:
+    0 2px 9px rgba(0,0,0,.72),
+    0 0 14px rgba(231,190,77,.17) !important;
+}
+
+/* TEAM RAILS: only readability polish; dimensions remain 5v5-safe. */
+.dr-hero-select-team > header span {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.dr-hero-select-team > header strong {
+  font-size: 9px !important;
+  color: #a4b4bb !important;
+}
+
+.dr-hero-select-player-copy strong {
+  font-size: 12.5px !important;
+}
+
+.dr-hero-select-player-copy > span {
+  font-size: 9.25px !important;
+}
+
+.dr-hero-select-player-copy > small {
+  font-size: 9px !important;
+}
+
+@media (max-width: 1500px) {
+  .dr-hero-select-overview > p {
+    font-size: 11px !important;
+  }
+
+  .dr-hero-select-abilities small {
+    font-size: 7.5px !important;
+  }
+
+  .dr-hero-select-abilities span {
+    font-size: 6.5px !important;
+  }
+
+  .dr-hero-select-phase strong {
+    font-size: 19px !important;
+  }
+
+  .dr-hero-select-player-copy strong {
+    font-size: 11px !important;
+  }
+
+  .dr-hero-select-player-copy > span,
+  .dr-hero-select-player-copy > small {
+    font-size: 8.25px !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .dr-hero-select-overview > p {
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .dr-hero-select-phase strong {
+    font-size: 17px !important;
+  }
+
+  .dr-hero-select-phase small {
+    font-size: 7px !important;
+  }
+}
