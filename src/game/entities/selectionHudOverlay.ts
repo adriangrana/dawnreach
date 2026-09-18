@@ -582,7 +582,14 @@ export function createSelectionHudBridge(localHero: GameEntity | null): Selectio
   const onKeyDownCapture = (event: KeyboardEvent) => {
     if (selected === localHero && localHero?.alive) return;
     const code = event.code;
-    if (code !== 'KeyA' && code !== 'KeyQ' && code !== 'KeyW' && code !== 'KeyE' && code !== 'KeyR') return;
+    const blocked = code === 'KeyA'
+      || code === 'KeyQ'
+      || code === 'KeyW'
+      || code === 'KeyE'
+      || code === 'KeyR'
+      || code === 'KeyT'
+      || /^Digit[1-6]$/.test(code);
+    if (!blocked) return;
     event.preventDefault();
     event.stopImmediatePropagation();
   };
