@@ -122,7 +122,9 @@ export function MatchLoadingScreen({
     let disposed = false;
     const current = Number(match.loadingProgress?.[me.id] || 0);
     const report = (progress: number) => {
-      if (!disposed && progress > current) platformRealtime.send('match.loading.progress', { progress });
+      if (!disposed && (progress > current || progress === 100)) {
+        platformRealtime.send('match.loading.progress', { progress });
+      }
     };
 
     const prepare = async () => {
