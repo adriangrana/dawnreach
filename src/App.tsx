@@ -758,9 +758,22 @@ export default function App({
   }, [runtime]);
 
   useEffect(() => subscribeWorldCombatEvents((event) => {
+    if (onlineMatch && localUser && event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) {
+      const remoteMatch = /^player:(.+):hero$/.exec(event.entityId);
+      const amount = Number(event.amount || 0);
+      if (remoteMatch && event.sourceEntityId === LOCAL_WORLD_HERO_ENTITY_ID && amount > 0) {
+        platformRealtime.send('match.runtime.combat', {
+          matchId: onlineMatch.id,
+          targetUserId: remoteMatch[1],
+          reason: event.reason === 'heal' ? 'heal' : 'damage',
+          amount,
+        });
+      }
+      return;
+    }
     if (event.entityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
     dispatch({ type: 'world-hero-sync', event: { ...event, atMs: toMatchGameTimeMs(event.atMs) } });
-  }), []);
+  }), [onlineMatch?.id, localUser?.id]);
 
   useEffect(() => subscribeWorldAttackEvents((event) => {
     if (event.attackerId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
@@ -926,6 +939,21 @@ export default function App({
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+      } else if (
+        type === 'match.runtime.combat'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'targetUserId' in event
+        && event.targetUserId === localUser.id
+        && 'sourceUserId' in event
+        && event.sourceUserId !== localUser.id
+        && 'amount' in event
+      ) {
+        gameRef.current?.applyLocalNetworkCombat({
+          reason: 'reason' in event && event.reason === 'heal' ? 'heal' : 'damage',
+          amount: Number(event.amount || 0),
+          sourceUserId: String(event.sourceUserId || ''),
+        });
       }
     });
 
