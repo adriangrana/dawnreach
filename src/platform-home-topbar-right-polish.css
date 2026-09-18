@@ -234,3 +234,84 @@
   .dr-home-top-stat svg { grid-row: 1 !important; }
   .dr-home-account-copy { min-width: 0 !important; }
 }
+
+
+/* Active match recovery: compact but impossible to miss. */
+.dr-home-return-match {
+  height: 42px;
+  margin-right: 10px;
+  padding: 0 12px 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(215, 177, 77, .48);
+  background:
+    linear-gradient(180deg, rgba(79, 61, 21, .48), rgba(28, 23, 12, .28));
+  color: #e7d79f;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 0 13px rgba(206, 167, 66, .08);
+}
+
+.dr-home-return-match:hover {
+  border-color: rgba(235, 199, 101, .78);
+  background:
+    linear-gradient(180deg, rgba(105, 79, 24, .60), rgba(37, 29, 13, .36));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 0 16px rgba(218, 176, 71, .15);
+}
+
+.dr-home-return-match > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  stroke-width: 1.55;
+  color: #d8b554;
+}
+
+.dr-home-return-match > span {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.dr-home-return-match small {
+  color: #8da0a8;
+  font: 700 6px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .11em;
+}
+
+.dr-home-return-match strong {
+  color: #efe3bd;
+  font: 800 8px/1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .075em;
+}
+
+@media (max-width: 1500px) {
+  .dr-home-return-match {
+    margin-right: 6px;
+    padding-inline: 8px;
+  }
+
+  .dr-home-return-match small {
+    display: none;
+  }
+
+  .dr-home-return-match strong {
+    font-size: 7px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .dr-home-return-match {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .dr-home-return-match > span {
+    display: none;
+  }
+}
