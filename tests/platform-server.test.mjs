@@ -386,10 +386,10 @@ test('shared player combat updates the target runtime snapshot', async () => {
 });
 
 
-test('lethal hero prediction waits for victim resolution and respects mitigation', async () => {
+test('server owns hero mitigation death and rejects stale client resurrection', async () => {
   await withServer(async ({ platform }) => {
     const match = {
-      id: 'runtime-combat-resolve',
+      id: 'runtime-combat-canonical',
       mode: 'normal',
       source: 'matchmaking',
       rated: false,
@@ -409,56 +409,73 @@ test('lethal hero prediction waits for victim resolution and respects mitigation
     };
     platform.store.addMatch(match);
     platform.reportMatchRuntimeState('resolve-blue', {
-      matchId: match.id, sequence: 1, position: { x: 0, y: 5, z: 0 }, yaw: 0,
-      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+      matchId: match.id, sequence: 1, position: { x: 0, y: 5, z: 0 }, yaw: Math.PI / 2,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
     });
     platform.reportMatchRuntimeState('resolve-red', {
-      matchId: match.id, sequence: 1, position: { x: 2, y: 5, z: 0 }, yaw: 0,
-      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
+      matchId: match.id, sequence: 1, position: { x: 2, y: 5, z: 0 }, yaw: -Math.PI / 2,
+      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 1, E: 0, R: 0 },
     });
 
-    const predictedLethal = platform.reportMatchRuntimeCombat('resolve-blue', {
+    platform.reportMatchRuntimeAbilityCast('resolve-red', {
+      matchId: match.id,
+      key: 'W',
+      rank: 1,
+    });
+
+    const guarded = platform.reportMatchRuntimeCombat('resolve-blue', {
       matchId: match.id,
       targetUserId: 'resolve-red',
       reason: 'damage',
-      amount: 100,
+      amount: 80,
     });
-    assert.equal(predictedLethal.lethal, true);
-    assert.ok(predictedLethal.combatId);
+    assert.equal(guarded.lethal, false);
+    assert.equal(guarded.resolvedAmount, 48);
 
-    platform.reportMatchRuntimeState('resolve-red', {
-      matchId: match.id, sequence: 2, position: { x: 2, y: 5, z: 0 }, yaw: 0,
-      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300, level: 1, alive: true,
-    });
     let red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
-    assert.equal(red.currentHp, 50);
+    assert.equal(red.currentHp, 2);
     assert.equal(red.alive, true);
     assert.equal(red.deaths, 0);
 
+    // A stale owner packet authored before the hit cannot put HP back.
+    platform.reportMatchRuntimeState('resolve-red', {
+      matchId: match.id, sequence: 2, position: { x: 2, y: 5, z: 0 }, yaw: -Math.PI / 2,
+      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 1, E: 0, R: 0 },
+    });
+    red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
+    assert.equal(red.currentHp, 2);
+
+    // Legacy victim-resolution packets are accepted as compatibility no-ops only.
     platform.reportMatchRuntimeCombatResolve('resolve-red', {
       matchId: match.id,
-      combatId: predictedLethal.combatId,
+      combatId: guarded.combatId,
       currentHp: 25,
       currentResource: 300,
       alive: true,
     });
     red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
-    assert.equal(red.currentHp, 25);
-    assert.equal(red.alive, true);
-    assert.equal(red.deaths, 0);
+    assert.equal(red.currentHp, 2);
 
-    const confirmedLethal = platform.reportMatchRuntimeCombat('resolve-blue', {
+    const lethal = platform.reportMatchRuntimeCombat('resolve-blue', {
       matchId: match.id,
       targetUserId: 'resolve-red',
       reason: 'damage',
       amount: 100,
     });
-    platform.reportMatchRuntimeCombatResolve('resolve-red', {
-      matchId: match.id,
-      combatId: confirmedLethal.combatId,
-      currentHp: 0,
-      currentResource: 300,
-      alive: false,
+    assert.equal(lethal.lethal, true);
+
+    red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
+    assert.equal(red.currentHp, 0);
+    assert.equal(red.alive, false);
+    assert.equal(red.deaths, 1);
+
+    platform.reportMatchRuntimeState('resolve-red', {
+      matchId: match.id, sequence: 3, position: { x: 2, y: 5, z: 0 }, yaw: -Math.PI / 2,
+      moving: false, currentHp: 50, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 1, E: 0, R: 0 },
     });
     red = platform.runtimeSnapshot(match.id).find(state => state.userId === 'resolve-red');
     assert.equal(red.currentHp, 0);
