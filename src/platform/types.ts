@@ -342,6 +342,33 @@ export type MatchRuntimeCreepDamageEvent = Readonly<{
   at: number;
 }>;
 
+export type MatchRuntimeStructureState = Readonly<{
+  id: string;
+  team: Team;
+  kind: 'tower' | 'building';
+  currentHp: number;
+  maxHp: number;
+  alive: boolean;
+}>;
+
+export type MatchRuntimeStructureSnapshotEvent = Readonly<{
+  type: 'match.runtime.structures';
+  matchId: string;
+  authorityUserId: string;
+  sequence: number;
+  sentAt: number;
+  structures: readonly MatchRuntimeStructureState[];
+}>;
+
+export type MatchRuntimeStructureDamageEvent = Readonly<{
+  type: 'match.runtime.structure.damage';
+  matchId: string;
+  sourceUserId: string;
+  structureId: string;
+  amount: number;
+  at: number;
+}>;
+
 export type MatchRuntimePauseStateEvent = Readonly<{
   type: 'match.runtime.pause';
   matchId: string;
@@ -425,6 +452,8 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeCombatEvent
   | MatchRuntimeCreepSnapshotEvent
   | MatchRuntimeCreepDamageEvent
+  | MatchRuntimeStructureSnapshotEvent
+  | MatchRuntimeStructureDamageEvent
   | MatchRuntimePauseStateEvent
   | MatchRuntimeHeroKillEvent
   | MatchChatMessageEvent
