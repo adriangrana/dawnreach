@@ -31,6 +31,10 @@ export class RealtimePeer {
     this.onClose = null;
     this.onMessage = null;
     socket.on('data', chunk => this.#consume(chunk));
+    // A remote peer can half-close the TCP stream first (`end`) and leave this side
+    // writable for a while. Treat EOF as a disconnect immediately so matchmaking
+    // connectivity/grace timers never keep a ghost player online.
+    socket.on('end', () => this.#finish());
     socket.on('close', () => this.#finish());
     socket.on('error', () => this.#finish());
   }

@@ -375,6 +375,10 @@ test('all explicit abandonments void a rated match instead of awarding a ghost w
     // Disconnect the survivor before the first player explicitly leaves so no offline
     // participant is awarded a win. The orphaned team then gets the normal grace window.
     redSocket.destroy();
+    // TCP close notification is asynchronous. Give the server one event-loop turn to
+    // observe the remote EOF before evaluating the explicit abandonment; otherwise the
+    // test asks it to know about a disconnect that has not reached its socket yet.
+    await wait(10);
     platform.abandonActiveMatch(blue.body.user.id);
     await wait(80);
 
