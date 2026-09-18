@@ -184,6 +184,9 @@ export class HeroSelectManager {
     session.match.heroSelections = selections;
     this.emit(session, 'hero_select.complete');
     this.options.onComplete(session.match, selections);
+
+    this.sessions.delete(session.matchId);
+    for (const participant of session.match.players) this.byUser.delete(participant.userId);
   }
 
   snapshotForUser(userId) {
