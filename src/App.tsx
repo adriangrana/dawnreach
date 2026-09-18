@@ -1132,6 +1132,7 @@ export default function App({
     disconnectedPlayers: [],
   });
   const [matchEnd, setMatchEnd] = useState<MatchEndPresentation | null>(null);
+  const matchEndedRef = useRef(false);
   useEffect(() => {
     setConnectionState({
       mode: 'cleared',
@@ -1141,6 +1142,10 @@ export default function App({
       disconnectedPlayers: [],
     });
     setMatchEnd(null);
+    if (matchEndedRef.current) {
+      matchEndedRef.current = false;
+      applyAuthoritativeMatchPause(false, null, performance.now());
+    }
   }, [onlineMatch?.id]);
 
   const overlayStateRef = useRef<ReturnType<typeof getOverlayState> | null>(null);
@@ -1515,6 +1520,29 @@ export default function App({
     const unsubscribe = platformRealtime.subscribe((event: PlatformRealtimeEvent) => {
       const type = typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
       if (
+        type === 'match.ended'
+        && 'match' in event
+        && event.match?.id === onlineMatch.id
+      ) {
+        const winnerTeam = 'winnerTeam' in event && (event.winnerTeam === 'blue' || event.winnerTeam === 'red')
+          ? event.winnerTeam
+          : null;
+        matchEndedRef.current = true;
+        setMatchEnd({
+          winnerTeam,
+          reason: 'reason' in event ? String(event.reason || 'completed') : 'completed',
+          voided: Boolean('voided' in event && event.voided),
+        });
+        setConnectionState({
+          mode: 'cleared',
+          team: null,
+          deadlineAt: null,
+          disconnectedUserIds: [],
+          disconnectedPlayers: [],
+        });
+        applyAuthoritativeMatchPause(true, null, performance.now());
+        gameRef.current?.setNetworkAuthority(false);
+      } else if (
         type === 'match.connection.grace'
         && 'matchId' in event
         && event.matchId === onlineMatch.id
@@ -1708,6 +1736,7 @@ export default function App({
     platformRealtime.send('match.runtime.snapshot', { matchId: onlineMatch.id });
 
     const publish = () => {
+      if (matchEndedRef.current) return;
       const game = gameRef.current;
       if (!game) return;
       const state = game.getLocalNetworkState();
@@ -1807,8 +1836,14 @@ export default function App({
         nowMs={runtime.nowMs}
         respawnReadyAtMs={runtime.respawnReadyAtMs}
       />
+      <MatchEndedOverlay
+        result={matchEnd}
+        localTeam={onlineMatch && localUser
+          ? (onlineMatch.players.find(player => player.userId === localUser.id)?.team ?? null)
+          : null}
+      />
       <ShopOverlay
-        open={runtime.shopOpen}
+        open={runtime.shopOpen && !matchEnd}
         gold={localHero.gold}
         inventoryFull={inventoryFull}
         onClose={() => dispatch({ type: 'shop-close', nowMs: performance.now() })}
