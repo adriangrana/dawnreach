@@ -510,10 +510,24 @@ export async function createDawnreachGame(
   // this exact scene/registry/hero; otherwise HUD casts only start cooldowns and never reach
   // Alden's animation, FX, damage, CC or healing implementation.
   const aldenAbilityRuntime = alden
-    ? ensureAldenWorldAbilityRuntime(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
+    ? ensureAldenWorldAbilityRuntime(
+      scene,
+      entityRegistry,
+      localHeroEntity,
+      renderer.domElement,
+      camera,
+      { observeHudCasts: false },
+    )
     : null;
   const aldenAbilityPresentation = alden
-    ? ensureAldenAbilityPresentation(scene, entityRegistry, localHeroEntity, renderer.domElement, camera)
+    ? ensureAldenAbilityPresentation(
+      scene,
+      entityRegistry,
+      localHeroEntity,
+      renderer.domElement,
+      camera,
+      { observeHudCasts: false },
+    )
     : null;
   for (const remote of remoteHeroes.values()) {
     if (remote.player.heroId !== 'H001') continue;
@@ -523,7 +537,12 @@ export async function createDawnreachGame(
       remote.entity,
       renderer.domElement,
       camera,
-      { interactive: false, cameraShake: false },
+      {
+        interactive: false,
+        cameraShake: false,
+        observeHudCasts: false,
+        targetImpacts: false,
+      },
     );
   }
   const aldenAbilityEdgePolish = alden
@@ -1667,10 +1686,14 @@ export async function createDawnreachGame(
         Math.sin(remote.targetYaw - remote.rig.model.rotation.y),
         Math.cos(remote.targetYaw - remote.rig.model.rotation.y),
       );
-      remote.rig.model.rotation.y += yawDelta * Math.min(1, dt * 12);
+      const renderedYaw = remote.rig.model.rotation.y + yawDelta * Math.min(1, dt * 12);
+      remote.rig.model.rotation.y = renderedYaw;
       const remoteMoving = remote.moving || distance > 0.035 || Math.abs(dy) > 0.05;
       animateAlden(remote.rig, elapsed, remoteMoving, dt, heroAnimationSpeed);
       remote.abilityPresentation?.update(abilityFrameNowMs, true);
+      // Network facing is persistent world state. Ability/locomotion presentation may bend
+      // joints, but it must never own the remote model yaw after this frame.
+      remote.rig.model.rotation.y = renderedYaw;
       remote.entity.root.userData.currentHp = remote.entity.currentHp;
       remote.entity.root.userData.maxHp = remote.entity.maxHp;
     }
@@ -1755,7 +1778,9 @@ export async function createDawnreachGame(
     },
     castLocalAbility(key: AbilityKey, rank: number, nowMs = toMatchGameTimeMs(performance.now())) {
       syncLocalHeroEntityState();
-      return triggerAldenWorldAbility(scene, key, rank, nowMs);
+      const cast = triggerAldenWorldAbility(scene, key, rank, nowMs);
+      if (cast) aldenAbilityPresentation?.presentCast(key, nowMs);
+      return cast;
     },
     presentRemoteAbilityCast(
       userId: string,

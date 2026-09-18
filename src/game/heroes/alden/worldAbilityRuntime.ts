@@ -97,6 +97,10 @@ type AbilityJoints = {
   wrist: THREE.Object3D | null;
 };
 
+export type AldenWorldAbilityRuntimeOptions = Readonly<{
+  observeHudCasts?: boolean;
+}>;
+
 export type AldenWorldAbilityRuntimeHandle = Readonly<{
   update(nowMs: number): void;
   castAbility(key: AbilityKey, rank: number, nowMs: number): void;
@@ -115,10 +119,11 @@ export function ensureAldenWorldAbilityRuntime(
   hero: GameEntity,
   canvas: HTMLCanvasElement,
   camera: THREE.Camera,
+  options: AldenWorldAbilityRuntimeOptions = {},
 ): AldenWorldAbilityRuntimeHandle {
   let runtime = installedScenes.get(scene);
   if (!runtime) {
-    runtime = new AldenWorldRuntime(scene, registry, hero, canvas, camera);
+    runtime = new AldenWorldRuntime(scene, registry, hero, canvas, camera, options);
     installedScenes.set(scene, runtime);
     activeRuntimes.add(runtime);
   } else {
@@ -186,7 +191,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
   private dash: DashState | null = null;
   private animation: AbilityAnimation | null = null;
 
-  private readonly observer: MutationObserver;
+  private readonly observer: MutationObserver | null;
   private readonly disposeAttackSubscription: () => void;
   private readonly disposeAttackGuard: () => void;
   private readonly disposeCombatGuard: () => void;
@@ -197,6 +202,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     private readonly hero: GameEntity,
     private readonly canvas: HTMLCanvasElement,
     camera: THREE.Camera,
+    options: AldenWorldAbilityRuntimeOptions,
   ) {
     this.camera = camera;
     scene.traverse(object => {
@@ -207,13 +213,17 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     this.hero.root.getWorldPosition(this.lastHeroPosition);
     this.canvas.addEventListener('pointermove', this.onPointerMove, { passive: true });
 
-    this.observer = new MutationObserver(this.onHudMutation);
-    this.observer.observe(document.body, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['data-cooldown'],
-    });
-    this.captureCurrentCooldownStates();
+    if (options.observeHudCasts !== false) {
+      this.observer = new MutationObserver(this.onHudMutation);
+      this.observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-cooldown'],
+      });
+      this.captureCurrentCooldownStates();
+    } else {
+      this.observer = null;
+    }
 
     this.disposeAttackSubscription = subscribeWorldAttackEvents(this.onWorldAttack);
     this.disposeAttackGuard = registerWorldAttackEventGuard(
@@ -234,7 +244,7 @@ class AldenWorldRuntime implements AldenWorldAbilityRuntimeHandle {
     if (this.disposed) return;
     this.disposed = true;
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
-    this.observer.disconnect();
+    this.observer?.disconnect();
     this.disposeAttackSubscription();
     this.disposeAttackGuard();
     this.disposeCombatGuard();

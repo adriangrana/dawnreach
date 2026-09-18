@@ -69,6 +69,8 @@ type RangeVisual = {
 export type AldenAbilityPresentationOptions = Readonly<{
   interactive?: boolean;
   cameraShake?: boolean;
+  observeHudCasts?: boolean;
+  targetImpacts?: boolean;
 }>;
 
 export type AldenAbilityPresentationHandle = Readonly<{
@@ -230,6 +232,9 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
   private camera: THREE.Camera;
   private readonly interactive: boolean;
   private readonly cameraShakeEnabled: boolean;
+  private readonly observeHudCasts: boolean;
+  private readonly targetImpactsEnabled: boolean;
+  private readonly lastPresentedAtMs = new Map<AbilityKey, number>();
   private pointerSeen = false;
   private hoverKey: AbilityKey | null = null;
   private pose: AbilityPose | null = null;
@@ -249,6 +254,8 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
     this.camera = camera;
     this.interactive = options.interactive !== false;
     this.cameraShakeEnabled = options.cameraShake !== false;
+    this.observeHudCasts = options.observeHudCasts !== false;
+    this.targetImpactsEnabled = options.targetImpacts !== false;
     scene.traverse(object => {
       if (object instanceof THREE.Mesh && object.userData.commandSurface) this.commandSurfaces.push(object);
     });
@@ -260,13 +267,17 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
       document.addEventListener('mouseover', this.onAbilityMouseOver, true);
       document.addEventListener('mouseout', this.onAbilityMouseOut, true);
 
-      this.observer = new MutationObserver(this.onHudMutation);
-      this.observer.observe(document.body, {
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['data-cooldown'],
-      });
-      this.captureCooldownState();
+      if (this.observeHudCasts) {
+        this.observer = new MutationObserver(this.onHudMutation);
+        this.observer.observe(document.body, {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['data-cooldown'],
+        });
+        this.captureCooldownState();
+      } else {
+        this.observer = null;
+      }
     } else {
       this.observer = null;
     }
@@ -363,6 +374,9 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
 
   presentCast(key: AbilityKey, nowMs: number, facingYaw?: number) {
     if (this.disposed || !this.hero.alive || this.hero.currentHp <= 0) return;
+    const previous = this.lastPresentedAtMs.get(key) ?? -Infinity;
+    if (nowMs - previous < 120) return;
+    this.lastPresentedAtMs.set(key, nowMs);
     switch (key) {
       case 'Q': this.presentQ(nowMs, facingYaw); break;
       case 'W': this.presentW(nowMs, facingYaw); break;
@@ -408,8 +422,10 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
         const heroWorld = this.hero.root.getWorldPosition(new THREE.Vector3());
         this.spawnSlashArc(heroWorld, yaw, Q_CLEAVE_RANGE, BLUE, GOLD_BRIGHT, 430, nowMs + ALDEN.q.castTimeSeconds * 1000);
         this.spawnShockwave(heroWorld, Q_CLEAVE_RANGE * 0.72, BLUE_GLOW, 360, 0.48);
-        for (const target of this.findEnemiesInCone(Q_CLEAVE_RANGE, ALDEN.q.cleaveAngleDegrees, direction)) {
-          this.spawnTargetImpact(target, BLUE_BRIGHT, GOLD, 420);
+        if (this.targetImpactsEnabled) {
+          for (const target of this.findEnemiesInCone(Q_CLEAVE_RANGE, ALDEN.q.cleaveAngleDegrees, direction)) {
+            this.spawnTargetImpact(target, BLUE_BRIGHT, GOLD, 420);
+          }
         }
         this.kickCameraShake(0.055, 150);
       },
@@ -487,7 +503,9 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
 
     this.spawnSparks(center, new THREE.Vector2(1, 0), GOLD_BRIGHT, 18, 520, nowMs, 2.0, true);
     this.spawnShockwave(center, E_RADIUS, GOLD, 500, 0.66);
-    for (const target of this.findEnemiesInRadius(E_RADIUS)) this.spawnTargetImpact(target, GOLD_BRIGHT, BLUE, 430);
+    if (this.targetImpactsEnabled) {
+      for (const target of this.findEnemiesInRadius(E_RADIUS)) this.spawnTargetImpact(target, GOLD_BRIGHT, BLUE, 430);
+    }
     this.kickCameraShake(0.035, 120);
   }
 
@@ -526,7 +544,9 @@ class AldenAbilityPresentation implements AldenAbilityPresentationHandle {
       run: () => {
         const center = this.hero.root.getWorldPosition(new THREE.Vector3());
         this.spawnJudgementImpact(center, nowMs + castMs);
-        for (const target of this.findEnemiesInRadius(R_RADIUS)) this.spawnTargetImpact(target, JUDGEMENT_GOLD, GOLD_BRIGHT, 620);
+        if (this.targetImpactsEnabled) {
+          for (const target of this.findEnemiesInRadius(R_RADIUS)) this.spawnTargetImpact(target, JUDGEMENT_GOLD, GOLD_BRIGHT, 620);
+        }
         this.spawnMajestyAura(nowMs + castMs);
         this.kickCameraShake(0.11, 260);
       },

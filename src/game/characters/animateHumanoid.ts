@@ -33,6 +33,9 @@ export function animateHumanoid(rig: HumanoidRig, elapsed: number, moving: boole
   animateLeg(rig.leftLeg, rig.leftShin, rig.leftFoot, (cycle + 0.5) % 1, weight);
   animateArm(rig.rightArm, rig.rightForearm, phase, weight, -1);
   animateArm(rig.leftArm, rig.leftForearm, phase + Math.PI, weight, 1);
+  // Ability presentation can add a transient pelvis pitch after locomotion. Locomotion itself
+  // does not author this axis, so reset it every frame to prevent additive pose residue.
+  rig.pelvis.rotation.x = 0;
   rig.pelvis.rotation.y = Math.cos(phase) * THREE.MathUtils.degToRad(4) * weight * rig.waistMotionScale;
   rig.pelvis.rotation.z = -sampleAngle(supportTiltKeys, cycle) * weight * rig.waistMotionScale;
   const supportTransfer = -Math.sin(phase) * weight;
