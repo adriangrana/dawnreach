@@ -1259,8 +1259,12 @@ class LaneCreepManager {
     // flow around a congested frontline instead of walking in place.
     if (bestProgress < Math.max(CREEP_MOVE_PROGRESS_EPSILON, travel * 0.06)) {
       const preferred = creep.avoidanceSide;
+      const avoidanceSigns: readonly (-1 | 1)[] = [
+        preferred,
+        preferred === 1 ? -1 : 1,
+      ];
       for (const magnitude of CREEP_AVOIDANCE_ANGLES) {
-        for (const sign of [preferred, -preferred] as const) {
+        for (const sign of avoidanceSigns) {
           const angle = magnitude * sign;
           const cos = Math.cos(angle);
           const sin = Math.sin(angle);
