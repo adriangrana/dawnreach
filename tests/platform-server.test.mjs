@@ -305,9 +305,12 @@ test('abandoning the last player on a team awards a connected surviving team', a
     assert.equal(ended.endReason, 'team_abandonment');
     assert.equal(ended.winnerTeam, 'red');
     assert.deepEqual(ended.abandonedUserIds, [blue.body.user.id]);
-    assert.equal(ended.postMatchReport?.version, 2);
+    assert.equal(ended.postMatchReport?.version, 3);
     assert.equal(ended.postMatchReport?.players?.length, 2);
     assert.equal(ended.postMatchReport?.finalStates?.length, 2);
+    assert.ok(ended.postMatchReport?.graphSamples?.length >= 2);
+    assert.equal(ended.postMatchReport?.timeline?.[0]?.type, 'match_start');
+    assert.equal(ended.postMatchReport?.timeline?.at(-1)?.type, 'match_end');
     const persistedBlue = ended.postMatchReport.players.find(player => player.userId === blue.body.user.id);
     assert.equal(persistedBlue.heroLevel, 3);
     assert.equal(persistedBlue.creepKills, 0);
@@ -1234,7 +1237,7 @@ test('destroying the enemy throne finishes and persists the post-match report', 
     assert.equal(ended.status, 'completed');
     assert.equal(ended.winnerTeam, 'blue');
     assert.equal(ended.endReason, 'throne_destroyed');
-    assert.equal(ended.postMatchReport?.version, 2);
+    assert.equal(ended.postMatchReport?.version, 3);
     assert.equal(ended.postMatchReport?.players?.length, 2);
     assert.equal(ended.postMatchReport?.finalStates?.length, 2);
     const blueResult = ended.postMatchReport.players.find(player => player.userId === 'throne-blue');
@@ -1242,6 +1245,10 @@ test('destroying the enemy throne finishes and persists the post-match report', 
     assert.equal(blueResult.towerDamage, 50);
     assert.equal(blueResult.towersDestroyed, 1);
     assert.equal(blueResult.buildingDamage, 100);
+    assert.ok(ended.postMatchReport?.graphSamples?.some(sample => sample.userId === 'throne-blue'));
+    assert.ok(ended.postMatchReport?.timeline?.some(event => event.type === 'tower_destroyed' && event.structureId === 'red-mid-1-tower'));
+    assert.ok(ended.postMatchReport?.timeline?.some(event => event.type === 'building_destroyed' && event.structureId === 'red-throne'));
+    assert.equal(ended.postMatchReport?.timeline?.at(-1)?.type, 'match_end');
     assert.equal(ended.postMatchReport?.structures?.find(structure => structure.id === 'red-throne')?.alive, false);
   });
 });

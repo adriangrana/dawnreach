@@ -32,6 +32,8 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeSpawnPositions = new Map();
   const matchRuntimeAuthorityUsers = new Map();
   const matchRuntimeResultStats = new Map();
+  const matchRuntimeGraphSamples = new Map();
+  const matchRuntimeTimelineEvents = new Map();
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
   const HERO_NAMES = Object.freeze({ H001: 'Alden' });
@@ -173,16 +175,112 @@ export function createPlatformServer(options = {}) {
     return stats;
   }
 
+  function graphSamplesRoom(matchId) {
+    let room = matchRuntimeGraphSamples.get(matchId);
+    if (!room) {
+      room = new Map();
+      matchRuntimeGraphSamples.set(matchId, room);
+    }
+    return room;
+  }
+
+  function recordGraphSample(match, state, atMs = null) {
+    if (!match || !state) return;
+    const elapsedMs = atMs === null
+      ? runtimeMatchElapsedMs(match, Date.now())
+      : Math.max(0, Number(atMs) || 0);
+    const bucketMs = atMs === null ? Math.floor(elapsedMs / 10_000) * 10_000 : elapsedMs;
+    const room = graphSamplesRoom(match.id);
+    const samples = room.get(state.userId) || [];
+    const sample = {
+      userId: state.userId,
+      team: state.team,
+      atMs: bucketMs,
+      level: Math.max(1, Number(state.level || 1)),
+      gold: Math.max(0, Number(state.gold || 0)),
+      experience: Math.max(0, Number(state.experience || 0)),
+      heroDamage: Math.max(0, Number(state.damageDealt || 0)),
+      heroDamageTaken: Math.max(0, Number(state.damageTaken || 0)),
+      healing: Math.max(0, Number(state.healingDone || 0)),
+      creepKills: Math.max(0, Number(state.lastHits || 0)),
+      creepDenies: Math.max(0, Number(state.denies || 0)),
+    };
+    if (samples.length && samples[samples.length - 1].atMs === bucketMs) samples[samples.length - 1] = sample;
+    else samples.push(sample);
+    room.set(state.userId, samples.slice(-720));
+  }
+
+  function graphSamplesSnapshot(matchId) {
+    const room = matchRuntimeGraphSamples.get(matchId);
+    if (!room) return [];
+    return [...room.values()]
+      .flat()
+      .map(sample => ({ ...sample }))
+      .sort((left, right) => left.atMs - right.atMs || left.userId.localeCompare(right.userId));
+  }
+
+  function timelineRoom(matchId) {
+    let events = matchRuntimeTimelineEvents.get(matchId);
+    if (!events) {
+      events = [];
+      matchRuntimeTimelineEvents.set(matchId, events);
+    }
+    return events;
+  }
+
+  function recordTimelineEvent(match, event) {
+    if (!match || !event?.id) return;
+    const events = timelineRoom(match.id);
+    if (events.some(existing => existing.id === event.id)) return;
+    events.push({
+      ...event,
+      atMs: Math.max(0, Number(event.atMs ?? runtimeMatchElapsedMs(match, Date.now())) || 0),
+    });
+    if (events.length > 2000) events.splice(0, events.length - 2000);
+  }
+
+  function timelineSnapshot(matchId) {
+    return [...(matchRuntimeTimelineEvents.get(matchId) || [])]
+      .map(event => ({ ...event }))
+      .sort((left, right) => left.atMs - right.atMs || left.id.localeCompare(right.id));
+  }
+
   function markResultPlayerDisconnected(matchId, userId, at = Date.now()) {
     const stats = resultStatsFor(matchId, userId);
-    if (stats.disconnectStartedAt === null) stats.disconnectStartedAt = at;
+    if (stats.disconnectStartedAt !== null) return;
+    stats.disconnectStartedAt = at;
+    const match = store.match(matchId);
+    const player = match?.players?.find(candidate => candidate.userId === userId) || null;
+    if (match && player) {
+      recordTimelineEvent(match, {
+        id: `disconnect:${matchId}:${userId}:${at}`,
+        type: 'disconnect',
+        team: player.team,
+        userId,
+        username: player.username,
+        label: `${player.username} disconnected`,
+        atMs: runtimeMatchElapsedMs(match, at),
+      });
+    }
   }
 
   function markResultPlayerConnected(matchId, userId, at = Date.now()) {
     const stats = resultStatsFor(matchId, userId);
-    if (stats.disconnectStartedAt !== null) {
-      stats.disconnectMs += Math.max(0, at - Number(stats.disconnectStartedAt));
-      stats.disconnectStartedAt = null;
+    if (stats.disconnectStartedAt === null) return;
+    stats.disconnectMs += Math.max(0, at - Number(stats.disconnectStartedAt));
+    stats.disconnectStartedAt = null;
+    const match = store.match(matchId);
+    const player = match?.players?.find(candidate => candidate.userId === userId) || null;
+    if (match && player) {
+      recordTimelineEvent(match, {
+        id: `reconnect:${matchId}:${userId}:${at}`,
+        type: 'reconnect',
+        team: player.team,
+        userId,
+        username: player.username,
+        label: `${player.username} reconnected`,
+        atMs: runtimeMatchElapsedMs(match, at),
+      });
     }
   }
 
@@ -203,6 +301,30 @@ export function createPlatformServer(options = {}) {
       : Math.max(0, endedAtMs - Date.parse(match.createdAt || endedAt));
     const durationMinutes = durationMs > 0 ? durationMs / 60_000 : 0;
     const abandoned = new Set(match.abandonedUserIds || []);
+
+    for (const state of finalStates) recordGraphSample(match, state, durationMs);
+    const graphSamples = graphSamplesSnapshot(match.id);
+    const timeline = timelineSnapshot(match.id);
+    if (!timeline.some(event => event.type === 'match_start')) {
+      timeline.unshift({
+        id: `match-start:${match.id}`,
+        type: 'match_start',
+        team: null,
+        label: 'Match started',
+        atMs: 0,
+      });
+    }
+    timeline.push({
+      id: `match-end:${match.id}`,
+      type: 'match_end',
+      team: voided ? null : winnerTeam,
+      label: voided
+        ? 'Match ended without a winner'
+        : winnerTeam
+          ? `${winnerTeam === 'blue' ? 'Dawn Team' : 'Dusk Team'} won the match`
+          : 'Match ended',
+      atMs: durationMs,
+    });
 
     const players = match.players.map(player => {
       const state = finalByUserId.get(player.userId) || null;
@@ -248,7 +370,7 @@ export function createPlatformServer(options = {}) {
     });
 
     return {
-      version: 2,
+      version: 3,
       matchId: match.id,
       winnerTeam: voided ? null : winnerTeam,
       reason: String(reason || (voided ? 'cancelled' : 'completed')),
@@ -257,6 +379,8 @@ export function createPlatformServer(options = {}) {
       endedAt,
       durationMs,
       players,
+      graphSamples,
+      timeline,
       finalStates,
       structures: structureSnapshot?.structures?.map(structure => ({ ...structure })) || [],
       creeps: creepSnapshot?.creeps?.map(creep => ({
@@ -567,6 +691,8 @@ export function createPlatformServer(options = {}) {
     matchRuntimeSpawnPositions.delete(matchId);
     matchRuntimeAuthorityUsers.delete(matchId);
     matchRuntimeResultStats.delete(matchId);
+    matchRuntimeGraphSamples.delete(matchId);
+    matchRuntimeTimelineEvents.delete(matchId);
     clearMatchDisconnectGrace(matchId);
   }
 
@@ -1220,6 +1346,19 @@ export function createPlatformServer(options = {}) {
     };
 
     runtimeRoom(active.id).set(userId, state);
+    recordGraphSample(active, state);
+    if (previous && Number(state.level || 1) > Number(previous.level || 1)) {
+      recordTimelineEvent(active, {
+        id: `level-up:${active.id}:${userId}:${state.level}`,
+        type: 'level_up',
+        team: player.team,
+        userId,
+        username: player.username,
+        level: state.level,
+        label: `${player.username} reached level ${state.level}`,
+        atMs: runtimeMatchElapsedMs(active, now),
+      });
+    }
     if (serverRespawned) {
       combatLocks.set(userId, {
         ...(combatLock || {}),
@@ -1257,7 +1396,24 @@ export function createPlatformServer(options = {}) {
         state: creditedKillerState,
       }, recipients);
     }
-    if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);
+    if (confirmedHeroKillEvent) {
+      recordTimelineEvent(active, {
+        id: confirmedHeroKillEvent.eventId,
+        type: 'hero_kill',
+        team: confirmedHeroKillEvent.killerTeam === 'blue' || confirmedHeroKillEvent.killerTeam === 'red'
+          ? confirmedHeroKillEvent.killerTeam
+          : null,
+        userId: confirmedHeroKillEvent.killerUserId,
+        username: confirmedHeroKillEvent.killerUsername,
+        targetUserId: confirmedHeroKillEvent.victimUserId,
+        targetUsername: confirmedHeroKillEvent.victimUsername,
+        label: confirmedHeroKillEvent.killerUsername
+          ? `${confirmedHeroKillEvent.killerUsername} killed ${confirmedHeroKillEvent.victimUsername}`
+          : `${confirmedHeroKillEvent.victimUsername} died`,
+        atMs: runtimeMatchElapsedMs(active, confirmedHeroKillEvent.at),
+      });
+      broadcast(confirmedHeroKillEvent, recipients);
+    }
     return state;
   }
 
@@ -1512,7 +1668,24 @@ export function createPlatformServer(options = {}) {
         state: reporterBroadcastState,
       }, recipients);
     }
-    if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);
+    if (confirmedHeroKillEvent) {
+      recordTimelineEvent(active, {
+        id: confirmedHeroKillEvent.eventId,
+        type: 'hero_kill',
+        team: confirmedHeroKillEvent.killerTeam === 'blue' || confirmedHeroKillEvent.killerTeam === 'red'
+          ? confirmedHeroKillEvent.killerTeam
+          : null,
+        userId: confirmedHeroKillEvent.killerUserId,
+        username: confirmedHeroKillEvent.killerUsername,
+        targetUserId: confirmedHeroKillEvent.victimUserId,
+        targetUsername: confirmedHeroKillEvent.victimUsername,
+        label: confirmedHeroKillEvent.killerUsername
+          ? `${confirmedHeroKillEvent.killerUsername} killed ${confirmedHeroKillEvent.victimUsername}`
+          : `${confirmedHeroKillEvent.victimUsername} died`,
+        atMs: runtimeMatchElapsedMs(active, confirmedHeroKillEvent.at),
+      });
+      broadcast(confirmedHeroKillEvent, recipients);
+    }
     return event;
   }
 
@@ -1809,6 +1982,22 @@ export function createPlatformServer(options = {}) {
     if (simulatorUserId && simulatorUserId !== userId) send(simulatorUserId, event);
     broadcast(runtimeStructureSnapshot(active.id), active.players.map(candidate => candidate.userId));
 
+    if (nextHp <= 0) {
+      const destroyedType = target.kind === 'tower' ? 'tower_destroyed' : 'building_destroyed';
+      recordTimelineEvent(active, {
+        id: `${destroyedType}:${active.id}:${structureId}`,
+        type: destroyedType,
+        team: source.team,
+        userId,
+        username: source.username,
+        structureId,
+        label: target.kind === 'tower'
+          ? `${source.username} destroyed ${structureId}`
+          : `${source.username} destroyed the enemy throne`,
+        atMs: runtimeMatchElapsedMs(active, event.at),
+      });
+    }
+
     if (nextHp <= 0 && structureId.endsWith('-throne')) {
       finishMatch(active, {
         winnerTeam: source.team,
@@ -1919,6 +2108,8 @@ export function createPlatformServer(options = {}) {
     matchRuntimeSpawnPositions.delete(updated.id);
     matchRuntimeAuthorityUsers.delete(updated.id);
     matchRuntimeResultStats.delete(updated.id);
+    matchRuntimeGraphSamples.delete(updated.id);
+    matchRuntimeTimelineEvents.delete(updated.id);
     clearMatchDisconnectGrace(updated.id);
     runtimePauseState(updated.id);
     broadcastRuntimeAuthority(updated);
@@ -1937,6 +2128,17 @@ export function createPlatformServer(options = {}) {
     if (!player) throw new Error('No participas en esta partida.');
 
     const abandonedUserIds = [...new Set([...(active.abandonedUserIds || []), userId])];
+    if (!(active.abandonedUserIds || []).includes(userId) && active.status === 'in_game') {
+      recordTimelineEvent(active, {
+        id: `abandon:${active.id}:${userId}`,
+        type: 'abandon',
+        team: player.team,
+        userId,
+        username: player.username,
+        label: `${player.username} abandoned the match`,
+        atMs: runtimeMatchElapsedMs(active, Date.now()),
+      });
+    }
     const remainingPlayers = active.players.filter(candidate => !abandonedUserIds.includes(candidate.userId));
     const remainingDawn = remainingPlayers.filter(candidate => candidate.team === 'blue');
     const remainingDusk = remainingPlayers.filter(candidate => candidate.team === 'red');

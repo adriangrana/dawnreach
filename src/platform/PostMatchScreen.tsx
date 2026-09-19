@@ -1,11 +1,14 @@
-import { BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users, Wifi, WifiOff } from 'lucide-react';
 import { getHeroDefinition } from '../game/heroes/catalog';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import { DawnreachHomeTopbar } from './DawnreachHome';
 import type {
   MatchEndedEvent,
+  MatchGraphSample,
   MatchResultPlayer,
   MatchRuntimePlayerState,
+  MatchTimelineEvent,
   MatchPlayer,
   PlatformUser,
   Team,
@@ -245,6 +248,181 @@ function TeamTable({
   );
 }
 
+
+type PostMatchTab = 'overview' | 'detailed' | 'graphs' | 'timeline';
+type GraphMetric = 'gold' | 'experience' | 'heroDamage' | 'creepScore';
+
+const GRAPH_METRICS: readonly Readonly<{ key: GraphMetric; label: string }>[]= [
+  { key: 'gold', label: 'GOLD HELD' },
+  { key: 'experience', label: 'EXPERIENCE' },
+  { key: 'heroDamage', label: 'HERO DAMAGE' },
+  { key: 'creepScore', label: 'CREEP SCORE' },
+];
+
+function graphValue(sample: MatchGraphSample, metric: GraphMetric) {
+  if (metric === 'experience') return sample.experience;
+  if (metric === 'heroDamage') return sample.heroDamage;
+  if (metric === 'creepScore') return sample.creepKills + sample.creepDenies;
+  return sample.gold;
+}
+
+function DetailedStatsTab({ players, localUserId }: { players: readonly FinalPlayer[]; localUserId: string }) {
+  return (
+    <section className="dr-post-tab-surface dr-post-detailed">
+      <header className="dr-post-tab-heading">
+        <div><small>PLAYER PERFORMANCE</small><h2>DETAILED STATS</h2></div>
+        <span>{players.length} PLAYERS</span>
+      </header>
+      <div className="dr-post-detailed-scroll">
+        <div className="dr-post-detailed-grid dr-post-detailed-head">
+          <span>PLAYER</span><span>LVL</span><span>K / D / A</span><span>LH / DN</span><span>GOLD</span>
+          <span>XP</span><span>XPM</span><span>HERO DMG</span><span>DMG TAKEN</span><span>HEALING</span>
+          <span>TOWER DMG</span><span>BUILDING</span><span>TOWERS</span><span>STREAK</span><span>DISCONNECTED</span>
+        </div>
+        {players.map(entry => (
+          <article
+            key={entry.player.userId}
+            className={`dr-post-detailed-grid dr-post-detailed-row is-${entry.player.team}${entry.player.userId === localUserId ? ' is-local' : ''}`}
+          >
+            <div className="dr-post-detailed-player">
+              <div className="dr-post-mini-portrait">{entry.portrait ? <img src={entry.portrait} alt="" /> : <Shield />}</div>
+              <span><strong>{entry.heroName}</strong><small>{entry.player.username}</small></span>
+            </div>
+            <b>{entry.stats.heroLevel}</b>
+            <b>{entry.stats.kills} / {entry.stats.deaths} / {entry.stats.assists}</b>
+            <b>{entry.stats.creepKills} / {entry.stats.creepDenies}</b>
+            <b>{formatNumber(entry.stats.currentGold)}</b>
+            <b>{formatNumber(entry.stats.experience)}</b>
+            <b>{formatNumber(entry.stats.xpm)}</b>
+            <b>{formatNumber(entry.stats.heroDamage)}</b>
+            <b>{formatNumber(entry.stats.heroDamageTaken)}</b>
+            <b>{formatNumber(entry.stats.healing)}</b>
+            <b>{formatNumber(entry.stats.towerDamage)}</b>
+            <b>{formatNumber(entry.stats.buildingDamage)}</b>
+            <b>{entry.stats.towersDestroyed}</b>
+            <b>{entry.stats.killStreak}</b>
+            <b>{formatDuration(entry.stats.disconnectSeconds * 1000)}</b>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GraphsTab({
+  samples,
+  players,
+}: {
+  samples: readonly MatchGraphSample[];
+  players: readonly FinalPlayer[];
+}) {
+  const [metric, setMetric] = useState<GraphMetric>('gold');
+  const grouped = new Map<string, MatchGraphSample[]>();
+  for (const sample of samples) {
+    const bucket = grouped.get(sample.userId) ?? [];
+    bucket.push(sample);
+    grouped.set(sample.userId, bucket);
+  }
+  for (const bucket of grouped.values()) bucket.sort((a, b) => a.atMs - b.atMs);
+
+  const maxAt = Math.max(1, ...samples.map(sample => sample.atMs));
+  const maxValue = Math.max(1, ...samples.map(sample => graphValue(sample, metric)));
+  const x = (atMs: number) => 54 + (atMs / maxAt) * 890;
+  const y = (value: number) => 324 - (value / maxValue) * 270;
+
+  return (
+    <section className="dr-post-tab-surface dr-post-graphs">
+      <header className="dr-post-tab-heading">
+        <div><small>MATCH PROGRESSION</small><h2>GRAPHS</h2></div>
+        <div className="dr-post-graph-metrics">
+          {GRAPH_METRICS.map(option => (
+            <button key={option.key} type="button" className={metric === option.key ? 'is-active' : ''} onClick={() => setMetric(option.key)}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </header>
+      {samples.length ? (
+        <div className="dr-post-graph-layout">
+          <div className="dr-post-chart">
+            <svg viewBox="0 0 1000 360" role="img" aria-label={`${GRAPH_METRICS.find(item => item.key === metric)?.label} over time`}>
+              {[0, .25, .5, .75, 1].map(fraction => (
+                <g key={fraction}>
+                  <line className="dr-post-chart-grid" x1="54" x2="944" y1={324 - fraction * 270} y2={324 - fraction * 270} />
+                  <text className="dr-post-chart-label" x="46" y={328 - fraction * 270} textAnchor="end">
+                    {formatNumber(maxValue * fraction)}
+                  </text>
+                  <text className="dr-post-chart-label" x={54 + fraction * 890} y="348" textAnchor="middle">
+                    {formatDuration(maxAt * fraction)}
+                  </text>
+                </g>
+              ))}
+              {[...grouped.entries()].map(([userId, bucket]) => {
+                const player = players.find(entry => entry.player.userId === userId);
+                if (!player || !bucket.length) return null;
+                const points = bucket.map(sample => `${x(sample.atMs)},${y(graphValue(sample, metric))}`).join(' ');
+                return <polyline key={userId} className={`dr-post-graph-line is-${player.player.team} slot-${player.player.slot}`} points={points} />;
+              })}
+            </svg>
+          </div>
+          <aside className="dr-post-graph-legend">
+            {players.map(entry => {
+              const bucket = grouped.get(entry.player.userId) ?? [];
+              const last = bucket[bucket.length - 1];
+              return (
+                <div key={entry.player.userId} className={`is-${entry.player.team}`}>
+                  <i />
+                  <div><strong>{entry.heroName}</strong><small>{entry.player.username}</small></div>
+                  <b>{last ? formatNumber(graphValue(last, metric)) : '—'}</b>
+                </div>
+              );
+            })}
+          </aside>
+        </div>
+      ) : (
+        <div className="dr-post-tab-empty"><BarChart3 /><strong>NO HISTORICAL SAMPLES</strong><span>This match was recorded before graph telemetry was enabled.</span></div>
+      )}
+    </section>
+  );
+}
+
+function timelineIcon(type: MatchTimelineEvent['type']) {
+  if (type === 'disconnect' || type === 'abandon') return <WifiOff />;
+  if (type === 'reconnect') return <Wifi />;
+  if (type === 'level_up') return <Gauge />;
+  if (type === 'tower_destroyed' || type === 'building_destroyed') return <Shield />;
+  if (type === 'match_start' || type === 'match_end') return <Trophy />;
+  return <Swords />;
+}
+
+function TimelineTab({ events }: { events: readonly MatchTimelineEvent[] }) {
+  const ordered = [...events].sort((a, b) => a.atMs - b.atMs || a.id.localeCompare(b.id));
+  return (
+    <section className="dr-post-tab-surface dr-post-timeline">
+      <header className="dr-post-tab-heading">
+        <div><small>SERVER-RECORDED EVENTS</small><h2>TIMELINE</h2></div>
+        <span>{ordered.length} EVENTS</span>
+      </header>
+      {ordered.length ? (
+        <div className="dr-post-timeline-list">
+          {ordered.map(event => (
+            <article key={event.id} className={`dr-post-timeline-event is-${event.team ?? 'neutral'} type-${event.type}`}>
+              <time>{formatDuration(event.atMs)}</time>
+              <span className="dr-post-timeline-icon">{timelineIcon(event.type)}</span>
+              <div>
+                <strong>{event.label}</strong>
+                <small>{event.type.replaceAll('_', ' ').toUpperCase()}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="dr-post-tab-empty"><Activity /><strong>NO TIMELINE DATA</strong><span>This match was recorded before timeline telemetry was enabled.</span></div>
+      )}
+    </section>
+  );
+}
+
 export function PostMatchScreen({
   result,
   me,
@@ -294,6 +472,9 @@ export function PostMatchScreen({
   const localDisconnectSeconds = local ? number(local.stats.disconnectSeconds) : 0;
   const isCustomMatch = result.match.mode === 'custom';
   const modeLabel = isCustomMatch ? 'CUSTOM MATCH' : result.match.mode.toUpperCase();
+  const [activeTab, setActiveTab] = useState<PostMatchTab>('overview');
+  const graphSamples = result.match.postMatchReport?.graphSamples ?? [];
+  const timeline = result.match.postMatchReport?.timeline ?? [];
 
   return (
     <main className={`dr-post-match is-mode-${result.match.mode}`} aria-label="Match results">
@@ -352,12 +533,13 @@ export function PostMatchScreen({
       </section>
 
       <nav className="dr-post-tabs" aria-label="Post match sections">
-        <button type="button" className="is-active" aria-current="page">OVERVIEW</button>
-        <button type="button" disabled>DETAILED STATS</button>
-        <button type="button" disabled>GRAPHS</button>
-        <button type="button" disabled>TIMELINE</button>
+        <button type="button" className={activeTab === 'overview' ? 'is-active' : ''} aria-current={activeTab === 'overview' ? 'page' : undefined} onClick={() => setActiveTab('overview')}>OVERVIEW</button>
+        <button type="button" className={activeTab === 'detailed' ? 'is-active' : ''} aria-current={activeTab === 'detailed' ? 'page' : undefined} onClick={() => setActiveTab('detailed')}>DETAILED STATS</button>
+        <button type="button" className={activeTab === 'graphs' ? 'is-active' : ''} aria-current={activeTab === 'graphs' ? 'page' : undefined} onClick={() => setActiveTab('graphs')}>GRAPHS</button>
+        <button type="button" className={activeTab === 'timeline' ? 'is-active' : ''} aria-current={activeTab === 'timeline' ? 'page' : undefined} onClick={() => setActiveTab('timeline')}>TIMELINE</button>
       </nav>
 
+      {activeTab === 'overview' && <>
       <section className="dr-post-content">
         <div className="dr-post-main">
           <TeamTable team="blue" entries={dawn} localUserId={me.id} mvpUserId={mvp?.player.userId ?? null} />
@@ -448,6 +630,12 @@ export function PostMatchScreen({
         <span><b>{local?.stats.killStreak ?? 0}</b><small>BEST STREAK</small></span>
         <span><b>{formatDuration(localDisconnectSeconds * 1000)}</b><small>DISCONNECTED</small></span>
       </div>
+
+
+      </>}
+      {activeTab === 'detailed' && <DetailedStatsTab players={players} localUserId={me.id} />}
+      {activeTab === 'graphs' && <GraphsTab samples={graphSamples} players={players} />}
+      {activeTab === 'timeline' && <TimelineTab events={timeline} />}
 
       <footer className="dr-post-actions">
         <button type="button" className="dr-post-primary" onClick={onPlayAgain}><RotateCcw /> PLAY AGAIN</button>

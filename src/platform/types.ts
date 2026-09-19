@@ -361,8 +361,36 @@ export type MatchRuntimePlayerState = Readonly<{
 export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
 export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
 
+export type MatchGraphSample = Readonly<{
+  userId: string;
+  team: Team;
+  atMs: number;
+  level: number;
+  gold: number;
+  experience: number;
+  heroDamage: number;
+  heroDamageTaken: number;
+  healing: number;
+  creepKills: number;
+  creepDenies: number;
+}>;
+
+export type MatchTimelineEvent = Readonly<{
+  id: string;
+  atMs: number;
+  type: 'hero_kill' | 'tower_destroyed' | 'building_destroyed' | 'level_up' | 'disconnect' | 'reconnect' | 'abandon' | 'match_start' | 'match_end';
+  team?: Team | null;
+  userId?: string | null;
+  username?: string | null;
+  targetUserId?: string | null;
+  targetUsername?: string | null;
+  structureId?: string | null;
+  level?: number | null;
+  label: string;
+}>;
+
 export type MatchPostMatchReport = Readonly<{
-  version: 2;
+  version: 2 | 3;
   matchId: string;
   winnerTeam: Team | null;
   reason: string;
@@ -370,8 +398,12 @@ export type MatchPostMatchReport = Readonly<{
   startedAt: string | null;
   endedAt: string;
   durationMs: number;
-  /** Canonical persistent post-match statistics used by Overview and future stat tabs. */
+  /** Canonical persistent post-match statistics used by Overview and Detailed Stats. */
   players: readonly MatchResultPlayer[];
+  /** Time-series samples recorded by the server for the Graphs tab. Added in report v3. */
+  graphSamples?: readonly MatchGraphSample[];
+  /** Ordered gameplay events recorded by the server for Timeline. Added in report v3. */
+  timeline?: readonly MatchTimelineEvent[];
   /** @deprecated Compatibility snapshot; post-match UI should consume players instead. */
   finalStates: readonly MatchRuntimePlayerState[];
   structures: readonly MatchRuntimeStructureState[];
