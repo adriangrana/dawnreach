@@ -149,14 +149,15 @@ function EmptyPlayerRow({ team, slot }: { team: Team; slot: number }) {
   return (
     <article className="dr-post-player-row is-empty" aria-label={`${teamLabel(team)} empty slot ${slot + 1}`}>
       <div className="dr-post-player">
-        <span className="dr-post-level" />
-        <div className="dr-post-portrait dr-post-portrait--empty" />
-        <div className="dr-post-player-copy"><strong>&nbsp;</strong><span>&nbsp;</span></div>
+        <span className="dr-post-level">—</span>
+        <div className="dr-post-portrait dr-post-portrait--empty"><Shield /></div>
+        <div className="dr-post-player-copy"><span>Empty slot</span></div>
       </div>
       <span /><span /><span /><span /><span /><span />
       <div className="dr-post-items">
         {Array.from({ length: 6 }, (_, index) => <span key={index} className="dr-post-item" />)}
       </div>
+      <span />
     </article>
   );
 }
@@ -193,6 +194,7 @@ function TeamTable({
         <span>DMG TAKEN</span>
         <span>HEALING</span>
         <span>ITEMS</span>
+        <span />
       </div>
       <div className="dr-post-team-rows">
         {entries.map(entry => {
@@ -228,7 +230,9 @@ function TeamTable({
                   </span>
                 ))}
               </div>
-              {mvp && <span className="dr-post-mvp-tag"><Crown /> MVP</span>}
+              <div className="dr-post-accolade">
+                {mvp && <span className="dr-post-mvp-tag"><Crown /> MVP</span>}
+              </div>
             </article>
           );
         })}
@@ -285,7 +289,7 @@ export function PostMatchScreen({
   const modeLabel = isCustomMatch ? 'CUSTOM MATCH' : result.match.mode.toUpperCase();
 
   return (
-    <main className={`dr-post-match is-mode-${result.match.mode}`}>
+    <main className={`dr-post-match is-mode-${result.match.mode}`} aria-label="Match results">
       <div className="dr-post-backdrop" aria-hidden="true" />
 
       <header className="dr-post-global-header">
@@ -314,9 +318,12 @@ export function PostMatchScreen({
 
       <section className={`dr-post-victory-banner is-${result.winnerTeam ?? 'neutral'}`}>
         <div className="dr-post-match-meta">
-          <strong>{modeLabel}</strong>
-          <span>DAWNREACH</span>
-          <small>{formatDuration(durationMs)}</small>
+          <img src={`/assets/icon/${isCustomMatch ? 'custom' : result.match.mode}.png`} alt="" />
+          <div>
+            <strong>{modeLabel}</strong>
+            <span>DAWNREACH</span>
+            <small>{formatDuration(durationMs)}</small>
+          </div>
         </div>
 
         <div className="dr-post-victory-center">
@@ -353,7 +360,7 @@ export function PostMatchScreen({
       </section>
 
       <nav className="dr-post-tabs" aria-label="Post match sections">
-        <button type="button" className="is-active">OVERVIEW</button>
+        <button type="button" className="is-active" aria-current="page">OVERVIEW</button>
         <button type="button" disabled>DETAILED STATS</button>
         <button type="button" disabled>GRAPHS</button>
         <button type="button" disabled>TIMELINE</button>
@@ -373,17 +380,20 @@ export function PostMatchScreen({
                 <div className="dr-post-mvp-art">
                   {mvp.portrait ? <img src={mvp.portrait} alt="" draggable={false} /> : <Shield />}
                 </div>
-                <div>
-                  <span className="dr-post-grade"><Crown /></span>
+                <div className="dr-post-mvp-copy">
+                  <small>MOST VALUABLE PLAYER</small>
                   <strong>{mvp.heroName}</strong>
                   <small>{mvp.player.username}</small>
                 </div>
+                <span className="dr-post-grade" aria-label="Match MVP"><Crown /><b>MVP</b></span>
               </div>
               <div className="dr-post-mvp-metrics">
                 <span><b>{mvp.stats.kills} / {mvp.stats.deaths} / {mvp.stats.assists}</b><small>K / D / A</small></span>
                 <span><b>{formatNumber(number(mvp.stats.heroDamage))}</b><small>DAMAGE</small></span>
                 <span><b>{formatNumber(number(mvp.stats.xpm))}</b><small>XPM</small></span>
+                <span><b>{formatNumber(number(mvp.stats.currentGold))}</b><small>FINAL GOLD</small></span>
               </div>
+              <p className="dr-post-mvp-caption">A brighter tomorrow begins with you.</p>
             </> : <p>No MVP data available.</p>}
           </section>
 
@@ -402,9 +412,9 @@ export function PostMatchScreen({
                   {entries.map(entry => {
                     const damage = number(entry.stats.heroDamage);
                     return (
-                      <div className={`dr-post-damage-entry is-${entry.player.team}`} key={entry.player.userId}>
+                      <div className={`dr-post-damage-entry is-${entry.player.team}`} key={entry.player.userId} title={`${entry.heroName} · ${entry.player.username}: ${formatNumber(damage)} damage`}>
                         <div className="dr-post-mini-portrait">{entry.portrait ? <img src={entry.portrait} alt="" /> : <Shield />}</div>
-                        <div className="dr-post-damage-track"><i style={{ width: `${Math.max(2, damage / maxDamage * 100)}%` }} /></div>
+                        <div className="dr-post-damage-track"><i style={{ width: `${Math.max(0, damage / maxDamage * 100)}%` }} /></div>
                         <strong>{formatNumber(damage)}</strong>
                       </div>
                     );
@@ -450,6 +460,7 @@ export function PostMatchScreen({
       <footer className="dr-post-actions">
         <button type="button" className="dr-post-primary" onClick={onPlayAgain}><RotateCcw /> PLAY AGAIN</button>
         <button type="button" className="dr-post-secondary" onClick={onContinue}><Home /> CONTINUE</button>
+        <span className="dr-post-footer-motto">GREAT PLAYERS BUILD BRIGHTER WORLDS.<img src="/assets/icon/dawnreach.png" alt="" /></span>
       </footer>
     </main>
   );
