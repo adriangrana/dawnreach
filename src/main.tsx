@@ -50,6 +50,36 @@ import './platform-loading-screen.css';
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
 
+function installBrowserNativeInteractionGuards() {
+  const blockContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+  };
+
+  const blockDeveloperShortcuts = (event: KeyboardEvent) => {
+    const key = event.key.toUpperCase();
+    const code = event.code;
+    const ctrlOrMeta = event.ctrlKey || event.metaKey;
+    const devToolsShortcut = (
+      code === 'F12'
+      || (ctrlOrMeta && event.shiftKey && ['I', 'J', 'C', 'K'].includes(key))
+      || (event.metaKey && event.altKey && ['I', 'J', 'C', 'K'].includes(key))
+      || (event.ctrlKey && key === 'U')
+      || code === 'ContextMenu'
+      || (event.shiftKey && code === 'F10')
+    );
+
+    if (!devToolsShortcut) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+
+  window.addEventListener('contextmenu', blockContextMenu, { capture: true });
+  window.addEventListener('keydown', blockDeveloperShortcuts, { capture: true });
+}
+
+installBrowserNativeInteractionGuards();
+
 function nextAnimationFrame() {
   return new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 }

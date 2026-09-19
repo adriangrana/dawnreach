@@ -139,6 +139,14 @@ export default function ShopOverlay({
     ? selectedCost === selected.recipe_cost ? 'Combinar' : 'Completar'
     : 'Comprar';
 
+  const quickBuy = (item: ItemDefinition) => {
+    setTier(item.tier);
+    setSelectedId(item.id);
+    const quote = getLocalShopPurchaseQuote(item.id);
+    const cost = quote?.remainingCost ?? item.cost;
+    if (gold >= cost) onBuy(item.id);
+  };
+
   const onSellDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes('application/x-dawnreach-inventory-item')) return;
     event.preventDefault();
@@ -220,7 +228,18 @@ export default function ShopOverlay({
                 const effectiveCost = quote?.remainingCost ?? item.cost;
                 const canAfford = gold >= effectiveCost;
                 return (
-                  <button type="button" key={item.id} className={`shop-item-card ${item.id === selected.id ? 'is-selected' : ''}`} onClick={() => setSelectedId(item.id)}>
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`shop-item-card ${item.id === selected.id ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedId(item.id)}
+                    onContextMenu={event => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      quickBuy(item);
+                    }}
+                    title="Clic: seleccionar · Clic derecho: comprar"
+                  >
                     <span className={`shop-item-icon ${itemTierClass(item.tier)}`}><ItemArt id={item.id} className="shop-item-icon-art" /></span>
                     <span className="shop-item-copy">
                       <strong>{item.name}</strong>
@@ -253,7 +272,17 @@ export default function ShopOverlay({
                 <span>RECETA</span>
                 <div>
                   {components.map(({ definition, quantity }) => (
-                    <button key={definition.id} type="button" onClick={() => { setTier(definition.tier); setSelectedId(definition.id); }}>
+                    <button
+                      key={definition.id}
+                      type="button"
+                      onClick={() => { setTier(definition.tier); setSelectedId(definition.id); }}
+                      onContextMenu={event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        quickBuy(definition);
+                      }}
+                      title="Clic: ver componente · Clic derecho: comprar"
+                    >
                       <b><ItemArt id={definition.id} className="shop-recipe-icon-art" /></b>
                       <span>{definition.name}{quantity > 1 ? ` ×${quantity}` : ''}</span>
                     </button>
