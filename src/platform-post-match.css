@@ -315,8 +315,8 @@
   gap: 0;
   padding-left: 28px;
   border-bottom: 1px solid rgba(115, 159, 196, .20);
-  background: linear-gradient(180deg, rgba(3, 11, 19, .58), rgba(3, 11, 19, .46));
-  backdrop-filter: blur(1.5px);
+  background: linear-gradient(180deg, rgba(3, 11, 19, .72), rgba(3, 11, 19, .62));
+  backdrop-filter: blur(2px);
 }
 
 .dr-post-tabs button {
@@ -325,13 +325,14 @@
   height: 40px;
   border: 0;
   background: transparent;
-  color: #7d94a6;
+  color: #a4b6c4;
   font: 700 11px/40px "Trebuchet MS", sans-serif;
+  text-shadow: 0 1px 3px rgba(0,0,0,.85);
   letter-spacing: .16em;
 }
 
 .dr-post-tabs button.is-active {
-  color: #f0dfb0;
+  color: #fff0c0;
 }
 
 .dr-post-tabs button.is-active::after {
@@ -373,7 +374,8 @@
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
   border: 1px solid rgba(93, 137, 170, .34);
   background:
-    linear-gradient(180deg, rgba(8, 23, 37, .72), rgba(4, 14, 23, .78));
+    linear-gradient(180deg, rgba(8, 23, 37, .91), rgba(4, 14, 23, .94));
+  backdrop-filter: blur(3px);
   box-shadow:
     inset 0 0 30px rgba(77, 152, 206, .035),
     0 10px 24px rgba(0, 0, 0, .18);
@@ -394,7 +396,7 @@
   justify-content: space-between;
   padding: 0 13px;
   border-bottom: 1px solid rgba(128, 170, 203, .15);
-  background: rgba(7, 20, 32, .58);
+  background: rgba(7, 20, 32, .90);
 }
 
 .dr-post-team-header > div {
@@ -440,7 +442,7 @@
   height: 22px;
   padding: 0 9px;
   border-bottom: 1px solid rgba(116, 151, 180, .1);
-  color: #667f93;
+  color: #91a9bb;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: .09em;
@@ -458,8 +460,9 @@
   min-height: 40px;
   height: 40px;
   padding: 2px 9px;
-  border-bottom: 1px solid rgba(112, 150, 179, .08);
-  color: #d3dde5;
+  border-bottom: 1px solid rgba(112, 150, 179, .10);
+  color: #edf3f7;
+  background: linear-gradient(90deg, rgba(7, 20, 32, .38), rgba(7, 20, 32, .16));
   font-size: 11px;
 }
 
@@ -480,7 +483,7 @@
 }
 
 .dr-post-player-row.is-empty {
-  opacity: .12;
+  opacity: .07;
 }
 
 .dr-post-player-row.is-empty > span:not(.dr-post-level),
@@ -544,29 +547,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #eee4ce;
+  color: #fff1cf;
   font: 700 12px Georgia, serif;
+  text-shadow: 0 1px 3px rgba(0,0,0,.92);
 }
 
 .dr-post-player-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #6d879b;
+  color: #9cb0bf;
   font-size: 8px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.85);
 }
 
 .dr-post-kda {
-  color: #f5f7f8;
+  color: #ffffff;
   font-size: 12px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
   font-weight: 800;
   letter-spacing: .04em;
 }
 
 .dr-post-player-row > span {
-  color: #d6e0e7;
+  color: #f0f5f8;
   font-size: 12px;
   font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
 }
 
 .dr-post-items {
@@ -637,9 +644,10 @@
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
   border: 1px solid rgba(183, 155, 89, .34);
   background:
-    radial-gradient(circle at 70% 15%, rgba(216, 177, 83, .04), transparent 36%),
-    linear-gradient(180deg, rgba(9, 22, 35, .72), rgba(4, 13, 22, .80));
-  box-shadow: inset 0 0 34px rgba(215, 179, 88, .025);
+    radial-gradient(circle at 70% 15%, rgba(216, 177, 83, .045), transparent 36%),
+    linear-gradient(180deg, rgba(9, 22, 35, .92), rgba(4, 13, 22, .95));
+  backdrop-filter: blur(3px);
+  box-shadow: inset 0 0 34px rgba(215, 179, 88, .035);
 }
 
 .dr-post-panel > header {
@@ -649,8 +657,9 @@
   gap: 8px;
   padding: 0 13px;
   border-bottom: 1px solid rgba(199, 168, 91, .2);
-  color: #e6d3a1;
+  color: #f1dda6;
   font: 700 10px Georgia, serif;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
   letter-spacing: .14em;
 }
 
@@ -692,12 +701,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #f0e2bc;
+  color: #fff0c8;
   font: 700 20px Georgia, serif;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
 }
 
 .dr-post-mvp-hero small {
-  color: #839daf;
+  color: #a8bac7;
   font-size: 9px;
 }
 
@@ -736,8 +746,9 @@
 }
 
 .dr-post-mvp-metrics b {
-  color: #e8edf1;
+  color: #ffffff;
   font-size: 11px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
 }
 
 .dr-post-mvp-metrics small {
@@ -827,8 +838,10 @@
 
 .dr-post-damage-entry strong {
   text-align: right;
-  color: #b7c6d1;
-  font-size: 9px;
+  color: #e4edf3;
+  font-size: 10px;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
 }
 
 .dr-post-lower {
@@ -848,7 +861,8 @@
   border: 1px solid rgba(119, 154, 181, .26);
   clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
   background:
-    linear-gradient(180deg, rgba(9, 23, 35, .70), rgba(4, 14, 22, .78));
+    linear-gradient(180deg, rgba(9, 23, 35, .90), rgba(4, 14, 22, .94));
+  backdrop-filter: blur(3px);
 }
 
 .dr-post-lower article::after {
@@ -875,8 +889,8 @@
 }
 
 .dr-post-lower small {
-  color: #718b9f;
-  font-size: 7px;
+  color: #9fb2c1;
+  font-size: 8px;
   letter-spacing: .14em;
 }
 
@@ -884,8 +898,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #e7ddc5;
+  color: #fff0cf;
   font: 700 15px Georgia, serif;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9);
 }
 
 .dr-post-lower em {
@@ -905,7 +920,8 @@
   gap: 1px;
   margin: 0 24px;
   border: 1px solid rgba(102, 137, 163, .18);
-  background: rgba(5, 15, 24, .64);
+  background: rgba(5, 15, 24, .88);
+  backdrop-filter: blur(3px);
 }
 
 .dr-post-secondary-stats > span {
@@ -921,13 +937,14 @@
 }
 
 .dr-post-secondary-stats b {
-  color: #d8e1e8;
-  font-size: 11px;
+  color: #ffffff;
+  font-size: 12px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
 }
 
 .dr-post-secondary-stats small {
-  color: #657f93;
-  font-size: 7px;
+  color: #9db0bf;
+  font-size: 8px;
   letter-spacing: .12em;
 }
 
@@ -938,7 +955,7 @@
   gap: 11px;
   padding: 7px 24px 11px;
   border-top: 1px solid rgba(121, 156, 183, .09);
-  background: linear-gradient(180deg, rgba(4, 13, 21, .06), rgba(3, 10, 17, .38));
+  background: linear-gradient(180deg, rgba(4, 13, 21, .30), rgba(3, 10, 17, .72));
 }
 
 .dr-post-actions button {
