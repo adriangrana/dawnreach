@@ -29,6 +29,9 @@ export class PlatformRealtimeClient {
     const socket = new WebSocket(websocketUrl(token));
     this.socket = socket;
     socket.addEventListener('message', event => {
+      // WebSocket.close() is asynchronous. During reconnect the old transport can still
+      // deliver buffered frames briefly; never fan those stale packets into the live match.
+      if (this.socket !== socket) return;
       if (typeof event.data !== 'string') return;
       try {
         const payload = JSON.parse(event.data) as PlatformRealtimeEvent;

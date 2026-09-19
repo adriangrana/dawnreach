@@ -108,6 +108,11 @@ const heroIcons = import.meta.glob<string>('./heroes/*/images/*I.webp', {
   eager: true, query: '?url', import: 'default',
 });
 
+// A browser client renders exactly one Dawnreach battlefield at a time. Rejoining can replace
+// the entire React host node, so the generation fence must be module-wide rather than keyed
+// by DOM element. Any older scene immediately becomes ineligible to schedule another frame.
+let latestGameGeneration = 0;
+
 type Point3 = { x: number; z: number };
 type AttackOrder =
   | { kind: 'ground'; point: Point3 }
@@ -173,6 +178,12 @@ export async function createDawnreachGame(
   getHeroState?: () => HeroOverlayState | null,
   options: DawnreachGameOptions = {},
 ) {
+  const gameGeneration = ++latestGameGeneration;
+  let destroyed = false;
+  const isCurrentGameInstance = () => (
+    !destroyed && latestGameGeneration === gameGeneration
+  );
+
   const localTeam: 'blue' | 'red' = options.localTeam ?? 'blue';
   const localPlayerId = options.localPlayerId ?? 'local-player';
   const localWorldEntityId = options.localWorldEntityId ?? 'blue-hero-alden';
@@ -1404,7 +1415,7 @@ export async function createDawnreachGame(
   updateMinimapHeroMarker();
 
   const animate = () => {
-    animationFrame = requestAnimationFrame(animate);
+    if (!isCurrentGameInstance()) return;
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
     attackCooldown = Math.max(0, attackCooldown - dt);
@@ -1753,6 +1764,8 @@ export async function createDawnreachGame(
     } else {
       updateMinimapHeroMarker();
     }
+
+    if (isCurrentGameInstance()) animationFrame = requestAnimationFrame(animate);
   };
 
   animate();
@@ -2108,7 +2121,10 @@ export async function createDawnreachGame(
       };
     },
     destroy() {
+      if (destroyed) return;
+      destroyed = true;
       cancelAnimationFrame(animationFrame);
+      clock.stop();
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('contextmenu', onContextMenu);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
@@ -2124,8 +2140,17 @@ export async function createDawnreachGame(
       selection.dispose();
       heroOverlay.dispose();
       disposeScene(scene);
+
+      // WebGLRenderer.dispose() releases Three.js caches but browsers may keep the actual
+      // GPU context alive until GC. A reconnect creates a fresh world + minimap context, so
+      // explicitly lose old contexts to prevent intermittent GPU-memory/context pressure.
       renderer.dispose();
-      minimapRenderer?.dispose();
+      try { renderer.forceContextLoss(); } catch { /* context may already be gone */ }
+      if (minimapRenderer) {
+        minimapRenderer.dispose();
+        try { minimapRenderer.forceContextLoss(); } catch { /* context may already be gone */ }
+      }
+
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
       if (minimapRenderer && minimapHost && minimapRenderer.domElement.parentElement === minimapHost) {
         minimapHost.removeChild(minimapRenderer.domElement);
