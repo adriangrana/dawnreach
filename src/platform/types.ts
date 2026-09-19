@@ -286,6 +286,8 @@ export type MatchRuntimePlayerState = Readonly<{
   alive: boolean;
   respawnRemainingMs?: number;
   respawnDurationMs?: number;
+  /** Server-owned generation. The owner must echo this exact value to acknowledge a respawn. */
+  respawnRevision?: number;
   abilityRanks?: Readonly<{ Q: number; W: number; E: number; R: number }>;
   abilityCooldownRemainingMs?: Readonly<{ Q: number; W: number; E: number; R: number }>;
   kills: number;

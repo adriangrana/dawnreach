@@ -1231,6 +1231,7 @@ export default function App({
     pendingRemoteAbilityCastsRef.current = [];
   }
   const networkSequenceRef = useRef(0);
+  const respawnRevisionRef = useRef(0);
   const runtimeStateRef = useRef(runtime);
   runtimeStateRef.current = runtime;
   const localHero = getRequiredHero(runtime.match, LOCAL_HERO_ENTITY_ID);
@@ -1590,6 +1591,14 @@ export default function App({
 
     const applyRemote = (state: MatchRuntimePlayerState) => {
       if (state.userId === localUser.id) {
+        networkSequenceRef.current = Math.max(
+          networkSequenceRef.current,
+          Math.max(0, Math.floor(Number(state.sequence) || 0)),
+        );
+        respawnRevisionRef.current = Math.max(
+          0,
+          Math.floor(Number(state.respawnRevision) || 0),
+        );
         // The server owns the final combat/death/respawn lifecycle. Reconcile the local HUD
         // and world entity too; previously the owner ignored its own authoritative packet,
         // which allowed a stale local HP snapshot to resurrect the hero at the death point.
@@ -1936,6 +1945,8 @@ export default function App({
           ? 0
           : Math.max(0, snapshot.respawnReadyAtMs - snapshot.nowMs),
         respawnDurationMs: snapshot.respawnDurationMs,
+        respawnRevision: respawnRevisionRef.current,
+        clientSentAt: Date.now(),
       });
 
       const creeps = game.getCreepNetworkSnapshot();

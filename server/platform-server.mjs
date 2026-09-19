@@ -385,6 +385,7 @@ export function createPlatformServer(options = {}) {
       }
 
       const spawn = runtimeSpawnPositions(matchId).get(userId) || state.position;
+      const respawnRevision = Math.max(0, Number(state.respawnRevision || 0)) + 1;
       const respawned = {
         ...state,
         position: { ...spawn },
@@ -394,6 +395,7 @@ export function createPlatformServer(options = {}) {
         alive: true,
         respawnRemainingMs: 0,
         respawnDurationMs: 0,
+        respawnRevision,
         sequence: Number(state.sequence || 0) + 1,
         sentAt: now,
       };
@@ -412,6 +414,7 @@ export function createPlatformServer(options = {}) {
         serverResolved: true,
         respawnGuard: true,
         respawnPosition: { ...spawn },
+        respawnRevision,
       });
       broadcast({
         type: 'match.runtime.state',
@@ -821,6 +824,18 @@ export function createPlatformServer(options = {}) {
     const clamp = (value, min, max) => Math.min(max, Math.max(min, finite(value)));
 
     const previous = runtimeRoom(active.id).get(userId);
+    const clientSequence = Math.max(0, Math.floor(finite(payload?.sequence, 0)));
+    const previousOwnerSequence = previous && Number.isFinite(Number(previous.ownerSequence))
+      ? Number(previous.ownerSequence)
+      : null;
+    if (previousOwnerSequence !== null && clientSequence <= previousOwnerSequence) {
+      return previous;
+    }
+    const reportedRespawnRevision = Math.max(
+      0,
+      Math.floor(finite(payload?.respawnRevision, 0)),
+    );
+
     const reportedPosition = {
       x: clamp(position.x, -75, 75),
       y: clamp(position.y, -5, 40),
@@ -829,7 +844,7 @@ export function createPlatformServer(options = {}) {
     if (!previous && !runtimeSpawnPositions(active.id).has(userId)) {
       runtimeSpawnPositions(active.id).set(userId, { ...reportedPosition });
     }
-    const sequence = Math.max(Number(previous?.sequence || 0) + 1, Math.floor(finite(payload?.sequence, 0)));
+    const sequence = Math.max(Number(previous?.sequence || 0) + 1, clientSequence);
     const now = Date.now();
     const combatLocks = runtimeCombatLocks(active.id);
     const combatLock = combatLocks.get(userId) || null;
@@ -867,6 +882,7 @@ export function createPlatformServer(options = {}) {
     let requestedCurrentResource = rawCurrentResource;
     let requestedAlive = rawAlive;
     let serverRespawned = false;
+    let authoritativeRespawnRevision = Math.max(0, Number(previous?.respawnRevision || 0));
     const respawnGuardPosition = combatLock?.respawnGuard
       ? (combatLock.respawnPosition
         || previous?.position
@@ -878,6 +894,7 @@ export function createPlatformServer(options = {}) {
       && previous?.alive !== false
       && rawAlive
       && respawnGuardPosition
+      && reportedRespawnRevision === Math.max(0, Number(combatLock.respawnRevision || 0))
       && (
         (reportedPosition.x - Number(respawnGuardPosition.x || 0)) ** 2
         + (reportedPosition.z - Number(respawnGuardPosition.z || 0)) ** 2
@@ -900,6 +917,7 @@ export function createPlatformServer(options = {}) {
       // death location with its pre-death HP; the server explicitly restores full resources
       // and the captured team/slot spawn position when the death lock expires.
       serverRespawned = true;
+      authoritativeRespawnRevision += 1;
       requestedCurrentHp = requestedMaxHp;
       requestedCurrentResource = requestedMaxResource;
       requestedAlive = true;
@@ -1030,6 +1048,8 @@ export function createPlatformServer(options = {}) {
       slot: player.slot,
       heroId: active.heroSelections?.[userId]?.heroId || 'H001',
       sequence,
+      ownerSequence: clientSequence,
+      respawnRevision: authoritativeRespawnRevision,
       position: serverRespawned
         ? { ...(runtimeSpawnPositions(active.id).get(userId) || reportedPosition) }
         : respawnGuardActive && previous
@@ -1074,6 +1094,7 @@ export function createPlatformServer(options = {}) {
         serverResolved: true,
         respawnGuard: true,
         respawnPosition: { ...state.position },
+        respawnRevision: state.respawnRevision,
       });
     }
     const recipients = active.players.map(candidate => candidate.userId);
@@ -2119,6 +2140,7 @@ export function createPlatformServer(options = {}) {
       }
       peer.onMessage = message => {
         try {
+          if (peersByUser.get(user.id) !== peer) return;
           const type = String(message?.type || '');
           if (type === 'queue.join' || type === 'party.queue') queueParty(user, message.mode === 'normal' ? 'normal' : 'ranked');
           else if (type === 'queue.leave') leaveQueue(user);

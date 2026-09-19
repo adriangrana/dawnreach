@@ -719,6 +719,51 @@ test('server serialization rejects late attacks from a hero already confirmed de
   });
 });
 
+test('server rejects stale runtime-state sequences before they can rewrite canonical position', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'runtime-stale-sequence',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'sequence-blue', username: 'Sequence Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'sequence-red', username: 'Sequence Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    platform.reportMatchRuntimeState('sequence-blue', {
+      matchId: match.id, sequence: 10,
+      position: { x: -12, y: 5.28, z: -20 }, yaw: 0, moving: false,
+      currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('sequence-blue', {
+      matchId: match.id, sequence: 11,
+      position: { x: -8, y: 5.28, z: -16 }, yaw: 0.5, moving: true,
+      currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('sequence-blue', {
+      matchId: match.id, sequence: 10,
+      position: { x: 25, y: 5.28, z: 25 }, yaw: 2, moving: false,
+      currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+
+    const blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'sequence-blue');
+    assert.equal(blue.ownerSequence, 11);
+    assert.deepEqual(blue.position, { x: -8, y: 5.28, z: -16 });
+    assert.equal(blue.moving, true);
+  });
+});
+
 test('server respawns a dead hero at its captured spawn and rejects a stale corpse packet', async () => {
   await withServer(async ({ platform }) => {
     const match = {
@@ -788,6 +833,8 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     assert.equal(blue.currentHp, 700);
     assert.equal(blue.currentResource, 300);
     assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
+    const respawnRevision = blue.respawnRevision;
+    assert.ok(respawnRevision > 0);
 
     // Wait beyond the old 1.5 s time-based guard. A corpse packet arriving this late must
     // still be unable to pull the hero back to the death position.
@@ -812,11 +859,11 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
     assert.equal(blue.deaths, 1);
 
-    // A live packet from the authoritative spawn acknowledges the respawn and releases the
-    // movement guard. Normal movement is accepted only after that acknowledgement.
+    // Even a live packet at spawn cannot acknowledge a respawn generation it never saw.
     platform.reportMatchRuntimeState('respawn-blue', {
       matchId: match.id,
       sequence: 100,
+      respawnRevision: Math.max(0, respawnRevision - 1),
       position: { x: -12, y: 5.28, z: -20 },
       yaw: 0,
       moving: false,
@@ -831,6 +878,41 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     platform.reportMatchRuntimeState('respawn-blue', {
       matchId: match.id,
       sequence: 101,
+      respawnRevision: Math.max(0, respawnRevision - 1),
+      position: { x: 3, y: 0, z: 4 },
+      yaw: 2,
+      moving: true,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'respawn-blue');
+    assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
+
+    // Only the exact server-issued respawn revision releases movement.
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 102,
+      respawnRevision,
+      position: { x: -12, y: 5.28, z: -20 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 103,
+      respawnRevision,
       position: { x: -10, y: 5.28, z: -18 },
       yaw: 0.5,
       moving: true,
