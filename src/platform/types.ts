@@ -257,6 +257,8 @@ export type MatchEndedEvent = Readonly<{
   winnerTeam: Team | null;
   reason: string;
   voided?: boolean;
+  durationMs?: number;
+  finalStates?: readonly MatchRuntimePlayerState[];
 }>;
 
 export type MatchRuntimeInventoryItem = Readonly<{
@@ -296,6 +298,9 @@ export type MatchRuntimePlayerState = Readonly<{
   lastHits: number;
   denies: number;
   gold: number;
+  damageDealt?: number;
+  damageTaken?: number;
+  healingDone?: number;
   inventory: readonly MatchRuntimeInventoryItem[];
   sentAt: number;
 }>;

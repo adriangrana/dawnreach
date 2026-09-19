@@ -465,12 +465,21 @@ export function createPlatformServer(options = {}) {
       ...(voided ? { rated: false } : {}),
     };
 
+    const finalStates = runtimeSnapshot(active.id);
+    const startedAtMs = Date.parse(active.startedAt || active.createdAt || endedAt);
+    const endedAtMs = Date.parse(endedAt);
+    const durationMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
+      ? Math.max(0, endedAtMs - startedAtMs)
+      : 0;
+
     broadcast({
       type: 'match.ended',
       match: publicMatch(updated),
       winnerTeam: voided ? null : winnerTeam,
       reason: updated.endReason,
       voided,
+      durationMs,
+      finalStates,
     }, active.players.map(candidate => candidate.userId));
 
     clearMatchRuntime(active.id);
@@ -1078,6 +1087,9 @@ export function createPlatformServer(options = {}) {
       lastHits: previous ? nonNegativeCounter(previous.lastHits, 0) : 0,
       denies: previous ? nonNegativeCounter(previous.denies, 0) : 0,
       gold: nonNegativeCounter(payload?.gold, previous?.gold),
+      damageDealt: Math.max(0, Number(previous?.damageDealt || 0)),
+      damageTaken: Math.max(0, Number(previous?.damageTaken || 0)),
+      healingDone: Math.max(0, Number(previous?.healingDone || 0)),
       inventory,
       sentAt: now,
     };
@@ -1203,6 +1215,22 @@ export function createPlatformServer(options = {}) {
     const nextHp = reason === 'heal'
       ? Math.min(Number(targetRuntime.maxHp || 1), Number(targetRuntime.currentHp || 0) + requestedAmount)
       : Math.max(0, Number(targetRuntime.currentHp || 0) - finalDamage);
+    const resolvedHealing = reason === 'heal'
+      ? Math.max(0, nextHp - Number(targetRuntime.currentHp || 0))
+      : 0;
+
+    let reporterStatState = null;
+    if (!environmentSource && reporterRuntime) {
+      reporterStatState = {
+        ...reporterRuntime,
+        damageDealt: Math.max(0, Number(reporterRuntime.damageDealt || 0))
+          + (reason === 'damage' ? finalDamage : 0),
+        healingDone: Math.max(0, Number(reporterRuntime.healingDone || 0)) + resolvedHealing,
+        sequence: Number(reporterRuntime.sequence || 0) + 1,
+        sentAt: now,
+      };
+      room.set(reporter.userId, reporterStatState);
+    }
     const lethal = reason === 'damage' && nextHp <= 0;
     const respawnSeconds = lethal
       ? serverHeroRespawnSeconds(targetRuntime.level)
@@ -1248,6 +1276,7 @@ export function createPlatformServer(options = {}) {
             sentAt: now,
           };
           room.set(killerPlayer.userId, creditedKillerState);
+          if (reporterStatState?.userId === killerPlayer.userId) reporterStatState = creditedKillerState;
         }
       }
       runtimeHeroDamageCredits(active.id).delete(target.userId);
@@ -1284,6 +1313,8 @@ export function createPlatformServer(options = {}) {
       currentHp: nextHp,
       alive: nextHp > 0,
       moving: nextHp > 0 ? Boolean(targetRuntime.moving) : false,
+      damageTaken: Math.max(0, Number(targetRuntime.damageTaken || 0))
+        + (reason === 'damage' ? finalDamage : 0),
       deaths: Number(targetRuntime.deaths || 0) + (lethal ? 1 : 0),
       respawnRemainingMs: lethal ? respawnSeconds * 1000 : 0,
       respawnDurationMs: lethal ? respawnSeconds * 1000 : 0,
@@ -1338,11 +1369,12 @@ export function createPlatformServer(options = {}) {
       matchId: active.id,
       state: targetState,
     }, recipients);
-    if (creditedKillerState) {
+    const reporterBroadcastState = creditedKillerState || reporterStatState;
+    if (reporterBroadcastState && reporterBroadcastState.userId !== target.userId) {
       broadcast({
         type: 'match.runtime.state',
         matchId: active.id,
-        state: creditedKillerState,
+        state: reporterBroadcastState,
       }, recipients);
     }
     if (confirmedHeroKillEvent) broadcast(confirmedHeroKillEvent, recipients);

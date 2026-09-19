@@ -5,6 +5,7 @@ import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { HeroSelectScreen } from './HeroSelectScreen';
 import { MatchLoadingScreen } from './MatchLoadingScreen';
+import { PostMatchScreen } from './PostMatchScreen';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
 import { DawnreachPlayScreen, type PlayMode } from './DawnreachPlay';
@@ -22,6 +23,7 @@ import {
   type PartySnapshot,
   type PlatformRealtimeEvent,
   type PlatformUser,
+  type MatchEndedEvent,
   type QueueMode,
   type QueueState,
   type ReadyState,
@@ -34,6 +36,7 @@ const EMPTY_SOCIAL: SocialSnapshot = { friends: [], incoming: [], outgoing: [] }
 const EMPTY_PARTY: PartySnapshot = { party: null, invites: [], messages: [] };
 const EMPTY_QUEUE: QueueState = { joined: false, mode: 'ranked', count: 0, target: 10 };
 const MATCH_ABANDON_REQUEST_EVENT = 'dawnreach:match-abandon-request';
+const MATCH_POST_MATCH_OPEN_EVENT = 'dawnreach:post-match-open';
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
@@ -118,6 +121,8 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const [heroSelect, setHeroSelect] = useState<HeroSelectState | null>(null);
   const [activeMatch, setActiveMatch] = useState<ActiveMatchSession | null>(null);
   const [sharedGameVisible, setSharedGameVisible] = useState(false);
+  const [postMatch, setPostMatch] = useState<MatchEndedEvent | null>(null);
+  const [postMatchVisible, setPostMatchVisible] = useState(false);
   const abandonPendingRef = useRef(false);
   const closeAfterAbandonRef = useRef(false);
   const [realtime, setRealtime] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -164,6 +169,19 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     window.addEventListener(MATCH_ABANDON_REQUEST_EVENT, onMatchAbandonRequest);
     return () => window.removeEventListener(MATCH_ABANDON_REQUEST_EVENT, onMatchAbandonRequest);
   }, [activeMatch?.stage, activeMatch?.match.id]);
+
+  useEffect(() => {
+    const openPostMatch = () => {
+      if (!postMatch) return;
+      setPostMatchVisible(true);
+      setHeroSelect(null);
+      setActiveMatch(null);
+      setSharedGameVisible(false);
+      setCurrentLobby(null);
+    };
+    window.addEventListener(MATCH_POST_MATCH_OPEN_EVENT, openPostMatch);
+    return () => window.removeEventListener(MATCH_POST_MATCH_OPEN_EVENT, openPostMatch);
+  }, [postMatch]);
 
   useEffect(() => {
     void refreshSocial().catch(() => undefined);
@@ -242,6 +260,8 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       }
       if (type === 'match.start' && 'match' in event && event.match) {
         setHeroSelect(null);
+        setPostMatch(null);
+        setPostMatchVisible(false);
         setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
         setSharedGameVisible(true);
         setNotice('');
@@ -266,28 +286,20 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setNotice('You left the match.');
       }
       if (type === 'match.ended' && 'match' in event && event.match) {
-        const endedMatch = event.match as ActiveMatchSession['match'];
-        const localTeam = endedMatch.players.find(player => player.userId === user.id)?.team ?? null;
-        const winnerTeam = 'winnerTeam' in event && (event.winnerTeam === 'blue' || event.winnerTeam === 'red')
-          ? event.winnerTeam
-          : null;
-        const voided = 'voided' in event && event.voided === true;
-        const reason = 'reason' in event ? String(event.reason || '') : '';
-
+        const ended = event as MatchEndedEvent;
         setHeroSelect(null);
-        setActiveMatch(null);
-        setSharedGameVisible(false);
+        setPostMatch(ended);
         setCurrentLobby(null);
-        setSection('home');
+        setNotice('');
 
-        if (voided || reason === 'all_disconnected_timeout' || reason === 'all_players_abandoned') {
-          setNotice('Match cancelled. No result was recorded.');
-        } else if (winnerTeam && localTeam) {
-          setNotice(winnerTeam === localTeam
-            ? 'Victory. The opposing team left or failed to reconnect.'
-            : 'Defeat. Your team left or failed to reconnect.');
-        } else {
-          setNotice('The match has ended.');
+        // Normal flow keeps the battlefield mounted so GameApp can play its result cinematic.
+        // If the game is not currently mounted (for example a disconnected player receives
+        // the final event from the home surface), open the post-match report immediately.
+        const gameMounted = Boolean(document.querySelector('.platform-local-game'));
+        if (!gameMounted) {
+          setActiveMatch(null);
+          setSharedGameVisible(false);
+          setPostMatchVisible(true);
         }
       }
       if (type === 'match.rejoin.ready' && 'activeMatch' in event && event.activeMatch) {
@@ -363,6 +375,25 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     setSection('play');
     setPlaySection('matchmaking');
   };
+
+  if (postMatch && postMatchVisible) {
+    const continueToHome = () => {
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setSection('home');
+      setRequestedPlayMode(null);
+    };
+    const playAgain = () => {
+      const mode = postMatch.match.mode;
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setSection('play');
+      setPlaySection(mode === 'custom' ? 'custom' : 'matchmaking');
+      setRequestedPlayMode(mode === 'normal' || mode === 'ranked' || mode === 'custom' ? mode : null);
+      if (mode === 'custom') platformRealtime.send('lobby.list');
+    };
+    return <PostMatchScreen result={postMatch} me={user} onContinue={continueToHome} onPlayAgain={playAgain} />;
+  }
 
   if (activeMatch?.stage === 'loading' || (activeMatch?.stage === 'in_game' && sharedGameVisible)) {
     return <div className={`platform-shared-match-runtime${activeMatch.stage === 'loading' ? ' is-loading' : ''}`}>

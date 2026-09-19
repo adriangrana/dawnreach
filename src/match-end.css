@@ -137,3 +137,142 @@ body[data-dawnreach-match-finished="true"] #dawnreach-game-menu [data-action="re
     font-size: 15px;
   }
 }
+
+
+/* Full-screen end-of-match cinematic. Loaded after styles.css to replace the old compact card. */
+.match-ended-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: transparent;
+  animation: dr-match-end-fade 520ms ease both;
+}
+
+.match-ended-cinematic-bg {
+  position: absolute;
+  inset: -5%;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(63, 118, 153, .22), transparent 34%),
+    linear-gradient(180deg, rgba(1, 7, 12, .52), rgba(2, 7, 12, .91)),
+    url("/assets/images/dawnreach_loading_splash.webp") center / cover no-repeat;
+  filter: blur(2px) saturate(.72) brightness(.55);
+  transform: scale(1.05);
+  animation: dr-match-end-bg 6s ease-out both;
+}
+
+.match-ended-overlay.is-victory .match-ended-cinematic-bg {
+  box-shadow: inset 0 0 180px rgba(55, 151, 219, .18);
+}
+
+.match-ended-overlay.is-defeat .match-ended-cinematic-bg {
+  box-shadow: inset 0 0 180px rgba(205, 63, 73, .16);
+}
+
+.match-ended-rays {
+  position: absolute;
+  width: min(1040px, 90vw);
+  aspect-ratio: 1;
+  opacity: .42;
+  background: repeating-conic-gradient(from 0deg, rgba(226, 192, 110, .08) 0deg 1.5deg, transparent 1.5deg 14deg);
+  mask-image: radial-gradient(circle, #000 0 16%, transparent 64%);
+  animation: dr-match-end-rays 24s linear infinite;
+}
+
+.match-ended-card {
+  position: relative;
+  width: min(760px, calc(100vw - 48px));
+  padding: 50px 52px 42px;
+  border: 0;
+  text-align: center;
+  background: radial-gradient(circle at 50% 40%, rgba(16, 34, 47, .66), rgba(5, 11, 16, .3) 58%, transparent 76%);
+  box-shadow: none;
+  animation: dr-match-end-card 760ms cubic-bezier(.16,.8,.2,1) 120ms both;
+}
+
+.match-ended-card::before,
+.match-ended-card::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224, 188, 100, .84), transparent);
+  box-shadow: 0 0 16px rgba(224, 188, 100, .26);
+}
+.match-ended-card::before { top: 28px; }
+.match-ended-card::after { bottom: 23px; }
+
+.match-ended-card small {
+  display: block;
+  margin: 0 0 12px;
+  color: #a9b9c7;
+  font: 700 10px/1 "Trebuchet MS", sans-serif;
+  letter-spacing: .42em;
+}
+
+.match-ended-card h2 {
+  margin: 0;
+  font: 700 clamp(58px, 8vw, 104px)/.92 Georgia, serif;
+  letter-spacing: .09em;
+  color: #e8ca7e;
+  text-shadow: 0 0 34px rgba(232, 202, 126, .25), 0 6px 24px rgba(0,0,0,.85);
+}
+
+.match-ended-overlay.is-victory .match-ended-card h2 { color: #f1d58c; }
+.match-ended-overlay.is-defeat .match-ended-card h2 { color: #ed858d; text-shadow: 0 0 34px rgba(237,133,141,.22), 0 6px 24px rgba(0,0,0,.85); }
+.match-ended-overlay.is-cancelled .match-ended-card h2 { font-size: clamp(42px, 6vw, 72px); color: #c7cbd0; }
+
+.match-ended-score {
+  display: grid;
+  grid-template-columns: 84px 1fr 44px 1fr 84px;
+  align-items: center;
+  gap: 10px;
+  width: min(470px, 90%);
+  margin: 25px auto 18px;
+}
+.match-ended-score span { font: 700 34px/1 Georgia, serif; }
+.match-ended-score .is-dawn { color: #79caff; }
+.match-ended-score .is-dusk { color: #ef7e87; }
+.match-ended-score i { height: 1px; background: linear-gradient(90deg, transparent, rgba(192, 174, 126, .55)); }
+.match-ended-score i:nth-of-type(2) { transform: scaleX(-1); }
+.match-ended-score b { color: #d8bd76; font: 700 13px Georgia, serif; letter-spacing: .12em; }
+
+.match-ended-card p {
+  margin: 0 auto;
+  max-width: 560px;
+  color: #d2d9df;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.match-ended-team {
+  display: block;
+  margin-top: 12px;
+  color: #9eb3c2;
+  font-size: 9px;
+  letter-spacing: .24em;
+}
+
+.match-ended-continue {
+  min-width: 250px;
+  height: 46px;
+  margin-top: 30px;
+  border: 1px solid rgba(218, 180, 87, .76);
+  color: #f4e1ac;
+  background: linear-gradient(180deg, rgba(104, 75, 22, .9), rgba(42, 29, 9, .96));
+  font: 800 10px "Trebuchet MS", sans-serif;
+  letter-spacing: .16em;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(218, 180, 87, .14), inset 0 0 0 1px rgba(255,255,255,.04);
+  transition: opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.match-ended-continue:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 0 30px rgba(218, 180, 87, .24); }
+.match-ended-continue:disabled { opacity: .32; cursor: default; }
+
+@keyframes dr-match-end-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dr-match-end-bg { from { transform: scale(1.09); } to { transform: scale(1.03); } }
+@keyframes dr-match-end-card { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes dr-match-end-rays { to { transform: rotate(360deg); } }

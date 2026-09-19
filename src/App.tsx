@@ -87,6 +87,7 @@ const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', impor
 const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.webp', import.meta.url).href;
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
+const MATCH_POST_MATCH_OPEN_EVENT = 'dawnreach:post-match-open';
 const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].webp', {
   eager: true, query: '?url', import: 'default',
 });
@@ -115,6 +116,9 @@ type MatchEndPresentation = {
   winnerTeam: 'blue' | 'red' | null;
   reason: string;
   voided: boolean;
+  dawnKills: number;
+  duskKills: number;
+  durationMs: number;
 };
 
 type RespawnPresentation = {
@@ -845,31 +849,70 @@ function MatchEndedOverlay({
   result: MatchEndPresentation | null;
   localTeam: 'blue' | 'red' | null;
 }) {
+  const [canContinue, setCanContinue] = useState(false);
+
+  useEffect(() => {
+    if (!result) {
+      setCanContinue(false);
+      return;
+    }
+    setCanContinue(false);
+    const timer = window.setTimeout(() => setCanContinue(true), 1800);
+    return () => window.clearTimeout(timer);
+  }, [result]);
+
   if (!result) return null;
 
   const title = result.voided || result.winnerTeam === null
-    ? 'PARTIDA CANCELADA'
+    ? 'MATCH CANCELLED'
     : result.winnerTeam === localTeam
-      ? 'VICTORIA'
-      : 'DERROTA';
+      ? 'VICTORY'
+      : 'DEFEAT';
+  const resultClass = title === 'VICTORY' ? 'is-victory' : title === 'DEFEAT' ? 'is-defeat' : 'is-cancelled';
   const reason = result.reason === 'team_abandonment'
-    ? 'El equipo rival se quedó sin jugadores activos.'
+    ? 'The opposing team ran out of active players.'
     : result.reason === 'team_disconnect_timeout'
-      ? 'El equipo rival agotó el tiempo de reconexión.'
+      ? 'The opposing team failed to reconnect in time.'
       : result.reason === 'all_disconnected_timeout'
-        ? 'Nadie regresó antes de terminar el tiempo de reconexión. La partida no puntúa.'
+        ? 'Nobody returned before the reconnect timer expired. The match is void.'
         : result.reason === 'all_players_abandoned'
-          ? 'Todos los jugadores abandonaron la partida. La partida no puntúa.'
+          ? 'All players abandoned the battlefield. The match is void.'
           : result.reason === 'loading_abandonment'
-            ? 'La partida fue cancelada durante la carga.'
-            : 'La partida ha terminado.';
+            ? 'The match was cancelled during loading.'
+            : result.winnerTeam === 'blue'
+              ? 'Dawn has broken Dusk\'s final resistance.'
+              : result.winnerTeam === 'red'
+                ? 'Dusk has conquered the battlefield.'
+                : 'The battle is over.';
+  const durationSeconds = Math.max(0, Math.floor(result.durationMs / 1000));
+  const duration = `${String(Math.floor(durationSeconds / 60)).padStart(2, '0')}:${String(durationSeconds % 60).padStart(2, '0')}`;
 
   return (
-    <section className="match-ended-overlay" role="dialog" aria-modal="true" aria-live="assertive">
+    <section className={`match-ended-overlay ${resultClass}`} role="dialog" aria-modal="true" aria-live="assertive">
+      <div className="match-ended-cinematic-bg" aria-hidden="true" />
+      <div className="match-ended-rays" aria-hidden="true" />
       <div className="match-ended-card">
-        <small>DAWNREACH</small>
+        <small>THE BATTLE IS OVER</small>
         <h2>{title}</h2>
+        <div className="match-ended-score" aria-label={`Final score ${result.dawnKills} to ${result.duskKills}`}>
+          <span className="is-dawn">{result.dawnKills}</span>
+          <i />
+          <b>VS</b>
+          <i />
+          <span className="is-dusk">{result.duskKills}</span>
+        </div>
         <p>{reason}</p>
+        <strong className="match-ended-team">
+          {result.winnerTeam ? `${result.winnerTeam === 'blue' ? 'DAWN' : 'DUSK'} TEAM · ${duration}` : duration}
+        </strong>
+        <button
+          type="button"
+          className="match-ended-continue"
+          disabled={!canContinue}
+          onClick={() => window.dispatchEvent(new CustomEvent(MATCH_POST_MATCH_OPEN_EVENT))}
+        >
+          {canContinue ? 'VIEW STATISTICS' : 'RECORDING RESULT…'}
+        </button>
       </div>
     </section>
   );
@@ -1630,10 +1673,20 @@ export default function App({
           ? ended.winnerTeam
           : null;
         matchEndedRef.current = true;
+        const finalStates = ended.finalStates ?? [];
+        const dawnKills = finalStates
+          .filter(state => state.team === 'blue')
+          .reduce((sum, state) => sum + Math.max(0, Number(state.kills || 0)), 0);
+        const duskKills = finalStates
+          .filter(state => state.team === 'red')
+          .reduce((sum, state) => sum + Math.max(0, Number(state.kills || 0)), 0);
         setMatchEnd({
           winnerTeam,
           reason: String(ended.reason || 'completed'),
           voided: Boolean(ended.voided),
+          dawnKills,
+          duskKills,
+          durationMs: Math.max(0, Number(ended.durationMs || 0)),
         });
         setConnectionState({
           mode: 'cleared',
