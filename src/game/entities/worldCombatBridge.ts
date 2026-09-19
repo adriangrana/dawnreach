@@ -97,6 +97,7 @@ type PendingHpChange = Readonly<{
 const runtimeSnapshots = new Map<string, WorldEntityRuntimeSnapshot>();
 const pendingHpChanges = new Map<string, PendingHpChange>();
 const pendingDamageAdjustments = new Map<string, number>();
+const appliedDamageAdjustments = new Map<string, number>();
 const combatListeners = new Set<WorldCombatListener>();
 const attackListeners = new Set<WorldAttackListener>();
 const combatEventGuards = new Map<string, WorldCombatEventGuard>();
@@ -120,9 +121,13 @@ function cloneRuntimeSnapshot(snapshot: WorldEntityRuntimeSnapshot): WorldEntity
 }
 
 function applyPendingDamageAdjustment(entityId: string, snapshot: WorldEntityRuntimeSnapshot) {
+  // Only an adjustment consumed by this exact publication may augment the next explicit
+  // combat event. Clear any stale marker before evaluating the new publication.
+  appliedDamageAdjustments.delete(entityId);
   const adjustment = pendingDamageAdjustments.get(entityId) ?? 0;
   if (adjustment <= 0) return snapshot;
   pendingDamageAdjustments.delete(entityId);
+  appliedDamageAdjustments.set(entityId, adjustment);
   const currentHp = Math.max(0, snapshot.currentHp - adjustment);
   return {
     ...snapshot,
@@ -164,6 +169,7 @@ export function removeWorldEntityRuntime(entityId: string): void {
   runtimeSnapshots.delete(entityId);
   pendingHpChanges.delete(entityId);
   pendingDamageAdjustments.delete(entityId);
+  appliedDamageAdjustments.delete(entityId);
 }
 
 export function subscribeWorldCombatEvents(listener: WorldCombatListener): () => void {
@@ -225,9 +231,28 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
       ? Math.max(0, snapshot.currentHp - effectiveCurrentHp)
       : Math.max(0, effectiveCurrentHp - snapshot.currentHp)
     : 0;
-  const inferredAmount = (pending?.kind === expectedKind ? pending.amount : undefined)
-    ?? event.amount
-    ?? (snapshotAmount > 0.001 ? snapshotAmount : undefined);
+  const explicitAmount = Number.isFinite(Number(event.amount))
+    ? Math.max(0, Number(event.amount))
+    : undefined;
+  // Generic HP deltas are inference only. They can belong to another creep hit or to a
+  // network reconciliation and must never replace an explicitly authored combat amount.
+  // Match-owned bonuses queued by queueWorldDamageAdjustment are the only augmentation.
+  const explicitDamageAdjustment = damageLike
+    ? Math.max(
+      0,
+      appliedDamageAdjustments.get(event.entityId)
+        ?? pendingDamageAdjustments.get(event.entityId)
+        ?? 0,
+    )
+    : 0;
+  if (damageLike && explicitDamageAdjustment > 0) {
+    pendingDamageAdjustments.delete(event.entityId);
+    appliedDamageAdjustments.delete(event.entityId);
+  }
+  const inferredAmount = explicitAmount !== undefined
+    ? explicitAmount + explicitDamageAdjustment
+    : (pending?.kind === expectedKind ? pending.amount : undefined)
+      ?? (snapshotAmount > 0.001 ? snapshotAmount : undefined);
   const sourceEntityId = event.sourceEntityId ?? inferRecentAttackSource(event);
   const published: WorldCombatEvent = {
     ...event,
@@ -241,10 +266,12 @@ export function emitWorldCombatEvent(event: WorldCombatEvent): void {
   for (const guard of combatEventGuards.values()) {
     if (guard(published)) continue;
     pendingHpChanges.delete(event.entityId);
+    appliedDamageAdjustments.delete(event.entityId);
     return;
   }
 
   pendingHpChanges.delete(event.entityId);
+  appliedDamageAdjustments.delete(event.entityId);
 
   if (snapshot) {
     runtimeSnapshots.set(event.entityId, {
