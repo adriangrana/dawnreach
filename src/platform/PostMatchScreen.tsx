@@ -1,6 +1,7 @@
 import { BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users } from 'lucide-react';
 import { getHeroDefinition } from '../game/heroes/catalog';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
+import { DawnreachHomeTopbar } from './DawnreachHome';
 import type {
   MatchEndedEvent,
   MatchResultPlayer,
@@ -247,13 +248,19 @@ function TeamTable({
 export function PostMatchScreen({
   result,
   me,
+  realtime,
   onContinue,
+  onPlay,
   onPlayAgain,
+  onLogout,
 }: {
   result: MatchEndedEvent;
   me: PlatformUser;
+  realtime: 'connecting' | 'online' | 'offline';
   onContinue: () => void;
+  onPlay: () => void;
   onPlayAgain: () => void;
+  onLogout: () => void;
 }) {
   const players = buildFinalPlayers(result);
   const localTeam = result.match.players.find(player => player.userId === me.id)?.team ?? null;
@@ -292,29 +299,14 @@ export function PostMatchScreen({
     <main className={`dr-post-match is-mode-${result.match.mode}`} aria-label="Match results">
       <div className="dr-post-backdrop" aria-hidden="true" />
 
-      <header className="dr-post-global-header">
-        <button type="button" className="dr-post-global-brand" onClick={onContinue} aria-label="Dawnreach home">
-          <img src="/assets/icon/dawnreach.png" alt="" draggable={false} />
-          <span><strong>DAWNREACH</strong><small>A BRIGHTER TOMORROW</small></span>
-        </button>
-        <nav className="dr-post-global-nav" aria-label="Main navigation">
-          <button type="button" onClick={onContinue}>HOME</button>
-          <button type="button" onClick={onPlayAgain}>PLAY</button>
-          <button type="button" disabled>HEROES</button>
-          <button type="button" disabled>COLLECTION</button>
-          <button type="button" disabled>STORE</button>
-          <button type="button" disabled>ESPORTS</button>
-          <button type="button" disabled>PROFILE</button>
-        </nav>
-        <div className="dr-post-global-user">
-          <span className="dr-post-global-avatar">
-            {local?.portrait
-              ? <img src={local.portrait} alt="" draggable={false} />
-              : me.username.slice(0, 2).toUpperCase()}
-          </span>
-          <span><strong>{me.username}</strong><small>POST-MATCH</small></span>
-        </div>
-      </header>
+      <DawnreachHomeTopbar
+        section="home"
+        user={me}
+        realtime={realtime}
+        onHome={onContinue}
+        onPlay={onPlay}
+        onLogout={onLogout}
+      />
 
       <section className={`dr-post-victory-banner is-${result.winnerTeam ?? 'neutral'}`}>
         <div className="dr-post-match-meta">

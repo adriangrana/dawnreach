@@ -279,3 +279,12 @@
   .dr-post-item { width: 23px; height: 23px; }
 }
 .dr-post-match, .dr-post-team, .dr-post-tabs { scrollbar-width: thin; scrollbar-color: #54677a #081522; }
+
+
+/* Post-match deliberately reuses DawnreachHomeTopbar. Keep its shell geometry identical to Home. */
+.dr-post-match > .dr-home-topbar {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  flex: 0 0 auto;
+}

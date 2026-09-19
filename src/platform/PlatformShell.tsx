@@ -383,6 +383,13 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       setSection('home');
       setRequestedPlayMode(null);
     };
+    const openPostMatchPlay = () => {
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setSection('play');
+      setPlaySection('matchmaking');
+      setRequestedPlayMode(null);
+    };
     const playAgain = () => {
       const mode = postMatch.match.mode;
       setPostMatch(null);
@@ -392,7 +399,15 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       setRequestedPlayMode(mode === 'normal' || mode === 'ranked' || mode === 'custom' ? mode : null);
       if (mode === 'custom') platformRealtime.send('lobby.list');
     };
-    return <PostMatchScreen result={postMatch} me={user} onContinue={continueToHome} onPlayAgain={playAgain} />;
+    return <PostMatchScreen
+      result={postMatch}
+      me={user}
+      realtime={realtime}
+      onContinue={continueToHome}
+      onPlay={openPostMatchPlay}
+      onPlayAgain={playAgain}
+      onLogout={onLogout}
+    />;
   }
 
   if (activeMatch?.stage === 'loading' || (activeMatch?.stage === 'in_game' && sharedGameVisible)) {
