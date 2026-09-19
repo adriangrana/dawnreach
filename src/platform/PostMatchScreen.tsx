@@ -1,7 +1,14 @@
 import { BarChart3, Coins, Crown, Home, RotateCcw, Shield, Swords, Timer, Trophy } from 'lucide-react';
 import { getHeroDefinition } from '../game/heroes/catalog';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
-import type { MatchEndedEvent, MatchRuntimePlayerState, MatchPlayer, PlatformUser, Team } from './types';
+import type {
+  MatchEndedEvent,
+  MatchResultPlayer,
+  MatchRuntimePlayerState,
+  MatchPlayer,
+  PlatformUser,
+  Team,
+} from './types';
 
 const heroPortraitModules = import.meta.glob<string>('../game/heroes/*/images/*.webp', {
   eager: true,
@@ -17,7 +24,7 @@ for (const [path, url] of Object.entries(heroPortraitModules)) {
 
 type FinalPlayer = Readonly<{
   player: MatchPlayer;
-  state: MatchRuntimePlayerState;
+  stats: MatchResultPlayer;
   heroName: string;
   portrait?: string;
 }>;
@@ -46,51 +53,65 @@ function safeHeroName(heroId: string) {
   }
 }
 
-function fallbackState(player: MatchPlayer, heroId: string): MatchRuntimePlayerState {
+function legacyResultPlayer(
+  player: MatchPlayer,
+  state: MatchRuntimePlayerState | null,
+  heroId: string,
+  observedAt: string,
+): MatchResultPlayer {
+  const experience = Math.max(0, number(state?.experience));
   return {
     userId: player.userId,
-    username: player.username,
-    team: player.team,
     slot: player.slot,
+    playerName: player.username,
+    team: player.team,
     heroId,
-    sequence: 0,
-    position: { x: 0, y: 0, z: 0 },
-    yaw: 0,
-    moving: false,
-    currentHp: 0,
-    maxHp: 0,
-    currentResource: 0,
-    maxResource: 0,
-    level: 1,
-    experience: 0,
-    alive: false,
-    kills: 0,
-    deaths: 0,
-    assists: 0,
-    lastHits: 0,
-    denies: 0,
-    gold: 0,
-    damageDealt: 0,
-    damageTaken: 0,
-    healingDone: 0,
-    inventory: [],
-    sentAt: 0,
+    heroName: safeHeroName(heroId),
+    kills: Math.max(0, number(state?.kills)),
+    deaths: Math.max(0, number(state?.deaths)),
+    assists: Math.max(0, number(state?.assists)),
+    heroLevel: Math.max(1, number(state?.level) || 1),
+    creepKills: Math.max(0, number(state?.lastHits)),
+    creepDenies: Math.max(0, number(state?.denies)),
+    currentGold: Math.max(0, number(state?.gold)),
+    experience,
+    heroDamage: Math.max(0, number(state?.damageDealt)),
+    heroDamageTaken: Math.max(0, number(state?.damageTaken)),
+    towerDamage: 0,
+    buildingDamage: 0,
+    healing: Math.max(0, number(state?.healingDone)),
+    xpm: 0,
+    towersDestroyed: 0,
+    killStreak: 0,
+    items: state?.inventory ?? [],
+    leftGame: false,
+    disconnectSeconds: 0,
+    observedAt,
   };
 }
 
 function buildFinalPlayers(result: MatchEndedEvent): FinalPlayer[] {
-  const finalStates = result.finalStates?.length
+  const reportPlayers = result.match.postMatchReport?.players ?? [];
+  const resultByUserId = new Map(reportPlayers.map(stats => [stats.userId, stats] as const));
+  const legacyStates = result.finalStates?.length
     ? result.finalStates
     : result.match.postMatchReport?.finalStates ?? [];
-  const byUserId = new Map(finalStates.map(state => [state.userId, state] as const));
+  const legacyByUserId = new Map(legacyStates.map(state => [state.userId, state] as const));
+  const observedAt = result.match.postMatchReport?.endedAt ?? result.match.endedAt ?? new Date().toISOString();
+
   return result.match.players
     .map(player => {
-      const heroId = result.match.heroSelections?.[player.userId]?.heroId || byUserId.get(player.userId)?.heroId || 'H001';
-      const state = byUserId.get(player.userId) ?? fallbackState(player, heroId);
+      const stored = resultByUserId.get(player.userId) ?? null;
+      const legacy = legacyByUserId.get(player.userId) ?? null;
+      const heroId = stored?.heroId
+        || result.match.heroSelections?.[player.userId]?.heroId
+        || legacy?.heroId
+        || 'H001';
+      const stats = stored ?? legacyResultPlayer(player, legacy, heroId, observedAt);
       return {
         player,
-        state,
-        heroName: safeHeroName(heroId),
+        stats,
+        heroName: stats.heroName || safeHeroName(heroId),
         portrait: heroPortraitsById.get(heroId.toUpperCase()),
       };
     })
@@ -107,20 +128,20 @@ function resultTitle(result: MatchEndedEvent, localTeam: Team | null) {
 }
 
 function mvpScore(entry: FinalPlayer) {
-  const state = entry.state;
+  const stats = entry.stats;
   return (
-    number(state.kills) * 4
-    + number(state.assists) * 1.8
-    - number(state.deaths) * 1.35
-    + number(state.damageDealt) / 1200
-    + number(state.gold) / 1800
-    + number(state.lastHits) * 0.05
-    + number(state.denies) * 0.25
+    number(stats.kills) * 4
+    + number(stats.assists) * 1.8
+    - number(stats.deaths) * 1.35
+    + number(stats.heroDamage) / 1200
+    + number(stats.currentGold) / 1800
+    + number(stats.creepKills) * 0.05
+    + number(stats.creepDenies) * 0.25
   );
 }
 
-function itemSlots(state: MatchRuntimePlayerState) {
-  const itemsBySlot = new Map(state.inventory.map(item => [item.slot, item] as const));
+function itemSlots(stats: MatchResultPlayer) {
+  const itemsBySlot = new Map(stats.items.map(item => [item.slot, item] as const));
   return Array.from({ length: 6 }, (_, slot) => itemsBySlot.get(slot) ?? null);
 }
 
@@ -135,9 +156,9 @@ function TeamTable({
   localUserId: string;
   mvpUserId: string | null;
 }) {
-  const kills = entries.reduce((sum, entry) => sum + number(entry.state.kills), 0);
-  const deaths = entries.reduce((sum, entry) => sum + number(entry.state.deaths), 0);
-  const assists = entries.reduce((sum, entry) => sum + number(entry.state.assists), 0);
+  const kills = entries.reduce((sum, entry) => sum + number(entry.stats.kills), 0);
+  const deaths = entries.reduce((sum, entry) => sum + number(entry.stats.deaths), 0);
+  const assists = entries.reduce((sum, entry) => sum + number(entry.stats.assists), 0);
   return (
     <section className={`dr-post-team dr-post-team--${team}`}>
       <header className="dr-post-team-header">
@@ -156,7 +177,7 @@ function TeamTable({
       </div>
       <div className="dr-post-team-rows">
         {entries.map(entry => {
-          const state = entry.state;
+          const stats = entry.stats;
           const local = entry.player.userId === localUserId;
           const mvp = entry.player.userId === mvpUserId;
           return (
@@ -165,7 +186,7 @@ function TeamTable({
               className={`dr-post-player-row${local ? ' is-local' : ''}${mvp ? ' is-mvp' : ''}`}
             >
               <div className="dr-post-player">
-                <span className="dr-post-level">{Math.max(1, Math.floor(number(state.level)))}</span>
+                <span className="dr-post-level">{Math.max(1, Math.floor(number(stats.heroLevel)))}</span>
                 <div className="dr-post-portrait">
                   {entry.portrait ? <img src={entry.portrait} alt="" draggable={false} /> : <Shield />}
                 </div>
@@ -174,14 +195,14 @@ function TeamTable({
                   <span>{entry.player.username}{local ? ' · YOU' : ''}</span>
                 </div>
               </div>
-              <b className="dr-post-kda">{state.kills} / {state.deaths} / {state.assists}</b>
-              <span>{state.lastHits} / {state.denies}</span>
-              <span>{formatNumber(number(state.gold))}</span>
-              <span>{formatNumber(number(state.damageDealt))}</span>
-              <span>{formatNumber(number(state.damageTaken))}</span>
-              <span>{formatNumber(number(state.healingDone))}</span>
+              <b className="dr-post-kda">{stats.kills} / {stats.deaths} / {stats.assists}</b>
+              <span>{stats.creepKills} / {stats.creepDenies}</span>
+              <span>{formatNumber(number(stats.currentGold))}</span>
+              <span>{formatNumber(number(stats.heroDamage))}</span>
+              <span>{formatNumber(number(stats.heroDamageTaken))}</span>
+              <span>{formatNumber(number(stats.healing))}</span>
               <div className="dr-post-items" aria-label="Final inventory">
-                {itemSlots(state).map((item, index) => (
+                {itemSlots(stats).map((item, index) => (
                   <span key={index} className={`dr-post-item${item ? ' has-item' : ''}`}>
                     {item && <img src={getItemIconDataUrl(item.definitionId)} alt={item.displayName} draggable={false} />}
                     {item && item.quantity > 1 && <em>{item.quantity}</em>}
@@ -212,8 +233,8 @@ export function PostMatchScreen({
   const localTeam = result.match.players.find(player => player.userId === me.id)?.team ?? null;
   const dawn = players.filter(entry => entry.player.team === 'blue');
   const dusk = players.filter(entry => entry.player.team === 'red');
-  const dawnKills = dawn.reduce((sum, entry) => sum + number(entry.state.kills), 0);
-  const duskKills = dusk.reduce((sum, entry) => sum + number(entry.state.kills), 0);
+  const dawnKills = dawn.reduce((sum, entry) => sum + number(entry.stats.kills), 0);
+  const duskKills = dusk.reduce((sum, entry) => sum + number(entry.stats.kills), 0);
   const endedAtMs = Date.parse(result.match.endedAt || '');
   const startedAtMs = Date.parse(result.match.startedAt || result.match.createdAt);
   const fallbackDurationMs = Number.isFinite(endedAtMs) && Number.isFinite(startedAtMs)
@@ -227,12 +248,12 @@ export function PostMatchScreen({
     : players;
   const mvp = [...mvpPool].sort((left, right) => mvpScore(right) - mvpScore(left))[0] ?? null;
   const local = players.find(entry => entry.player.userId === me.id) ?? null;
-  const maxDamage = Math.max(1, ...players.map(entry => number(entry.state.damageDealt)));
-  const dawnDamage = dawn.reduce((sum, entry) => sum + number(entry.state.damageDealt), 0);
-  const duskDamage = dusk.reduce((sum, entry) => sum + number(entry.state.damageDealt), 0);
+  const maxDamage = Math.max(1, ...players.map(entry => number(entry.stats.heroDamage)));
+  const dawnDamage = dawn.reduce((sum, entry) => sum + number(entry.stats.heroDamage), 0);
+  const duskDamage = dusk.reduce((sum, entry) => sum + number(entry.stats.heroDamage), 0);
   const localResult = resultTitle(result, localTeam);
-  const localGold = local ? number(local.state.gold) : 0;
-  const localCreepScore = local ? number(local.state.lastHits) + number(local.state.denies) : 0;
+  const localGold = local ? number(local.stats.currentGold) : 0;
+  const localCreepScore = local ? number(local.stats.creepKills) + number(local.stats.creepDenies) : 0;
 
   return (
     <main className="dr-post-match">
@@ -284,9 +305,9 @@ export function PostMatchScreen({
                 </div>
               </div>
               <div className="dr-post-mvp-metrics">
-                <span><b>{mvp.state.kills} / {mvp.state.deaths} / {mvp.state.assists}</b><small>K / D / A</small></span>
-                <span><b>{formatNumber(number(mvp.state.damageDealt))}</b><small>DAMAGE</small></span>
-                <span><b>{formatNumber(number(mvp.state.gold))}</b><small>GOLD</small></span>
+                <span><b>{mvp.stats.kills} / {mvp.stats.deaths} / {mvp.stats.assists}</b><small>K / D / A</small></span>
+                <span><b>{formatNumber(number(mvp.stats.heroDamage))}</b><small>DAMAGE</small></span>
+                <span><b>{formatNumber(number(mvp.stats.currentGold))}</b><small>GOLD</small></span>
               </div>
             </> : <p>No MVP data available.</p>}
           </section>
@@ -304,7 +325,7 @@ export function PostMatchScreen({
                     <strong>{formatNumber(total)}</strong>
                   </div>
                   {entries.map(entry => {
-                    const damage = number(entry.state.damageDealt);
+                    const damage = number(entry.stats.heroDamage);
                     return (
                       <div className={`dr-post-damage-entry is-${entry.player.team}`} key={entry.player.userId}>
                         <div className="dr-post-mini-portrait">{entry.portrait ? <img src={entry.portrait} alt="" /> : <Shield />}</div>

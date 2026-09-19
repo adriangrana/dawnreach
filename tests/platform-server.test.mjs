@@ -305,11 +305,15 @@ test('abandoning the last player on a team awards a connected surviving team', a
     assert.equal(ended.endReason, 'team_abandonment');
     assert.equal(ended.winnerTeam, 'red');
     assert.deepEqual(ended.abandonedUserIds, [blue.body.user.id]);
-    assert.equal(ended.postMatchReport?.version, 1);
+    assert.equal(ended.postMatchReport?.version, 2);
+    assert.equal(ended.postMatchReport?.players?.length, 2);
     assert.equal(ended.postMatchReport?.finalStates?.length, 2);
-    const persistedBlue = ended.postMatchReport.finalStates.find(state => state.userId === blue.body.user.id);
-    assert.equal(persistedBlue.level, 3);
-    assert.equal(persistedBlue.inventory[0].definitionId, 'I001');
+    const persistedBlue = ended.postMatchReport.players.find(player => player.userId === blue.body.user.id);
+    assert.equal(persistedBlue.heroLevel, 3);
+    assert.equal(persistedBlue.creepKills, 0);
+    assert.equal(persistedBlue.currentGold, 615);
+    assert.equal(persistedBlue.items[0].definitionId, 'I001');
+    assert.equal(persistedBlue.leftGame, true);
     assert.equal(platform.store.activeMatchForUser(blue.body.user.id), null);
     assert.equal(platform.store.activeMatchForUser(red.body.user.id), null);
     redSocket.destroy();
@@ -1196,27 +1200,48 @@ test('destroying the enemy throne finishes and persists the post-match report', 
     platform.reportMatchRuntimeStructures('throne-blue', {
       matchId: match.id,
       sequence: 1,
-      structures: [{
-        id: 'red-throne',
-        team: 'red',
-        kind: 'building',
-        currentHp: 100,
-        maxHp: 5000,
-        alive: true,
-      }],
+      structures: [
+        {
+          id: 'red-mid-1-tower',
+          team: 'red',
+          kind: 'tower',
+          currentHp: 50,
+          maxHp: 1000,
+          alive: true,
+        },
+        {
+          id: 'red-throne',
+          team: 'red',
+          kind: 'building',
+          currentHp: 100,
+          maxHp: 5000,
+          alive: true,
+        },
+      ],
+    });
+    platform.reportMatchRuntimeStructureDamage('throne-blue', {
+      matchId: match.id,
+      structureId: 'red-mid-1-tower',
+      amount: 75,
     });
     platform.reportMatchRuntimeStructureDamage('throne-blue', {
       matchId: match.id,
       structureId: 'red-throne',
-      amount: 100,
+      amount: 125,
     });
 
     const ended = platform.store.match(match.id);
     assert.equal(ended.status, 'completed');
     assert.equal(ended.winnerTeam, 'blue');
     assert.equal(ended.endReason, 'throne_destroyed');
-    assert.equal(ended.postMatchReport?.version, 1);
+    assert.equal(ended.postMatchReport?.version, 2);
+    assert.equal(ended.postMatchReport?.players?.length, 2);
     assert.equal(ended.postMatchReport?.finalStates?.length, 2);
+    const blueResult = ended.postMatchReport.players.find(player => player.userId === 'throne-blue');
+    assert.equal(blueResult.heroName, 'Alden');
+    assert.equal(blueResult.towerDamage, 50);
+    assert.equal(blueResult.towersDestroyed, 1);
+    assert.equal(blueResult.buildingDamage, 100);
     assert.equal(ended.postMatchReport?.structures?.find(structure => structure.id === 'red-throne')?.alive, false);
   });
 });

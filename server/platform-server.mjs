@@ -31,8 +31,10 @@ export function createPlatformServer(options = {}) {
   const matchRuntimePauseStates = new Map();
   const matchRuntimeSpawnPositions = new Map();
   const matchRuntimeAuthorityUsers = new Map();
+  const matchRuntimeResultStats = new Map();
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
+  const HERO_NAMES = Object.freeze({ H001: 'Alden' });
   const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
   const HERO_RESPAWN_BASE_SECONDS = Number.isFinite(Number(options.heroRespawnBaseSeconds))
     ? Math.max(0.01, Number(options.heroRespawnBaseSeconds))
@@ -95,7 +97,7 @@ export function createPlatformServer(options = {}) {
 
   const heroSelect = new HeroSelectManager({
     heroIds: ['H001'],
-    heroNames: { H001: 'Alden' },
+    heroNames: HERO_NAMES,
     pickSeconds: 45,
     onEvent: (event, userIds) => broadcast(event, userIds),
     onComplete: handoffToGameSession,
@@ -144,6 +146,46 @@ export function createPlatformServer(options = {}) {
     })) : [];
   }
 
+  function resultStatsRoom(matchId) {
+    let room = matchRuntimeResultStats.get(matchId);
+    if (!room) {
+      room = new Map();
+      matchRuntimeResultStats.set(matchId, room);
+    }
+    return room;
+  }
+
+  function resultStatsFor(matchId, userId) {
+    const room = resultStatsRoom(matchId);
+    let stats = room.get(userId);
+    if (!stats) {
+      stats = {
+        towerDamage: 0,
+        buildingDamage: 0,
+        towersDestroyed: 0,
+        currentKillStreak: 0,
+        maxKillStreak: 0,
+        disconnectMs: 0,
+        disconnectStartedAt: null,
+      };
+      room.set(userId, stats);
+    }
+    return stats;
+  }
+
+  function markResultPlayerDisconnected(matchId, userId, at = Date.now()) {
+    const stats = resultStatsFor(matchId, userId);
+    if (stats.disconnectStartedAt === null) stats.disconnectStartedAt = at;
+  }
+
+  function markResultPlayerConnected(matchId, userId, at = Date.now()) {
+    const stats = resultStatsFor(matchId, userId);
+    if (stats.disconnectStartedAt !== null) {
+      stats.disconnectMs += Math.max(0, at - Number(stats.disconnectStartedAt));
+      stats.disconnectStartedAt = null;
+    }
+  }
+
   function buildPostMatchReport(match, {
     winnerTeam = null,
     reason = 'completed',
@@ -151,17 +193,62 @@ export function createPlatformServer(options = {}) {
     endedAt = new Date().toISOString(),
   } = {}) {
     const finalStates = runtimeSnapshot(match.id);
+    const finalByUserId = new Map(finalStates.map(state => [state.userId, state]));
     const structureSnapshot = runtimeStructureSnapshot(match.id);
     const creepSnapshot = runtimeCreepSnapshot(match.id);
     const startedAt = match.startedAt || null;
-    const startedAtMs = Date.parse(startedAt || match.createdAt || endedAt);
     const endedAtMs = Date.parse(endedAt);
-    const durationMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
-      ? Math.max(0, endedAtMs - startedAtMs)
-      : 0;
+    const durationMs = startedAt && Number.isFinite(endedAtMs)
+      ? runtimeMatchElapsedMs(match, endedAtMs)
+      : Math.max(0, endedAtMs - Date.parse(match.createdAt || endedAt));
+    const durationMinutes = durationMs > 0 ? durationMs / 60_000 : 0;
+    const abandoned = new Set(match.abandonedUserIds || []);
+
+    const players = match.players.map(player => {
+      const state = finalByUserId.get(player.userId) || null;
+      const stats = resultStatsFor(match.id, player.userId);
+      const heroId = match.heroSelections?.[player.userId]?.heroId || state?.heroId || 'H001';
+      const experience = Math.max(0, Number(state?.experience || 0));
+      const disconnectMs = Math.max(
+        0,
+        Number(stats.disconnectMs || 0)
+          + (stats.disconnectStartedAt !== null && Number.isFinite(endedAtMs)
+            ? Math.max(0, endedAtMs - Number(stats.disconnectStartedAt))
+            : 0),
+      );
+
+      return {
+        userId: player.userId,
+        slot: Number(player.slot || 0),
+        playerName: player.username,
+        team: player.team,
+        heroId,
+        heroName: HERO_NAMES[heroId] || heroId,
+        kills: Math.max(0, Number(state?.kills || 0)),
+        deaths: Math.max(0, Number(state?.deaths || 0)),
+        assists: Math.max(0, Number(state?.assists || 0)),
+        heroLevel: Math.max(1, Number(state?.level || 1)),
+        creepKills: Math.max(0, Number(state?.lastHits || 0)),
+        creepDenies: Math.max(0, Number(state?.denies || 0)),
+        currentGold: Math.max(0, Number(state?.gold || 0)),
+        experience,
+        heroDamage: Math.max(0, Number(state?.damageDealt || 0)),
+        heroDamageTaken: Math.max(0, Number(state?.damageTaken || 0)),
+        towerDamage: Math.max(0, Number(stats.towerDamage || 0)),
+        buildingDamage: Math.max(0, Number(stats.buildingDamage || 0)),
+        healing: Math.max(0, Number(state?.healingDone || 0)),
+        xpm: durationMinutes > 0 ? Math.round(experience / durationMinutes) : 0,
+        towersDestroyed: Math.max(0, Number(stats.towersDestroyed || 0)),
+        killStreak: Math.max(0, Number(stats.maxKillStreak || 0)),
+        items: Array.isArray(state?.inventory) ? state.inventory.map(item => ({ ...item })) : [],
+        leftGame: abandoned.has(player.userId),
+        disconnectSeconds: Math.floor(disconnectMs / 1000),
+        observedAt: endedAt,
+      };
+    });
 
     return {
-      version: 1,
+      version: 2,
       matchId: match.id,
       winnerTeam: voided ? null : winnerTeam,
       reason: String(reason || (voided ? 'cancelled' : 'completed')),
@@ -169,6 +256,7 @@ export function createPlatformServer(options = {}) {
       startedAt,
       endedAt,
       durationMs,
+      players,
       finalStates,
       structures: structureSnapshot?.structures?.map(structure => ({ ...structure })) || [],
       creeps: creepSnapshot?.creeps?.map(creep => ({
@@ -478,6 +566,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimePauseStates.delete(matchId);
     matchRuntimeSpawnPositions.delete(matchId);
     matchRuntimeAuthorityUsers.delete(matchId);
+    matchRuntimeResultStats.delete(matchId);
     clearMatchDisconnectGrace(matchId);
   }
 
@@ -1289,6 +1378,9 @@ export function createPlatformServer(options = {}) {
     let confirmedHeroKillEvent = null;
 
     if (lethal) {
+      const victimResultStats = resultStatsFor(active.id, target.userId);
+      victimResultStats.currentKillStreak = 0;
+
       const directHeroKiller = !environmentSource
         ? reporter
         : null;
@@ -1303,6 +1395,13 @@ export function createPlatformServer(options = {}) {
       killerPlayer = directHeroKiller || recentCreditedPlayer;
 
       if (killerPlayer) {
+        const killerResultStats = resultStatsFor(active.id, killerPlayer.userId);
+        killerResultStats.currentKillStreak = Math.max(0, Number(killerResultStats.currentKillStreak || 0)) + 1;
+        killerResultStats.maxKillStreak = Math.max(
+          Number(killerResultStats.maxKillStreak || 0),
+          killerResultStats.currentKillStreak,
+        );
+
         const killerRuntime = room.get(killerPlayer.userId) || null;
         if (killerRuntime) {
           creditedKillerState = {
@@ -1668,7 +1767,17 @@ export function createPlatformServer(options = {}) {
     const target = previous?.structures?.find(structure => structure.id === structureId) || null;
     if (!previous || !target || target.alive === false || Number(target.currentHp || 0) <= 0) return null;
 
-    const nextHp = Math.max(0, Number(target.currentHp || 0) - amount);
+    const previousHp = Math.max(0, Number(target.currentHp || 0));
+    const resolvedStructureDamage = Math.min(previousHp, amount);
+    const nextHp = Math.max(0, previousHp - amount);
+    const sourceResultStats = resultStatsFor(active.id, userId);
+    if (target.kind === 'tower') {
+      sourceResultStats.towerDamage += resolvedStructureDamage;
+      if (nextHp <= 0) sourceResultStats.towersDestroyed += 1;
+    } else {
+      sourceResultStats.buildingDamage += resolvedStructureDamage;
+    }
+
     const nextStructure = {
       ...target,
       currentHp: nextHp,
@@ -1809,6 +1918,7 @@ export function createPlatformServer(options = {}) {
     matchRuntimePauseStates.delete(updated.id);
     matchRuntimeSpawnPositions.delete(updated.id);
     matchRuntimeAuthorityUsers.delete(updated.id);
+    matchRuntimeResultStats.delete(updated.id);
     clearMatchDisconnectGrace(updated.id);
     runtimePauseState(updated.id);
     broadcastRuntimeAuthority(updated);
@@ -2193,6 +2303,7 @@ export function createPlatformServer(options = {}) {
       peersByUser.set(user.id, peer);
       const connectedMatch = store.activeMatchForUser(user.id);
       if (connectedMatch?.status === 'in_game') {
+        markResultPlayerConnected(connectedMatch.id, user.id);
         broadcastMatchPlayerConnection(connectedMatch, user.id, true);
         evaluateMatchConnectivity(connectedMatch.id);
       }
@@ -2273,6 +2384,7 @@ export function createPlatformServer(options = {}) {
           peersByUser.delete(user.id);
           const disconnectedMatch = store.activeMatchForUser(user.id);
           if (disconnectedMatch?.status === 'in_game' && !shuttingDown) {
+            markResultPlayerDisconnected(disconnectedMatch.id, user.id);
             broadcastMatchPlayerConnection(disconnectedMatch, user.id, false);
             evaluateMatchConnectivity(disconnectedMatch.id);
           }

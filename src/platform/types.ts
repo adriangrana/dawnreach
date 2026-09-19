@@ -270,6 +270,59 @@ export type MatchRuntimeInventoryItem = Readonly<{
   cooldownRemainingMs?: number;
 }>;
 
+/** Stable inventory snapshot stored with a completed match result. */
+export type MatchInventoryItem = MatchRuntimeInventoryItem;
+
+/**
+ * Persistent player result. Runtime/network state intentionally lives elsewhere:
+ * this object only contains statistics meaningful after the match has ended.
+ *
+ * Optional fields represent mechanics that Dawnreach may not implement/track yet.
+ * They must be omitted rather than fabricated.
+ */
+export type MatchResultPlayer = Readonly<{
+  userId: string;
+  slot: number;
+  playerName: string;
+  team: Team;
+  heroId: string;
+  heroName: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  heroLevel: number;
+  creepKills: number;
+  creepDenies: number;
+  neutralKills?: number;
+  currentGold: number;
+  netWorth?: number;
+  experience: number;
+  heroDamage: number;
+  heroDamageTaken: number;
+  towerDamage: number;
+  buildingDamage: number;
+  healing: number;
+  goldEarned?: number;
+  gpm?: number;
+  xpm: number;
+  /** Backwards-compatible aggregate of observer + sentry wards placed. */
+  wardsPlaced?: number;
+  observerWardsPlaced?: number;
+  sentryWardsPlaced?: number;
+  wardsDestroyed?: number;
+  towersDestroyed: number;
+  courierKills?: number;
+  roshanKills?: number;
+  buybacks?: number;
+  runesPicked?: number;
+  /** Highest consecutive hero-kill streak reached during this match. */
+  killStreak: number;
+  items: readonly MatchInventoryItem[];
+  leftGame: boolean;
+  disconnectSeconds: number;
+  observedAt: string;
+}>;
+
 export type MatchRuntimePlayerState = Readonly<{
   userId: string;
   username: string;
@@ -309,7 +362,7 @@ export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; mat
 export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
 
 export type MatchPostMatchReport = Readonly<{
-  version: 1;
+  version: 2;
   matchId: string;
   winnerTeam: Team | null;
   reason: string;
@@ -317,6 +370,9 @@ export type MatchPostMatchReport = Readonly<{
   startedAt: string | null;
   endedAt: string;
   durationMs: number;
+  /** Canonical persistent post-match statistics used by Overview and future stat tabs. */
+  players: readonly MatchResultPlayer[];
+  /** @deprecated Compatibility snapshot; post-match UI should consume players instead. */
   finalStates: readonly MatchRuntimePlayerState[];
   structures: readonly MatchRuntimeStructureState[];
   creeps: readonly MatchRuntimeCreepState[];
