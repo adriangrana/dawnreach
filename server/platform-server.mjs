@@ -865,7 +865,6 @@ export function createPlatformServer(options = {}) {
     let requestedCurrentResource = rawCurrentResource;
     let requestedAlive = rawAlive;
     let serverRespawned = false;
-    let suppressOwnerEcho = false;
     let deathIncrement = 0;
     let creditedKillerState = null;
     let confirmedHeroKillEvent = null;
@@ -1050,11 +1049,19 @@ export function createPlatformServer(options = {}) {
       });
     }
     const recipients = active.players.map(candidate => candidate.userId);
+    // This is the owner's high-frequency proposal stream. Echoing it back to the same
+    // client races with local HP/mana regeneration: by the time an older echo arrives,
+    // the owner has already regenerated further and the HUD visibly oscillates backward.
+    //
+    // Other players still need the state, while authoritative corrections for the owner
+    // are delivered by the dedicated combat/respawn flows and by explicit runtime snapshot
+    // hydration on (re)join. Therefore never reflect an ordinary periodic proposal back
+    // to its source.
     broadcast({
       type: 'match.runtime.state',
       matchId: active.id,
       state,
-    }, suppressOwnerEcho ? recipients.filter(recipientUserId => recipientUserId !== userId) : recipients);
+    }, recipients.filter(recipientUserId => recipientUserId !== userId));
     if (creditedKillerState) {
       broadcast({
         type: 'match.runtime.state',
