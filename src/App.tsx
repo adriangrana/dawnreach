@@ -1886,7 +1886,7 @@ export default function App({
         const damage = {
           creepId: String(event.creepId || ''),
           amount: Number(event.amount || 0),
-          sourceUserId,
+          sourceUserId: String(event.sourceUserId || ''),
           atMs: performance.now(),
         };
         const game = gameRef.current;
