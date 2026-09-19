@@ -631,6 +631,10 @@ export async function createDawnreachGame(
   let attackOrder: AttackOrder | null = null;
   let attackMoveTarget: GameEntity | null = null;
   let lastAttackMoveScanAt = -Infinity;
+  // Default idle stance is combat-ready: when the hero has no explicit player order,
+  // it may auto-acquire a nearby hostile and retaliate instead of passively taking hits.
+  let idleAttackTarget: GameEntity | null = null;
+  let lastIdleAttackScanAt = -Infinity;
   let attackArmed = false;
   let attackCooldown = 0;
   let attackSwing = 0;
@@ -714,6 +718,8 @@ export async function createDawnreachGame(
     clearMovementRoute();
     attackOrder = null;
     attackMoveTarget = null;
+    idleAttackTarget = null;
+    lastIdleAttackScanAt = -Infinity;
     lastAttackPathTarget = null;
     attackCooldown = 0;
     attackSwing = 0;
@@ -826,6 +832,15 @@ export async function createDawnreachGame(
     hero.root.userData.dawnreachHoldPosition = false;
   };
 
+  const clearIdleAttackTarget = (clearRoute = false) => {
+    if (pendingAttackTarget === idleAttackTarget) pendingAttackTarget = null;
+    idleAttackTarget = null;
+    lastIdleAttackScanAt = -Infinity;
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    if (clearRoute) clearMovementRoute();
+  };
+
   const showCommandMarker = (marker: THREE.Group, point: Point3) => {
     marker.userData.surfaceHeight = sampleSurfaceHeight(point.x, point.z, 0);
     marker.position.set(point.x, marker.userData.surfaceHeight + COMMAND_MARKER_Y, point.z);
@@ -837,6 +852,7 @@ export async function createDawnreachGame(
 
   const issueStopCommand = () => {
     leaveHoldPosition();
+    clearIdleAttackTarget();
     clearMovementRoute();
     attackOrder = null;
     attackMoveTarget = null;
@@ -850,6 +866,7 @@ export async function createDawnreachGame(
   };
 
   const issueHoldPositionCommand = () => {
+    clearIdleAttackTarget();
     clearMovementRoute();
     attackOrder = null;
     attackMoveTarget = null;
@@ -868,6 +885,7 @@ export async function createDawnreachGame(
 
   const issueMoveCommand = (point: Point3) => {
     leaveHoldPosition();
+    clearIdleAttackTarget();
     attackOrder = null;
     attackMoveTarget = null;
     lastAttackPathTarget = null;
@@ -881,6 +899,7 @@ export async function createDawnreachGame(
 
   const issueGroundAttack = (point: Point3) => {
     leaveHoldPosition();
+    clearIdleAttackTarget();
     attackOrder = { kind: 'ground', point };
     attackMoveTarget = null;
     lastAttackMoveScanAt = -Infinity;
@@ -895,6 +914,7 @@ export async function createDawnreachGame(
 
   const issueTargetAttack = (target: GameEntity) => {
     leaveHoldPosition();
+    clearIdleAttackTarget();
     attackOrder = { kind: 'target', target };
     attackMoveTarget = null;
     pendingAttackTarget = null;
@@ -971,6 +991,29 @@ export async function createDawnreachGame(
     }
 
     return best;
+  };
+
+  const tryAcquireIdleRetaliationTarget = (sourceEntityId?: string) => {
+    if (!sourceEntityId || isHeroMovementLocked()) return false;
+    // Explicit player intent always wins. Retaliation is only the fallback for a truly idle hero.
+    if (holdPositionActive || attackOrder || attackMoveTarget || routeRequest || destination) return false;
+
+    const source = entityRegistry.values().find(entity => entity.id === sourceEntityId) ?? null;
+    if (!isAutomaticAttackMoveTarget(source)) return false;
+
+    source.root.getWorldPosition(attackTargetPosition);
+    const distance = Math.hypot(
+      attackTargetPosition.x - hero.root.position.x,
+      attackTargetPosition.z - hero.root.position.z,
+    );
+    const acquisitionRange = Math.max(ATTACK_MOVE_ACQUISITION_RANGE, getTargetAttackReach(source));
+    if (distance > acquisitionRange) return false;
+
+    idleAttackTarget = source;
+    lastIdleAttackScanAt = elapsed;
+    lastAttackPathTarget = null;
+    lastTargetRepathAt = -Infinity;
+    return true;
   };
 
   const getAttackCooldownSeconds = () => {
@@ -1420,7 +1463,7 @@ export async function createDawnreachGame(
     elapsed += dt;
     attackCooldown = Math.max(0, attackCooldown - dt);
 
-    if (!attackOrder && !attackMoveTarget && !holdPositionActive && attackCooldown <= 0 && attackSwing <= 0) {
+    if (!attackOrder && !attackMoveTarget && !idleAttackTarget && !holdPositionActive && attackCooldown <= 0 && attackSwing <= 0) {
       openingAttackReady = true;
     }
 
@@ -1488,6 +1531,49 @@ export async function createDawnreachGame(
             openingAttackReady = false;
             triggerAttack(holdPositionTarget, openingStrike);
           }
+        }
+      }
+    }
+
+    if (!movementLocked && !holdPositionActive && !attackOrder && !attackMoveTarget) {
+      if (idleAttackTarget && (!idleAttackTarget.root.parent || !isAutomaticAttackMoveTarget(idleAttackTarget))) {
+        clearIdleAttackTarget(true);
+      }
+
+      // Only begin a fresh idle acquisition after explicit movement has finished. Once
+      // acquired, this block owns the short pursuit route until the target leaves its leash.
+      if (
+        !idleAttackTarget
+        && !routeRequest
+        && !destination
+        && attackSwing <= 0
+        && elapsed - lastIdleAttackScanAt >= ATTACK_MOVE_SCAN_INTERVAL
+      ) {
+        lastIdleAttackScanAt = elapsed;
+        idleAttackTarget = findNearestAcquisitionTarget();
+        if (idleAttackTarget) {
+          lastAttackPathTarget = null;
+          lastTargetRepathAt = -Infinity;
+        }
+      }
+
+      if (idleAttackTarget) {
+        idleAttackTarget.root.getWorldPosition(attackTargetPosition);
+        const distance = Math.hypot(
+          attackTargetPosition.x - hero.root.position.x,
+          attackTargetPosition.z - hero.root.position.z,
+        );
+        const acquisitionRange = Math.max(
+          ATTACK_MOVE_ACQUISITION_RANGE,
+          getTargetAttackReach(idleAttackTarget),
+        );
+
+        // Idle auto-attack has a leash: it should defend/fight locally, not chase a unit
+        // indefinitely across the map after a brief acquisition.
+        if (distance > acquisitionRange) {
+          clearIdleAttackTarget(true);
+        } else {
+          pursueAttackTarget(idleAttackTarget, false);
         }
       }
     }
@@ -2059,6 +2145,9 @@ export async function createDawnreachGame(
     }) {
       const overlay = syncLocalHeroEntityState();
       if (!overlay || !Number.isFinite(input.amount) || input.amount <= 0) return null;
+      if (input.reason === 'damage') {
+        tryAcquireIdleRetaliationTarget(input.sourceEntityId || `player:${input.sourceUserId}:hero`);
+      }
       const maxHp = Math.max(1, overlay.stats.maxHp);
       const beforeHp = THREE.MathUtils.clamp(localHeroEntity.currentHp, 0, maxHp);
       const currentHp = input.reason === 'heal'
