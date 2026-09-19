@@ -3,7 +3,7 @@
   inset: 0;
   z-index: 400;
   display: grid;
-  grid-template-rows: 64px 142px 40px minmax(0, 1fr) 94px 38px 62px;
+  grid-template-rows: 70px 132px 40px minmax(0, 1fr) 90px 36px 60px;
   min-width: 1100px;
   min-height: 720px;
   overflow: hidden;
@@ -17,11 +17,15 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(2, 9, 16, .38), rgba(2, 9, 16, .72)),
-    linear-gradient(90deg, rgba(2, 9, 16, .78), rgba(5, 18, 31, .30) 48%, rgba(2, 9, 16, .80)),
-    url("/assets/images/dawnreach_loading_splash.webp") center / cover no-repeat;
-  filter: saturate(.92) brightness(.82);
+    linear-gradient(180deg, rgba(2, 9, 16, .50), rgba(2, 9, 16, .78)),
+    linear-gradient(90deg, rgba(2, 9, 16, .82), rgba(5, 18, 31, .26) 48%, rgba(2, 9, 16, .84)),
+    var(--dr-post-bg, url("/assets/images/dawnreach_home_background.webp")) center / cover no-repeat;
+  filter: saturate(.72) brightness(.62);
 }
+
+.dr-post-match.is-mode-custom { --dr-post-bg: url("/assets/images/dawnreach_custom_background.webp"); }
+.dr-post-match.is-mode-ranked { --dr-post-bg: url("/assets/images/dawnreach_ranked_background.webp"); }
+.dr-post-match.is-mode-normal { --dr-post-bg: url("/assets/images/dawnreach_normal_background.webp"); }
 
 .dr-post-match > *:not(.dr-post-backdrop) {
   position: relative;
@@ -31,10 +35,10 @@
 
 .dr-post-global-header {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 230px;
+  grid-template-columns: 245px minmax(0, 1fr) 220px;
   align-items: center;
-  height: 64px;
-  padding: 0 26px;
+  height: 70px;
+  padding: 0 28px;
   border-bottom: 1px solid rgba(115, 150, 177, .23);
   background: linear-gradient(180deg, rgba(5, 15, 26, .97), rgba(4, 12, 21, .95));
   box-shadow: 0 8px 28px rgba(0,0,0,.28);
@@ -84,13 +88,13 @@
 }
 
 .dr-post-global-nav button {
-  min-width: 100px;
-  padding: 0 16px;
+  min-width: 92px;
+  padding: 0 13px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: #889baa;
-  font: 700 10px/1 "Trebuchet MS", sans-serif;
+  font: 700 11px/1 "Trebuchet MS", sans-serif;
   letter-spacing: .09em;
   cursor: pointer;
 }
@@ -113,8 +117,8 @@
 }
 
 .dr-post-global-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(214, 178, 83, .7);
@@ -125,6 +129,14 @@
   color: #e9d8a9;
   font: 700 12px Georgia, serif;
   box-shadow: 0 0 0 2px rgba(42, 76, 99, .58);
+  overflow: hidden;
+}
+
+.dr-post-global-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
 }
 
 .dr-post-global-user > span:last-child {
@@ -150,14 +162,14 @@
 .dr-post-victory-banner {
   position: relative;
   display: grid;
-  grid-template-columns: 220px minmax(560px, 1fr) 220px;
+  grid-template-columns: 210px minmax(620px, 1fr) 210px;
   align-items: center;
   overflow: hidden;
   border-bottom: 1px solid rgba(112, 151, 182, .23);
   background:
-    linear-gradient(90deg, rgba(3, 12, 22, .87), rgba(6, 20, 34, .42) 26%, rgba(6, 20, 34, .35) 74%, rgba(3, 12, 22, .88)),
-    linear-gradient(180deg, rgba(2, 9, 16, .10), rgba(2, 9, 16, .64)),
-    url("/assets/images/dawnreach_loading_splash.webp") center 46% / cover no-repeat;
+    linear-gradient(90deg, rgba(3, 12, 22, .88), rgba(6, 20, 34, .35) 26%, rgba(6, 20, 34, .29) 74%, rgba(3, 12, 22, .90)),
+    linear-gradient(180deg, rgba(2, 9, 16, .18), rgba(2, 9, 16, .70)),
+    var(--dr-post-bg, url("/assets/images/dawnreach_home_background.webp")) center 42% / cover no-repeat;
   box-shadow: inset 0 -22px 40px rgba(0,0,0,.28);
 }
 
@@ -212,8 +224,8 @@
 .dr-post-victory-center {
   position: relative;
   z-index: 2;
-  width: min(930px, 68vw);
-  height: 142px;
+  width: min(1080px, 64vw);
+  height: 132px;
   justify-self: center;
 }
 
@@ -221,10 +233,10 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 100%;
-  height: 178px;
+  width: min(1080px, 64vw);
+  height: auto;
   transform: translate(-50%, -50%);
-  object-fit: fill;
+  object-fit: contain;
   pointer-events: none;
   filter: drop-shadow(0 3px 14px rgba(0,0,0,.45));
 }
@@ -233,10 +245,10 @@
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: 128px minmax(270px, 1fr) 128px;
+  grid-template-columns: 150px minmax(320px, 1fr) 150px;
   align-items: center;
   justify-content: center;
-  padding: 0 92px;
+  padding: 0 150px;
 }
 
 .dr-post-banner-score {
@@ -248,7 +260,7 @@
 }
 
 .dr-post-banner-score strong {
-  font: 700 42px/.92 Georgia, serif;
+  font: 700 52px/.92 Georgia, serif;
   text-shadow: 0 0 18px currentColor;
 }
 
@@ -275,7 +287,7 @@
 .dr-post-banner-title h1 {
   margin: 0;
   color: #f0d37e;
-  font: 700 clamp(37px, 3vw, 51px)/.9 Georgia, serif;
+  font: 700 clamp(46px, 3.2vw, 60px)/.9 Georgia, serif;
   letter-spacing: .08em;
   text-shadow:
     0 0 20px rgba(234, 199, 108, .25),
@@ -304,12 +316,12 @@
 
 .dr-post-tabs button {
   position: relative;
-  min-width: 158px;
+  min-width: 170px;
   height: 40px;
   border: 0;
   background: transparent;
-  color: #708b9f;
-  font: 700 10px/40px "Trebuchet MS", sans-serif;
+  color: #7d94a6;
+  font: 700 11px/40px "Trebuchet MS", sans-serif;
   letter-spacing: .16em;
 }
 
@@ -335,22 +347,23 @@
 .dr-post-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 385px;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
-  padding: 10px 24px 7px;
+  padding: 8px 24px 6px;
+  align-items: start;
 }
 
 .dr-post-main {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 279px 279px;
+  grid-template-rows: 254px 254px;
   gap: 9px;
 }
 
 .dr-post-team {
-  height: 279px;
-  min-height: 279px;
+  height: 254px;
+  min-height: 254px;
   overflow: hidden;
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
   border: 1px solid rgba(93, 137, 170, .34);
@@ -423,21 +436,22 @@
   padding: 0 9px;
   border-bottom: 1px solid rgba(116, 151, 180, .1);
   color: #667f93;
-  font-size: 7px;
-  letter-spacing: .1em;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .09em;
 }
 
 .dr-post-team-rows {
   display: grid;
-  grid-template-rows: repeat(5, 45px);
-  height: 225px;
+  grid-template-rows: repeat(5, 40px);
+  height: 200px;
   min-height: 0;
 }
 
 .dr-post-player-row {
   position: relative;
-  min-height: 45px;
-  height: 45px;
+  min-height: 40px;
+  height: 40px;
   padding: 2px 9px;
   border-bottom: 1px solid rgba(112, 150, 179, .08);
   color: #d3dde5;
@@ -461,7 +475,7 @@
 }
 
 .dr-post-player-row.is-empty {
-  opacity: .28;
+  opacity: .12;
 }
 
 .dr-post-player-row.is-empty > span:not(.dr-post-level),
@@ -471,7 +485,7 @@
 
 .dr-post-player {
   display: grid;
-  grid-template-columns: 28px 41px minmax(0, 1fr);
+  grid-template-columns: 26px 37px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -491,8 +505,8 @@
 }
 
 .dr-post-portrait {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   overflow: hidden;
   border: 1px solid rgba(128, 173, 205, .46);
   background: #091622;
@@ -546,7 +560,7 @@
 
 .dr-post-player-row > span {
   color: #d6e0e7;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -608,7 +622,7 @@
 .dr-post-side {
   min-height: 0;
   display: grid;
-  grid-template-rows: 248px 301px;
+  grid-template-rows: 222px 295px;
   gap: 9px;
 }
 
@@ -641,15 +655,15 @@
 
 .dr-post-mvp-hero {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: center;
   gap: 15px;
   padding: 12px 14px 8px;
 }
 
 .dr-post-mvp-art {
-  width: 108px;
-  height: 108px;
+  width: 92px;
+  height: 92px;
   overflow: hidden;
   border: 1px solid rgba(218, 184, 100, .52);
   background: #07131e;
@@ -674,7 +688,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f0e2bc;
-  font: 700 22px Georgia, serif;
+  font: 700 20px Georgia, serif;
 }
 
 .dr-post-mvp-hero small {
@@ -816,7 +830,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 9px;
-  padding: 6px 24px 7px;
+  padding: 5px 24px 6px;
 }
 
 .dr-post-lower article {
@@ -844,8 +858,8 @@
 
 .dr-post-lower svg {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
   color: #ceb05e;
 }
 
@@ -957,12 +971,12 @@
 
 @media (max-height: 800px) {
   .dr-post-match {
-    grid-template-rows: 54px 112px 34px minmax(0, 1fr) 76px 32px 54px;
+    grid-template-rows: 56px 106px 34px minmax(0, 1fr) 74px 30px 52px;
     min-height: 650px;
   }
 
   .dr-post-global-header {
-    height: 54px;
+    height: 56px;
     grid-template-columns: 210px minmax(0, 1fr) 190px;
     padding: 0 18px;
   }
@@ -983,11 +997,12 @@
   }
 
   .dr-post-victory-center {
-    height: 112px;
+    height: 106px;
   }
 
   .dr-post-victory-emblem {
-    height: 142px;
+    width: min(820px, 62vw);
+    height: auto;
   }
 
   .dr-post-banner-title h1 {
@@ -1009,12 +1024,12 @@
   }
 
   .dr-post-main {
-    grid-template-rows: 230px 230px;
+    grid-template-rows: 214px 214px;
   }
 
   .dr-post-team {
-    height: 230px;
-    min-height: 230px;
+    height: 214px;
+    min-height: 214px;
   }
 
   .dr-post-team-header {
@@ -1026,18 +1041,18 @@
   }
 
   .dr-post-team-rows {
-    grid-template-rows: repeat(5, 36.8px);
-    height: 184px;
+    grid-template-rows: repeat(5, 33.6px);
+    height: 168px;
   }
 
   .dr-post-player-row {
-    height: 36.8px;
-    min-height: 36.8px;
+    height: 33.6px;
+    min-height: 33.6px;
   }
 
   .dr-post-portrait {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
   }
 
   .dr-post-player {
@@ -1045,7 +1060,7 @@
   }
 
   .dr-post-side {
-    grid-template-rows: 192px 259px;
+    grid-template-rows: 184px 253px;
   }
 
   .dr-post-mvp-hero {

@@ -147,16 +147,13 @@ function itemSlots(stats: MatchResultPlayer) {
 
 function EmptyPlayerRow({ team, slot }: { team: Team; slot: number }) {
   return (
-    <article className="dr-post-player-row is-empty" aria-hidden="true">
+    <article className="dr-post-player-row is-empty" aria-label={`${teamLabel(team)} empty slot ${slot + 1}`}>
       <div className="dr-post-player">
-        <span className="dr-post-level">—</span>
-        <div className="dr-post-portrait dr-post-portrait--empty"><Shield /></div>
-        <div className="dr-post-player-copy">
-          <strong>EMPTY SLOT</strong>
-          <span>{teamLabel(team)} · SLOT {slot + 1}</span>
-        </div>
+        <span className="dr-post-level" />
+        <div className="dr-post-portrait dr-post-portrait--empty" />
+        <div className="dr-post-player-copy"><strong>&nbsp;</strong><span>&nbsp;</span></div>
       </div>
-      <span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span>
+      <span /><span /><span /><span /><span /><span />
       <div className="dr-post-items">
         {Array.from({ length: 6 }, (_, index) => <span key={index} className="dr-post-item" />)}
       </div>
@@ -288,7 +285,7 @@ export function PostMatchScreen({
   const modeLabel = isCustomMatch ? 'CUSTOM MATCH' : result.match.mode.toUpperCase();
 
   return (
-    <main className="dr-post-match">
+    <main className={`dr-post-match is-mode-${result.match.mode}`}>
       <div className="dr-post-backdrop" aria-hidden="true" />
 
       <header className="dr-post-global-header">
@@ -301,11 +298,16 @@ export function PostMatchScreen({
           <button type="button" onClick={onPlayAgain}>PLAY</button>
           <button type="button" disabled>HEROES</button>
           <button type="button" disabled>COLLECTION</button>
-          <button type="button" disabled>RANKING</button>
+          <button type="button" disabled>STORE</button>
+          <button type="button" disabled>ESPORTS</button>
           <button type="button" disabled>PROFILE</button>
         </nav>
         <div className="dr-post-global-user">
-          <span className="dr-post-global-avatar">{me.username.slice(0, 2).toUpperCase()}</span>
+          <span className="dr-post-global-avatar">
+            {local?.portrait
+              ? <img src={local.portrait} alt="" draggable={false} />
+              : me.username.slice(0, 2).toUpperCase()}
+          </span>
           <span><strong>{me.username}</strong><small>POST-MATCH</small></span>
         </div>
       </header>
