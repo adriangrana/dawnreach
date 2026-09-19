@@ -1569,6 +1569,34 @@ export default function App({
         applyAuthoritativeMatchPause(true, null, performance.now(), undefined, null, false);
         gameRef.current?.setNetworkAuthority(false);
       } else if (
+        type === 'match.player.connection'
+        && 'matchId' in event
+        && event.matchId === onlineMatch.id
+        && 'userId' in event
+        && 'connected' in event
+      ) {
+        const userId = String(event.userId || '');
+        const connected = Boolean(event.connected);
+        const username = 'username' in event ? String(event.username || '') : '';
+        const team = 'team' in event && event.team === 'red' ? 'red' : 'blue';
+        if (!userId) return;
+        setConnectionState(previous => {
+          const disconnectedIds = new Set(previous.disconnectedUserIds);
+          const disconnectedPlayers = previous.disconnectedPlayers
+            .filter(player => player.userId !== userId);
+          if (connected) {
+            disconnectedIds.delete(userId);
+          } else {
+            disconnectedIds.add(userId);
+            disconnectedPlayers.push({ userId, username, team });
+          }
+          return {
+            ...previous,
+            disconnectedUserIds: [...disconnectedIds],
+            disconnectedPlayers,
+          };
+        });
+      } else if (
         type === 'match.connection.grace'
         && 'matchId' in event
         && event.matchId === onlineMatch.id

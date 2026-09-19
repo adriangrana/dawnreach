@@ -1,15 +1,22 @@
 import * as THREE from 'three';
 import type { GameEntity, GameEntityKind, TeamId } from './gameEntities';
 
-const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-});
+const heroIconAssets = {
+  ...import.meta.glob<string>('../heroes/*/images/*I.webp', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+  ...import.meta.glob<string>('../heroes/*/images/*I.png', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+};
 
 const heroIconsByDefinitionId = new Map<string, string>();
-for (const [path, url] of Object.entries(heroIcons)) {
-  const match = /\/images\/([^/]+)I\.png$/i.exec(path);
+for (const [path, url] of Object.entries(heroIconAssets)) {
+  const match = /\/images\/([^/]+)I\.(?:webp|png)$/i.exec(path);
   if (match?.[1]) heroIconsByDefinitionId.set(match[1].toUpperCase(), url);
 }
 
@@ -186,11 +193,12 @@ function drawHeroFrame(
     const height = icon.naturalHeight * scale;
     ctx.drawImage(icon, (80 - width) / 2, HERO_FRAME_Y + (80 - height) / 2, width, height);
   } else {
-    ctx.font = 'bold 38px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(entity.displayName.charAt(0) || '?', 38, HERO_FRAME_Y + 40);
+    // Never render a player's username initial as a hero portrait. If an authored portrait
+    // is missing, keep the icon cell neutral instead of producing stray letters beside HP.
+    ctx.fillStyle = 'rgba(14, 22, 28, 0.88)';
+    ctx.beginPath();
+    ctx.arc(38, HERO_FRAME_Y + 40, 23, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 

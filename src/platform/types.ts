@@ -404,6 +404,15 @@ export type MatchRuntimeAuthorityEvent = Readonly<{
   simulationUserId: string | null;
 }>;
 
+export type MatchPlayerConnectionEvent = Readonly<{
+  type: 'match.player.connection';
+  matchId: string;
+  userId: string;
+  username: string;
+  team: Team;
+  connected: boolean;
+}>;
+
 export type MatchConnectionGraceEvent = Readonly<{
   type: 'match.connection.grace';
   matchId: string;
@@ -503,6 +512,7 @@ export type PlatformRealtimeEvent =
   | MatchRuntimeStructureSnapshotEvent
   | MatchRuntimeStructureDamageEvent
   | MatchRuntimeAuthorityEvent
+  | MatchPlayerConnectionEvent
   | MatchConnectionGraceEvent
   | MatchRuntimePauseStateEvent
   | MatchRuntimeHeroKillEvent

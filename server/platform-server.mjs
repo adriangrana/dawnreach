@@ -486,6 +486,19 @@ export function createPlatformServer(options = {}) {
     };
   }
 
+  function broadcastMatchPlayerConnection(match, userId, connected) {
+    const player = match?.players?.find(candidate => candidate.userId === userId);
+    if (!player) return;
+    broadcast({
+      type: 'match.player.connection',
+      matchId: match.id,
+      userId,
+      username: player.username,
+      team: player.team,
+      connected: Boolean(connected),
+    }, match.players.map(candidate => candidate.userId));
+  }
+
   function runtimeConnectionGraceEvent(match) {
     const connectivity = matchConnectivity(match);
     const connectedUserIds = [
@@ -2032,7 +2045,10 @@ export function createPlatformServer(options = {}) {
       if (!peer) return socket.destroy();
       peersByUser.set(user.id, peer);
       const connectedMatch = store.activeMatchForUser(user.id);
-      if (connectedMatch?.status === 'in_game') evaluateMatchConnectivity(connectedMatch.id);
+      if (connectedMatch?.status === 'in_game') {
+        broadcastMatchPlayerConnection(connectedMatch, user.id, true);
+        evaluateMatchConnectivity(connectedMatch.id);
+      }
       peer.onMessage = message => {
         try {
           const type = String(message?.type || '');
@@ -2109,6 +2125,7 @@ export function createPlatformServer(options = {}) {
           peersByUser.delete(user.id);
           const disconnectedMatch = store.activeMatchForUser(user.id);
           if (disconnectedMatch?.status === 'in_game' && !shuttingDown) {
+            broadcastMatchPlayerConnection(disconnectedMatch, user.id, false);
             evaluateMatchConnectivity(disconnectedMatch.id);
           }
         }
