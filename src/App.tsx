@@ -1886,7 +1886,7 @@ export default function App({
         const damage = {
           creepId: String(event.creepId || ''),
           amount: Number(event.amount || 0),
-          sourceUserId: String(event.sourceUserId || ''),
+          sourceUserId,
           atMs: performance.now(),
         };
         const game = gameRef.current;
@@ -1939,6 +1939,15 @@ export default function App({
         )
       ) {
         const game = gameRef.current;
+        const sourceUserId = String(event.sourceUserId || '');
+        const sourceEntityId = 'sourceEntityId' in event ? String(event.sourceEntityId || '') : '';
+        if (
+          sourceUserId
+          && sourceUserId !== localUser.id
+          && /^player:[^:]+:hero$/.test(sourceEntityId)
+        ) {
+          game?.revealRemoteHero(sourceUserId, 2500);
+        }
         const resolved = game?.applyLocalNetworkCombat({
           reason: 'reason' in event && event.reason === 'heal' ? 'heal' : 'damage',
           amount: 'resolvedAmount' in event && Number.isFinite(Number(event.resolvedAmount))
@@ -1946,7 +1955,7 @@ export default function App({
             : Number(event.amount || 0),
           rawAmount: Number(event.amount || 0),
           sourceUserId: String(event.sourceUserId || ''),
-          sourceEntityId: 'sourceEntityId' in event ? String(event.sourceEntityId || '') : undefined,
+          sourceEntityId: sourceEntityId || undefined,
           respawnSeconds: 'respawnSeconds' in event && Number.isFinite(Number(event.respawnSeconds))
             ? Number(event.respawnSeconds)
             : undefined,

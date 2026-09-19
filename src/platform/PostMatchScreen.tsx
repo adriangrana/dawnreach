@@ -79,7 +79,10 @@ function fallbackState(player: MatchPlayer, heroId: string): MatchRuntimePlayerS
 }
 
 function buildFinalPlayers(result: MatchEndedEvent): FinalPlayer[] {
-  const byUserId = new Map((result.finalStates ?? []).map(state => [state.userId, state] as const));
+  const finalStates = result.finalStates?.length
+    ? result.finalStates
+    : result.match.postMatchReport?.finalStates ?? [];
+  const byUserId = new Map(finalStates.map(state => [state.userId, state] as const));
   return result.match.players
     .map(player => {
       const heroId = result.match.heroSelections?.[player.userId]?.heroId || byUserId.get(player.userId)?.heroId || 'H001';
@@ -148,6 +151,7 @@ function TeamTable({
         <span>GOLD</span>
         <span>DMG DEALT</span>
         <span>DMG TAKEN</span>
+        <span>HEALING</span>
         <span>ITEMS</span>
       </div>
       <div className="dr-post-team-rows">
@@ -175,6 +179,7 @@ function TeamTable({
               <span>{formatNumber(number(state.gold))}</span>
               <span>{formatNumber(number(state.damageDealt))}</span>
               <span>{formatNumber(number(state.damageTaken))}</span>
+              <span>{formatNumber(number(state.healingDone))}</span>
               <div className="dr-post-items" aria-label="Final inventory">
                 {itemSlots(state).map((item, index) => (
                   <span key={index} className={`dr-post-item${item ? ' has-item' : ''}`}>
@@ -214,15 +219,19 @@ export function PostMatchScreen({
   const fallbackDurationMs = Number.isFinite(endedAtMs) && Number.isFinite(startedAtMs)
     ? Math.max(0, endedAtMs - startedAtMs)
     : 0;
-  const durationMs = number(result.durationMs) || fallbackDurationMs;
+  const durationMs = number(result.durationMs)
+    || number(result.match.postMatchReport?.durationMs)
+    || fallbackDurationMs;
   const mvpPool = result.winnerTeam
     ? players.filter(entry => entry.player.team === result.winnerTeam)
     : players;
   const mvp = [...mvpPool].sort((left, right) => mvpScore(right) - mvpScore(left))[0] ?? null;
   const local = players.find(entry => entry.player.userId === me.id) ?? null;
   const maxDamage = Math.max(1, ...players.map(entry => number(entry.state.damageDealt)));
+  const dawnDamage = dawn.reduce((sum, entry) => sum + number(entry.state.damageDealt), 0);
+  const duskDamage = dusk.reduce((sum, entry) => sum + number(entry.state.damageDealt), 0);
   const localResult = resultTitle(result, localTeam);
-  const totalGold = players.reduce((sum, entry) => sum + number(entry.state.gold), 0);
+  const localGold = local ? number(local.state.gold) : 0;
   const localCreepScore = local ? number(local.state.lastHits) + number(local.state.denies) : 0;
 
   return (
@@ -269,7 +278,7 @@ export function PostMatchScreen({
                   {mvp.portrait ? <img src={mvp.portrait} alt="" draggable={false} /> : <Shield />}
                 </div>
                 <div>
-                  <span className="dr-post-grade">S+</span>
+                  <span className="dr-post-grade"><Crown /></span>
                   <strong>{mvp.heroName}</strong>
                   <small>{mvp.player.username}</small>
                 </div>
@@ -285,16 +294,27 @@ export function PostMatchScreen({
           <section className="dr-post-panel dr-post-damage-panel">
             <header><BarChart3 /> TEAM DAMAGE</header>
             <div className="dr-post-damage-list">
-              {players.map(entry => {
-                const damage = number(entry.state.damageDealt);
-                return (
-                  <div className={`dr-post-damage-entry is-${entry.player.team}`} key={entry.player.userId}>
-                    <div className="dr-post-mini-portrait">{entry.portrait ? <img src={entry.portrait} alt="" /> : <Shield />}</div>
-                    <div className="dr-post-damage-track"><i style={{ width: `${Math.max(2, damage / maxDamage * 100)}%` }} /></div>
-                    <strong>{formatNumber(damage)}</strong>
+              {([
+                ['blue', dawnDamage, dawn],
+                ['red', duskDamage, dusk],
+              ] as const).map(([team, total, entries]) => (
+                <div className="dr-post-damage-team" key={team}>
+                  <div className={`dr-post-damage-total is-${team}`}>
+                    <span>{teamLabel(team)}</span>
+                    <strong>{formatNumber(total)}</strong>
                   </div>
-                );
-              })}
+                  {entries.map(entry => {
+                    const damage = number(entry.state.damageDealt);
+                    return (
+                      <div className={`dr-post-damage-entry is-${entry.player.team}`} key={entry.player.userId}>
+                        <div className="dr-post-mini-portrait">{entry.portrait ? <img src={entry.portrait} alt="" /> : <Shield />}</div>
+                        <div className="dr-post-damage-track"><i style={{ width: `${Math.max(2, damage / maxDamage * 100)}%` }} /></div>
+                        <strong>{formatNumber(damage)}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </section>
         </aside>
@@ -302,7 +322,7 @@ export function PostMatchScreen({
 
       <section className="dr-post-lower">
         <article><Timer /><span><small>MATCH TIME</small><strong>{formatDuration(durationMs)}</strong></span></article>
-        <article><Coins /><span><small>TOTAL MATCH GOLD</small><strong>{formatNumber(totalGold)}</strong></span></article>
+        <article><Coins /><span><small>YOUR FINAL GOLD</small><strong>{formatNumber(localGold)}</strong></span></article>
         <article><Swords /><span><small>YOUR CREEP SCORE</small><strong>{formatNumber(localCreepScore)}</strong></span></article>
         <article><Trophy /><span><small>YOUR RESULT</small><strong>{localResult}</strong></span></article>
       </section>

@@ -123,6 +123,7 @@ export type MatchSummary = Readonly<{
   endReason?: 'loading_abandonment' | 'team_abandonment' | string;
   winnerTeam?: Team | null;
   abandonedUserIds?: readonly string[];
+  postMatchReport?: MatchPostMatchReport;
 }>;
 
 export type ActiveMatchSession = Readonly<{
@@ -306,6 +307,20 @@ export type MatchRuntimePlayerState = Readonly<{
 }>;
 export type MatchRuntimeStateEvent = Readonly<{ type: 'match.runtime.state'; matchId: string; state: MatchRuntimePlayerState }>;
 export type MatchRuntimeSnapshotEvent = Readonly<{ type: 'match.runtime.snapshot'; matchId: string; states: readonly MatchRuntimePlayerState[] }>;
+
+export type MatchPostMatchReport = Readonly<{
+  version: 1;
+  matchId: string;
+  winnerTeam: Team | null;
+  reason: string;
+  voided: boolean;
+  startedAt: string | null;
+  endedAt: string;
+  durationMs: number;
+  finalStates: readonly MatchRuntimePlayerState[];
+  structures: readonly MatchRuntimeStructureState[];
+  creeps: readonly MatchRuntimeCreepState[];
+}>;
 export type MatchRuntimeAbilityCastEvent = Readonly<{
   type: 'match.runtime.ability.cast';
   matchId: string;

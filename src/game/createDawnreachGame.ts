@@ -69,6 +69,7 @@ export type DawnreachRemoteHeroState = Readonly<{
   maxResource: number;
   level: number;
   alive: boolean;
+  respawnRevision?: number;
 }>;
 
 export type DawnreachGameOptions = Readonly<{
@@ -349,6 +350,7 @@ export async function createDawnreachGame(
     alive: boolean;
   } | null = null;
   let lastLocalAuthoritativeSequence = -1;
+  let lastLocalRespawnRevision = -1;
 
   const syncLocalHeroEntityState = () => {
     const overlay = getHeroState?.() ?? null;
@@ -398,6 +400,8 @@ export async function createDawnreachGame(
     targetYaw: number;
     moving: boolean;
     lastSequence: number;
+    lastRespawnRevision: number;
+    forcedRevealUntil: number;
   };
   const remoteHeroes = new Map<string, RemoteHeroRuntime>();
   for (const player of sharedPlayers) {
@@ -439,6 +443,8 @@ export async function createDawnreachGame(
       targetYaw: 0,
       moving: false,
       lastSequence: -1,
+      lastRespawnRevision: -1,
+      forcedRevealUntil: 0,
     });
     publishWorldEntityRuntime(entity.id, {
       level: entity.level,
@@ -1757,7 +1763,8 @@ export async function createDawnreachGame(
       // make an enemy visible outside allied vision.
       root.visible = !remote.entity.alive
         || remote.entity.team === localTeam
-        || remote.entity.revealed;
+        || remote.entity.revealed
+        || performance.now() < remote.forcedRevealUntil;
 
       if (!remote.entity.alive || remote.entity.currentHp <= 0) {
         remote.moving = false;
@@ -2006,7 +2013,10 @@ export async function createDawnreachGame(
     applyLocalAuthoritativeNetworkState(state: DawnreachRemoteHeroState) {
       if (state.userId !== localPlayerId || state.sequence <= lastLocalAuthoritativeSequence) return false;
       const firstAuthoritativeState = lastLocalAuthoritativeSequence < 0;
+      const respawnRevision = Math.max(0, Math.floor(Number(state.respawnRevision) || 0));
+      const respawnRevisionChanged = respawnRevision > lastLocalRespawnRevision;
       lastLocalAuthoritativeSequence = state.sequence;
+      lastLocalRespawnRevision = Math.max(lastLocalRespawnRevision, respawnRevision);
 
       const wasAlive = localHeroEntity.alive && localHeroEntity.currentHp > 0;
       const wasRespawnHeld = Boolean(hero.root.userData[RESPAWN_HOLD_KEY]);
@@ -2044,7 +2054,7 @@ export async function createDawnreachGame(
         hero.root.visible = true;
         hero.model.visible = true;
         hero.model.rotation.x = 0;
-        if (!wasAlive || wasRespawnHeld || firstAuthoritativeState) {
+        if (!wasAlive || wasRespawnHeld || firstAuthoritativeState || respawnRevisionChanged) {
           // A dead -> alive transition respawns at the server position. The first state after
           // mounting also restores a reconnecting player's last world position. Later normal
           // echoes never correct movement, avoiding self rubber-banding.
@@ -2076,7 +2086,10 @@ export async function createDawnreachGame(
       const remote = remoteHeroes.get(state.userId);
       if (!remote || state.sequence <= remote.lastSequence) return;
       const wasAlive = remote.entity.alive;
+      const respawnRevision = Math.max(0, Math.floor(Number(state.respawnRevision) || 0));
+      const respawnRevisionChanged = respawnRevision > remote.lastRespawnRevision;
       remote.lastSequence = state.sequence;
+      remote.lastRespawnRevision = Math.max(remote.lastRespawnRevision, respawnRevision);
       remote.targetPosition.set(state.position.x, state.position.y, state.position.z);
       remote.targetYaw = state.yaw;
       remote.moving = state.moving;
@@ -2103,16 +2116,21 @@ export async function createDawnreachGame(
         // Replica heroes do not own their respawn lifecycle. When the owner's authoritative
         // state becomes alive again, restore the render state immediately instead of waiting
         // for locomotion/animation to touch the model on the next movement command.
-        remote.entity.root.visible = remote.entity.team === localTeam || remote.entity.revealed;
+        remote.entity.root.visible = remote.entity.team === localTeam
+          || remote.entity.revealed
+          || performance.now() < remote.forcedRevealUntil;
         remote.rig.model.visible = true;
         remote.rig.model.rotation.x = 0;
         remote.entity.root.userData.dawnreachRespawnAtSeconds = undefined;
         remote.entity.root.userData.dawnreachRespawnHold = false;
         remote.entity.root.userData.dawnreachDeathPosition = undefined;
-        if (!wasAlive) {
+        if (!wasAlive || respawnRevisionChanged) {
+          // A new server respawn generation is a hard world discontinuity. Never interpolate
+          // from the corpse or trust a previous local alive state.
           remote.entity.root.position.copy(remote.targetPosition);
           remote.rig.gait.phase = 0;
           remote.rig.gait.weight = 0;
+          vision.updateEntityVisibility();
         }
       }
 
@@ -2135,6 +2153,18 @@ export async function createDawnreachGame(
           atMs: toMatchGameTimeMs(performance.now()),
         });
       }
+    },
+    revealRemoteHero(userId: string, durationMs = 2200) {
+      const remote = remoteHeroes.get(userId);
+      if (!remote || remote.entity.team === localTeam) return false;
+      remote.forcedRevealUntil = Math.max(
+        remote.forcedRevealUntil,
+        performance.now() + Math.max(250, durationMs),
+      );
+      remote.entity.revealed = true;
+      remote.entity.root.userData.inVision = true;
+      remote.entity.root.visible = true;
+      return true;
     },
     applyLocalNetworkCombat(input: {
       reason: 'damage' | 'heal';

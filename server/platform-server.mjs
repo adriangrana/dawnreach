@@ -144,6 +144,40 @@ export function createPlatformServer(options = {}) {
     })) : [];
   }
 
+  function buildPostMatchReport(match, {
+    winnerTeam = null,
+    reason = 'completed',
+    voided = false,
+    endedAt = new Date().toISOString(),
+  } = {}) {
+    const finalStates = runtimeSnapshot(match.id);
+    const structureSnapshot = runtimeStructureSnapshot(match.id);
+    const creepSnapshot = runtimeCreepSnapshot(match.id);
+    const startedAt = match.startedAt || null;
+    const startedAtMs = Date.parse(startedAt || match.createdAt || endedAt);
+    const endedAtMs = Date.parse(endedAt);
+    const durationMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
+      ? Math.max(0, endedAtMs - startedAtMs)
+      : 0;
+
+    return {
+      version: 1,
+      matchId: match.id,
+      winnerTeam: voided ? null : winnerTeam,
+      reason: String(reason || (voided ? 'cancelled' : 'completed')),
+      voided: Boolean(voided),
+      startedAt,
+      endedAt,
+      durationMs,
+      finalStates,
+      structures: structureSnapshot?.structures?.map(structure => ({ ...structure })) || [],
+      creeps: creepSnapshot?.creeps?.map(creep => ({
+        ...creep,
+        position: { ...creep.position },
+      })) || [],
+    };
+  }
+
   function runtimeAuthorityUserId(match) {
     const abandoned = new Set(match?.abandonedUserIds || []);
     const eligible = [...(match?.players || [])]
@@ -450,27 +484,29 @@ export function createPlatformServer(options = {}) {
   function finishMatch(active, { winnerTeam = null, reason, voided = false } = {}) {
     if (!active || !['loading', 'in_game'].includes(active.status)) return active ? publicMatch(active) : null;
     const endedAt = new Date().toISOString();
+    const endReason = String(reason || (voided ? 'cancelled' : 'completed'));
+    const postMatchReport = buildPostMatchReport(active, {
+      winnerTeam,
+      reason: endReason,
+      voided,
+      endedAt,
+    });
     const updated = store.updateMatch(active.id, {
       status: voided ? 'cancelled' : 'completed',
       endedAt,
-      endReason: String(reason || (voided ? 'cancelled' : 'completed')),
+      endReason,
       winnerTeam: voided ? null : winnerTeam,
+      postMatchReport,
       ...(voided ? { rated: false } : {}),
     }) || {
       ...active,
       status: voided ? 'cancelled' : 'completed',
       endedAt,
-      endReason: String(reason || (voided ? 'cancelled' : 'completed')),
+      endReason,
       winnerTeam: voided ? null : winnerTeam,
+      postMatchReport,
       ...(voided ? { rated: false } : {}),
     };
-
-    const finalStates = runtimeSnapshot(active.id);
-    const startedAtMs = Date.parse(active.startedAt || active.createdAt || endedAt);
-    const endedAtMs = Date.parse(endedAt);
-    const durationMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
-      ? Math.max(0, endedAtMs - startedAtMs)
-      : 0;
 
     broadcast({
       type: 'match.ended',
@@ -478,8 +514,8 @@ export function createPlatformServer(options = {}) {
       winnerTeam: voided ? null : winnerTeam,
       reason: updated.endReason,
       voided,
-      durationMs,
-      finalStates,
+      durationMs: postMatchReport.durationMs,
+      finalStates: postMatchReport.finalStates,
     }, active.players.map(candidate => candidate.userId));
 
     clearMatchRuntime(active.id);
@@ -1663,6 +1699,14 @@ export function createPlatformServer(options = {}) {
 
     if (simulatorUserId && simulatorUserId !== userId) send(simulatorUserId, event);
     broadcast(runtimeStructureSnapshot(active.id), active.players.map(candidate => candidate.userId));
+
+    if (nextHp <= 0 && structureId.endsWith('-throne')) {
+      finishMatch(active, {
+        winnerTeam: source.team,
+        reason: 'throne_destroyed',
+        voided: false,
+      });
+    }
     return event;
   }
 
@@ -1816,20 +1860,7 @@ export function createPlatformServer(options = {}) {
       });
     }
 
-    const updated = store.updateMatch(active.id, {
-      abandonedUserIds,
-      ...(ended ? {
-        status: loadingCancelled || voided ? 'cancelled' : 'completed',
-        endedAt: new Date().toISOString(),
-        endReason: loadingCancelled
-          ? 'loading_abandonment'
-          : winnerTeam
-            ? 'team_abandonment'
-            : 'all_players_abandoned',
-        winnerTeam,
-        ...(voided ? { rated: false } : {}),
-      } : {}),
-    }) || { ...active, abandonedUserIds };
+    const updated = store.updateMatch(active.id, { abandonedUserIds }) || { ...active, abandonedUserIds };
 
     send(userId, {
       type: 'match.abandoned',
@@ -1837,22 +1868,17 @@ export function createPlatformServer(options = {}) {
       ended,
     });
 
-    const participantIds = active.players.map(candidate => candidate.userId);
     if (ended) {
-      broadcast({
-        type: 'match.ended',
-        match: publicMatch(updated),
+      const endReason = loadingCancelled
+        ? 'loading_abandonment'
+        : winnerTeam
+          ? 'team_abandonment'
+          : 'all_players_abandoned';
+      return finishMatch(updated, {
         winnerTeam,
-        reason: loadingCancelled
-          ? 'loading_abandonment'
-          : winnerTeam
-            ? 'team_abandonment'
-            : 'all_players_abandoned',
+        reason: endReason,
         voided: loadingCancelled || voided,
-      }, participantIds);
-      clearMatchRuntime(active.id);
-      if (active.source === 'custom') lobbies.closeByMatch(active.id);
-      return publicMatch(updated);
+      });
     }
 
     if (active.source === 'custom') lobbies.removeParticipantFromInGame(active.id, userId);

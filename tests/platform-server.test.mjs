@@ -252,6 +252,50 @@ test('abandoning the last player on a team awards a connected surviving team', a
     };
 
     platform.store.addMatch(match);
+    platform.reportMatchRuntimeState(blue.body.user.id, {
+      matchId: match.id,
+      sequence: 1,
+      position: { x: -10, y: 5.28, z: -18 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 3,
+      experience: 240,
+      alive: true,
+      kills: 2,
+      deaths: 1,
+      assists: 4,
+      lastHits: 7,
+      denies: 1,
+      gold: 615,
+      inventory: [{ slot: 0, definitionId: 'I001', displayName: 'Semilla de Hierro', quantity: 1 }],
+      abilityRanks: { Q: 1, W: 1, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState(red.body.user.id, {
+      matchId: match.id,
+      sequence: 1,
+      position: { x: 10, y: 5.28, z: 18 },
+      yaw: 0,
+      moving: false,
+      currentHp: 650,
+      maxHp: 700,
+      currentResource: 260,
+      maxResource: 300,
+      level: 2,
+      experience: 120,
+      alive: true,
+      kills: 1,
+      deaths: 2,
+      assists: 0,
+      lastHits: 4,
+      denies: 0,
+      gold: 420,
+      inventory: [],
+      abilityRanks: { Q: 1, W: 0, E: 0, R: 0 },
+    });
     const redSocket = await openWebsocket(port, red.body.token);
     await wait(10);
 
@@ -261,6 +305,11 @@ test('abandoning the last player on a team awards a connected surviving team', a
     assert.equal(ended.endReason, 'team_abandonment');
     assert.equal(ended.winnerTeam, 'red');
     assert.deepEqual(ended.abandonedUserIds, [blue.body.user.id]);
+    assert.equal(ended.postMatchReport?.version, 1);
+    assert.equal(ended.postMatchReport?.finalStates?.length, 2);
+    const persistedBlue = ended.postMatchReport.finalStates.find(state => state.userId === blue.body.user.id);
+    assert.equal(persistedBlue.level, 3);
+    assert.equal(persistedBlue.inventory[0].definitionId, 'I001');
     assert.equal(platform.store.activeMatchForUser(blue.body.user.id), null);
     assert.equal(platform.store.activeMatchForUser(red.body.user.id), null);
     redSocket.destroy();
@@ -1094,6 +1143,81 @@ test('server keeps creep and structure HP canonical against stale simulator snap
     });
     tower = platform.runtimeStructureSnapshot(match.id).structures[0];
     assert.equal(tower.currentHp, 750);
+  });
+});
+
+test('destroying the enemy throne finishes and persists the post-match report', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'throne-post-match-report',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'throne-blue', username: 'Throne Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'throne-red', username: 'Throne Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    for (const [userId, team, x] of [
+      ['throne-blue', 'blue', -10],
+      ['throne-red', 'red', 10],
+    ]) {
+      platform.reportMatchRuntimeState(userId, {
+        matchId: match.id,
+        sequence: 1,
+        position: { x, y: 5.28, z: 0 },
+        yaw: 0,
+        moving: false,
+        currentHp: 700,
+        maxHp: 700,
+        currentResource: 300,
+        maxResource: 300,
+        level: 2,
+        experience: 100,
+        alive: true,
+        kills: 0,
+        deaths: 0,
+        assists: 0,
+        lastHits: 0,
+        denies: 0,
+        gold: 500,
+        inventory: [],
+        abilityRanks: { Q: 1, W: 0, E: 0, R: 0 },
+      });
+    }
+
+    platform.reportMatchRuntimeStructures('throne-blue', {
+      matchId: match.id,
+      sequence: 1,
+      structures: [{
+        id: 'red-throne',
+        team: 'red',
+        kind: 'building',
+        currentHp: 100,
+        maxHp: 5000,
+        alive: true,
+      }],
+    });
+    platform.reportMatchRuntimeStructureDamage('throne-blue', {
+      matchId: match.id,
+      structureId: 'red-throne',
+      amount: 100,
+    });
+
+    const ended = platform.store.match(match.id);
+    assert.equal(ended.status, 'completed');
+    assert.equal(ended.winnerTeam, 'blue');
+    assert.equal(ended.endReason, 'throne_destroyed');
+    assert.equal(ended.postMatchReport?.version, 1);
+    assert.equal(ended.postMatchReport?.finalStates?.length, 2);
+    assert.equal(ended.postMatchReport?.structures?.find(structure => structure.id === 'red-throne')?.alive, false);
   });
 });
 
