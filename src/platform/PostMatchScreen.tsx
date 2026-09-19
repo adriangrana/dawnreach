@@ -1,4 +1,4 @@
-import { BarChart3, Coins, Crown, Home, RotateCcw, Shield, Swords, Timer, Trophy } from 'lucide-react';
+import { BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users } from 'lucide-react';
 import { getHeroDefinition } from '../game/heroes/catalog';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import type {
@@ -145,6 +145,25 @@ function itemSlots(stats: MatchResultPlayer) {
   return Array.from({ length: 6 }, (_, slot) => itemsBySlot.get(slot) ?? null);
 }
 
+function EmptyPlayerRow({ team, slot }: { team: Team; slot: number }) {
+  return (
+    <article className="dr-post-player-row is-empty" aria-hidden="true">
+      <div className="dr-post-player">
+        <span className="dr-post-level">—</span>
+        <div className="dr-post-portrait dr-post-portrait--empty"><Shield /></div>
+        <div className="dr-post-player-copy">
+          <strong>EMPTY SLOT</strong>
+          <span>{teamLabel(team)} · SLOT {slot + 1}</span>
+        </div>
+      </div>
+      <span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span>
+      <div className="dr-post-items">
+        {Array.from({ length: 6 }, (_, index) => <span key={index} className="dr-post-item" />)}
+      </div>
+    </article>
+  );
+}
+
 function TeamTable({
   team,
   entries,
@@ -162,8 +181,11 @@ function TeamTable({
   return (
     <section className={`dr-post-team dr-post-team--${team}`}>
       <header className="dr-post-team-header">
-        <strong>{teamLabel(team)}</strong>
-        <span>{kills} / {deaths} / {assists}</span>
+        <div>
+          <strong>{teamLabel(team)}</strong>
+          <small>{entries.length}/5 PLAYERS</small>
+        </div>
+        <span><b>{kills}</b> / {deaths} / {assists}</span>
       </header>
       <div className="dr-post-table-head" aria-hidden="true">
         <span>PLAYER</span>
@@ -213,6 +235,9 @@ function TeamTable({
             </article>
           );
         })}
+        {Array.from({ length: Math.max(0, 5 - entries.length) }, (_, index) => (
+          <EmptyPlayerRow key={`empty-${team}-${index}`} team={team} slot={entries.length + index} />
+        ))}
       </div>
     </section>
   );
@@ -254,6 +279,13 @@ export function PostMatchScreen({
   const localResult = resultTitle(result, localTeam);
   const localGold = local ? number(local.stats.currentGold) : 0;
   const localCreepScore = local ? number(local.stats.creepKills) + number(local.stats.creepDenies) : 0;
+  const localStructureDamage = local
+    ? number(local.stats.towerDamage) + number(local.stats.buildingDamage)
+    : 0;
+  const localXpm = local ? number(local.stats.xpm) : 0;
+  const localDisconnectSeconds = local ? number(local.stats.disconnectSeconds) : 0;
+  const isCustomMatch = result.match.mode === 'custom';
+  const modeLabel = isCustomMatch ? 'CUSTOM MATCH' : result.match.mode.toUpperCase();
 
   return (
     <main className="dr-post-match">
@@ -265,15 +297,16 @@ export function PostMatchScreen({
         </div>
         <div className="dr-post-result">
           <span className="dr-post-score dr-post-score--blue">{dawnKills}</span>
-          <div>
-            <small>{result.match.mode.toUpperCase()} · {formatDuration(durationMs)}</small>
+          <div className="dr-post-result-copy">
+            <small>{modeLabel} · {formatDuration(durationMs)}</small>
             <h1 className={localResult === 'VICTORY' ? 'is-victory' : localResult === 'DEFEAT' ? 'is-defeat' : ''}>{localResult}</h1>
+            <span>{result.winnerTeam ? `${teamLabel(result.winnerTeam)} WINS` : 'MATCH ENDED'}</span>
           </div>
           <span className="dr-post-score dr-post-score--red">{duskKills}</span>
         </div>
         <div className="dr-post-user">
           <strong>{me.username}</strong>
-          <span>POST-MATCH REPORT</span>
+          <span>{isCustomMatch ? 'CUSTOM MATCH' : 'POST-MATCH REPORT'}</span>
         </div>
       </header>
 
@@ -307,7 +340,7 @@ export function PostMatchScreen({
               <div className="dr-post-mvp-metrics">
                 <span><b>{mvp.stats.kills} / {mvp.stats.deaths} / {mvp.stats.assists}</b><small>K / D / A</small></span>
                 <span><b>{formatNumber(number(mvp.stats.heroDamage))}</b><small>DAMAGE</small></span>
-                <span><b>{formatNumber(number(mvp.stats.currentGold))}</b><small>GOLD</small></span>
+                <span><b>{formatNumber(number(mvp.stats.xpm))}</b><small>XPM</small></span>
               </div>
             </> : <p>No MVP data available.</p>}
           </section>
@@ -342,11 +375,35 @@ export function PostMatchScreen({
       </section>
 
       <section className="dr-post-lower">
-        <article><Timer /><span><small>MATCH TIME</small><strong>{formatDuration(durationMs)}</strong></span></article>
-        <article><Coins /><span><small>YOUR FINAL GOLD</small><strong>{formatNumber(localGold)}</strong></span></article>
-        <article><Swords /><span><small>YOUR CREEP SCORE</small><strong>{formatNumber(localCreepScore)}</strong></span></article>
-        <article><Trophy /><span><small>YOUR RESULT</small><strong>{localResult}</strong></span></article>
+        <article>
+          <Timer />
+          <span><small>MATCH TIME</small><strong>{formatDuration(durationMs)}</strong></span>
+        </article>
+        <article>
+          <Gauge />
+          <span><small>YOUR XPM</small><strong>{formatNumber(localXpm)}</strong></span>
+        </article>
+        <article>
+          <Swords />
+          <span><small>STRUCTURE DAMAGE</small><strong>{formatNumber(localStructureDamage)}</strong></span>
+        </article>
+        <article className="dr-post-mode-card">
+          {isCustomMatch ? <Users /> : <Trophy />}
+          <span>
+            <small>{isCustomMatch ? 'MATCH TYPE' : 'YOUR RESULT'}</small>
+            <strong>{isCustomMatch ? 'CUSTOM MATCH' : localResult}</strong>
+            {isCustomMatch && <em>{players.length} PLAYERS</em>}
+          </span>
+        </article>
       </section>
+
+      <div className="dr-post-secondary-stats" aria-label="Additional match statistics">
+        <span><b>{formatNumber(localGold)}</b><small>FINAL GOLD</small></span>
+        <span><b>{formatNumber(localCreepScore)}</b><small>LH + DN</small></span>
+        <span><b>{local?.stats.towersDestroyed ?? 0}</b><small>TOWERS</small></span>
+        <span><b>{local?.stats.killStreak ?? 0}</b><small>BEST STREAK</small></span>
+        <span><b>{formatDuration(localDisconnectSeconds * 1000)}</b><small>DISCONNECTED</small></span>
+      </div>
 
       <footer className="dr-post-actions">
         <button type="button" className="dr-post-primary" onClick={onPlayAgain}><RotateCcw /> PLAY AGAIN</button>
