@@ -1055,8 +1055,8 @@ export function createPlatformServer(options = {}) {
       kills: previous ? previous.kills : 0,
       deaths: (previous ? previous.deaths : 0) + deathIncrement,
       assists: previous ? nonNegativeCounter(payload?.assists, previous.assists) : 0,
-      lastHits: nonNegativeCounter(payload?.lastHits, previous?.lastHits),
-      denies: nonNegativeCounter(payload?.denies, previous?.denies),
+      lastHits: previous ? nonNegativeCounter(previous.lastHits, 0) : 0,
+      denies: previous ? nonNegativeCounter(previous.denies, 0) : 0,
       gold: nonNegativeCounter(payload?.gold, previous?.gold),
       inventory,
       sentAt: now,
@@ -1089,7 +1089,7 @@ export function createPlatformServer(options = {}) {
       type: 'match.runtime.state',
       matchId: active.id,
       state,
-    }, serverRespawned
+    }, (serverRespawned || deathIncrement > 0)
       ? recipients
       : recipients.filter(recipientUserId => recipientUserId !== userId));
     if (creditedKillerState) {
@@ -1427,7 +1427,6 @@ export function createPlatformServer(options = {}) {
     const creepId = String(payload?.creepId || '');
     const idMatch = /^lane-creep:(blue|red):(top|mid|bot):\d+:\d+$/.exec(creepId);
     if (!idMatch) throw new Error('Creep de destino inválido.');
-    if (idMatch[1] === source.team) throw new Error('No se permite daño aliado a creeps.');
 
     const amount = Math.max(0, Math.min(10000, Number(payload?.amount) || 0));
     if (amount <= 0) return null;
@@ -1435,6 +1434,14 @@ export function createPlatformServer(options = {}) {
     const previous = matchRuntimeCreepStates.get(active.id);
     const target = previous?.creeps?.find(creep => creep.id === creepId) || null;
     if (!previous || !target || target.alive === false || Number(target.currentHp || 0) <= 0) return null;
+
+    const alliedTarget = idMatch[1] === source.team;
+    const targetHpFraction = Number(target.maxHp || 0) > 0
+      ? Number(target.currentHp || 0) / Number(target.maxHp || 1)
+      : 1;
+    if (alliedTarget && targetHpFraction > 0.5) {
+      throw new Error('Solo puedes denegar creeps aliados con 50% de vida o menos.');
+    }
 
     const nextHp = Math.max(0, Number(target.currentHp || 0) - amount);
     const nextCreep = {
@@ -1455,6 +1462,22 @@ export function createPlatformServer(options = {}) {
     };
     matchRuntimeCreepStates.set(active.id, snapshot);
 
+    let creditedSourceState = null;
+    if (nextHp <= 0) {
+      const room = runtimeRoom(active.id);
+      const sourceRuntime = room.get(userId) || null;
+      if (sourceRuntime) {
+        creditedSourceState = {
+          ...sourceRuntime,
+          lastHits: Number(sourceRuntime.lastHits || 0) + (alliedTarget ? 0 : 1),
+          denies: Number(sourceRuntime.denies || 0) + (alliedTarget ? 1 : 0),
+          sequence: Number(sourceRuntime.sequence || 0) + 1,
+          sentAt: Date.now(),
+        };
+        room.set(userId, creditedSourceState);
+      }
+    }
+
     const simulatorUserId = runtimeAuthorityUserId(active);
     const event = {
       type: 'match.runtime.creep.damage',
@@ -1468,7 +1491,15 @@ export function createPlatformServer(options = {}) {
     // The server owns HP/death. The simulation producer only mirrors the accepted hit into
     // its local AI world so future movement/attack proposals continue from the same state.
     if (simulatorUserId && simulatorUserId !== userId) send(simulatorUserId, event);
-    broadcast(runtimeCreepSnapshot(active.id), active.players.map(candidate => candidate.userId));
+    const recipients = active.players.map(candidate => candidate.userId);
+    broadcast(runtimeCreepSnapshot(active.id), recipients);
+    if (creditedSourceState) {
+      broadcast({
+        type: 'match.runtime.state',
+        matchId: active.id,
+        state: creditedSourceState,
+      }, recipients);
+    }
     return event;
   }
 

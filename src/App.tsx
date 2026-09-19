@@ -305,6 +305,15 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
           R: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.R ?? 0),
         }
         : hero.cooldownReadyAtMs,
+      runtime: {
+        ...hero.runtime,
+        counters: {
+          ...hero.runtime.counters,
+          'scoreboard.kills': Math.max(0, Math.floor(action.state.kills ?? 0)),
+          'scoreboard.deaths': Math.max(0, Math.floor(action.state.deaths ?? 0)),
+          'scoreboard.assists': Math.max(0, Math.floor(action.state.assists ?? 0)),
+        },
+      },
     };
     const restoredMatch = {
       ...match,
@@ -1588,6 +1597,8 @@ export default function App({
           kills: state.kills,
           deaths: state.deaths,
           assists: state.assists,
+          lastHits: state.lastHits,
+          denies: state.denies,
         });
         dispatch({ type: 'local-server-sync', state, nowMs: performance.now() });
         const game = gameRef.current;

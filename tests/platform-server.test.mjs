@@ -493,8 +493,8 @@ test('active match runtime state is shared by match id and survives as an in-mem
     assert.equal(snapshot[0].level, 6);
     assert.equal(snapshot[0].experience, 812);
     assert.equal(snapshot[0].gold, 1375);
-    assert.equal(snapshot[0].lastHits, 14);
-    assert.equal(snapshot[0].denies, 3);
+    assert.equal(snapshot[0].lastHits, 0);
+    assert.equal(snapshot[0].denies, 0);
     assert.deepEqual(snapshot[0].abilityRanks, { Q: 2, W: 1, E: 1, R: 1 });
     assert.deepEqual(snapshot[0].abilityCooldownRemainingMs, { Q: 3100, W: 0, E: 7200, R: 48000 });
     assert.deepEqual(snapshot[0].inventory, [
@@ -846,6 +846,85 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     assert.deepEqual(blue.position, { x: -10, y: 5.28, z: -18 });
     assert.equal(blue.moving, true);
   }, { heroRespawnBaseSeconds: 0.02, heroRespawnPerLevelSeconds: 0 });
+});
+
+test('server owns last-hit and deny counters for creep deaths', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'server-owned-lh-dn',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'lh-blue', username: 'LH Blue', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'lh-red', username: 'LH Red', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+    };
+    platform.store.addMatch(match);
+
+    platform.reportMatchRuntimeState('lh-blue', {
+      matchId: match.id, sequence: 1, position: { x: -4, y: 5.28, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, lastHits: 999, denies: 999,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('lh-red', {
+      matchId: match.id, sequence: 1, position: { x: 4, y: 5.28, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+
+    platform.reportMatchRuntimeCreeps('lh-blue', {
+      matchId: match.id,
+      sequence: 1,
+      sentAt: Date.now(),
+      elapsedSeconds: 10,
+      creeps: [
+        {
+          id: 'lane-creep:red:mid:1:1', team: 'red', lane: 'mid', type: 'melee',
+          position: { x: 0, y: 0, z: 0 }, yaw: 0, currentHp: 50, maxHp: 500,
+          alive: true, state: 'COMBAT', moving: false, seed: 1, attackSequence: 0,
+        },
+        {
+          id: 'lane-creep:blue:mid:1:2', team: 'blue', lane: 'mid', type: 'melee',
+          position: { x: 1, y: 0, z: 0 }, yaw: 0, currentHp: 200, maxHp: 500,
+          alive: true, state: 'COMBAT', moving: false, seed: 2, attackSequence: 0,
+        },
+      ],
+    });
+
+    platform.reportMatchRuntimeCreepDamage('lh-blue', {
+      matchId: match.id,
+      creepId: 'lane-creep:red:mid:1:1',
+      amount: 60,
+    });
+    platform.reportMatchRuntimeCreepDamage('lh-blue', {
+      matchId: match.id,
+      creepId: 'lane-creep:blue:mid:1:2',
+      amount: 250,
+    });
+
+    let blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'lh-blue');
+    assert.equal(blue.lastHits, 1);
+    assert.equal(blue.denies, 1);
+
+    // A later owner snapshot cannot forge or roll back server-owned lane counters.
+    platform.reportMatchRuntimeState('lh-blue', {
+      matchId: match.id, sequence: 500, position: { x: -4, y: 5.28, z: 0 }, yaw: 0,
+      moving: false, currentHp: 700, maxHp: 700, currentResource: 300, maxResource: 300,
+      level: 1, alive: true, lastHits: 777, denies: 777,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'lh-blue');
+    assert.equal(blue.lastHits, 1);
+    assert.equal(blue.denies, 1);
+  });
 });
 
 test('server keeps creep and structure HP canonical against stale simulator snapshots', async () => {
