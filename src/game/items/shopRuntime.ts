@@ -178,6 +178,31 @@ function applyTeleportMaintenance(
   return next;
 }
 
+function reconcileHeroVitalsAfterInventoryStatChange(
+  before: MatchState,
+  after: MatchState,
+  heroEntityId: string,
+  nowMs = runtimeNowMs(),
+) {
+  const beforeHero = getRequiredHero(before, heroEntityId);
+  const afterHero = getRequiredHero(after, heroEntityId);
+  const beforeStats = calculateHeroStats(before, heroEntityId, { nowMs });
+  const afterStats = calculateHeroStats(after, heroEntityId, { nowMs });
+
+  const hpRatio = beforeStats.maxHp > 0
+    ? Math.max(0, Math.min(1, beforeHero.currentHp / beforeStats.maxHp))
+    : (beforeHero.currentHp > 0 ? 1 : 0);
+  const resourceRatio = beforeStats.maxResource > 0
+    ? Math.max(0, Math.min(1, beforeHero.currentResource / beforeStats.maxResource))
+    : (beforeHero.currentResource > 0 ? 1 : 0);
+
+  afterHero.currentHp = Math.max(0, Math.min(afterStats.maxHp, afterStats.maxHp * hpRatio));
+  afterHero.currentResource = Math.max(
+    0,
+    Math.min(afterStats.maxResource, afterStats.maxResource * resourceRatio),
+  );
+}
+
 export function syncHeroItemRuntime(
   state: MatchState,
   heroEntityId: string,
@@ -261,6 +286,7 @@ export function purchaseShopItem(
     stackSlot.item.quantity += item.quantity;
     stackSlot.item.cooldownReadyAtMs = Math.max(stackSlot.item.cooldownReadyAtMs, item.cooldownReadyAtMs);
     const stackedItem = structuredClone(stackSlot.item);
+    reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
     syncHeroItemRuntime(next, heroEntityId);
     return { match: next, definition, item: stackedItem, ok: true, dropped: false, reason: null };
   }
@@ -268,11 +294,15 @@ export function purchaseShopItem(
   const emptySlot = findEmptySlotForItem(hero, item.definitionId);
   if (nearShop && emptySlot) {
     emptySlot.item = item;
+    reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
     syncHeroItemRuntime(next, heroEntityId);
     return { match: next, definition, item, ok: true, dropped: false, reason: null };
   }
 
   markShopPurchaseForStorefrontDrop(instanceId);
+  // Recipe components may have been consumed even when the completed item is dropped to
+  // the storefront. Reconcile against the actual post-purchase inventory either way.
+  reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
   syncHeroItemRuntime(next, heroEntityId);
   return {
     match: next,
@@ -306,6 +336,7 @@ export function pickUpGroundItem(
     stackSlot.item.quantity += Math.max(1, item.quantity);
     stackSlot.item.cooldownReadyAtMs = Math.max(stackSlot.item.cooldownReadyAtMs, item.cooldownReadyAtMs);
     inheritTeleportCooldown(hero, stackSlot.item);
+    reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
     syncHeroItemRuntime(next, heroEntityId);
     return { match: next, definition, item: structuredClone(stackSlot.item), ok: true, reason: null };
   }
@@ -314,6 +345,7 @@ export function pickUpGroundItem(
   if (!emptySlot) return { match: state, definition, item, ok: false, reason: 'inventory-full' };
   emptySlot.item = structuredClone(item);
   inheritTeleportCooldown(hero, emptySlot.item);
+  reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
   syncHeroItemRuntime(next, heroEntityId);
   return { match: next, definition, item, ok: true, reason: null };
 }
@@ -375,6 +407,7 @@ export function dropInventoryItem(
   const hero = getRequiredHero(next, heroEntityId);
   const slot = hero.inventory.find(candidate => candidate.slot === slotIndex)!;
   slot.item = null;
+  reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
   syncHeroItemRuntime(next, heroEntityId);
   return { match: next, item, definition, ok: true };
 }
@@ -397,6 +430,7 @@ export function sellInventoryItem(
   if (!slot) return { match: state, item: null, definition: null, ok: false, saleGold: 0 };
   slot.item = null;
   hero.gold += saleGold;
+  reconcileHeroVitalsAfterInventoryStatChange(state, next, heroEntityId);
   syncHeroItemRuntime(next, heroEntityId);
   return { match: next, item: structuredClone(item), definition, ok: true, saleGold };
 }
