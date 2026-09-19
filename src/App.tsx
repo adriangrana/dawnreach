@@ -261,16 +261,66 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
 
   if (action.type === 'local-server-sync') {
     const hero = getRequiredHero(match, LOCAL_HERO_ENTITY_ID);
-    const stats = calculateHeroStats(match, hero.heroEntityId, { nowMs });
+    const restoredItems = new Map(
+      (action.state.inventory ?? []).map(item => [item.slot, item] as const),
+    );
+    const inventory = hero.inventory.map(slot => {
+      const item = restoredItems.get(slot.slot);
+      const definition = item ? getItemDefinition(item.definitionId) : null;
+      return {
+        ...slot,
+        item: item
+          ? {
+            instanceId: `restored:${action.state.userId}:${slot.slot}:${item.definitionId}`,
+            definitionId: item.definitionId,
+            displayName: item.displayName,
+            quantity: Math.max(1, item.quantity),
+            statModifiers: definition ? itemStatsToHeroModifiers(definition.stats) : [],
+            cooldownReadyAtMs: nowMs + Math.max(0, item.cooldownRemainingMs ?? 0),
+          }
+          : null,
+      };
+    });
+    const restoredHero = {
+      ...hero,
+      level: Math.max(1, Math.floor(action.state.level || hero.level)),
+      experience: Math.max(0, Number(action.state.experience ?? hero.experience)),
+      gold: Math.max(0, Math.floor(action.state.gold ?? hero.gold)),
+      lastHits: Math.max(0, Math.floor(action.state.lastHits ?? hero.lastHits)),
+      denies: Math.max(0, Math.floor(action.state.denies ?? hero.denies)),
+      inventory,
+      abilityRanks: action.state.abilityRanks
+        ? {
+          Q: Math.max(0, Math.floor(action.state.abilityRanks.Q ?? 0)),
+          W: Math.max(0, Math.floor(action.state.abilityRanks.W ?? 0)),
+          E: Math.max(0, Math.floor(action.state.abilityRanks.E ?? 0)),
+          R: Math.max(0, Math.floor(action.state.abilityRanks.R ?? 0)),
+        }
+        : hero.abilityRanks,
+      cooldownReadyAtMs: action.state.abilityCooldownRemainingMs
+        ? {
+          Q: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.Q ?? 0),
+          W: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.W ?? 0),
+          E: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.E ?? 0),
+          R: nowMs + Math.max(0, action.state.abilityCooldownRemainingMs.R ?? 0),
+        }
+        : hero.cooldownReadyAtMs,
+    };
+    const restoredMatch = {
+      ...match,
+      heroes: {
+        ...match.heroes,
+        [LOCAL_HERO_ENTITY_ID]: restoredHero,
+      },
+    };
+    const stats = calculateHeroStats(restoredMatch, restoredHero.heroEntityId, { nowMs });
     const currentHp = Math.max(0, Math.min(stats.maxHp, action.state.currentHp));
     const currentResource = Math.max(
       0,
       Math.min(stats.maxResource, action.state.currentResource),
     );
     const nextHero = {
-      ...hero,
-      level: Math.max(1, Math.floor(action.state.level || hero.level)),
-      experience: Math.max(0, Number(action.state.experience ?? hero.experience)),
+      ...restoredHero,
       currentHp,
       currentResource,
     };
@@ -286,9 +336,9 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
     return {
       ...runtime,
       match: {
-        ...match,
+        ...restoredMatch,
         heroes: {
-          ...match.heroes,
+          ...restoredMatch.heroes,
           [LOCAL_HERO_ENTITY_ID]: nextHero,
         },
       },
@@ -1523,6 +1573,12 @@ export default function App({
   useEffect(() => {
     if (!onlineMatch || !localUser || onlineMatch.status !== 'in_game') return;
 
+    // A freshly remounted client starts from the hero definition defaults. Never publish
+    // those defaults back to the server before the authoritative runtime snapshot has had
+    // a chance to hydrate inventory/progression/abilities after reconnect.
+    let runtimeSnapshotHydrated = false;
+    let hydrationFrame = 0;
+
     const applyRemote = (state: MatchRuntimePlayerState) => {
       if (state.userId === localUser.id) {
         // The server owns the final combat/death/respawn lifecycle. Reconcile the local HUD
@@ -1628,6 +1684,15 @@ export default function App({
         applyRemote(event.state as MatchRuntimePlayerState);
       } else if (type === 'match.runtime.snapshot' && 'matchId' in event && event.matchId === onlineMatch.id && 'states' in event && Array.isArray(event.states)) {
         for (const state of event.states as readonly MatchRuntimePlayerState[]) applyRemote(state);
+        // Reducer reconciliation is asynchronous relative to the websocket callback. Wait
+        // through two presentation frames before allowing the 80 ms publisher to read the
+        // hydrated runtime and send it back as the owner's next proposal.
+        if (hydrationFrame) cancelAnimationFrame(hydrationFrame);
+        hydrationFrame = requestAnimationFrame(() => {
+          hydrationFrame = requestAnimationFrame(() => {
+            runtimeSnapshotHydrated = true;
+          });
+        });
       } else if (
         type === 'match.runtime.ability.cast'
         && 'matchId' in event
@@ -1823,7 +1888,7 @@ export default function App({
     platformRealtime.send('match.runtime.snapshot', { matchId: onlineMatch.id });
 
     const publish = () => {
-      if (matchEndedRef.current) return;
+      if (matchEndedRef.current || !runtimeSnapshotHydrated) return;
       const game = gameRef.current;
       if (!game) return;
       const state = game.getLocalNetworkState();
@@ -1888,6 +1953,7 @@ export default function App({
     const timer = window.setInterval(publish, 80);
     return () => {
       window.clearInterval(timer);
+      if (hydrationFrame) cancelAnimationFrame(hydrationFrame);
       unsubscribe();
     };
   }, [onlineMatch?.id, onlineMatch?.status, localUser?.id]);

@@ -1017,7 +1017,7 @@ export function createPlatformServer(options = {}) {
       maxHp: requestedMaxHp,
       currentResource: requestedCurrentResource,
       maxResource: requestedMaxResource,
-      level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, 1)))),
+      level: Math.max(1, Math.min(99, Math.floor(finite(payload?.level, previous?.level || 1)))),
       experience: Math.max(0, Math.min(1000000000, finite(payload?.experience, previous?.experience || 0))),
       alive: requestedAlive,
       respawnRemainingMs: authoritativeRespawnRemainingMs,

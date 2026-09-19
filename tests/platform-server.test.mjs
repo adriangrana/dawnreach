@@ -466,8 +466,18 @@ test('active match runtime state is shared by match id and survives as an in-mem
       maxHp: 700,
       currentResource: 285,
       maxResource: 318,
-      level: 2,
+      level: 6,
+      experience: 812,
       alive: true,
+      lastHits: 14,
+      denies: 3,
+      gold: 1375,
+      inventory: [
+        { slot: 0, definitionId: 'I001', displayName: 'Test Blade', quantity: 1, cooldownRemainingMs: 4200 },
+        { slot: 6, definitionId: 'I057', displayName: 'Teleport Scroll', quantity: 2, cooldownRemainingMs: 18000 },
+      ],
+      abilityRanks: { Q: 2, W: 1, E: 1, R: 1 },
+      abilityCooldownRemainingMs: { Q: 3100, W: 0, E: 7200, R: 48000 },
     });
 
     assert.equal(published.userId, 'runtime-blue');
@@ -480,6 +490,17 @@ test('active match runtime state is shared by match id and survives as an in-mem
     assert.equal(snapshot.length, 1);
     assert.equal(snapshot[0].username, 'Runtime Blue');
     assert.equal(snapshot[0].currentHp, 640);
+    assert.equal(snapshot[0].level, 6);
+    assert.equal(snapshot[0].experience, 812);
+    assert.equal(snapshot[0].gold, 1375);
+    assert.equal(snapshot[0].lastHits, 14);
+    assert.equal(snapshot[0].denies, 3);
+    assert.deepEqual(snapshot[0].abilityRanks, { Q: 2, W: 1, E: 1, R: 1 });
+    assert.deepEqual(snapshot[0].abilityCooldownRemainingMs, { Q: 3100, W: 0, E: 7200, R: 48000 });
+    assert.deepEqual(snapshot[0].inventory, [
+      { slot: 0, definitionId: 'I001', displayName: 'Test Blade', quantity: 1, cooldownRemainingMs: 4200 },
+      { slot: 6, definitionId: 'I057', displayName: 'Teleport Scroll', quantity: 2, cooldownRemainingMs: 18000 },
+    ]);
   });
 });
 
