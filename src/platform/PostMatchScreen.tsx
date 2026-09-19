@@ -277,8 +277,13 @@ const GRAPH_METRICS: readonly Readonly<{ key: GraphMetric; label: string }>[]= [
   { key: 'creepScore', label: 'CREEP SCORE' },
 ];
 
+function hasGraphMetricSample(sample: MatchGraphSample, metric: GraphMetric) {
+  return metric !== 'netWorth'
+    || (sample.netWorth !== undefined && Number.isFinite(Number(sample.netWorth)));
+}
+
 function graphValue(sample: MatchGraphSample, metric: GraphMetric) {
-  if (metric === 'netWorth') return sample.netWorth ?? sample.gold;
+  if (metric === 'netWorth') return Math.max(0, Number(sample.netWorth ?? 0));
   if (metric === 'experience') return sample.experience;
   if (metric === 'heroDamage') return sample.heroDamage;
   if (metric === 'creepScore') return sample.creepKills + sample.creepDenies;
@@ -337,8 +342,9 @@ function GraphsTab({
   players: readonly FinalPlayer[];
 }) {
   const [metric, setMetric] = useState<GraphMetric>('gold');
+  const metricSamples = samples.filter(sample => hasGraphMetricSample(sample, metric));
   const grouped = new Map<string, MatchGraphSample[]>();
-  for (const sample of samples) {
+  for (const sample of metricSamples) {
     const bucket = grouped.get(sample.userId) ?? [];
     bucket.push(sample);
     grouped.set(sample.userId, bucket);
@@ -346,7 +352,7 @@ function GraphsTab({
   for (const bucket of grouped.values()) bucket.sort((a, b) => a.atMs - b.atMs);
 
   const maxAt = Math.max(1, ...samples.map(sample => sample.atMs));
-  const maxValue = Math.max(1, ...samples.map(sample => graphValue(sample, metric)));
+  const maxValue = Math.max(1, ...metricSamples.map(sample => graphValue(sample, metric)));
   const x = (atMs: number) => 54 + (atMs / maxAt) * 890;
   const y = (value: number) => 324 - (value / maxValue) * 270;
 
@@ -362,7 +368,7 @@ function GraphsTab({
           ))}
         </div>
       </header>
-      {samples.length ? (
+      {samples.length && metricSamples.length ? (
         <div className="dr-post-graph-layout">
           <div className="dr-post-chart">
             <svg viewBox="0 0 1000 360" role="img" aria-label={`${GRAPH_METRICS.find(item => item.key === metric)?.label} over time`}>
@@ -398,6 +404,12 @@ function GraphsTab({
               );
             })}
           </aside>
+        </div>
+      ) : metric === 'netWorth' && samples.length ? (
+        <div className="dr-post-tab-empty">
+          <BarChart3 />
+          <strong>NET WORTH UNAVAILABLE</strong>
+          <span>This match was completed before Net Worth telemetry was recorded. New matches use gold on hand plus the full value of owned items.</span>
         </div>
       ) : (
         <div className="dr-post-tab-empty"><BarChart3 /><strong>NO HISTORICAL SAMPLES</strong><span>This match was recorded before graph telemetry was enabled.</span></div>
