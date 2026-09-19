@@ -2009,6 +2009,7 @@ export async function createDawnreachGame(
       lastLocalAuthoritativeSequence = state.sequence;
 
       const wasAlive = localHeroEntity.alive && localHeroEntity.currentHp > 0;
+      const wasRespawnHeld = Boolean(hero.root.userData[RESPAWN_HOLD_KEY]);
       localHeroEntity.maxHp = Math.max(1, state.maxHp);
       localHeroEntity.currentHp = THREE.MathUtils.clamp(state.currentHp, 0, localHeroEntity.maxHp);
       localHeroEntity.maxResource = Math.max(0, state.maxResource);
@@ -2043,7 +2044,7 @@ export async function createDawnreachGame(
         hero.root.visible = true;
         hero.model.visible = true;
         hero.model.rotation.x = 0;
-        if (!wasAlive || firstAuthoritativeState) {
+        if (!wasAlive || wasRespawnHeld || firstAuthoritativeState) {
           // A dead -> alive transition respawns at the server position. The first state after
           // mounting also restores a reconnecting player's last world position. Later normal
           // echoes never correct movement, avoiding self rubber-banding.

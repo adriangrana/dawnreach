@@ -789,6 +789,9 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     assert.equal(blue.currentResource, 300);
     assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
 
+    // Wait beyond the old 1.5 s time-based guard. A corpse packet arriving this late must
+    // still be unable to pull the hero back to the death position.
+    await wait(1600);
     platform.reportMatchRuntimeState('respawn-blue', {
       matchId: match.id,
       sequence: 99,
@@ -808,6 +811,40 @@ test('server respawns a dead hero at its captured spawn and rejects a stale corp
     assert.equal(blue.currentHp, 700);
     assert.deepEqual(blue.position, { x: -12, y: 5.28, z: -20 });
     assert.equal(blue.deaths, 1);
+
+    // A live packet from the authoritative spawn acknowledges the respawn and releases the
+    // movement guard. Normal movement is accepted only after that acknowledgement.
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 100,
+      position: { x: -12, y: 5.28, z: -20 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeState('respawn-blue', {
+      matchId: match.id,
+      sequence: 101,
+      position: { x: -10, y: 5.28, z: -18 },
+      yaw: 0.5,
+      moving: true,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    blue = platform.runtimeSnapshot(match.id).find(state => state.userId === 'respawn-blue');
+    assert.deepEqual(blue.position, { x: -10, y: 5.28, z: -18 });
+    assert.equal(blue.moving, true);
   }, { heroRespawnBaseSeconds: 0.02, heroRespawnPerLevelSeconds: 0 });
 });
 

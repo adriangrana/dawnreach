@@ -398,18 +398,20 @@ export function createPlatformServer(options = {}) {
         sentAt: now,
       };
       runtimeRoom(matchId).set(userId, respawned);
-      // Keep a short server reconciliation guard after respawn. A client can have one last
-      // corpse/death-position snapshot already in flight; it must not teleport the freshly
-      // respawned hero back to the death location or kill it again.
+      // Keep the authoritative spawn locked until the owner proves it has consumed the
+      // respawn by publishing a live position near that spawn. A fixed timeout is unsafe:
+      // delayed/in-flight corpse packets can arrive after it and teleport the hero back to
+      // the death location.
       locks.set(userId, {
         ...lock,
         hpCeiling: respawned.currentHp,
-        until: now + 1500,
+        until: null,
         deadUntil: null,
         pendingLethal: false,
         respawnSeconds: null,
         serverResolved: true,
         respawnGuard: true,
+        respawnPosition: { ...spawn },
       });
       broadcast({
         type: 'match.runtime.state',
@@ -865,6 +867,22 @@ export function createPlatformServer(options = {}) {
     let requestedCurrentResource = rawCurrentResource;
     let requestedAlive = rawAlive;
     let serverRespawned = false;
+    const respawnGuardPosition = combatLock?.respawnGuard
+      ? (combatLock.respawnPosition
+        || previous?.position
+        || runtimeSpawnPositions(active.id).get(userId)
+        || null)
+      : null;
+    const respawnGuardAcked = Boolean(
+      combatLock?.respawnGuard
+      && previous?.alive !== false
+      && rawAlive
+      && respawnGuardPosition
+      && (
+        (reportedPosition.x - Number(respawnGuardPosition.x || 0)) ** 2
+        + (reportedPosition.z - Number(respawnGuardPosition.z || 0)) ** 2
+      ) <= 2.5 ** 2
+    );
     let deathIncrement = 0;
     let creditedKillerState = null;
     let confirmedHeroKillEvent = null;
@@ -886,6 +904,17 @@ export function createPlatformServer(options = {}) {
       requestedCurrentResource = requestedMaxResource;
       requestedAlive = true;
       combatLocks.delete(userId);
+    } else if (combatLock?.respawnGuard && previous?.alive !== false) {
+      if (respawnGuardAcked) {
+        // The owner has now observed the authoritative respawn and is publishing from the
+        // spawn area. Normal movement proposals may resume from this packet onward.
+        combatLocks.delete(userId);
+      } else {
+        // Stale corpse/death-position packets remain invalid for as long as necessary.
+        requestedCurrentHp = Math.max(1, Number(previous?.currentHp ?? combatLock.hpCeiling ?? requestedMaxHp));
+        requestedCurrentResource = Math.max(0, Number(previous?.currentResource ?? requestedMaxResource));
+        requestedAlive = true;
+      }
     } else if (combatLock?.until && now < combatLock.until) {
       // Canonical combat has already committed HP/death on the server. Periodic owner
       // snapshots are movement/resource proposals only during this reconciliation window.
@@ -975,11 +1004,9 @@ export function createPlatformServer(options = {}) {
       };
     }
 
-    const effectiveCombatLock = combatLocks.get(userId) || combatLock;
+    const effectiveCombatLock = combatLocks.get(userId) || null;
     const respawnGuardActive = Boolean(
       effectiveCombatLock?.respawnGuard
-      && effectiveCombatLock?.until
-      && now < effectiveCombatLock.until
       && previous?.alive !== false,
     );
     const authoritativeRespawnRemainingMs = requestedAlive
@@ -1040,12 +1067,13 @@ export function createPlatformServer(options = {}) {
       combatLocks.set(userId, {
         ...(combatLock || {}),
         hpCeiling: state.currentHp,
-        until: now + 1500,
+        until: null,
         deadUntil: null,
         pendingLethal: false,
         respawnSeconds: null,
         serverResolved: true,
         respawnGuard: true,
+        respawnPosition: { ...state.position },
       });
     }
     const recipients = active.players.map(candidate => candidate.userId);
@@ -1061,7 +1089,9 @@ export function createPlatformServer(options = {}) {
       type: 'match.runtime.state',
       matchId: active.id,
       state,
-    }, recipients.filter(recipientUserId => recipientUserId !== userId));
+    }, serverRespawned
+      ? recipients
+      : recipients.filter(recipientUserId => recipientUserId !== userId));
     if (creditedKillerState) {
       broadcast({
         type: 'match.runtime.state',
