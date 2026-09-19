@@ -367,6 +367,8 @@ export type MatchGraphSample = Readonly<{
   atMs: number;
   level: number;
   gold: number;
+  /** Gold on hand plus the full catalog value of currently owned items. */
+  netWorth?: number;
   experience: number;
   heroDamage: number;
   heroDamageTaken: number;

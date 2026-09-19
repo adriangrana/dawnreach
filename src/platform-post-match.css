@@ -348,10 +348,10 @@
 .dr-post-detailed-grid {
   display: grid;
   grid-template-columns:
-    minmax(190px, 1.45fr) 48px 80px 70px 76px 78px 65px
+    minmax(190px, 1.45fr) 48px 80px 70px 76px 82px 78px 65px
     88px 88px 76px 88px 82px 60px 60px 94px;
   align-items: center;
-  min-width: 1370px;
+  min-width: 1455px;
   padding: 0 14px;
   column-gap: 7px;
 }

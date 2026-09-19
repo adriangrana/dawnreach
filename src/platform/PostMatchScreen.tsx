@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Activity, BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users, Wifi, WifiOff } from 'lucide-react';
 import { getHeroDefinition } from '../game/heroes/catalog';
+import { getItemDefinition } from '../game/items/itemDatabase';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
 import { DawnreachHomeTopbar } from './DawnreachHome';
 import type {
@@ -55,6 +56,22 @@ function safeHeroName(heroId: string) {
   } catch {
     return heroId || 'Unknown Hero';
   }
+}
+
+function calculateNetWorth(currentGold: unknown, items: MatchResultPlayer['items']) {
+  const inventoryValue = items.reduce((total, item) => {
+    const definition = getItemDefinition(item.definitionId);
+    const quantity = Math.max(0, Math.floor(number(item.quantity)));
+    return total + (definition?.cost ?? 0) * quantity;
+  }, 0);
+  return Math.max(0, number(currentGold)) + inventoryValue;
+}
+
+function playerNetWorth(stats: MatchResultPlayer) {
+  if (stats.netWorth !== undefined && Number.isFinite(Number(stats.netWorth))) {
+    return Math.max(0, Number(stats.netWorth));
+  }
+  return calculateNetWorth(stats.currentGold, stats.items);
 }
 
 function legacyResultPlayer(
@@ -250,16 +267,18 @@ function TeamTable({
 
 
 type PostMatchTab = 'overview' | 'detailed' | 'graphs' | 'timeline';
-type GraphMetric = 'gold' | 'experience' | 'heroDamage' | 'creepScore';
+type GraphMetric = 'gold' | 'netWorth' | 'experience' | 'heroDamage' | 'creepScore';
 
 const GRAPH_METRICS: readonly Readonly<{ key: GraphMetric; label: string }>[]= [
   { key: 'gold', label: 'GOLD HELD' },
+  { key: 'netWorth', label: 'NET WORTH' },
   { key: 'experience', label: 'EXPERIENCE' },
   { key: 'heroDamage', label: 'HERO DAMAGE' },
   { key: 'creepScore', label: 'CREEP SCORE' },
 ];
 
 function graphValue(sample: MatchGraphSample, metric: GraphMetric) {
+  if (metric === 'netWorth') return sample.netWorth ?? sample.gold;
   if (metric === 'experience') return sample.experience;
   if (metric === 'heroDamage') return sample.heroDamage;
   if (metric === 'creepScore') return sample.creepKills + sample.creepDenies;
@@ -275,7 +294,7 @@ function DetailedStatsTab({ players, localUserId }: { players: readonly FinalPla
       </header>
       <div className="dr-post-detailed-scroll">
         <div className="dr-post-detailed-grid dr-post-detailed-head">
-          <span>PLAYER</span><span>LVL</span><span>K / D / A</span><span>LH / DN</span><span>GOLD</span>
+          <span>PLAYER</span><span>LVL</span><span>K / D / A</span><span>LH / DN</span><span>GOLD</span><span>NET WORTH</span>
           <span>XP</span><span>XPM</span><span>HERO DMG</span><span>DMG TAKEN</span><span>HEALING</span>
           <span>TOWER DMG</span><span>BUILDING</span><span>TOWERS</span><span>STREAK</span><span>DISCONNECTED</span>
         </div>
@@ -292,6 +311,7 @@ function DetailedStatsTab({ players, localUserId }: { players: readonly FinalPla
             <b>{entry.stats.kills} / {entry.stats.deaths} / {entry.stats.assists}</b>
             <b>{entry.stats.creepKills} / {entry.stats.creepDenies}</b>
             <b>{formatNumber(entry.stats.currentGold)}</b>
+            <b>{formatNumber(playerNetWorth(entry.stats))}</b>
             <b>{formatNumber(entry.stats.experience)}</b>
             <b>{formatNumber(entry.stats.xpm)}</b>
             <b>{formatNumber(entry.stats.heroDamage)}</b>

@@ -271,7 +271,10 @@ test('abandoning the last player on a team awards a connected surviving team', a
       lastHits: 7,
       denies: 1,
       gold: 615,
-      inventory: [{ slot: 0, definitionId: 'I001', displayName: 'Semilla de Hierro', quantity: 1 }],
+      inventory: [
+        { slot: 0, definitionId: 'item_007', displayName: 'Semilla de Hierro', quantity: 1 },
+        { slot: 6, definitionId: 'item_060', displayName: 'Pergamino de Teletransporte', quantity: 2 },
+      ],
       abilityRanks: { Q: 1, W: 1, E: 0, R: 0 },
     });
     platform.reportMatchRuntimeState(red.body.user.id, {
@@ -315,7 +318,13 @@ test('abandoning the last player on a team awards a connected surviving team', a
     assert.equal(persistedBlue.heroLevel, 3);
     assert.equal(persistedBlue.creepKills, 0);
     assert.equal(persistedBlue.currentGold, 615);
-    assert.equal(persistedBlue.items[0].definitionId, 'I001');
+    assert.equal(persistedBlue.netWorth, 965);
+    assert.equal(persistedBlue.items[0].definitionId, 'item_007');
+    assert.ok(
+      ended.postMatchReport.graphSamples.some(
+        sample => sample.userId === blue.body.user.id && sample.netWorth === 965,
+      ),
+    );
     assert.equal(persistedBlue.leftGame, true);
     assert.equal(platform.store.activeMatchForUser(blue.body.user.id), null);
     assert.equal(platform.store.activeMatchForUser(red.body.user.id), null);

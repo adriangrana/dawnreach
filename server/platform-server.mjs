@@ -14,6 +14,37 @@ import { LobbyManager } from './lobbies.mjs';
 import { HeroSelectManager } from './hero-select.mjs';
 import { acceptWebSocket } from './websocket.mjs';
 
+const ITEM_CATALOG_URLS = [
+  new URL('../src/game/items/basic.json', import.meta.url),
+  new URL('../src/game/items/intermediate.json', import.meta.url),
+  new URL('../src/game/items/advanced.json', import.meta.url),
+];
+
+const ITEM_COST_BY_ID = (() => {
+  const costs = new Map();
+  for (const catalogUrl of ITEM_CATALOG_URLS) {
+    const catalog = JSON.parse(fs.readFileSync(catalogUrl, 'utf8'));
+    for (const item of Array.isArray(catalog?.items) ? catalog.items : []) {
+      const id = String(item?.id || '');
+      const cost = Number(item?.cost);
+      if (id && Number.isFinite(cost) && cost >= 0) costs.set(id, cost);
+    }
+  }
+  return costs;
+})();
+
+function runtimeNetWorth(state) {
+  const gold = Math.max(0, Number(state?.gold || 0));
+  const inventoryValue = Array.isArray(state?.inventory)
+    ? state.inventory.reduce((total, item) => {
+      const cost = ITEM_COST_BY_ID.get(String(item?.definitionId || '')) || 0;
+      const quantity = Math.max(0, Math.floor(Number(item?.quantity ?? 1) || 0));
+      return total + cost * quantity;
+    }, 0)
+    : 0;
+  return Math.max(0, Math.round(gold + inventoryValue));
+}
+
 export function createPlatformServer(options = {}) {
   const config = options.config || loadPlatformConfig();
   const logger = options.logger || console;
@@ -198,6 +229,7 @@ export function createPlatformServer(options = {}) {
       atMs: bucketMs,
       level: Math.max(1, Number(state.level || 1)),
       gold: Math.max(0, Number(state.gold || 0)),
+      netWorth: runtimeNetWorth(state),
       experience: Math.max(0, Number(state.experience || 0)),
       heroDamage: Math.max(0, Number(state.damageDealt || 0)),
       heroDamageTaken: Math.max(0, Number(state.damageTaken || 0)),
@@ -353,6 +385,7 @@ export function createPlatformServer(options = {}) {
         creepKills: Math.max(0, Number(state?.lastHits || 0)),
         creepDenies: Math.max(0, Number(state?.denies || 0)),
         currentGold: Math.max(0, Number(state?.gold || 0)),
+        netWorth: runtimeNetWorth(state),
         experience,
         heroDamage: Math.max(0, Number(state?.damageDealt || 0)),
         heroDamageTaken: Math.max(0, Number(state?.damageTaken || 0)),
