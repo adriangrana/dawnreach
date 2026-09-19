@@ -104,6 +104,7 @@ body {
 }
 
 .top-hero-face {
+  position: relative;
   width: 100%;
   height: 100%;
   display: grid;
@@ -126,27 +127,41 @@ body {
     linear-gradient(135deg, #443039, #261b23 55%, #120d12);
 }
 
+.top-hero-slot.is-disconnected {
+  border-color: rgba(255, 126, 107, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 80, 64, 0.46),
+    0 0 10px rgba(255, 61, 48, 0.34);
+}
+
+.top-hero-slot.is-disconnected .top-hero-image {
+  filter: grayscale(0.82) brightness(0.48);
+}
+
 .top-hero-disconnected {
   position: absolute;
-  left: 2px;
-  top: 2px;
-  z-index: 7;
-  width: 17px;
-  height: 17px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #ffe8d0;
-  background: rgba(158, 47, 47, 0.94);
-  border: 1px solid #ffb4a3;
-  box-shadow: 0 1px 5px rgba(0,0,0,.72), 0 0 8px rgba(255,75,59,.4);
+  color: #fff1e4;
+  background: rgba(153, 34, 34, 0.96);
+  border: 1px solid #ffc0b3;
+  box-shadow:
+    0 2px 7px rgba(0,0,0,.82),
+    0 0 10px rgba(255,75,59,.58);
   pointer-events: none;
 }
 
 .top-hero-disconnected svg {
-  width: 11px;
-  height: 11px;
-  stroke-width: 2.4;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
 }
 
 .reconnect-grace-banner {

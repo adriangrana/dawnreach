@@ -705,7 +705,7 @@ function TeamPortraits({ team, side, localRespawn }: {
           : undefined;
         const respawn = localHero && localRespawn?.dead ? localRespawn : remoteRespawn;
         return (
-          <div className="top-hero-slot" key={`${side}-${index}`}>
+          <div className={`top-hero-slot${hero.disconnected ? ' is-disconnected' : ''}`} key={`${side}-${index}`}>
             <div className="top-hero-face">
               <Shield className="top-hero-silhouette" />
               <span>{hero.initial}</span>

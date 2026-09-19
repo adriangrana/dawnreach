@@ -7,6 +7,12 @@ const heroIcons = import.meta.glob<string>('../heroes/*/images/*I.png', {
   import: 'default',
 });
 
+const heroIconsByDefinitionId = new Map<string, string>();
+for (const [path, url] of Object.entries(heroIcons)) {
+  const match = /\/images\/([^/]+)I\.png$/i.exec(path);
+  if (match?.[1]) heroIconsByDefinitionId.set(match[1].toUpperCase(), url);
+}
+
 // addHeroOverlay is parented under the 0.68-scaled local Alden root, so its 4.8-unit
 // sprite is 3.264 world units wide. Generic/network heroes compensate parent scaling;
 // use the same final world width so remote/enemy bars do not appear oversized.
@@ -254,7 +260,10 @@ function entitySignature(entity: GameEntity, localTeam: LocalTeamId | null) {
 
 function heroIconPath(entity: GameEntity) {
   if (!entity.definitionId) return undefined;
-  return heroIcons[`../heroes/${entity.displayName.toLowerCase()}/images/${entity.definitionId}I.png`];
+  // Player display names (for example "kyra") are not hero folder names. Resolve the
+  // overhead portrait from the canonical hero definition id so network heroes never fall
+  // back to drawing the player's first initial beside the health bar.
+  return heroIconsByDefinitionId.get(String(entity.definitionId).toUpperCase());
 }
 
 /**
