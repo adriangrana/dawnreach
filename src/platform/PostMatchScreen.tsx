@@ -290,25 +290,65 @@ export function PostMatchScreen({
   return (
     <main className="dr-post-match">
       <div className="dr-post-backdrop" aria-hidden="true" />
-      <header className="dr-post-topbar">
-        <div className="dr-post-brand">
+
+      <header className="dr-post-global-header">
+        <button type="button" className="dr-post-global-brand" onClick={onContinue} aria-label="Dawnreach home">
           <img src="/assets/icon/dawnreach.png" alt="" draggable={false} />
           <span><strong>DAWNREACH</strong><small>A BRIGHTER TOMORROW</small></span>
-        </div>
-        <div className="dr-post-result">
-          <span className="dr-post-score dr-post-score--blue">{dawnKills}</span>
-          <div className="dr-post-result-copy">
-            <small>{modeLabel} · {formatDuration(durationMs)}</small>
-            <h1 className={localResult === 'VICTORY' ? 'is-victory' : localResult === 'DEFEAT' ? 'is-defeat' : ''}>{localResult}</h1>
-            <span>{result.winnerTeam ? `${teamLabel(result.winnerTeam)} WINS` : 'MATCH ENDED'}</span>
-          </div>
-          <span className="dr-post-score dr-post-score--red">{duskKills}</span>
-        </div>
-        <div className="dr-post-user">
-          <strong>{me.username}</strong>
-          <span>{isCustomMatch ? 'CUSTOM MATCH' : 'POST-MATCH REPORT'}</span>
+        </button>
+        <nav className="dr-post-global-nav" aria-label="Main navigation">
+          <button type="button" onClick={onContinue}>HOME</button>
+          <button type="button" onClick={onPlayAgain}>PLAY</button>
+          <button type="button" disabled>HEROES</button>
+          <button type="button" disabled>COLLECTION</button>
+          <button type="button" disabled>RANKING</button>
+          <button type="button" disabled>PROFILE</button>
+        </nav>
+        <div className="dr-post-global-user">
+          <span className="dr-post-global-avatar">{me.username.slice(0, 2).toUpperCase()}</span>
+          <span><strong>{me.username}</strong><small>POST-MATCH</small></span>
         </div>
       </header>
+
+      <section className={`dr-post-victory-banner is-${result.winnerTeam ?? 'neutral'}`}>
+        <div className="dr-post-match-meta">
+          <strong>{modeLabel}</strong>
+          <span>DAWNREACH</span>
+          <small>{formatDuration(durationMs)}</small>
+        </div>
+
+        <div className="dr-post-victory-center">
+          {result.winnerTeam && (
+            <img
+              className="dr-post-victory-emblem"
+              src={result.winnerTeam === 'red'
+            ? '/assets/images/emblema_victoria_cristal_rojo.webp'
+            : '/assets/images/emblema_victoria_cristal_azul.webp'}
+              alt=""
+              draggable={false}
+            />
+          )}
+          <div className="dr-post-victory-content">
+            <div className="dr-post-banner-score is-blue">
+              <strong>{dawnKills}</strong>
+              <span>DAWN TEAM</span>
+            </div>
+            <div className="dr-post-banner-title">
+              <h1 className={localResult === 'VICTORY' ? 'is-victory' : localResult === 'DEFEAT' ? 'is-defeat' : ''}>{localResult}</h1>
+              <small>{result.winnerTeam ? `${teamLabel(result.winnerTeam)} WINS` : 'MATCH ENDED'}</small>
+            </div>
+            <div className="dr-post-banner-score is-red">
+              <strong>{duskKills}</strong>
+              <span>DUSK TEAM</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="dr-post-banner-motto">
+          <strong>DAWNREACH</strong>
+          <small>A BRIGHTER TOMORROW</small>
+        </div>
+      </section>
 
       <nav className="dr-post-tabs" aria-label="Post match sections">
         <button type="button" className="is-active">OVERVIEW</button>
