@@ -174,7 +174,7 @@ function EmptyPlayerRow({ team, slot }: { team: Team; slot: number }) {
         <div className="dr-post-portrait dr-post-portrait--empty"><Shield /></div>
         <div className="dr-post-player-copy"><span>Empty slot</span></div>
       </div>
-      <span /><span /><span /><span /><span /><span />
+      <span /><span /><span /><span /><span /><span /><span />
       <div className="dr-post-items">
         {Array.from({ length: 6 }, (_, index) => <span key={index} className="dr-post-item" />)}
       </div>
@@ -211,6 +211,7 @@ function TeamTable({
         <span>K / D / A</span>
         <span>LH / DN</span>
         <span>GOLD</span>
+        <span>NET WORTH</span>
         <span>DMG DEALT</span>
         <span>DMG TAKEN</span>
         <span>HEALING</span>
@@ -240,6 +241,7 @@ function TeamTable({
               <b className="dr-post-kda">{stats.kills} / {stats.deaths} / {stats.assists}</b>
               <span>{stats.creepKills} / {stats.creepDenies}</span>
               <span>{formatNumber(number(stats.currentGold))}</span>
+              <span>{formatNumber(playerNetWorth(stats))}</span>
               <span>{formatNumber(number(stats.heroDamage))}</span>
               <span>{formatNumber(number(stats.heroDamageTaken))}</span>
               <span>{formatNumber(number(stats.healing))}</span>
@@ -343,6 +345,7 @@ function GraphsTab({
 }) {
   const [metric, setMetric] = useState<GraphMetric>('gold');
   const metricSamples = samples.filter(sample => hasGraphMetricSample(sample, metric));
+  const netWorthFinalOnly = metric === 'netWorth' && samples.length > 0 && metricSamples.length === 0;
   const grouped = new Map<string, MatchGraphSample[]>();
   for (const sample of metricSamples) {
     const bucket = grouped.get(sample.userId) ?? [];
@@ -352,7 +355,9 @@ function GraphsTab({
   for (const bucket of grouped.values()) bucket.sort((a, b) => a.atMs - b.atMs);
 
   const maxAt = Math.max(1, ...samples.map(sample => sample.atMs));
-  const maxValue = Math.max(1, ...metricSamples.map(sample => graphValue(sample, metric)));
+  const maxValue = netWorthFinalOnly
+    ? Math.max(1, ...players.map(entry => playerNetWorth(entry.stats)))
+    : Math.max(1, ...metricSamples.map(sample => graphValue(sample, metric)));
   const x = (atMs: number) => 54 + (atMs / maxAt) * 890;
   const y = (value: number) => 324 - (value / maxValue) * 270;
 
@@ -368,7 +373,7 @@ function GraphsTab({
           ))}
         </div>
       </header>
-      {samples.length && metricSamples.length ? (
+      {samples.length && (metricSamples.length || netWorthFinalOnly) ? (
         <div className="dr-post-graph-layout">
           <div className="dr-post-chart">
             <svg viewBox="0 0 1000 360" role="img" aria-label={`${GRAPH_METRICS.find(item => item.key === metric)?.label} over time`}>
@@ -383,7 +388,18 @@ function GraphsTab({
                   </text>
                 </g>
               ))}
-              {[...grouped.entries()].map(([userId, bucket]) => {
+              {netWorthFinalOnly ? <>
+                <text className="dr-post-chart-note" x="64" y="28">FINAL NET WORTH ONLY — HISTORICAL INVENTORY SAMPLES WERE NOT RECORDED</text>
+                {players.map(entry => (
+                  <circle
+                    key={entry.player.userId}
+                    className={`dr-post-graph-point is-${entry.player.team}`}
+                    cx={x(maxAt)}
+                    cy={y(playerNetWorth(entry.stats))}
+                    r="6"
+                  />
+                ))}
+              </> : [...grouped.entries()].map(([userId, bucket]) => {
                 const player = players.find(entry => entry.player.userId === userId);
                 if (!player || !bucket.length) return null;
                 const points = bucket.map(sample => `${x(sample.atMs)},${y(graphValue(sample, metric))}`).join(' ');
@@ -399,17 +415,15 @@ function GraphsTab({
                 <div key={entry.player.userId} className={`is-${entry.player.team}`}>
                   <i />
                   <div><strong>{entry.heroName}</strong><small>{entry.player.username}</small></div>
-                  <b>{last ? formatNumber(graphValue(last, metric)) : '—'}</b>
+                  <b>{last
+                    ? formatNumber(graphValue(last, metric))
+                    : netWorthFinalOnly
+                      ? formatNumber(playerNetWorth(entry.stats))
+                      : '—'}</b>
                 </div>
               );
             })}
           </aside>
-        </div>
-      ) : metric === 'netWorth' && samples.length ? (
-        <div className="dr-post-tab-empty">
-          <BarChart3 />
-          <strong>NET WORTH UNAVAILABLE</strong>
-          <span>This match was completed before Net Worth telemetry was recorded. New matches use gold on hand plus the full value of owned items.</span>
         </div>
       ) : (
         <div className="dr-post-tab-empty"><BarChart3 /><strong>NO HISTORICAL SAMPLES</strong><span>This match was recorded before graph telemetry was enabled.</span></div>
@@ -496,6 +510,7 @@ export function PostMatchScreen({
   const duskDamage = dusk.reduce((sum, entry) => sum + number(entry.stats.heroDamage), 0);
   const localResult = resultTitle(result, localTeam);
   const localGold = local ? number(local.stats.currentGold) : 0;
+  const localNetWorth = local ? playerNetWorth(local.stats) : 0;
   const localCreepScore = local ? number(local.stats.creepKills) + number(local.stats.creepDenies) : 0;
   const localStructureDamage = local
     ? number(local.stats.towerDamage) + number(local.stats.buildingDamage)
@@ -598,6 +613,7 @@ export function PostMatchScreen({
                 <span><b>{formatNumber(number(mvp.stats.heroDamage))}</b><small>DAMAGE</small></span>
                 <span><b>{formatNumber(number(mvp.stats.xpm))}</b><small>XPM</small></span>
                 <span><b>{formatNumber(number(mvp.stats.currentGold))}</b><small>FINAL GOLD</small></span>
+                <span><b>{formatNumber(playerNetWorth(mvp.stats))}</b><small>NET WORTH</small></span>
               </div>
               <p className="dr-post-mvp-caption">A brighter tomorrow begins with you.</p>
             </> : <p>No MVP data available.</p>}
@@ -657,6 +673,7 @@ export function PostMatchScreen({
 
       <div className="dr-post-secondary-stats" aria-label="Additional match statistics">
         <span><b>{formatNumber(localGold)}</b><small>FINAL GOLD</small></span>
+        <span><b>{formatNumber(localNetWorth)}</b><small>NET WORTH</small></span>
         <span><b>{formatNumber(localCreepScore)}</b><small>LH + DN</small></span>
         <span><b>{local?.stats.towersDestroyed ?? 0}</b><small>TOWERS</small></span>
         <span><b>{local?.stats.killStreak ?? 0}</b><small>BEST STREAK</small></span>

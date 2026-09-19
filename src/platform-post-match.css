@@ -2,7 +2,7 @@
   --post-gold: #d7b979;
   --post-muted: #8ea7bb;
   --post-border: rgba(179, 156, 105, .38);
-  --post-columns: minmax(185px, 1.7fr) .8fr .65fr .75fr .85fr .85fr .65fr 174px 58px;
+  --post-columns: minmax(185px, 1.65fr) .72fr .58fr .68fr .72fr .78fr .78fr .58fr 174px 58px;
   position: fixed;
   inset: 0;
   z-index: 400;
@@ -97,7 +97,7 @@
 .dr-post-team-header small { color: #87a0b3; font-size: 8px; letter-spacing: .08em; }
 .dr-post-team-header > span { color: var(--team-color); letter-spacing: .08em; }
 .dr-post-team-header > span b { font-weight: 500; }
-.dr-post-table-head, .dr-post-player-row { display: grid; grid-template-columns: var(--post-columns); align-items: center; column-gap: 8px; min-width: 920px; padding: 0 10px; }
+.dr-post-table-head, .dr-post-player-row { display: grid; grid-template-columns: var(--post-columns); align-items: center; column-gap: 8px; min-width: 990px; padding: 0 10px; }
 .dr-post-table-head { height: 25px; color: #91a8bc; font-size: 8px; letter-spacing: .045em; }
 .dr-post-table-head > span:not(:first-child), .dr-post-player-row > span, .dr-post-kda { text-align: center; }
 .dr-post-table-head > span:nth-last-child(2) { text-align: left; }
@@ -146,7 +146,7 @@
 .dr-post-grade::after { border-left-color: transparent; border-right-color: #b99b60; transform: rotate(22deg); }
 .dr-post-grade svg { width: 26px; height: 26px; stroke-width: 1.3; }
 .dr-post-grade b { font: 16px Georgia, serif; letter-spacing: .08em; }
-.dr-post-mvp-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 10px 10px; border-top: 1px solid #aac6e015; }
+.dr-post-mvp-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 8px 10px 10px; border-top: 1px solid #aac6e015; }
 .dr-post-mvp-metrics span { display: grid; gap: 5px; text-align: center; border-left: 1px solid #9bb1c720; }
 .dr-post-mvp-metrics span:first-child { border: 0; }
 .dr-post-mvp-metrics b { font-size: 12px; font-weight: 500; white-space: nowrap; }
@@ -177,7 +177,7 @@
 .dr-post-lower small { color: #a8b8c8; font-size: 9px; letter-spacing: .14em; }
 .dr-post-lower strong { color: #ede3ca; font: 22px/1 Georgia, serif; overflow-wrap: anywhere; }
 .dr-post-lower em { color: #87a0b4; font-size: 8px; font-style: normal; letter-spacing: .12em; }
-.dr-post-secondary-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 10px auto 0; padding: 0 24px; max-width: 1920px; }
+.dr-post-secondary-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 10px auto 0; padding: 0 24px; max-width: 1920px; }
 .dr-post-secondary-stats > span { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 10px 8px; background: #071421d9; border-block: 1px solid #95aab422; border-left: 1px solid #95aab422; }
 .dr-post-secondary-stats > span:last-child { border-right: 1px solid #95aab422; }
 .dr-post-secondary-stats b { font-size: 12px; font-weight: 500; }
@@ -273,8 +273,8 @@
   .dr-post-actions { padding-block: 10px; }
 }
 @media (min-width: 1101px) and (max-width: 1350px) {
-  .dr-post-match { --post-columns: minmax(154px, 1fr) 60px 52px 56px 64px 64px 52px 156px 52px; }
-  .dr-post-table-head, .dr-post-player-row { min-width: 870px; column-gap: 6px; }
+  .dr-post-match { --post-columns: minmax(154px, 1fr) 56px 48px 52px 58px 60px 60px 48px 156px 52px; }
+  .dr-post-table-head, .dr-post-player-row { min-width: 940px; column-gap: 6px; }
   .dr-post-items { grid-template-columns: repeat(6, 23px); }
   .dr-post-item { width: 23px; height: 23px; }
 }
@@ -497,6 +497,19 @@
 
 .dr-post-graph-line.is-blue { color: #62c7ff; }
 .dr-post-graph-line.is-red { color: #ed6975; }
+.dr-post-graph-point {
+  fill: currentColor;
+  stroke: #071622;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+.dr-post-graph-point.is-blue { color: #62c7ff; }
+.dr-post-graph-point.is-red { color: #ed6975; }
+.dr-post-chart-note {
+  fill: #8ca2b2;
+  font: 700 8px "Segoe UI", sans-serif;
+  letter-spacing: .08em;
+}
 .dr-post-graph-line.slot-1 { opacity: .86; stroke-dasharray: 12 3; }
 .dr-post-graph-line.slot-2 { opacity: .74; stroke-dasharray: 6 3; }
 .dr-post-graph-line.slot-3 { opacity: .64; stroke-dasharray: 3 3; }
