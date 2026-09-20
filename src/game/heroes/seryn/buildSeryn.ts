@@ -3,6 +3,7 @@ import { createHumanoidRig, type HumanoidRig } from '../../characters/humanoidRi
 import {
   createHairBladeGeometry,
   createPanelGeometry,
+  createSerynHairGeometry,
   createSerynHeadGeometry,
   createSerynLoftGeometry,
   createSerynShoulderBlendGeometry,
@@ -16,6 +17,7 @@ export type SerynRig = HumanoidRig & {
   bow: THREE.Group;
   bowString: THREE.Line;
   quiver: THREE.Group;
+  hair: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
 };
 
 function part(
@@ -246,79 +248,23 @@ function buildFace(_rig: HumanoidRig, _m: SerynMaterials) {
 }
 
 function buildHair(rig: HumanoidRig, m: SerynMaterials) {
-  // Crown cap begins at the actual hairline, well above the eyes. The old loft wrapped
-  // around the face at eye height and made Seryn look bald with strands sprouting from
-  // her eyes.
-  const cap = part(
+  // One continuous fitted hairstyle mesh: crown, parting, temple curtains and the
+  // shoulder-length back are all one connected surface. No tube/lock primitives.
+  const hair = part(
     rig.head,
-    'seryn-hair-crown',
-    new THREE.SphereGeometry(1, 56, 30, 0, Math.PI * 2, 0, 1.26),
+    'seryn-unified-hair',
+    createSerynHairGeometry(),
     m.hair,
-    [0, 0.070, -0.018],
   );
-  cap.scale.set(0.176, 0.190, 0.174);
+  hair.frustumCulled = false;
 
-  // Slight side part over the forehead. These are hair volumes that originate at the
-  // crown/hairline and sweep outward; none start in the eye region.
-  curve(rig.head, 'seryn-front-sweep-left', [
-    new THREE.Vector3(-0.010, 0.228, 0.090),
-    new THREE.Vector3(-0.052, 0.194, 0.132),
-    new THREE.Vector3(-0.105, 0.145, 0.132),
-    new THREE.Vector3(-0.145, 0.090, 0.092),
-  ], 0.027, m.hair, 0.014, 22);
-  curve(rig.head, 'seryn-front-sweep-right', [
-    new THREE.Vector3(0.010, 0.225, 0.086),
-    new THREE.Vector3(0.050, 0.195, 0.125),
-    new THREE.Vector3(0.096, 0.150, 0.122),
-    new THREE.Vector3(0.135, 0.105, 0.082),
-  ], 0.024, m.hairShadow, 0.012, 20);
-
-  // Long side locks frame the cheeks from the temples and stay outside the eyes.
-  for (const side of [-1, 1]) {
-    curve(rig.head, 'seryn-face-framing-lock', [
-      new THREE.Vector3(side * 0.138, 0.120, 0.060),
-      new THREE.Vector3(side * 0.154, 0.025, 0.070),
-      new THREE.Vector3(side * 0.151, -0.105, 0.055),
-      new THREE.Vector3(side * 0.132, -0.245, 0.030),
-      new THREE.Vector3(side * 0.102, -0.345, 0.005),
-    ], 0.030, side > 0 ? m.hair : m.hairShadow, 0.009, 28);
-
-    const templeLayer = part(
-      rig.head,
-      'seryn-temple-layer',
-      createHairBladeGeometry(0.060, 0.31, 0.050, 8),
-      side > 0 ? m.hairShadow : m.hair,
-      [side * 0.148, 0.115, 0.035],
-    );
-    templeLayer.rotation.z = side * -0.055;
-    templeLayer.rotation.y = side * -0.25;
-  }
-
-  // Dense layered back hair gives a complete hairstyle instead of exposing the back
-  // half of the skull. Individual tapered locks overlap like a modeled hair mass.
-  const backLocks = [
-    [-0.135, -0.095, 0.54, 0.038, m.hairShadow],
-    [-0.090, -0.112, 0.60, 0.043, m.hair],
-    [-0.045, -0.124, 0.64, 0.046, m.hairShadow],
-    [0.000, -0.130, 0.66, 0.047, m.hair],
-    [0.045, -0.124, 0.63, 0.045, m.hairShadow],
-    [0.090, -0.112, 0.59, 0.042, m.hair],
-    [0.135, -0.095, 0.53, 0.037, m.hairShadow],
-  ] as const;
-  for (const [x, z, length, radius, material] of backLocks) {
-    curve(rig.head, 'seryn-back-hair-lock', [
-      new THREE.Vector3(x, 0.160, z),
-      new THREE.Vector3(x * 1.08, 0.020, z - 0.005),
-      new THREE.Vector3(x * 1.02, -0.170, z + 0.008),
-      new THREE.Vector3(x * 0.80, 0.160 - length, z + 0.028),
-    ], radius, material, 0.009, 30);
-  }
-
-  // Decorative forehead jewel stays separate because it is jewelry, not anatomy.
+  // Jewelry remains separate from hair/anatomy because it is an actual accessory.
   const jewel = part(rig.head, 'seryn-forehead-prism', new THREE.OctahedronGeometry(0.030, 0), m.crystal, [0, 0.132, 0.166]);
   jewel.scale.set(0.52, 1.16, 0.40);
   const setting = part(rig.head, 'seryn-forehead-setting', new THREE.TorusGeometry(0.032, 0.0055, 5, 16), m.gold, [0, 0.132, 0.157]);
   setting.scale.y = 1.18;
+
+  return hair;
 }
 
 function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
@@ -565,7 +511,7 @@ export function buildSeryn(): SerynRig {
 
   buildAnatomy(rig, materials);
   buildFace(rig, materials);
-  buildHair(rig, materials);
+  const hair = buildHair(rig, materials);
   buildClothing(rig, materials);
   const { bow, bowString } = buildBow(rig, materials);
   const quiver = buildQuiver(rig, materials);
@@ -573,7 +519,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v10-sculpted-ears-eyes';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v11-unified-animated-hair';
 
-  return Object.assign(rig, { bow, bowString, quiver });
+  return Object.assign(rig, { bow, bowString, quiver, hair });
 }

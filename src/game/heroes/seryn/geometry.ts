@@ -447,3 +447,118 @@ export function createSerynHeadGeometry(widthSegments = 128, heightSegments = 92
   geometry.computeBoundingSphere();
   return geometry;
 }
+
+
+/**
+ * One connected hairstyle shell fitted to Seryn's skull.
+ *
+ * The crown, parting, temple curtains and shoulder-length back hair all belong to one
+ * indexed surface. No tubes, cones or detached locks are used. The lower vertices carry
+ * flex/phase attributes so the same mesh can be animated with secondary hair motion.
+ */
+export function createSerynHairGeometry(radialSegments = 112, verticalSegments = 52) {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const flexValues: number[] = [];
+  const phaseValues: number[] = [];
+  const indices: number[] = [];
+
+  const crownY = 0.255;
+  const crownRadiusX = 0.178;
+  const crownRadiusZ = 0.174;
+
+  for (let row = 0; row <= verticalSegments; row++) {
+    const v = row / verticalSegments;
+    const capProgress = smoothstep(0, 0.44, v);
+    const hanging = smoothstep(0.36, 1, v);
+
+    for (let column = 0; column <= radialSegments; column++) {
+      const u = column / radialSegments;
+      const theta = -Math.PI + u * Math.PI * 2;
+      const sinTheta = Math.sin(theta);
+      const cosTheta = Math.cos(theta);
+      const frontness = Math.max(0, cosTheta);
+      const backness = Math.max(0, -cosTheta);
+      const side = Math.abs(sinTheta);
+
+      // Hairline stays high in the centre of the forehead, then falls rapidly into
+      // long temple curtains. Back/side hair reaches the upper shoulder line.
+      const frontCenter = Math.exp(-0.5 * Math.pow(theta / 0.39, 2));
+      const temple = Math.exp(-0.5 * Math.pow((Math.abs(theta) - 0.82) / 0.24, 2));
+      const bottomY = -0.455 + 0.555 * frontCenter + 0.105 * temple;
+
+      const yCurve = Math.pow(v, 0.92);
+      const y = THREE.MathUtils.lerp(crownY, bottomY, yCurve);
+
+      // Crown grows smoothly out of the part instead of starting as a hard cap.
+      const crownSpread = Math.sin(capProgress * Math.PI * 0.5);
+      const lowerTaper = 1 - 0.075 * hanging;
+      const rx = crownRadiusX * crownSpread * lowerTaper;
+      const rz = crownRadiusZ * crownSpread * (1 - 0.035 * hanging);
+
+      // A real parting: upper-front vertices separate subtly left/right and the crown
+      // gains a shallow central valley instead of a perfect hemisphere.
+      const partInfluence = Math.exp(-Math.pow(theta / 0.34, 2)) * (1 - smoothstep(0.18, 0.58, v));
+      const partDirection = theta === 0 ? 0 : Math.sign(theta);
+      const partOffsetX = partDirection * 0.010 * partInfluence;
+      const partValleyY = 0.009 * partInfluence;
+
+      // Lower front-side hair falls almost vertically beside the face; back hair keeps
+      // a fuller rounded silhouette. This prevents a helmet/bowl-cut appearance.
+      const faceCurtain = hanging * frontness * side;
+      const backFullness = hanging * backness;
+      const x = sinTheta * rx
+        + partOffsetX
+        + Math.sign(sinTheta || 1) * 0.010 * faceCurtain;
+      let z = cosTheta * rz;
+      z = THREE.MathUtils.lerp(z, 0.068 * cosTheta, faceCurtain * 0.52);
+      z -= 0.012 * backFullness;
+
+      // Broad waves are actual surface undulation, while the fine strand detail comes
+      // from the anisotropic-looking procedural hair material.
+      const wave = Math.sin(theta * 5.0 + v * 3.2) * 0.0045 * hanging;
+      const fine = Math.sin(theta * 23.0 + v * 5.0) * 0.0015 * (0.25 + hanging * 0.75);
+      const radialNormalX = sinTheta;
+      const radialNormalZ = cosTheta;
+
+      positions.push(
+        x + radialNormalX * (wave + fine),
+        y - partValleyY,
+        z + radialNormalZ * (wave + fine),
+      );
+      uvs.push(u, v);
+
+      // Only the hanging lengths flex strongly. Crown vertices remain stable against
+      // the skull so the hairstyle can be animated without looking rubbery.
+      const flex = hanging * hanging * (0.55 + 0.45 * Math.max(side, backness));
+      flexValues.push(flex);
+      phaseValues.push(theta + v * 2.6);
+    }
+  }
+
+  const stride = radialSegments + 1;
+  for (let row = 0; row < verticalSegments; row++) {
+    for (let column = 0; column < radialSegments; column++) {
+      const a = row * stride + column;
+      const b = a + 1;
+      const d = (row + 1) * stride + column;
+      const c = d + 1;
+      // Outward-facing winding for the shell.
+      indices.push(a, d, b, b, d, c);
+    }
+  }
+
+  const result = new THREE.BufferGeometry();
+  result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  result.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  result.setAttribute('hairFlex', new THREE.Float32BufferAttribute(flexValues, 1));
+  result.setAttribute('hairPhase', new THREE.Float32BufferAttribute(phaseValues, 1));
+  result.setIndex(indices);
+  result.computeVertexNormals();
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+
+  const position = result.getAttribute('position') as THREE.BufferAttribute;
+  result.userData.serynHairBasePositions = new Float32Array(position.array as ArrayLike<number>);
+  return result;
+}

@@ -114,23 +114,76 @@ function leatherTexture() {
 
 function hairTexture() {
   const random = seeded(0xa11ce);
-  return makeCanvasTexture(256, (ctx, size) => {
+  return makeCanvasTexture(768, (ctx, size) => {
     const gradient = ctx.createLinearGradient(0, 0, size, 0);
-    gradient.addColorStop(0, '#748391');
-    gradient.addColorStop(0.35, '#dce2e8');
-    gradient.addColorStop(0.68, '#aeb9c5');
-    gradient.addColorStop(1, '#667582');
+    gradient.addColorStop(0.00, '#657684');
+    gradient.addColorStop(0.18, '#b6c1cc');
+    gradient.addColorStop(0.38, '#e7ebef');
+    gradient.addColorStop(0.58, '#bdc7d1');
+    gradient.addColorStop(0.80, '#f0f3f6');
+    gradient.addColorStop(1.00, '#70808e');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);
-    for (let x = 0; x < size; x += 2) {
-      const alpha = 0.03 + random() * 0.08;
-      ctx.strokeStyle = x % 4 ? `rgba(255,255,255,${alpha})` : `rgba(26,39,52,${alpha})`;
+
+    // Thousands of slightly curved fibres create a continuous strand flow. The UVs of
+    // the unified hair shell run crown -> tips, so these strokes follow the hairstyle.
+    for (let strand = 0; strand < 1650; strand++) {
+      const x = random() * size;
+      const width = 0.28 + random() * 0.85;
+      const drift = (random() - 0.5) * 8;
+      const highlight = random() > 0.52;
+      const alpha = 0.025 + random() * 0.095;
+      ctx.strokeStyle = highlight
+        ? `rgba(255,255,255,${alpha})`
+        : `rgba(33,48,62,${alpha * 0.95})`;
+      ctx.lineWidth = width;
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.bezierCurveTo(x + 3, size * 0.35, x - 2, size * 0.7, x + 1, size);
+      ctx.moveTo(x, -6);
+      ctx.bezierCurveTo(
+        x + drift * 0.35, size * 0.30,
+        x - drift * 0.22, size * 0.68,
+        x + drift, size + 6,
+      );
       ctx.stroke();
     }
-  }, 3.5, 1);
+
+    // Broader tonal ribbons stop the material looking like flat grey plastic.
+    for (let ribbon = 0; ribbon < 42; ribbon++) {
+      const x = random() * size;
+      const width = 5 + random() * 14;
+      const g = ctx.createLinearGradient(x - width, 0, x + width, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.5, random() > 0.5 ? 'rgba(255,255,255,0.055)' : 'rgba(26,38,50,0.055)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - width, 0, width * 2, size);
+    }
+  }, 3.0, 1);
+}
+
+function hairBumpTexture() {
+  const random = seeded(0xb71f33);
+  const texture = makeCanvasTexture(512, (ctx, size) => {
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, size, size);
+    for (let strand = 0; strand < 1050; strand++) {
+      const x = random() * size;
+      const drift = (random() - 0.5) * 5;
+      const value = 112 + Math.floor(random() * 44);
+      ctx.strokeStyle = `rgb(${value},${value},${value})`;
+      ctx.lineWidth = 0.45 + random() * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(x, -4);
+      ctx.bezierCurveTo(
+        x + drift * 0.3, size * 0.33,
+        x - drift * 0.2, size * 0.68,
+        x + drift, size + 4,
+      );
+      ctx.stroke();
+    }
+  }, 3.0, 1);
+  texture.colorSpace = THREE.NoColorSpace;
+  return texture;
 }
 
 export function createSerynMaterials() {
@@ -159,11 +212,15 @@ export function createSerynMaterials() {
   const hairMap = hairTexture();
   const hair = new THREE.MeshPhysicalMaterial({
     map: hairMap,
+    bumpMap: hairBumpTexture(),
+    bumpScale: 0.010,
     color: 0xf0f4f8,
-    roughness: 0.46,
-    metalness: 0.02,
-    sheen: 0.45,
-    sheenColor: new THREE.Color(0xc7e9ff),
+    roughness: 0.52,
+    metalness: 0.01,
+    sheen: 0.72,
+    sheenColor: new THREE.Color(0xd8efff),
+    clearcoat: 0.10,
+    clearcoatRoughness: 0.58,
     side: THREE.DoubleSide,
   });
   const hairShadow = hair.clone();
