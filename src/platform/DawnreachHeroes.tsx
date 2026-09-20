@@ -13,18 +13,12 @@ import {
   Star,
   Swords,
 } from 'lucide-react';
+import { getHeroAbilityArt, getHeroFullArt, getHeroInnateArt, getHeroPortrait } from '../game/heroes/assets';
 import { calculateDefinitionAttributesAtLevel, calculateDefinitionStatsAtLevel } from '../game/heroes/heroAttributes';
 import { listHeroDefinitions } from '../game/heroes/catalog';
 import { HeroPrimaryAttribute, type HeroDefinition } from '../game/heroes/types';
-import aldenPortrait from '../game/heroes/alden/images/H001.webp';
-import aldenFullArt from '../game/heroes/alden/images/H001F.png';
-import aldenInnate from '../game/heroes/alden/images/H001I.webp';
-import aldenQ from '../game/heroes/alden/images/H001Q.webp';
-import aldenW from '../game/heroes/alden/images/H001W.webp';
-import aldenE from '../game/heroes/alden/images/H001E.webp';
-import aldenR from '../game/heroes/alden/images/H001R.webp';
 
-type HeroFilter = 'all' | 'top' | 'jungle' | 'mid' | 'carry' | 'support' | 'favorites' | 'recent';
+type HeroFilter = 'all' | 'north' | 'mid' | 'south' | 'favorites' | 'recent';
 
 type SidebarFilterItem = Readonly<{
   key: HeroFilter;
@@ -40,11 +34,9 @@ const HERO_FILTER_GROUPS: readonly Readonly<{
     key: 'primary',
     items: [
       { key: 'all', label: 'ALL HEROES', icon: Sparkles },
-      { key: 'top', label: 'TOP', icon: Shield },
-      { key: 'jungle', label: 'JUNGLE', icon: Sparkles },
+      { key: 'north', label: 'NORTH', icon: Shield },
       { key: 'mid', label: 'MID', icon: Crosshair },
-      { key: 'carry', label: 'CARRY', icon: Swords },
-      { key: 'support', label: 'SUPPORT', icon: Heart },
+      { key: 'south', label: 'SOUTH', icon: Swords },
     ],
   },
   {
@@ -57,16 +49,15 @@ const HERO_FILTER_GROUPS: readonly Readonly<{
 ];
 
 function heroPortrait(heroId: string) {
-  return heroId === 'H001' ? aldenPortrait : '';
+  return getHeroPortrait(heroId);
 }
 
 function heroFullArt(heroId: string) {
-  return heroId === 'H001' ? aldenFullArt : '';
+  return getHeroFullArt(heroId) || getHeroPortrait(heroId);
 }
 
 function abilityArt(heroId: string, key: 'I' | 'Q' | 'W' | 'E' | 'R') {
-  if (heroId !== 'H001') return '';
-  return { I: aldenInnate, Q: aldenQ, W: aldenW, E: aldenE, R: aldenR }[key];
+  return key === 'I' ? getHeroInnateArt(heroId) : getHeroAbilityArt(heroId, key);
 }
 
 function primaryAttributeLabel(attribute: HeroPrimaryAttribute) {
@@ -79,36 +70,12 @@ function difficultyBars(difficulty: HeroDefinition['difficulty']) {
   return difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 2 : 3;
 }
 
-function inferHeroLane(hero: HeroDefinition): 'top' | 'jungle' | 'mid' | 'carry' | 'support' {
-  const roleText = [hero.primaryRole, hero.className, ...hero.secondaryRoles].join(' ').toLowerCase();
-
-  if (
-    roleText.includes('support')
-    || roleText.includes('apoyo')
-    || roleText.includes('healer')
-    || roleText.includes('utility')
-  ) return 'support';
-
-  if (
-    roleText.includes('jungle')
-    || roleText.includes('jungler')
-    || roleText.includes('ganker')
-  ) return 'jungle';
-
-  if (
-    roleText.includes('mid')
-    || roleText.includes('mage')
-    || roleText.includes('caster')
-    || roleText.includes('assassin')
-  ) return 'mid';
-
-  if (
-    roleText.includes('carry')
-    || roleText.includes('marksman')
-    || roleText.includes('adc')
-  ) return 'carry';
-
-  return 'top';
+function heroMatchesLane(hero: HeroDefinition, lane: 'north' | 'mid' | 'south') {
+  const wanted = lane.toUpperCase();
+  return Boolean(
+    hero.deploymentPreferences?.primary.includes(wanted as 'NORTH' | 'MID' | 'SOUTH')
+    || hero.deploymentPreferences?.secondary.includes(wanted as 'NORTH' | 'MID' | 'SOUTH'),
+  );
 }
 
 function matchesFilter(
@@ -120,7 +87,7 @@ function matchesFilter(
   if (filter === 'all') return true;
   if (filter === 'favorites') return favoriteHeroIds.has(hero.id);
   if (filter === 'recent') return recentHeroIds.has(hero.id);
-  return inferHeroLane(hero) === filter;
+  return heroMatchesLane(hero, filter);
 }
 
 function FutureHeroCard({ index }: { index: number }) {
@@ -130,7 +97,7 @@ function FutureHeroCard({ index }: { index: number }) {
   </article>;
 }
 
-export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; onPractice: () => void }) {
+export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; onPractice: (heroId: string) => void }) {
   const heroes = useMemo(() => listHeroDefinitions(), []);
   const [filter, setFilter] = useState<HeroFilter>('all');
   const [query, setQuery] = useState('');
@@ -143,11 +110,9 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
 
   const filterCounts = useMemo<Record<HeroFilter, number>>(() => ({
     all: heroes.length,
-    top: heroes.filter(hero => inferHeroLane(hero) === 'top').length,
-    jungle: heroes.filter(hero => inferHeroLane(hero) === 'jungle').length,
-    mid: heroes.filter(hero => inferHeroLane(hero) === 'mid').length,
-    carry: heroes.filter(hero => inferHeroLane(hero) === 'carry').length,
-    support: heroes.filter(hero => inferHeroLane(hero) === 'support').length,
+    north: heroes.filter(hero => heroMatchesLane(hero, 'north')).length,
+    mid: heroes.filter(hero => heroMatchesLane(hero, 'mid')).length,
+    south: heroes.filter(hero => heroMatchesLane(hero, 'south')).length,
     favorites: heroes.filter(hero => favoriteHeroIds.has(hero.id)).length,
     recent: heroes.filter(hero => recentHeroIds.has(hero.id)).length,
   }), [heroes, favoriteHeroIds, recentHeroIds]);
@@ -224,7 +189,7 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
             <footer><strong>{hero.displayName.toUpperCase()}</strong><small>{hero.primaryRole.toUpperCase()}</small></footer>
           </button>)}
           {!query && filter === 'all' && Array.from({ length: 11 }, (_, index) => <FutureHeroCard key={index} index={index} />)}
-          {!visibleHeroes.length && <div className="dr-heroes-no-results"><Search /><strong>NO HEROES FOUND</strong><span>Try another search or role filter.</span></div>}
+          {!visibleHeroes.length && <div className="dr-heroes-no-results"><Search /><strong>NO HEROES FOUND</strong><span>Try another search or lane filter.</span></div>}
         </div>
       </main>
 
@@ -277,7 +242,7 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
           </section>
 
           <div className="dr-heroes-detail-actions">
-            <button type="button" onClick={onPractice}>PRACTICE</button>
+            <button type="button" onClick={() => onPractice(selected.id)}>PRACTICE</button>
             <button className="is-primary" type="button" onClick={onPlay}>PLAY <ChevronRight /></button>
           </div>
         </div>

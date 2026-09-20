@@ -51,7 +51,7 @@ function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
 }
 
-function LocalGameScreen({ activeMatch, user }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null } = {}) {
+function LocalGameScreen({ activeMatch, user, localHeroId = 'H001' }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null; localHeroId?: string } = {}) {
   const [ready, setReady] = useState(false);
   const localMatchPlayer = activeMatch?.match.players.find(player => player.userId === user?.id) ?? null;
   const runtimeMatchId = activeMatch?.match.id ?? null;
@@ -81,7 +81,7 @@ function LocalGameScreen({ activeMatch, user }: { activeMatch?: ActiveMatchSessi
     requestAnimationFrame(inspect);
     return () => { disposed = true; };
   }, []);
-  return <div className="platform-local-game"><GameApp onlineMatch={activeMatch?.match ?? null} localUser={user ?? null} />{!ready && <div className="platform-game-loading" role="status" aria-label="Loading match"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparing the battlefield…</span></div></div>}</div>;
+  return <div className="platform-local-game"><GameApp onlineMatch={activeMatch?.match ?? null} localUser={user ?? null} localHeroId={localHeroId} />{!ready && <div className="platform-game-loading" role="status" aria-label="Loading match"><img src={LOADING_SPLASH} alt="" draggable={false} /><div><strong>DAWNREACH</strong><span>Preparing the battlefield…</span></div></div>}</div>;
 }
 
 function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; onAuthenticated: (user: PlatformUser) => void; onLocalGame: () => void }) {
@@ -111,7 +111,7 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
   </main>;
 }
 
-function HomeSurface({ user: initialUser, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: () => void; onLogout: () => void }) {
+function HomeSurface({ user: initialUser, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: (heroId?: string) => void; onLogout: () => void }) {
   const [user, setUser] = useState(initialUser);
   const [section, setSection] = useState<HomeSection>('home');
   const [playSection, setPlaySection] = useState<PlaySection>('matchmaking');
@@ -499,7 +499,7 @@ function HomeSurface({ user: initialUser, onLocalPlay, onLogout }: { user: Platf
       {section === 'profile' ? (
         <DawnreachProfile user={user} realtime={realtime} onOpenMatch={openProfileMatch} />
       ) : section === 'heroes' ? (
-        <DawnreachHeroes onPlay={openPlay} onPractice={onLocalPlay} />
+        <DawnreachHeroes onPlay={openPlay} onPractice={heroId => onLocalPlay(heroId)} />
       ) : section === 'ranking' ? (
         <DawnreachRanking user={user} social={social} />
       ) : (
@@ -531,9 +531,10 @@ export default function PlatformShell() {
   const [surface, setSurface] = useState<Surface>('booting');
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [error, setError] = useState('');
+  const [localHeroId, setLocalHeroId] = useState('H001');
   useEffect(() => { let active = true; const restore = async () => { if (!getAuthToken()) { if (active) setSurface('auth'); return; } try { const restored = await getCurrentPlatformUser(); if (!active) return; setUser(restored); setSurface('home'); } catch (restoreError) { if (!active) return; setError(restoreError instanceof Error ? restoreError.message : 'Could not restore the session.'); setSurface('auth'); } }; void restore(); return () => { active = false; }; }, []);
   const authenticated = (nextUser: PlatformUser) => { setUser(nextUser); setError(''); setSurface('home'); };
   const logout = async () => { platformRealtime.disconnect(); try { await logoutPlatformAccount(); } catch { /* token is cleared in client */ } setUser(null); setSurface('auth'); };
-  if (surface === 'game') return <div className="platform-shell platform-shell--game" data-dawnreach-platform-ready="true"><LocalGameScreen /></div>;
-  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restoring session…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={() => setSurface('game')} onLogout={() => void logout()} />}</div>;
+  if (surface === 'game') return <div className="platform-shell platform-shell--game" data-dawnreach-platform-ready="true"><LocalGameScreen localHeroId={localHeroId} /></div>;
+  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restoring session…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={heroId => { setLocalHeroId(heroId || 'H001'); setSurface('game'); }} onLogout={() => void logout()} />}</div>;
 }

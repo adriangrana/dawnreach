@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Shield, Swords } from 'lucide-react';
-import aldenCardArt from '../game/heroes/alden/images/H001.webp';
+import { getHeroPortrait } from '../game/heroes/assets';
+import { getHeroDefinition, hasHeroDefinition } from '../game/heroes/catalog';
 import { platformRealtime } from './realtimeClient';
 import type { ActiveMatchSession, MatchPlayer, PlatformUser, Team } from './types';
 
 const BACKGROUND = '/assets/images/ciudadela_celestial_entre_las_nubes.webp';
 const MARK = '/assets/icon/dawnreach.png';
-
-const HEROES: Record<string, { name: string; title: string; art: string }> = {
-  H001: { name: 'ALDEN', title: 'THE OATHBEARER', art: aldenCardArt },
-};
-
-const TIPS = [
-  'Vision around objectives can decide a fight before it begins.',
-  'Two heroes pressure North, one controls Mid, and two hold South.',
-  'A coordinated retreat is stronger than five isolated escapes.',
-  'Information wins battles. Watch the lanes before committing to a fight.',
-];
 
 function laneFor(player: MatchPlayer, teammates: readonly MatchPlayer[]) {
   const ordered = [...teammates].sort((a, b) => a.slot - b.slot);
@@ -44,7 +34,12 @@ function LoadingPlayerCard({
   me: PlatformUser;
 }) {
   const heroId = session.match.heroSelections?.[player.userId]?.heroId || 'H001';
-  const hero = HEROES[heroId] || { name: heroId, title: 'DAWNREACH HERO', art: aldenCardArt };
+  const definition = hasHeroDefinition(heroId) ? getHeroDefinition(heroId) : null;
+  const hero = {
+    name: definition?.displayName.toUpperCase() ?? heroId,
+    title: definition?.className.toUpperCase() ?? 'DAWNREACH HERO',
+    art: getHeroPortrait(heroId) || getHeroPortrait('H001'),
+  };
   const progress = Math.max(0, Math.min(100, Number(session.match.loadingProgress?.[player.userId] || 0)));
   const lane = laneFor(player, teammates);
   return <article className={`dr-loading-player-card is-${player.team}${player.userId === me.id ? ' is-self' : ''}`}>
@@ -141,7 +136,7 @@ export function MatchLoadingScreen({
       const assets = [...new Set([
         BACKGROUND,
         MARK,
-        ...selectedHeroIds.map(heroId => HEROES[heroId]?.art).filter((art): art is string => Boolean(art)),
+        ...selectedHeroIds.map(heroId => getHeroPortrait(heroId)).filter((art): art is string => Boolean(art)),
       ])];
 
       let completed = 0;

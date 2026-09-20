@@ -1,15 +1,20 @@
 import { ALDEN } from './alden/gameplay';
+import { SERYN } from './seryn/gameplay';
 import type { HeroDefinition, HeroId } from './types';
 
+const HERO_DEFINITIONS: readonly HeroDefinition[] = [ALDEN, SERYN];
+const HERO_BY_ID = new Map<HeroId, HeroDefinition>(HERO_DEFINITIONS.map(hero => [hero.id, hero]));
+
 export function getHeroDefinition(heroId: HeroId): HeroDefinition {
-  if (heroId === ALDEN.id) return ALDEN;
-  throw new Error(`Unknown hero definition: ${heroId}`);
+  const definition = HERO_BY_ID.get(heroId);
+  if (!definition) throw new Error(`Unknown hero definition: ${heroId}`);
+  return definition;
 }
 
 export function hasHeroDefinition(heroId: HeroId): boolean {
-  return heroId === ALDEN.id;
+  return HERO_BY_ID.has(heroId);
 }
 
 export function listHeroDefinitions(): readonly HeroDefinition[] {
-  return [ALDEN];
+  return HERO_DEFINITIONS;
 }

@@ -67,7 +67,7 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeTimelineEvents = new Map();
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
-  const HERO_NAMES = Object.freeze({ H001: 'Alden' });
+  const HERO_NAMES = Object.freeze({ H001: 'Alden', H002: 'Seryn' });
   const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
   const HERO_RESPAWN_BASE_SECONDS = Number.isFinite(Number(options.heroRespawnBaseSeconds))
     ? Math.max(0.01, Number(options.heroRespawnBaseSeconds))
@@ -129,7 +129,7 @@ export function createPlatformServer(options = {}) {
   }
 
   const heroSelect = new HeroSelectManager({
-    heroIds: ['H001'],
+    heroIds: Object.keys(HERO_NAMES),
     heroNames: HERO_NAMES,
     pickSeconds: 45,
     onEvent: (event, userIds) => broadcast(event, userIds),

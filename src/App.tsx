@@ -73,6 +73,7 @@ import {
   setCombatHudServerAuthority,
   setCombatHudStats,
 } from './hud/combatStatsOverlay';
+import { getHeroAbilityArt, getHeroInnateArt, getHeroPortrait } from './game/heroes/assets';
 import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
@@ -83,14 +84,9 @@ import {
   type AbilityKey, type CombatTargetClass, type HeroId, type InventoryItem, type MatchState,
 } from './game/match';
 
-const ALDEN_PORTRAIT_SRC = new URL('./game/heroes/alden/images/H001.webp', import.meta.url).href;
-const ALDEN_MINIMAP_SRC = new URL('./game/heroes/alden/images/H001I.webp', import.meta.url).href;
 const HUD_ART_SRC = new URL('./assets/hud-art.svg', import.meta.url).href;
 const LOCAL_WORLD_HERO_ENTITY_ID = 'blue-hero-alden';
 const MATCH_POST_MATCH_OPEN_EVENT = 'dawnreach:post-match-open';
-const heroAbilityImages = import.meta.glob<string>('./game/heroes/*/images/*[QWER].webp', {
-  eager: true, query: '?url', import: 'default',
-});
 
 type TeamHero = {
   initial: string;
@@ -168,7 +164,7 @@ function teamPortraitsFromMatch(
       const elapsedSinceSyncMs = Math.max(0, nowMs - syncedAtMs);
       return {
         initial: hero.heroName?.slice(0, 1).toUpperCase() || '?',
-        portrait: hero.definitionId === 'H001' ? ALDEN_PORTRAIT_SRC : undefined,
+        portrait: getHeroPortrait(hero.definitionId) || undefined,
         local: hero.heroEntityId === LOCAL_HERO_ENTITY_ID,
         ownerUserId,
         disconnected: Boolean(ownerUserId && disconnectedUserIds.has(ownerUserId)),
@@ -187,7 +183,6 @@ function formatMatchClock(ms: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 const abilityArt: Record<AbilityKey, string> = { Q: 'blade', W: 'aegis', E: 'banner', R: 'sun' };
-const heroImageCodes: Record<string, string> = { H001: 'H001' };
 const heroAttributeDisplay = [
   { key: 'strength' as const, shortLabel: 'FUE', label: 'Fuerza' },
   { key: 'agility' as const, shortLabel: 'AGI', label: 'Agilidad' },
@@ -1054,7 +1049,7 @@ function GameHud({
         <div className="minimap-field">
           <div ref={minimapRef} className="minimap-live"
             style={{ position: 'absolute', inset: 0, zIndex: 10, overflow: 'hidden', background: '#07100e' }} />
-          <img ref={minimapHeroRef} className="minimap-hero-icon" src={ALDEN_MINIMAP_SRC} alt="" draggable={false}
+          <img ref={minimapHeroRef} className="minimap-hero-icon" src={getHeroInnateArt(localHero.definitionId) || getHeroPortrait(localHero.definitionId)} alt="" draggable={false}
             onError={hideMissingImage} style={{ opacity: localHeroDead ? 0 : 1 }} />
         </div>
         <div className="minimap-tools"><span><ZoomIn /></span><span><Eye /></span><span><Crosshair /></span></div>
@@ -1064,8 +1059,8 @@ function GameHud({
       <section className="command-deck">
         <div className="hero-panel">
           <div className="hero-portrait">
-            <span className="hero-portrait__crest">A</span>
-            <img className="hero-portrait__image" src={ALDEN_PORTRAIT_SRC} alt="" draggable={false} onError={hideMissingImage}
+            <span className="hero-portrait__crest">{definition.displayName.slice(0, 1).toUpperCase()}</span>
+            <img className="hero-portrait__image" src={getHeroPortrait(hero.definitionId)} alt="" draggable={false} onError={hideMissingImage}
               style={heroDead ? { filter: 'grayscale(0.9) brightness(0.42)' } : undefined} />
             <RespawnCooldownOverlay presentation={respawnPresentation} />
             <span className="hero-level-ring"
@@ -1119,7 +1114,7 @@ function GameHud({
                 remainingMs={control.remainingMs} cooldownSeconds={control.preview?.cooldownSeconds}
                 resourceCost={control.preview?.resourceCost} resourceName={definition.resource.displayName}
                 blockedReason={heroDead ? 'No disponible mientras estás muerto' : control.blockedReason} art={abilityArt[key]}
-                image={heroAbilityImages[`./game/heroes/${hero.heroName?.toLowerCase()}/images/${heroImageCodes[hero.definitionId]}${key}.webp`]}
+                image={getHeroAbilityArt(hero.definitionId, key)}
                 onUse={() => dispatch({ type: 'cast', key, nowMs: performance.now() })}
                 canUpgrade={canUpgrade}
                 onUpgrade={() => dispatch({ type: 'upgrade', key, nowMs: performance.now() })}
@@ -1183,9 +1178,11 @@ function GameHud({
 export default function App({
   onlineMatch,
   localUser,
+  localHeroId = 'H001',
 }: {
   onlineMatch?: MatchSummary | null;
   localUser?: PlatformUser | null;
+  localHeroId?: HeroId;
 } = {}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
@@ -1211,7 +1208,7 @@ export default function App({
         localUser.id,
         nowMs,
       )
-      : createPlayableMatch('H001', 1, nowMs);
+      : createPlayableMatch(localHeroId, 1, nowMs);
     return {
       match,
       nowMs,
