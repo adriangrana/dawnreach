@@ -657,11 +657,12 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   );
   centerGem.scale.set(0.58, 1.16, 0.42);
 
-  // String shares the same X/Y plane as both tips. A shallow rearward draw at the
-  // grip gives it tension without making it look like the bow itself is twisted.
+  // The bow limbs run on local Y. During the attack pose the bow is counter-rotated
+  // against the raised arm so local Y stays world-up, while local +Z becomes the firing
+  // direction. The string therefore draws backward on local -Z, not sideways on X.
   const stringGeometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0.046, 1.020, 0),
-    new THREE.Vector3(-0.105, 0, 0),
+    new THREE.Vector3(0.046, 0, -0.105),
     new THREE.Vector3(0.046, -1.020, 0),
   ]);
   const bowString = new THREE.Line(
@@ -673,14 +674,14 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
 
   const arrowLaunchSocket = new THREE.Group();
   arrowLaunchSocket.name = 'seryn-arrow-launch-socket';
-  arrowLaunchSocket.position.set(0.035, 0, 0);
+  arrowLaunchSocket.position.set(0.046, 0, 0.045);
   bow.add(arrowLaunchSocket);
 
   const nockedArrow = createSerynArrow(m, 'seryn-nocked-arrow');
-  // Arrow geometry points along local +Y. Rotate it so the nocked arrow points along
-  // the bow's local +X axis; attack pose rotates +X into the hero's forward +Z.
-  nockedArrow.rotation.z = -Math.PI / 2;
-  nockedArrow.position.set(-0.105, 0, 0.010);
+  // Arrow geometry points along local +Y. Rotate it onto bow-local +Z, which is the
+  // character's forward firing axis once the attack pose is applied.
+  nockedArrow.rotation.x = Math.PI / 2;
+  nockedArrow.position.set(0.046, 0, -0.105);
   nockedArrow.visible = false;
   bow.add(nockedArrow);
 

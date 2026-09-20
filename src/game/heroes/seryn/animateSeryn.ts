@@ -392,8 +392,8 @@ function updateCloth(
 function setBowStringDraw(rig: SerynRig, draw: number) {
   const position = rig.bowString.geometry.getAttribute('position') as THREE.BufferAttribute;
   if (!position || position.count < 3) return;
-  const centerX = THREE.MathUtils.lerp(-0.105, -0.305, draw);
-  position.setXYZ(1, centerX, 0, 0);
+  const centerZ = THREE.MathUtils.lerp(-0.105, -0.305, draw);
+  position.setXYZ(1, 0.046, 0, centerZ);
   position.needsUpdate = true;
 }
 
@@ -427,16 +427,19 @@ function updateArcheryAttackPose(rig: SerynRig, progress: number) {
   rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, -0.10, bowPose);
   rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, -0.03, bowPose);
 
-  // Rotate the bow's local +X shooting axis into character-forward +Z while it is raised.
+  // The raised left arm contributes roughly -90° around X. Counter-rotate the bow
+  // roughly +90° around X so its limbs remain vertical while bow-local +Z points
+  // straight toward the target. This is the canonical archer orientation:
+  // vertical bow, horizontal/forward arrow.
   rig.bow.position.set(
     THREE.MathUtils.lerp(rig.bowRestPosition.x, 0.014, bowPose),
     THREE.MathUtils.lerp(rig.bowRestPosition.y, -0.070, bowPose),
     THREE.MathUtils.lerp(rig.bowRestPosition.z, 0.028, bowPose),
   );
   rig.bow.rotation.set(
-    THREE.MathUtils.lerp(rig.bowRestRotation.x, 0, bowPose),
-    THREE.MathUtils.lerp(rig.bowRestRotation.y, -Math.PI / 2, bowPose),
-    THREE.MathUtils.lerp(rig.bowRestRotation.z, 0, bowPose),
+    THREE.MathUtils.lerp(rig.bowRestRotation.x, Math.PI / 2, bowPose),
+    THREE.MathUtils.lerp(rig.bowRestRotation.y, 0, bowPose),
+    THREE.MathUtils.lerp(rig.bowRestRotation.z, -0.018, bowPose),
   );
 
   // Phase 1: the right hand reaches back to the quiver.
@@ -487,9 +490,9 @@ function updateArcheryAttackPose(rig: SerynRig, progress: number) {
   const stringDraw = draw * (1 - release);
   setBowStringDraw(rig, stringDraw);
   rig.nockedArrow.position.set(
-    THREE.MathUtils.lerp(-0.105, -0.305, stringDraw),
+    0.046,
     0,
-    0.010,
+    THREE.MathUtils.lerp(-0.105, -0.305, stringDraw),
   );
 
   // Release recoil and recovery.
