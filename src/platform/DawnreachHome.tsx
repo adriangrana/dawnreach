@@ -29,15 +29,17 @@ export function DawnreachHomeTopbar({
   onHome,
   onPlay,
   onHeroes,
+  onRanking,
   onProfile,
   onLogout,
 }: {
-  section: 'home' | 'play' | 'heroes' | 'profile';
+  section: 'home' | 'play' | 'heroes' | 'ranking' | 'profile';
   user: PlatformUser;
   realtime: 'connecting' | 'online' | 'offline';
   onHome: () => void;
   onPlay: () => void;
   onHeroes?: () => void;
+  onRanking?: () => void;
   onProfile?: () => void;
   onLogout: () => void;
 }) {
@@ -48,7 +50,7 @@ export function DawnreachHomeTopbar({
       <button className={section === 'play' ? 'is-active' : ''} onClick={onPlay}>PLAY</button>
       <button className={section === 'heroes' ? 'is-active' : ''} disabled={!onHeroes} onClick={onHeroes}>HEROES</button>
       <button disabled>COLLECTION</button>
-      <button disabled>RANKING</button>
+      <button className={section === 'ranking' ? 'is-active' : ''} disabled={!onRanking} onClick={onRanking}>RANKING</button>
       <button className={section === 'profile' ? 'is-active' : ''} disabled={!onProfile} onClick={onProfile}>PROFILE</button>
     </nav>
     <div className="dr-home-top-actions">

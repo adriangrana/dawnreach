@@ -49,6 +49,7 @@ import './platform-loading-screen.css';
 import './platform-post-match.css';
 import './platform-profile.css';
 import './platform-heroes.css';
+import './platform-ranking.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;

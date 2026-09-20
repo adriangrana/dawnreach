@@ -477,6 +477,7 @@ export function PostMatchScreen({
   onHome,
   onPlay,
   onHeroes,
+  onRanking,
   onProfile,
   onPlayAgain,
   onLogout,
@@ -488,6 +489,7 @@ export function PostMatchScreen({
   onHome: () => void;
   onPlay: () => void;
   onHeroes: () => void;
+  onRanking: () => void;
   onProfile: () => void;
   onPlayAgain: () => void;
   onLogout: () => void;
@@ -540,6 +542,7 @@ export function PostMatchScreen({
         onHome={onHome}
         onPlay={onPlay}
         onHeroes={onHeroes}
+        onRanking={onRanking}
         onProfile={onProfile}
         onLogout={onLogout}
       />
