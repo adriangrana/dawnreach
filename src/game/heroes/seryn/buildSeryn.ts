@@ -14,7 +14,7 @@ type MaterialSet = Readonly<{
   hairShadow: THREE.MeshStandardMaterial;
   eyeWhite: THREE.MeshStandardMaterial;
   iris: THREE.MeshStandardMaterial;
-  lashes: THREE.MeshStandardMaterial;
+  dark: THREE.MeshStandardMaterial;
   lips: THREE.MeshStandardMaterial;
   navy: THREE.MeshStandardMaterial;
   navyDark: THREE.MeshStandardMaterial;
@@ -24,6 +24,14 @@ type MaterialSet = Readonly<{
   gold: THREE.MeshStandardMaterial;
   leather: THREE.MeshStandardMaterial;
   crystal: THREE.MeshStandardMaterial;
+}>;
+
+type RingSection = Readonly<{
+  y: number;
+  rx: number;
+  rz: number;
+  front?: number;
+  back?: number;
 }>;
 
 function standard(
@@ -44,22 +52,22 @@ function standard(
 
 function materials(): MaterialSet {
   return {
-    skin: standard(0xd8ad98, 0.0, 0.72),
-    skinWarm: standard(0xc88f7c, 0.0, 0.78),
-    hair: standard(0xd8dde5, 0.08, 0.45),
-    hairShadow: standard(0x9aa7b5, 0.08, 0.52),
-    eyeWhite: standard(0xf1f4f6, 0.0, 0.42),
-    iris: standard(0x53c9e9, 0.05, 0.30, 0x0e6784, 0.26),
-    lashes: standard(0x202630, 0.0, 0.82),
-    lips: standard(0x9f5c5c, 0.0, 0.66),
-    navy: standard(0x122b50, 0.16, 0.60),
-    navyDark: standard(0x07182c, 0.22, 0.64),
-    teal: standard(0x2d6570, 0.10, 0.66),
-    silver: standard(0xb8c3ce, 0.76, 0.24),
-    silverDark: standard(0x667789, 0.70, 0.30),
-    gold: standard(0xc6a25a, 0.80, 0.23),
-    leather: standard(0x2b2324, 0.12, 0.78),
-    crystal: standard(0x61dcff, 0.32, 0.16, 0x148eb7, 0.42),
+    skin: standard(0xb97863, 0, 0.9),
+    skinWarm: standard(0xa96053, 0, 0.92),
+    hair: standard(0xb9c2cd, 0.03, 0.62),
+    hairShadow: standard(0x768391, 0.03, 0.70),
+    eyeWhite: standard(0xd9e0e4, 0, 0.62),
+    iris: standard(0x4dc9ea, 0.02, 0.36, 0x0c5773, 0.18),
+    dark: standard(0x1e252c, 0, 0.88),
+    lips: standard(0x7d3f43, 0, 0.86),
+    navy: standard(0x173455, 0.08, 0.72),
+    navyDark: standard(0x09182a, 0.10, 0.78),
+    teal: standard(0x2f6970, 0.06, 0.76),
+    silver: standard(0x9eacb8, 0.62, 0.34),
+    silverDark: standard(0x5a6875, 0.58, 0.40),
+    gold: standard(0xb78f4c, 0.68, 0.34),
+    leather: standard(0x2a2020, 0.05, 0.90),
+    crystal: standard(0x55d3f2, 0.24, 0.24, 0x126b8a, 0.30),
   };
 }
 
@@ -99,51 +107,46 @@ function rounded(
   material: THREE.Material,
   segments = 20,
 ) {
-  const geometry = new THREE.SphereGeometry(1, segments, Math.max(10, Math.floor(segments * 0.65)));
+  const geometry = new THREE.SphereGeometry(1, segments, Math.max(10, Math.floor(segments * 0.68)));
   geometry.scale(...size);
   return mesh(parent, name, geometry, material, position);
 }
 
-function contour(
-  parent: THREE.Object3D,
-  name: string,
-  sections: Array<[number, number]>,
-  depth: number,
-  material: THREE.Material,
-  radialSegments = 22,
-) {
-  const geometry = new THREE.LatheGeometry(
-    sections.map(([radius, y]) => new THREE.Vector2(radius, y)),
-    radialSegments,
-  );
-  geometry.scale(1, 1, depth);
-  return mesh(parent, name, geometry, material);
-}
+function ringGeometry(sections: readonly RingSection[], segments = 24) {
+  const vertices: number[] = [];
+  const indices: number[] = [];
 
-function plate(
-  parent: THREE.Object3D,
-  name: string,
-  points: Array<[number, number]>,
-  depth: number,
-  material: THREE.Material,
-  z = 0,
-  bevel = 0.016,
-) {
-  const shape = new THREE.Shape();
-  points.forEach(([x, y], index) => {
-    if (index === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  });
-  shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: bevel,
-    bevelThickness: bevel * 0.7,
-  });
-  geometry.translate(0, 0, z);
-  return mesh(parent, name, geometry, material);
+  for (const section of sections) {
+    for (let index = 0; index < segments; index++) {
+      const angle = index / segments * Math.PI * 2;
+      const sx = Math.sin(angle);
+      const cz = Math.cos(angle);
+      const front = Math.max(0, cz);
+      const back = Math.max(0, -cz);
+      const x = sx * section.rx;
+      const z = cz * section.rz
+        + (section.front ?? 0) * front * front
+        - (section.back ?? 0) * back * back;
+      vertices.push(x, section.y, z);
+    }
+  }
+
+  for (let ring = 0; ring < sections.length - 1; ring++) {
+    for (let index = 0; index < segments; index++) {
+      const next = (index + 1) % segments;
+      const a = ring * segments + index;
+      const b = ring * segments + next;
+      const c = (ring + 1) * segments + next;
+      const d = (ring + 1) * segments + index;
+      indices.push(a, d, c, a, c, b);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function tube(
@@ -152,70 +155,72 @@ function tube(
   points: THREE.Vector3[],
   radius: number,
   material: THREE.Material,
-  tubularSegments = 20,
+  tubularSegments = 18,
 ) {
-  const curve = new THREE.CatmullRomCurve3(points);
   return mesh(
     parent,
     name,
-    new THREE.TubeGeometry(curve, tubularSegments, radius, 7, false),
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), tubularSegments, radius, 7, false),
     material,
   );
 }
 
-function buildFemaleBody(rig: HumanoidRig, m: MaterialSet) {
-  // Seryn is deliberately lighter and narrower than Alden. These are rig proportions,
-  // not just armor scale, so every animation retains a feminine silhouette.
-  rig.leftArm.position.x = 0.405;
-  rig.rightArm.position.x = -0.405;
-  rig.leftLeg.position.x = 0.19;
-  rig.rightLeg.position.x = -0.19;
-  rig.head.position.y = 0.82;
-  rig.leftShin.position.y = -0.565;
-  rig.rightShin.position.y = -0.565;
-  rig.leftFoot.position.y = -0.49;
-  rig.rightFoot.position.y = -0.49;
+function makeFacePlate(
+  parent: THREE.Object3D,
+  name: string,
+  size: [number, number, number],
+  position: [number, number, number],
+  material: THREE.Material,
+) {
+  const part = rounded(parent, name, size, position, material, 18);
+  part.scale.z = 0.45;
+  return part;
+}
 
-  contour(rig.pelvis, 'seryn-body-pelvis', [
-    [0.00, -0.22],
-    [0.20, -0.21],
-    [0.295, -0.10],
-    [0.315, 0.03],
-    [0.285, 0.19],
-    [0.00, 0.23],
-  ], 0.76, m.skin);
+function buildFemaleAnatomy(rig: HumanoidRig, m: MaterialSet) {
+  // Re-proportion the shared skeleton itself, rather than hiding the generic proportions
+  // below armor. This gives Seryn longer legs, a narrower ribcage and a lighter shoulder line.
+  rig.pelvis.position.y = 1.34;
+  rig.torso.position.y = 1.92;
+  rig.head.position.y = 0.77;
 
-  contour(rig.torso, 'seryn-body-torso', [
-    [0.00, -0.53],
-    [0.215, -0.52],
-    [0.225, -0.35],
-    [0.245, -0.18],
-    [0.295, 0.02],
-    [0.335, 0.20],
-    [0.315, 0.38],
-    [0.255, 0.50],
-    [0.00, 0.52],
-  ], 0.69, m.skin);
+  rig.leftLeg.position.x = 0.175;
+  rig.rightLeg.position.x = -0.175;
+  rig.leftShin.position.y = -0.61;
+  rig.rightShin.position.y = -0.61;
+  rig.leftFoot.position.y = -0.535;
+  rig.rightFoot.position.y = -0.535;
 
-  // Soft upper-chest volume is kept anatomical and mostly covered by the cuirass.
-  rounded(rig.torso, 'seryn-body-chest-left', [0.145, 0.135, 0.105], [0.125, 0.14, 0.185], m.skin);
-  rounded(rig.torso, 'seryn-body-chest-right', [0.145, 0.135, 0.105], [-0.125, 0.14, 0.185], m.skin);
+  rig.leftArm.position.set(0.385, 0.29, 0);
+  rig.rightArm.position.set(-0.385, 0.29, 0);
+  rig.leftForearm.position.y = -0.455;
+  rig.rightForearm.position.y = -0.455;
+  rig.sockets.leftHand.position.y = -0.43;
+  rig.sockets.rightHand.position.y = -0.43;
 
-  contour(rig.torso, 'seryn-body-neck', [
-    [0.00, 0.44],
-    [0.088, 0.45],
-    [0.092, 0.68],
-    [0.078, 0.74],
-    [0.00, 0.75],
-  ], 0.90, m.skin);
+  mesh(rig.pelvis, 'seryn-anatomy-pelvis', ringGeometry([
+    { y: -0.22, rx: 0.17, rz: 0.13 },
+    { y: -0.13, rx: 0.25, rz: 0.17, back: 0.018 },
+    { y: 0.02, rx: 0.285, rz: 0.18, back: 0.020 },
+    { y: 0.16, rx: 0.255, rz: 0.155 },
+    { y: 0.23, rx: 0.18, rz: 0.125 },
+  ]), m.skin);
 
-  const head = rounded(rig.head, 'seryn-face', [0.195, 0.245, 0.190], [0, 0.015, 0], m.skin, 28);
-  head.scale.z = 0.97;
+  mesh(rig.torso, 'seryn-anatomy-torso', ringGeometry([
+    { y: -0.54, rx: 0.175, rz: 0.12 },
+    { y: -0.40, rx: 0.190, rz: 0.13 },
+    { y: -0.20, rx: 0.215, rz: 0.145 },
+    { y: 0.00, rx: 0.245, rz: 0.155, front: 0.026 },
+    { y: 0.17, rx: 0.282, rz: 0.165, front: 0.040 },
+    { y: 0.34, rx: 0.268, rz: 0.150, front: 0.018 },
+    { y: 0.48, rx: 0.205, rz: 0.120 },
+  ]), m.skin);
 
-  // Jaw and cheek shaping keeps the face from reading as a featureless sphere.
-  rounded(rig.head, 'seryn-jaw', [0.145, 0.115, 0.145], [0, -0.115, 0.015], m.skin, 24);
-  rounded(rig.head, 'seryn-cheek-left', [0.075, 0.060, 0.045], [0.105, -0.005, 0.145], m.skinWarm, 18);
-  rounded(rig.head, 'seryn-cheek-right', [0.075, 0.060, 0.045], [-0.105, -0.005, 0.145], m.skinWarm, 18);
+  mesh(rig.torso, 'seryn-anatomy-neck', ringGeometry([
+    { y: 0.43, rx: 0.072, rz: 0.066 },
+    { y: 0.58, rx: 0.077, rz: 0.070 },
+    { y: 0.72, rx: 0.071, rz: 0.066 },
+  ], 18), m.skin);
 
   for (const side of [-1, 1]) {
     const upperArm = side > 0 ? rig.leftArm : rig.rightArm;
@@ -225,257 +230,261 @@ function buildFemaleBody(rig: HumanoidRig, m: MaterialSet) {
     const shin = side > 0 ? rig.leftShin : rig.rightShin;
     const foot = side > 0 ? rig.leftFoot : rig.rightFoot;
 
-    contour(upperArm, 'seryn-body-upper-arm', [
-      [0.00, -0.44],
-      [0.064, -0.43],
-      [0.082, -0.27],
-      [0.092, -0.08],
-      [0.072, -0.015],
-      [0.00, 0],
-    ], 0.92, m.skin, 18);
+    mesh(upperArm, 'seryn-anatomy-upper-arm', ringGeometry([
+      { y: 0.00, rx: 0.075, rz: 0.068 },
+      { y: -0.13, rx: 0.082, rz: 0.072 },
+      { y: -0.31, rx: 0.068, rz: 0.061 },
+      { y: -0.44, rx: 0.055, rz: 0.052 },
+    ], 18), m.skin);
 
-    rounded(forearm, 'seryn-body-elbow', [0.070, 0.070, 0.066], [0, 0, 0], m.skin, 16);
-    contour(forearm, 'seryn-body-forearm', [
-      [0.00, -0.43],
-      [0.048, -0.42],
-      [0.060, -0.30],
-      [0.075, -0.12],
-      [0.066, -0.04],
-      [0.00, -0.025],
-    ], 0.92, m.skin, 18);
+    rounded(forearm, 'seryn-anatomy-elbow', [0.058, 0.060, 0.055], [0, 0, 0], m.skin, 16);
+    mesh(forearm, 'seryn-anatomy-forearm', ringGeometry([
+      { y: -0.01, rx: 0.057, rz: 0.054 },
+      { y: -0.13, rx: 0.066, rz: 0.058 },
+      { y: -0.29, rx: 0.053, rz: 0.049 },
+      { y: -0.41, rx: 0.044, rz: 0.043 },
+    ], 18), m.skin);
 
-    rounded(hand, 'seryn-body-hand', [0.058, 0.105, 0.063], [0, -0.035, 0.005], m.skin, 16);
+    rounded(hand, 'seryn-anatomy-hand', [0.048, 0.095, 0.052], [0, -0.030, 0.012], m.skin, 18);
 
-    rounded(thigh, 'seryn-body-hip', [0.115, 0.105, 0.115], [0, 0, 0], m.skin, 18);
-    contour(thigh, 'seryn-body-thigh', [
-      [0.00, -0.54],
-      [0.078, -0.53],
-      [0.108, -0.39],
-      [0.128, -0.16],
-      [0.118, -0.045],
-      [0.00, 0],
-    ], 0.92, m.skin, 20);
+    mesh(thigh, 'seryn-anatomy-thigh', ringGeometry([
+      { y: -0.01, rx: 0.110, rz: 0.105 },
+      { y: -0.16, rx: 0.118, rz: 0.108 },
+      { y: -0.36, rx: 0.094, rz: 0.086 },
+      { y: -0.58, rx: 0.070, rz: 0.066 },
+    ], 20), m.skin);
 
-    rounded(shin, 'seryn-body-knee', [0.073, 0.075, 0.070], [0, 0, 0], m.skin, 16);
-    contour(shin, 'seryn-body-calf', [
-      [0.00, -0.47],
-      [0.052, -0.46],
-      [0.078, -0.31],
-      [0.095, -0.16],
-      [0.072, -0.045],
-      [0.00, -0.025],
-    ], 0.90, m.skin, 18);
+    rounded(shin, 'seryn-anatomy-knee', [0.064, 0.062, 0.060], [0, 0, 0], m.skin, 16);
+    mesh(shin, 'seryn-anatomy-calf', ringGeometry([
+      { y: -0.01, rx: 0.062, rz: 0.058 },
+      { y: -0.14, rx: 0.076, rz: 0.070 },
+      { y: -0.31, rx: 0.067, rz: 0.062 },
+      { y: -0.50, rx: 0.047, rz: 0.045 },
+    ], 18), m.skin);
 
-    rounded(foot, 'seryn-body-foot', [0.095, 0.070, 0.205], [0, -0.025, 0.075], m.skin, 18);
+    rounded(foot, 'seryn-anatomy-foot', [0.082, 0.060, 0.178], [0, -0.030, 0.075], m.skin, 18);
   }
+
+  // Head is a single low-poly facial volume with a tapered jaw. Avoid separate cheek blobs:
+  // those were the main reason the previous version read as a porcelain doll.
+  mesh(rig.head, 'seryn-head', ringGeometry([
+    { y: -0.205, rx: 0.058, rz: 0.100, front: 0.012 },
+    { y: -0.155, rx: 0.112, rz: 0.132, front: 0.010 },
+    { y: -0.070, rx: 0.150, rz: 0.158, front: 0.012 },
+    { y: 0.040, rx: 0.168, rz: 0.165, front: 0.010 },
+    { y: 0.135, rx: 0.156, rz: 0.155 },
+    { y: 0.205, rx: 0.102, rz: 0.128 },
+    { y: 0.235, rx: 0.032, rz: 0.052 },
+  ], 28), m.skin);
 }
 
 function buildFaceAndHair(rig: HumanoidRig, m: MaterialSet) {
-  // Eyes sit on local +Z because Dawnreach humanoids face +Z.
   for (const side of [-1, 1]) {
-    const eye = rounded(rig.head, 'seryn-eye-white', [0.055, 0.028, 0.018], [side * 0.072, 0.045, 0.181], m.eyeWhite, 18);
-    eye.rotation.z = side * -0.05;
-    rounded(rig.head, 'seryn-eye-iris', [0.021, 0.021, 0.012], [side * 0.072, 0.045, 0.198], m.iris, 16);
-    rounded(rig.head, 'seryn-eye-pupil', [0.009, 0.012, 0.007], [side * 0.072, 0.045, 0.207], m.lashes, 12);
-    const brow = mesh(rig.head, 'seryn-brow', new THREE.BoxGeometry(0.090, 0.012, 0.010), m.hairShadow, [side * 0.073, 0.105, 0.192]);
+    makeFacePlate(rig.head, 'seryn-eye-sclera', [0.047, 0.018, 0.014], [side * 0.061, 0.044, 0.160], m.eyeWhite);
+    rounded(rig.head, 'seryn-eye-iris', [0.013, 0.013, 0.007], [side * 0.061, 0.044, 0.171], m.iris, 14);
+    rounded(rig.head, 'seryn-eye-pupil', [0.0055, 0.007, 0.004], [side * 0.061, 0.044, 0.177], m.dark, 10);
+    const brow = mesh(
+      rig.head,
+      'seryn-eyebrow',
+      new THREE.BoxGeometry(0.060, 0.007, 0.007),
+      m.hairShadow,
+      [side * 0.060, 0.084, 0.161],
+    );
     brow.rotation.z = side * -0.08;
   }
 
-  const nose = mesh(rig.head, 'seryn-nose', new THREE.ConeGeometry(0.032, 0.105, 8), m.skinWarm, [0, -0.005, 0.205]);
+  const nose = mesh(rig.head, 'seryn-nose', new THREE.ConeGeometry(0.018, 0.060, 5), m.skinWarm, [0, 0.000, 0.170]);
   nose.rotation.x = Math.PI / 2;
-  nose.scale.set(0.72, 1, 0.66);
+  nose.scale.set(0.72, 1, 0.72);
 
-  rounded(rig.head, 'seryn-upper-lip', [0.055, 0.012, 0.013], [0, -0.080, 0.190], m.lips, 16);
-  rounded(rig.head, 'seryn-lower-lip', [0.050, 0.014, 0.014], [0, -0.098, 0.187], m.lips, 16);
+  makeFacePlate(rig.head, 'seryn-upper-lip', [0.038, 0.007, 0.009], [0, -0.076, 0.157], m.lips);
+  makeFacePlate(rig.head, 'seryn-lower-lip', [0.034, 0.008, 0.009], [0, -0.089, 0.155], m.lips);
 
-  // Pointed ears follow the established Seryn concept art while retaining human skin.
   for (const side of [-1, 1]) {
-    const ear = mesh(rig.head, 'seryn-pointed-ear', new THREE.ConeGeometry(0.070, 0.235, 5), m.skin, [side * 0.220, 0.045, -0.005]);
+    const ear = mesh(
+      rig.head,
+      'seryn-pointed-ear',
+      new THREE.ConeGeometry(0.045, 0.155, 5),
+      m.skin,
+      [side * 0.184, 0.036, 0.000],
+    );
     ear.rotation.z = side * -Math.PI / 2;
-    ear.rotation.y = side * -0.08;
-    ear.scale.z = 0.55;
+    ear.scale.z = 0.45;
   }
 
-  // Silver-blonde cap plus layered lengths. The cap leaves the face fully visible.
   const cap = mesh(
     rig.head,
     'seryn-hair-cap',
-    new THREE.SphereGeometry(0.215, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.64),
+    new THREE.SphereGeometry(1, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.45),
     m.hair,
-    [0, 0.055, -0.010],
+    [0, 0.070, -0.010],
   );
-  cap.scale.set(1.08, 1.08, 1.08);
+  cap.scale.set(0.176, 0.190, 0.170);
 
-  const backHair = group(rig.head, 'seryn-back-hair', [0, 0.01, -0.12]);
-  tube(backHair, 'seryn-hair-center', [
-    new THREE.Vector3(0, 0.11, 0),
-    new THREE.Vector3(0.01, -0.16, -0.01),
-    new THREE.Vector3(-0.02, -0.42, -0.03),
-    new THREE.Vector3(-0.04, -0.67, 0.00),
-  ], 0.070, m.hair, 22);
-  tube(backHair, 'seryn-hair-left', [
-    new THREE.Vector3(0.10, 0.09, 0.01),
-    new THREE.Vector3(0.15, -0.16, 0.02),
-    new THREE.Vector3(0.12, -0.40, -0.01),
-    new THREE.Vector3(0.08, -0.60, 0.01),
-  ], 0.055, m.hairShadow, 20);
-  tube(backHair, 'seryn-hair-right', [
-    new THREE.Vector3(-0.10, 0.09, 0.01),
-    new THREE.Vector3(-0.14, -0.16, 0.02),
-    new THREE.Vector3(-0.10, -0.41, -0.01),
-    new THREE.Vector3(-0.05, -0.61, 0.01),
-  ], 0.055, m.hairShadow, 20);
-
+  // Angular layered locks read as game-character hair, not as tubes or a porcelain helmet.
   for (const side of [-1, 1]) {
-    tube(rig.head, 'seryn-face-lock', [
-      new THREE.Vector3(side * 0.145, 0.16, 0.05),
-      new THREE.Vector3(side * 0.175, 0.01, 0.11),
-      new THREE.Vector3(side * 0.155, -0.17, 0.105),
-      new THREE.Vector3(side * 0.115, -0.30, 0.055),
-    ], 0.030, m.hair, 16);
+    const frontLock = mesh(
+      rig.head,
+      'seryn-front-hair-lock',
+      new THREE.ConeGeometry(0.033, 0.33, 5),
+      side > 0 ? m.hair : m.hairShadow,
+      [side * 0.115, -0.030, 0.100],
+    );
+    frontLock.rotation.z = side * -0.10;
+    frontLock.scale.z = 0.75;
+
+    const templeLock = mesh(
+      rig.head,
+      'seryn-temple-hair-lock',
+      new THREE.ConeGeometry(0.042, 0.42, 6),
+      m.hair,
+      [side * 0.145, -0.090, -0.015],
+    );
+    templeLock.rotation.z = side * -0.07;
+    templeLock.scale.z = 0.78;
   }
 
-  const jewel = mesh(rig.head, 'seryn-forehead-prism', new THREE.OctahedronGeometry(0.045, 0), m.crystal, [0, 0.155, 0.198]);
-  jewel.scale.set(0.62, 1.25, 0.42);
-  const setting = mesh(rig.head, 'seryn-forehead-setting', new THREE.TorusGeometry(0.045, 0.008, 5, 12), m.gold, [0, 0.155, 0.187]);
-  setting.scale.y = 1.2;
+  for (const [x, z, length, shade] of [
+    [-0.085, -0.105, 0.48, m.hairShadow],
+    [0.000, -0.120, 0.52, m.hair],
+    [0.085, -0.105, 0.46, m.hairShadow],
+  ] as const) {
+    const lock = mesh(
+      rig.head,
+      'seryn-back-hair-lock',
+      new THREE.ConeGeometry(0.048, length, 6),
+      shade,
+      [x, -0.145, z],
+    );
+    lock.scale.z = 0.82;
+  }
+
+  const jewel = mesh(rig.head, 'seryn-forehead-prism', new THREE.OctahedronGeometry(0.035, 0), m.crystal, [0, 0.137, 0.164]);
+  jewel.scale.set(0.56, 1.18, 0.42);
+  const setting = mesh(rig.head, 'seryn-forehead-setting', new THREE.TorusGeometry(0.035, 0.006, 5, 14), m.gold, [0, 0.137, 0.155]);
+  setting.scale.y = 1.16;
 }
 
-function buildClothing(rig: HumanoidRig, m: MaterialSet) {
-  // Fitted midnight under-layer keeps the body shape readable instead of turning Seryn
-  // into the rectangular armored silhouette used by Alden.
-  contour(rig.torso, 'seryn-midnight-tunic', [
-    [0.00, -0.535],
-    [0.224, -0.53],
-    [0.236, -0.34],
-    [0.260, -0.16],
-    [0.310, 0.04],
-    [0.347, 0.22],
-    [0.324, 0.39],
-    [0.260, 0.49],
-    [0.00, 0.51],
-  ], 0.715, m.navy, 24);
+function buildOutfit(rig: HumanoidRig, m: MaterialSet) {
+  // Fitted scout base layer. It follows the anatomy instead of replacing it with a box.
+  mesh(rig.torso, 'seryn-base-top', ringGeometry([
+    { y: -0.545, rx: 0.184, rz: 0.126 },
+    { y: -0.39, rx: 0.201, rz: 0.136 },
+    { y: -0.19, rx: 0.229, rz: 0.152 },
+    { y: 0.00, rx: 0.258, rz: 0.164, front: 0.024 },
+    { y: 0.17, rx: 0.293, rz: 0.174, front: 0.037 },
+    { y: 0.33, rx: 0.280, rz: 0.159, front: 0.015 },
+    { y: 0.43, rx: 0.215, rz: 0.127 },
+  ]), m.navy);
 
-  contour(rig.pelvis, 'seryn-midnight-hip-guard', [
-    [0.00, -0.225],
-    [0.205, -0.22],
-    [0.303, -0.10],
-    [0.325, 0.03],
-    [0.294, 0.19],
-    [0.00, 0.235],
-  ], 0.78, m.navyDark, 22);
+  mesh(rig.pelvis, 'seryn-base-leggings-hip', ringGeometry([
+    { y: -0.225, rx: 0.178, rz: 0.136 },
+    { y: -0.13, rx: 0.259, rz: 0.176 },
+    { y: 0.02, rx: 0.294, rz: 0.188 },
+    { y: 0.16, rx: 0.264, rz: 0.163 },
+    { y: 0.225, rx: 0.187, rz: 0.132 },
+  ]), m.navyDark);
 
-  // Segmented silver cuirass with open side channels and a cyan prism center.
-  plate(rig.torso, 'seryn-cuirass-center', [
-    [-0.135, 0.37], [0.135, 0.37], [0.190, 0.15], [0.135, -0.16],
-    [0.075, -0.31], [-0.075, -0.31], [-0.135, -0.16], [-0.190, 0.15],
-  ], 0.035, m.silver, 0.248, 0.014);
-  const leftPlate = plate(rig.torso, 'seryn-cuirass-left', [
-    [0.145, 0.33], [0.315, 0.25], [0.300, 0.03], [0.205, -0.13], [0.170, 0.10],
-  ], 0.030, m.silverDark, 0.238, 0.012);
-  leftPlate.rotation.y = -0.08;
-  const rightPlate = plate(rig.torso, 'seryn-cuirass-right', [
-    [-0.145, 0.33], [-0.315, 0.25], [-0.300, 0.03], [-0.205, -0.13], [-0.170, 0.10],
-  ], 0.030, m.silverDark, 0.238, 0.012);
-  rightPlate.rotation.y = 0.08;
+  // Small flexible cuirass sections rather than one giant grey slab.
+  const chestCenter = mesh(
+    rig.torso,
+    'seryn-cuirass-center',
+    new THREE.OctahedronGeometry(0.145, 0),
+    m.silver,
+    [0, 0.105, 0.225],
+  );
+  chestCenter.scale.set(0.70, 1.55, 0.22);
 
-  const prism = mesh(rig.torso, 'seryn-cuirass-prism', new THREE.OctahedronGeometry(0.105, 0), m.crystal, [0, 0.105, 0.335]);
-  prism.scale.set(0.58, 1.45, 0.42);
-
-  // Gold cartographic seams echo the horizon / meridian VFX language.
-  for (const x of [-0.205, 0.205]) {
-    const seam = mesh(rig.torso, 'seryn-cuirass-gold-seam', new THREE.BoxGeometry(0.018, 0.48, 0.018), m.gold, [x, 0.07, 0.292]);
-    seam.rotation.z = x > 0 ? -0.18 : 0.18;
-  }
-
-  // Teal scarf around the neck and two short tails at the back.
-  contour(rig.torso, 'seryn-scout-scarf', [
-    [0.00, 0.38],
-    [0.155, 0.39],
-    [0.175, 0.49],
-    [0.150, 0.60],
-    [0.00, 0.61],
-  ], 0.86, m.teal, 24);
   for (const side of [-1, 1]) {
-    const tail = plate(rig.torso, 'seryn-scarf-tail', [
-      [side * 0.025, 0.39],
-      [side * 0.155, 0.30],
-      [side * 0.125, -0.12],
-      [side * 0.035, -0.23],
-    ], 0.012, m.teal, -0.285, 0.006);
-    tail.rotation.z = side * 0.05;
+    const sidePlate = rounded(
+      rig.torso,
+      'seryn-cuirass-side',
+      [0.115, 0.165, 0.035],
+      [side * 0.145, 0.110, 0.205],
+      m.silverDark,
+      18,
+    );
+    sidePlate.rotation.z = side * -0.14;
+    sidePlate.scale.z = 0.58;
   }
 
-  // Light shoulder guards hug the body rather than extending like knight pauldrons.
+  const prism = mesh(rig.torso, 'seryn-chest-prism', new THREE.OctahedronGeometry(0.065, 0), m.crystal, [0, 0.105, 0.286]);
+  prism.scale.set(0.56, 1.35, 0.38);
+
+  const collar = mesh(rig.torso, 'seryn-teal-collar', ringGeometry([
+    { y: 0.40, rx: 0.176, rz: 0.110 },
+    { y: 0.48, rx: 0.185, rz: 0.118 },
+    { y: 0.57, rx: 0.154, rz: 0.105 },
+  ], 20), m.teal);
+  collar.scale.z = 1.04;
+
   for (const side of [-1, 1]) {
     const arm = side > 0 ? rig.leftArm : rig.rightArm;
-    const guard = rounded(arm, 'seryn-shoulder-guard', [0.185, 0.080, 0.175], [0, -0.035, 0.010], m.silver, 18);
-    guard.rotation.z = side * -0.16;
-    guard.scale.z = 0.82;
-    const accent = mesh(arm, 'seryn-shoulder-gold-fin', new THREE.ConeGeometry(0.045, 0.26, 4), m.gold, [side * 0.115, -0.03, 0.01]);
-    accent.rotation.z = side * -Math.PI / 2;
-  }
+    const guard = rounded(
+      arm,
+      'seryn-light-pauldron',
+      [0.135, 0.055, 0.125],
+      [0, -0.025, 0],
+      m.silver,
+      18,
+    );
+    guard.rotation.z = side * -0.15;
+    guard.scale.z = 0.78;
 
-  for (const side of [-1, 1]) {
-    const upperArm = side > 0 ? rig.leftArm : rig.rightArm;
     const forearm = side > 0 ? rig.leftForearm : rig.rightForearm;
+    mesh(forearm, 'seryn-bracer', ringGeometry([
+      { y: -0.045, rx: 0.068, rz: 0.060 },
+      { y: -0.12, rx: 0.074, rz: 0.064 },
+      { y: -0.28, rx: 0.062, rz: 0.055 },
+      { y: -0.37, rx: 0.050, rz: 0.047 },
+    ], 18), m.silver);
+    const bracerPrism = mesh(forearm, 'seryn-bracer-prism', new THREE.OctahedronGeometry(0.035, 0), m.crystal, [0, -0.205, 0.060]);
+    bracerPrism.scale.set(0.50, 1.15, 0.33);
+
     const thigh = side > 0 ? rig.leftLeg : rig.rightLeg;
+    mesh(thigh, 'seryn-legging', ringGeometry([
+      { y: -0.015, rx: 0.116, rz: 0.109 },
+      { y: -0.16, rx: 0.123, rz: 0.112 },
+      { y: -0.36, rx: 0.099, rz: 0.091 },
+      { y: -0.57, rx: 0.074, rz: 0.070 },
+    ], 20), m.navy);
+
     const shin = side > 0 ? rig.leftShin : rig.rightShin;
+    mesh(shin, 'seryn-greave', ringGeometry([
+      { y: -0.015, rx: 0.068, rz: 0.062 },
+      { y: -0.14, rx: 0.082, rz: 0.074 },
+      { y: -0.31, rx: 0.071, rz: 0.066 },
+      { y: -0.48, rx: 0.052, rz: 0.049 },
+    ], 18), m.silver);
+
     const foot = side > 0 ? rig.leftFoot : rig.rightFoot;
-
-    contour(upperArm, 'seryn-upper-arm-sleeve', [
-      [0.00, -0.31], [0.072, -0.30], [0.085, -0.16], [0.084, -0.055], [0.00, -0.035],
-    ], 0.95, m.navyDark, 18);
-
-    contour(forearm, 'seryn-bracer', [
-      [0.00, -0.37],
-      [0.067, -0.36],
-      [0.080, -0.22],
-      [0.090, -0.08],
-      [0.075, -0.045],
-      [0.00, -0.035],
-    ], 0.96, m.silver, 18);
-    const bracerPrism = mesh(forearm, 'seryn-bracer-prism', new THREE.OctahedronGeometry(0.050, 0), m.crystal, [0, -0.19, 0.088]);
-    bracerPrism.scale.set(0.55, 1.2, 0.36);
-
-    contour(thigh, 'seryn-legging', [
-      [0.00, -0.54], [0.082, -0.53], [0.112, -0.37], [0.132, -0.15], [0.122, -0.045], [0.00, 0],
-    ], 0.94, m.navy, 20);
-
-    contour(shin, 'seryn-greave', [
-      [0.00, -0.445],
-      [0.060, -0.44],
-      [0.083, -0.30],
-      [0.101, -0.15],
-      [0.079, -0.045],
-      [0.00, -0.025],
-    ], 0.95, m.silver, 18);
-
-    const knee = rounded(shin, 'seryn-knee-plate', [0.088, 0.070, 0.045], [0, -0.015, 0.075], m.silverDark, 16);
-    knee.rotation.x = -0.15;
-
-    rounded(foot, 'seryn-boot', [0.112, 0.085, 0.225], [0, -0.035, 0.077], m.navyDark, 18);
-    const toe = rounded(foot, 'seryn-boot-silver-toe', [0.100, 0.045, 0.120], [0, -0.025, 0.165], m.silverDark, 16);
-    toe.scale.y = 0.75;
+    rounded(foot, 'seryn-boot', [0.090, 0.066, 0.188], [0, -0.035, 0.075], m.navyDark, 18);
+    const toe = rounded(foot, 'seryn-boot-toe', [0.080, 0.037, 0.100], [0, -0.020, 0.152], m.silverDark, 16);
+    toe.scale.y = 0.72;
   }
 
-  // Belt and asymmetrical field-skirt panels.
-  contour(rig.torso, 'seryn-waist-belt', [
-    [0.00, -0.50], [0.245, -0.50], [0.260, -0.42], [0.245, -0.35], [0.00, -0.35],
-  ], 0.80, m.leather, 24);
-  const buckle = mesh(rig.torso, 'seryn-belt-prism', new THREE.OctahedronGeometry(0.095, 0), m.crystal, [0, -0.425, 0.300]);
-  buckle.scale.set(0.75, 0.85, 0.40);
-  const buckleFrame = mesh(rig.torso, 'seryn-belt-frame', new THREE.TorusGeometry(0.100, 0.014, 5, 16), m.gold, [0, -0.425, 0.288]);
-  buckleFrame.scale.x = 1.22;
+  mesh(rig.torso, 'seryn-belt', ringGeometry([
+    { y: -0.505, rx: 0.187, rz: 0.132 },
+    { y: -0.455, rx: 0.194, rz: 0.138 },
+    { y: -0.405, rx: 0.188, rz: 0.133 },
+  ], 20), m.leather);
+
+  const buckle = mesh(rig.torso, 'seryn-belt-prism', new THREE.OctahedronGeometry(0.060, 0), m.crystal, [0, -0.455, 0.154]);
+  buckle.scale.set(0.72, 0.92, 0.36);
+  const buckleFrame = mesh(rig.torso, 'seryn-belt-frame', new THREE.TorusGeometry(0.067, 0.009, 5, 16), m.gold, [0, -0.455, 0.147]);
+  buckleFrame.scale.x = 1.18;
 
   for (const side of [-1, 1]) {
-    const panel = plate(rig.pelvis, 'seryn-field-skirt-panel', [
-      [side * 0.06, 0.04],
-      [side * 0.285, -0.02],
-      [side * 0.245, -0.52],
-      [side * 0.10, -0.59],
-    ], 0.018, side > 0 ? m.teal : m.navyDark, 0.08, 0.008);
-    panel.rotation.y = side * -0.12;
+    const panel = mesh(
+      rig.pelvis,
+      'seryn-hip-cloth',
+      new THREE.PlaneGeometry(0.145, 0.46, 1, 5),
+      side > 0 ? m.teal : m.navyDark,
+      [side * 0.205, -0.245, 0.020],
+    );
+    panel.rotation.y = side * -0.20;
+    panel.rotation.z = side * 0.06;
+    (panel.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
   }
 }
 
@@ -483,47 +492,45 @@ function buildBow(rig: HumanoidRig, m: MaterialSet) {
   const bow = new THREE.Group();
   bow.name = 'seryn-prism-longbow';
 
-  const limbPointsUpper = [
+  const upper = [
     new THREE.Vector3(0, 0.02, 0),
-    new THREE.Vector3(0.11, 0.28, 0.015),
-    new THREE.Vector3(0.22, 0.58, 0.055),
-    new THREE.Vector3(0.17, 0.84, 0.085),
-    new THREE.Vector3(0.08, 1.06, 0.035),
+    new THREE.Vector3(0.08, 0.28, 0.012),
+    new THREE.Vector3(0.17, 0.57, 0.045),
+    new THREE.Vector3(0.14, 0.82, 0.070),
+    new THREE.Vector3(0.07, 1.02, 0.028),
   ];
-  const limbPointsLower = limbPointsUpper.map(point => new THREE.Vector3(-point.x, -point.y, point.z));
-  tube(bow, 'seryn-bow-upper', limbPointsUpper, 0.032, m.gold, 24);
-  tube(bow, 'seryn-bow-lower', limbPointsLower, 0.032, m.gold, 24);
+  const lower = upper.map(point => new THREE.Vector3(-point.x, -point.y, point.z));
+  tube(bow, 'seryn-bow-upper', upper, 0.027, m.gold, 22);
+  tube(bow, 'seryn-bow-lower', lower, 0.027, m.gold, 22);
 
-  const innerUpper = limbPointsUpper.map(point => new THREE.Vector3(point.x * 0.82, point.y * 0.96, point.z - 0.015));
-  const innerLower = innerUpper.map(point => new THREE.Vector3(-point.x, -point.y, point.z));
-  tube(bow, 'seryn-bow-upper-silver', innerUpper, 0.018, m.silverDark, 24);
-  tube(bow, 'seryn-bow-lower-silver', innerLower, 0.018, m.silverDark, 24);
+  const upperInner = upper.map(point => new THREE.Vector3(point.x * 0.80, point.y * 0.96, point.z - 0.012));
+  const lowerInner = upperInner.map(point => new THREE.Vector3(-point.x, -point.y, point.z));
+  tube(bow, 'seryn-bow-upper-inner', upperInner, 0.014, m.silverDark, 22);
+  tube(bow, 'seryn-bow-lower-inner', lowerInner, 0.014, m.silverDark, 22);
 
-  const grip = rounded(bow, 'seryn-bow-grip', [0.055, 0.175, 0.050], [0, 0, 0], m.leather, 16);
-  grip.rotation.z = -0.04;
-  const centerPrism = mesh(bow, 'seryn-bow-center-prism', new THREE.OctahedronGeometry(0.095, 0), m.crystal, [0.045, 0.02, 0.035]);
-  centerPrism.scale.set(0.65, 1.25, 0.48);
+  rounded(bow, 'seryn-bow-grip', [0.043, 0.150, 0.044], [0, 0, 0], m.leather, 16);
+  const centerPrism = mesh(bow, 'seryn-bow-center-prism', new THREE.OctahedronGeometry(0.068, 0), m.crystal, [0.035, 0.015, 0.030]);
+  centerPrism.scale.set(0.58, 1.18, 0.44);
 
   for (const side of [-1, 1]) {
-    const tip = mesh(bow, 'seryn-bow-tip-prism', new THREE.OctahedronGeometry(0.085, 0), m.crystal, [side * 0.08, side * 1.05, 0.04]);
-    tip.scale.set(0.62, 1.55, 0.48);
+    const tip = mesh(bow, 'seryn-bow-tip-prism', new THREE.OctahedronGeometry(0.060, 0), m.crystal, [side * 0.07, side * 1.015, 0.032]);
+    tip.scale.set(0.56, 1.42, 0.46);
   }
 
   const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0.08, 1.06, 0.035),
-    new THREE.Vector3(0, 0, -0.12),
-    new THREE.Vector3(-0.08, -1.06, 0.035),
+    new THREE.Vector3(0.07, 1.02, 0.028),
+    new THREE.Vector3(0, 0, -0.10),
+    new THREE.Vector3(-0.07, -1.02, 0.028),
   ]);
   const bowString = new THREE.Line(
     stringGeometry,
-    new THREE.LineBasicMaterial({ color: 0xb8f5ff, transparent: true, opacity: 0.92 }),
+    new THREE.LineBasicMaterial({ color: 0xaeeeff, transparent: true, opacity: 0.88 }),
   );
   bowString.name = 'seryn-bow-energy-string';
   bow.add(bowString);
 
-  // Keep the longbow vertical and slightly canted in her left hand.
-  bow.position.set(0.02, -0.12, 0.03);
-  bow.rotation.set(0.04, -0.06, -0.10);
+  bow.position.set(0.012, -0.105, 0.025);
+  bow.rotation.set(0.02, -0.05, -0.08);
   rig.sockets.leftHand.add(bow);
 
   return { bow, bowString };
@@ -533,26 +540,41 @@ function buildQuiver(rig: HumanoidRig, m: MaterialSet) {
   const quiver = new THREE.Group();
   quiver.name = 'seryn-quiver';
 
-  const body = mesh(quiver, 'seryn-quiver-body', new THREE.CylinderGeometry(0.115, 0.145, 0.95, 14), m.leather);
-  body.rotation.z = 0.12;
-  const rim = mesh(quiver, 'seryn-quiver-rim', new THREE.TorusGeometry(0.122, 0.018, 6, 16), m.gold, [0, 0.475, 0]);
+  const body = mesh(
+    quiver,
+    'seryn-quiver-body',
+    new THREE.CylinderGeometry(0.082, 0.102, 0.74, 14),
+    m.leather,
+  );
+  body.rotation.z = 0.10;
+
+  const rim = mesh(
+    quiver,
+    'seryn-quiver-rim',
+    new THREE.TorusGeometry(0.090, 0.013, 6, 16),
+    m.gold,
+    [0, 0.372, 0],
+  );
   rim.rotation.x = Math.PI / 2;
 
-  for (let index = 0; index < 6; index++) {
+  for (let index = 0; index < 5; index++) {
     const arrow = new THREE.Group();
     arrow.name = 'seryn-quiver-arrow';
-    const shaft = mesh(arrow, 'seryn-arrow-shaft', new THREE.CylinderGeometry(0.010, 0.010, 0.84, 7), m.silver);
-    shaft.position.y = 0.38;
-    const tip = mesh(arrow, 'seryn-arrow-prism', new THREE.ConeGeometry(0.036, 0.12, 5), m.crystal, [0, 0.84, 0]);
-    const feather = mesh(arrow, 'seryn-arrow-fletching', new THREE.ConeGeometry(0.035, 0.12, 4), m.teal, [0, -0.06, 0]);
-    feather.rotation.z = Math.PI;
-    arrow.position.x = (index - 2.5) * 0.031;
-    arrow.position.z = Math.abs(index - 2.5) * 0.012;
+    const shaft = mesh(
+      arrow,
+      'seryn-arrow-shaft',
+      new THREE.CylinderGeometry(0.008, 0.008, 0.70, 7),
+      m.silver,
+    );
+    shaft.position.y = 0.30;
+    mesh(arrow, 'seryn-arrow-prism', new THREE.ConeGeometry(0.027, 0.095, 5), m.crystal, [0, 0.695, 0]);
+    arrow.position.x = (index - 2) * 0.025;
+    arrow.position.z = Math.abs(index - 2) * 0.010;
     quiver.add(arrow);
   }
 
-  quiver.position.set(-0.25, 0.08, -0.13);
-  quiver.rotation.set(0.08, -0.12, 0.34);
+  quiver.position.set(-0.235, 0.02, -0.115);
+  quiver.rotation.set(0.06, -0.08, 0.31);
   rig.sockets.back.add(quiver);
   return quiver;
 }
@@ -560,19 +582,19 @@ function buildQuiver(rig: HumanoidRig, m: MaterialSet) {
 export function buildSeryn(): SerynRig {
   const rig = createHumanoidRig({
     name: 'H002',
-    armRestAngle: 0.075,
+    armRestAngle: 0.055,
   });
   const m = materials();
 
-  buildFemaleBody(rig, m);
+  buildFemaleAnatomy(rig, m);
   buildFaceAndHair(rig, m);
-  buildClothing(rig, m);
+  buildOutfit(rig, m);
   const { bow, bowString } = buildBow(rig, m);
   const quiver = buildQuiver(rig, m);
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'female-prism-scout-v2';
+  rig.root.userData.serynModelRevision = 'female-horizon-v3';
 
   return Object.assign(rig, { bow, bowString, quiver });
 }
