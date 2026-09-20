@@ -1,0 +1,277 @@
+.dr-heroes-page {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 118px minmax(0, 1fr);
+  color: #dce6ee;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(3, 12, 20, .28), rgba(3, 12, 20, .82)),
+    url('/assets/images/dawnreach_home_background.webp') center / cover;
+}
+.dr-heroes-page * { box-sizing: border-box; }
+
+.dr-heroes-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 30px 16px;
+  border-bottom: 1px solid rgba(134, 160, 180, .24);
+  background: linear-gradient(90deg, rgba(5, 18, 30, .94), rgba(8, 26, 42, .64), rgba(5, 17, 28, .9));
+}
+.dr-heroes-titlebar small { color: #b89a5b; font-size: 8px; font-weight: 800; letter-spacing: .16em; }
+.dr-heroes-titlebar h1 { margin: 3px 0 3px; color: #efe5ce; font: 30px/1 Georgia, serif; letter-spacing: .08em; }
+.dr-heroes-titlebar p { margin: 0; color: #8196a7; font-size: 10px; }
+.dr-heroes-roster-count { min-width: 140px; display: flex; align-items: center; justify-content: end; gap: 12px; }
+.dr-heroes-roster-count strong { color: #d8bc76; font: 32px Georgia, serif; }
+.dr-heroes-roster-count span { color: #8196a7; font-size: 8px; letter-spacing: .12em; line-height: 1.45; }
+
+.dr-heroes-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 178px minmax(420px, 1fr) minmax(390px, 460px);
+}
+
+.dr-heroes-filters {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 44px 1fr auto;
+  border-right: 1px solid rgba(124, 151, 171, .25);
+  background: rgba(4, 16, 27, .94);
+}
+.dr-heroes-filters > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(124, 151, 171, .18);
+}
+.dr-heroes-filters > header strong { color: #e7dec9; font: 12px Georgia, serif; letter-spacing: .08em; }
+.dr-heroes-filters > header span { color: #637d8f; font-size: 7px; letter-spacing: .12em; }
+.dr-heroes-filters nav { display: grid; align-content: start; }
+.dr-heroes-filters nav button {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(124, 151, 171, .10);
+  color: #7891a3;
+  background: transparent;
+  text-align: left;
+  font-size: 9px;
+  letter-spacing: .10em;
+}
+.dr-heroes-filters nav button.is-active {
+  color: #efe3c7;
+  border-left-color: #d4b266;
+  background: linear-gradient(90deg, rgba(197, 157, 75, .15), rgba(46, 93, 126, .08));
+}
+.dr-heroes-filter-icon { width: 26px; height: 26px; display: grid; place-items: center; color: #6e92a9; }
+.dr-heroes-filter-icon svg { width: 18px; height: 18px; stroke-width: 1.35; }
+.dr-heroes-filters nav button.is-active .dr-heroes-filter-icon { color: #d7bd7b; }
+.dr-heroes-owned-summary {
+  display: grid;
+  gap: 4px;
+  padding: 18px;
+  border-top: 1px solid rgba(124,151,171,.16);
+}
+.dr-heroes-owned-summary small { color: #72899a; font-size: 7px; letter-spacing: .1em; }
+.dr-heroes-owned-summary strong { color: #e6dec9; font: 22px Georgia, serif; }
+.dr-heroes-owned-summary span { color: #62c7e9; font-size: 7px; letter-spacing: .12em; }
+
+.dr-heroes-browser {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 54px minmax(0,1fr);
+  background: rgba(4, 14, 23, .73);
+}
+.dr-heroes-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(124,151,171,.18);
+  background: rgba(6, 20, 32, .88);
+}
+.dr-heroes-view-tabs { height: 100%; display: flex; }
+.dr-heroes-view-tabs button {
+  min-width: 102px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #71899b;
+  background: transparent;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.dr-heroes-view-tabs button.is-active { color: #e9dfc8; border-bottom-color: #d6b566; }
+.dr-heroes-search {
+  width: min(280px, 42%);
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(116,150,175,.34);
+  background: rgba(2, 12, 20, .74);
+}
+.dr-heroes-search svg { width: 14px; color: #70899b; }
+.dr-heroes-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #dbe5eb; background: transparent; font-size: 10px; }
+.dr-heroes-search input::placeholder { color: #62798a; }
+
+.dr-heroes-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126,154,176,.4) transparent;
+}
+.dr-heroes-card {
+  position: relative;
+  aspect-ratio: .78;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(117, 148, 171, .28);
+  color: #dce6ec;
+  background: #07131e;
+  text-align: left;
+}
+.dr-heroes-card.is-hero:hover,
+.dr-heroes-card.is-selected {
+  border-color: #d3b161;
+  box-shadow: 0 0 0 1px rgba(211,177,97,.32), 0 10px 24px rgba(0,0,0,.28);
+}
+.dr-heroes-card.is-selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border: 2px solid rgba(224, 192, 117, .64);
+  pointer-events: none;
+}
+.dr-heroes-card > img { width: 100%; height: 100%; object-fit: cover; object-position: center top; transition: transform .2s ease; }
+.dr-heroes-card.is-hero:hover > img { transform: scale(1.025); }
+.dr-heroes-card-overlay { position: absolute; inset: 45% 0 0; background: linear-gradient(180deg, transparent, rgba(2,9,15,.93)); }
+.dr-heroes-card footer {
+  position: absolute;
+  z-index: 3;
+  inset: auto 0 0;
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+}
+.dr-heroes-card footer strong { color: #f0e5cc; font: 13px Georgia, serif; letter-spacing: .06em; }
+.dr-heroes-card footer small { color: #80a1b6; font-size: 6px; letter-spacing: .09em; }
+.dr-heroes-card.is-future { opacity: .5; }
+.dr-heroes-future-art { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(155deg,#0b2232,#050d14 72%); }
+.dr-heroes-future-art::before { content:''; width:62%; aspect-ratio:1; border:1px solid rgba(117,148,171,.23); transform:rotate(45deg); }
+.dr-heroes-future-art svg { position:absolute; width:30px; color:#506a7c; }
+.dr-heroes-no-results { grid-column:1/-1; min-height:260px; display:grid; place-items:center; align-content:center; gap:8px; color:#708899; }
+.dr-heroes-no-results svg { width:28px; color:#b69d66; }
+.dr-heroes-no-results strong { color:#acbbc4; font-size:10px; letter-spacing:.1em; }
+.dr-heroes-no-results span { font-size:9px; }
+
+.dr-heroes-detail {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(250px, 40%) minmax(0,1fr);
+  border-left: 1px solid rgba(128,155,176,.28);
+  background: rgba(5, 17, 28, .96);
+}
+.dr-heroes-detail-art {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(10,31,48,.16), rgba(4,13,22,.52)),
+    url('/assets/images/dawnreach_home_background.webp') center / cover;
+}
+.dr-heroes-detail-art > img {
+  position: absolute;
+  inset: -12px 0 auto auto;
+  width: 100%;
+  height: calc(100% + 28px);
+  object-fit: contain;
+  object-position: right top;
+  filter: drop-shadow(-8px 10px 18px rgba(0,0,0,.45));
+}
+.dr-heroes-detail-gradient { position:absolute; inset:0; background:linear-gradient(90deg,rgba(4,14,23,.82),transparent 45%),linear-gradient(180deg,transparent 42%,rgba(5,17,28,.96)); }
+.dr-heroes-detail-name { position:absolute; left:20px; bottom:18px; z-index:2; max-width:70%; }
+.dr-heroes-detail-name small { color:#6ec3e8; font-size:7px; letter-spacing:.15em; }
+.dr-heroes-detail-name h2 { margin:3px 0 2px; color:#f0e5cf; font:32px/1 Georgia,serif; letter-spacing:.06em; }
+.dr-heroes-detail-name p { margin:0; color:#d0b572; font-size:9px; letter-spacing:.1em; }
+
+.dr-heroes-detail-content {
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126,154,176,.4) transparent;
+}
+.dr-heroes-identity-row { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid rgba(124,151,171,.15); }
+.dr-heroes-identity-row > div { min-height:58px; display:grid; align-content:center; gap:5px; padding:10px 16px; border-right:1px solid rgba(124,151,171,.15); }
+.dr-heroes-identity-row > div:last-child { border-right:0; }
+.dr-heroes-identity-row small { color:#6f8799; font-size:6px; letter-spacing:.11em; }
+.dr-heroes-identity-row strong { color:#e5decd; font-size:10px; letter-spacing:.08em; }
+.dr-heroes-difficulty { display:flex; gap:4px; }
+.dr-heroes-difficulty i { width:22px; height:4px; background:#253b4b; }
+.dr-heroes-difficulty i.is-filled { background:#d1ae61; box-shadow:0 0 6px rgba(209,174,97,.3); }
+
+.dr-heroes-lore { margin:0; padding:14px 16px; color:#879caa; font:11px/1.55 Georgia,serif; border-bottom:1px solid rgba(124,151,171,.13); }
+.dr-heroes-attributes { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid rgba(124,151,171,.13); }
+.dr-heroes-attributes article { min-height:58px; display:grid; place-items:center; align-content:center; gap:3px; border-right:1px solid rgba(124,151,171,.13); }
+.dr-heroes-attributes article:last-child { border-right:0; }
+.dr-heroes-attributes span { color:#6f8799; font-size:7px; letter-spacing:.1em; }
+.dr-heroes-attributes strong { color:#e8dfcb; font:18px Georgia,serif; }
+
+.dr-heroes-combat-stats { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid rgba(124,151,171,.13); }
+.dr-heroes-combat-stats article { min-height:60px; display:flex; align-items:center; gap:8px; padding:10px 12px; border-right:1px solid rgba(124,151,171,.11); border-bottom:1px solid rgba(124,151,171,.11); }
+.dr-heroes-combat-stats article:nth-child(3n) { border-right:0; }
+.dr-heroes-combat-stats svg { width:17px; height:17px; color:#79a7c3; stroke-width:1.4; }
+.dr-heroes-combat-stats span { display:grid; gap:2px; }
+.dr-heroes-combat-stats small { color:#667f91; font-size:6px; letter-spacing:.08em; }
+.dr-heroes-combat-stats strong { color:#dce4e8; font-size:10px; }
+
+.dr-heroes-abilities { padding:12px 14px; }
+.dr-heroes-abilities header { display:flex; justify-content:space-between; margin-bottom:9px; }
+.dr-heroes-abilities header strong { color:#e2dbc9; font:12px Georgia,serif; letter-spacing:.07em; }
+.dr-heroes-abilities header span { color:#60798b; font-size:6px; letter-spacing:.1em; }
+.dr-heroes-abilities > div { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.dr-heroes-abilities article { min-width:0; display:grid; gap:5px; }
+.dr-heroes-abilities img { width:100%; aspect-ratio:1; object-fit:cover; border:1px solid rgba(147,126,76,.52); background:#08141e; }
+.dr-heroes-abilities article > span { min-width:0; display:grid; gap:1px; }
+.dr-heroes-abilities b { overflow:hidden; color:#bdc8cf; font-size:7px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.dr-heroes-abilities small { color:#d1b46f; font-size:6px; }
+
+.dr-heroes-detail-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 14px; }
+.dr-heroes-detail-actions button { height:38px; border:1px solid #4f6b7e; color:#9cb4c4; background:#071521; font-size:8px; font-weight:800; letter-spacing:.12em; }
+.dr-heroes-detail-actions button.is-primary { display:flex; align-items:center; justify-content:center; gap:8px; border-color:#c4a45e; color:#f0e4c8; background:linear-gradient(180deg,#5d4925,#332811); box-shadow:inset 0 0 15px rgba(213,177,91,.1); }
+.dr-heroes-detail-actions button svg { width:13px; }
+
+@media (max-width: 1280px) {
+  .dr-heroes-layout { grid-template-columns: 150px minmax(370px,1fr) 370px; }
+  .dr-heroes-grid { grid-template-columns:repeat(3,minmax(120px,1fr)); }
+}
+@media (max-width: 980px) {
+  .dr-heroes-layout { grid-template-columns:72px minmax(0,1fr); }
+  .dr-heroes-filters nav button { grid-template-columns:1fr; place-items:center; padding:0; }
+  .dr-heroes-filters nav button > span:last-child, .dr-heroes-filters > header span, .dr-heroes-owned-summary { display:none; }
+  .dr-heroes-detail { display:none; }
+}
+@media (max-width: 680px) {
+  .dr-heroes-titlebar { padding-inline:16px; }
+  .dr-heroes-titlebar p, .dr-heroes-roster-count span { display:none; }
+  .dr-heroes-grid { grid-template-columns:repeat(2,minmax(110px,1fr)); }
+  .dr-heroes-search { width:46%; }
+}

@@ -28,14 +28,16 @@ export function DawnreachHomeTopbar({
   realtime,
   onHome,
   onPlay,
+  onHeroes,
   onProfile,
   onLogout,
 }: {
-  section: 'home' | 'play' | 'profile';
+  section: 'home' | 'play' | 'heroes' | 'profile';
   user: PlatformUser;
   realtime: 'connecting' | 'online' | 'offline';
   onHome: () => void;
   onPlay: () => void;
+  onHeroes?: () => void;
   onProfile?: () => void;
   onLogout: () => void;
 }) {
@@ -44,7 +46,7 @@ export function DawnreachHomeTopbar({
     <nav className="dr-home-nav" aria-label="Main navigation">
       <button className={section === 'home' ? 'is-active' : ''} onClick={onHome}>HOME</button>
       <button className={section === 'play' ? 'is-active' : ''} onClick={onPlay}>PLAY</button>
-      <button disabled>HEROES</button>
+      <button className={section === 'heroes' ? 'is-active' : ''} disabled={!onHeroes} onClick={onHeroes}>HEROES</button>
       <button disabled>COLLECTION</button>
       <button disabled>RANKING</button>
       <button className={section === 'profile' ? 'is-active' : ''} disabled={!onProfile} onClick={onProfile}>PROFILE</button>

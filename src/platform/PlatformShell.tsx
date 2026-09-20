@@ -6,6 +6,7 @@ import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { HeroSelectScreen } from './HeroSelectScreen';
 import { MatchLoadingScreen } from './MatchLoadingScreen';
 import { PostMatchScreen } from './PostMatchScreen';
+import { DawnreachHeroes } from './DawnreachHeroes';
 import { DawnreachProfile } from './DawnreachProfile';
 import { DawnreachHomeOverview, DawnreachHomeRightRail, DawnreachHomeTopbar, DawnreachSharedFooter } from './DawnreachHome';
 import { ReadyCheckOverlay } from './MatchmakingPanel';
@@ -42,7 +43,7 @@ const MATCH_POST_MATCH_OPEN_EVENT = 'dawnreach:post-match-open';
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
-type HomeSection = 'home' | 'play' | 'profile';
+type HomeSection = 'home' | 'play' | 'heroes' | 'profile';
 type PlaySection = 'matchmaking' | 'custom';
 
 function eventType(event: PlatformRealtimeEvent) {
@@ -369,6 +370,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
   const openNormal = () => { chooseMode('normal'); setRequestedPlayMode('normal'); setSection('play'); setPlaySection('matchmaking'); };
   const openRanked = () => { chooseMode('ranked'); setRequestedPlayMode('ranked'); setSection('play'); setPlaySection('matchmaking'); };
   const openCustom = () => { setRequestedPlayMode('custom'); setSection('play'); setPlaySection('custom'); platformRealtime.send('lobby.list'); };
+  const openHeroes = () => { setRequestedPlayMode(null); setSection('heroes'); };
   const openProfile = () => { setRequestedPlayMode(null); setSection('profile'); };
   const openProfileMatch = (match: MatchSummary) => {
     const report = match.postMatchReport;
@@ -419,6 +421,13 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       setPlaySection('matchmaking');
       setRequestedPlayMode(null);
     };
+    const openPostMatchHeroes = () => {
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setPostMatchReturnSection('home');
+      setSection('heroes');
+      setRequestedPlayMode(null);
+    };
     const openPostMatchProfile = () => {
       setPostMatch(null);
       setPostMatchVisible(false);
@@ -443,6 +452,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       onContinue={continueToHome}
       onHome={openPostMatchHome}
       onPlay={openPostMatchPlay}
+      onHeroes={openPostMatchHeroes}
       onProfile={openPostMatchProfile}
       onPlayAgain={playAgain}
       onLogout={onLogout}
@@ -462,7 +472,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
 
   return <>
     <main className="platform-home-surface platform-home-shell">
-      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onProfile={openProfile} onLogout={onLogout} />
+      <DawnreachHomeTopbar section={section} user={user} realtime={realtime} onHome={() => setSection('home')} onPlay={openPlay} onHeroes={openHeroes} onProfile={openProfile} onLogout={onLogout} />
       {activeMatch?.stage === 'in_game' && !sharedGameVisible && <aside className="dr-active-match-recovery" role="status">
         <Swords />
         <div>
@@ -473,6 +483,8 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       </aside>}
       {section === 'profile' ? (
         <DawnreachProfile user={user} realtime={realtime} onOpenMatch={openProfileMatch} />
+      ) : section === 'heroes' ? (
+        <DawnreachHeroes onPlay={openPlay} onPractice={onLocalPlay} />
       ) : (
         <div className="platform-home-grid">
           <section className="platform-main-workspace">
