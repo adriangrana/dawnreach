@@ -571,31 +571,56 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   const bow = new THREE.Group();
   bow.name = 'seryn-prism-longbow';
 
+  // Keep the entire recurved frame in one geometric plane. The previous lower limb
+  // mirrored X as well as Y and the Z offsets changed along the limb, producing an
+  // unintended S/twist when viewed from the front.
   const upper = [
-    new THREE.Vector3(0, 0.02, 0),
-    new THREE.Vector3(0.075, 0.26, 0.010),
-    new THREE.Vector3(0.160, 0.54, 0.038),
-    new THREE.Vector3(0.145, 0.80, 0.066),
-    new THREE.Vector3(0.065, 1.02, 0.030),
+    new THREE.Vector3(0.000, 0.020, 0),
+    new THREE.Vector3(0.088, 0.255, 0),
+    new THREE.Vector3(0.154, 0.525, 0),
+    new THREE.Vector3(0.128, 0.790, 0),
+    new THREE.Vector3(0.046, 1.020, 0),
   ];
-  const lower = upper.map(point => new THREE.Vector3(-point.x, -point.y, point.z));
-  curve(bow, 'seryn-bow-upper-gold', upper, 0.024, m.gold, 0.015, 26);
-  curve(bow, 'seryn-bow-lower-gold', lower, 0.024, m.gold, 0.015, 26);
-  curve(bow, 'seryn-bow-upper-spine', upper.map(p => new THREE.Vector3(p.x * 0.84, p.y * 0.98, p.z - 0.012)), 0.013, m.silverDark, 0.008, 26);
-  curve(bow, 'seryn-bow-lower-spine', lower.map(p => new THREE.Vector3(p.x * 0.84, p.y * 0.98, p.z - 0.012)), 0.013, m.silverDark, 0.008, 26);
+  const lower = upper.map(point => new THREE.Vector3(point.x, -point.y, 0));
 
-  rounded(bow, 'seryn-bow-grip', [0.042, 0.145, 0.043], [0, 0, 0], m.leather, 18);
+  curve(bow, 'seryn-bow-upper-gold', upper, 0.024, m.gold, 0.015, 32);
+  curve(bow, 'seryn-bow-lower-gold', lower, 0.024, m.gold, 0.015, 32);
+
+  // Parallel inner spine adds depth without torsion: it stays in a plane parallel to
+  // the main frame instead of wandering through Z.
+  const upperSpine = upper.map(p => new THREE.Vector3(p.x * 0.84 - 0.004, p.y * 0.985, -0.014));
+  const lowerSpine = lower.map(p => new THREE.Vector3(p.x * 0.84 - 0.004, p.y * 0.985, -0.014));
+  curve(bow, 'seryn-bow-upper-spine', upperSpine, 0.013, m.silverDark, 0.008, 32);
+  curve(bow, 'seryn-bow-lower-spine', lowerSpine, 0.013, m.silverDark, 0.008, 32);
+
+  rounded(bow, 'seryn-bow-grip', [0.042, 0.145, 0.043], [0, 0, 0], m.leather, 20);
+
   for (const side of [-1, 1]) {
-    const gem = part(bow, 'seryn-bow-tip-prism', new THREE.OctahedronGeometry(0.056, 0), m.crystal, [side * 0.065, side * 1.015, 0.032]);
+    const gem = part(
+      bow,
+      'seryn-bow-tip-prism',
+      new THREE.OctahedronGeometry(0.056, 0),
+      m.crystal,
+      [0.046, side * 1.020, 0],
+    );
     gem.scale.set(0.54, 1.40, 0.44);
   }
-  const centerGem = part(bow, 'seryn-bow-center-prism', new THREE.OctahedronGeometry(0.065, 0), m.crystal, [0.032, 0.010, 0.030]);
+
+  const centerGem = part(
+    bow,
+    'seryn-bow-center-prism',
+    new THREE.OctahedronGeometry(0.065, 0),
+    m.crystal,
+    [0.025, 0.010, 0.032],
+  );
   centerGem.scale.set(0.58, 1.16, 0.42);
 
+  // String shares the same X/Y plane as both tips. A shallow rearward draw at the
+  // grip gives it tension without making it look like the bow itself is twisted.
   const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0.065, 1.02, 0.030),
-    new THREE.Vector3(0, 0, -0.10),
-    new THREE.Vector3(-0.065, -1.02, 0.030),
+    new THREE.Vector3(0.046, 1.020, 0),
+    new THREE.Vector3(-0.105, 0, 0),
+    new THREE.Vector3(0.046, -1.020, 0),
   ]);
   const bowString = new THREE.Line(
     stringGeometry,
@@ -605,7 +630,9 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   bow.add(bowString);
 
   bow.position.set(0.010, -0.105, 0.026);
-  bow.rotation.set(0.025, -0.050, -0.075);
+  // Let the hand/socket supply the natural pose. Keep only a tiny presentation cant;
+  // no X/Y rotation is applied because that made the planar bow read as warped.
+  bow.rotation.set(0, 0, -0.018);
   rig.sockets.leftHand.add(bow);
   return { bow, bowString };
 }
@@ -662,7 +689,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v15-leg-colliding-cloth';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v16-straight-recurve-bow';
 
   return Object.assign(rig, { bow, bowString, quiver, hair, clothMeshes });
 }
