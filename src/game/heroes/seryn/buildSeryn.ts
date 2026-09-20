@@ -16,7 +16,14 @@ import { createSerynMaterials, type SerynMaterials } from './materials';
 export type SerynRig = HumanoidRig & {
   bow: THREE.Group;
   bowString: THREE.Line;
+  bowRestPosition: THREE.Vector3;
+  bowRestRotation: THREE.Euler;
+  arrowLaunchSocket: THREE.Group;
+  handArrow: THREE.Group;
+  nockedArrow: THREE.Group;
+  projectileArrowPrototype: THREE.Group;
   quiver: THREE.Group;
+  quiverArrows: THREE.Group[];
   hair: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
   clothMeshes: THREE.Mesh<THREE.BufferGeometry, THREE.Material>[];
 };
@@ -567,6 +574,41 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
   return clothMeshes;
 }
 
+function createSerynArrow(m: SerynMaterials, name = 'seryn-arrow') {
+  const arrow = new THREE.Group();
+  arrow.name = name;
+
+  const shaft = part(
+    arrow,
+    `${name}-shaft`,
+    new THREE.CylinderGeometry(0.0065, 0.0065, 0.64, 10),
+    m.silver,
+    [0, 0.21, 0],
+  );
+  shaft.castShadow = true;
+
+  const head = part(
+    arrow,
+    `${name}-head`,
+    new THREE.ConeGeometry(0.028, 0.12, 5),
+    m.crystal,
+    [0, 0.59, 0],
+  );
+  head.castShadow = true;
+
+  const fletching = part(
+    arrow,
+    `${name}-fletching`,
+    new THREE.ConeGeometry(0.027, 0.105, 4),
+    m.teal,
+    [0, -0.075, 0],
+  );
+  fletching.rotation.z = Math.PI;
+  fletching.castShadow = true;
+
+  return arrow;
+}
+
 function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   const bow = new THREE.Group();
   bow.name = 'seryn-prism-longbow';
@@ -629,12 +671,33 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   bowString.name = 'seryn-bow-energy-string';
   bow.add(bowString);
 
+  const arrowLaunchSocket = new THREE.Group();
+  arrowLaunchSocket.name = 'seryn-arrow-launch-socket';
+  arrowLaunchSocket.position.set(0.035, 0, 0);
+  bow.add(arrowLaunchSocket);
+
+  const nockedArrow = createSerynArrow(m, 'seryn-nocked-arrow');
+  // Arrow geometry points along local +Y. Rotate it so the nocked arrow points along
+  // the bow's local +X axis; attack pose rotates +X into the hero's forward +Z.
+  nockedArrow.rotation.z = -Math.PI / 2;
+  nockedArrow.position.set(-0.105, 0, 0.010);
+  nockedArrow.visible = false;
+  bow.add(nockedArrow);
+
   bow.position.set(0.010, -0.105, 0.026);
   // Let the hand/socket supply the natural pose. Keep only a tiny presentation cant;
   // no X/Y rotation is applied because that made the planar bow read as warped.
   bow.rotation.set(0, 0, -0.018);
   rig.sockets.leftHand.add(bow);
-  return { bow, bowString };
+
+  return {
+    bow,
+    bowString,
+    bowRestPosition: bow.position.clone(),
+    bowRestRotation: bow.rotation.clone(),
+    arrowLaunchSocket,
+    nockedArrow,
+  };
 }
 
 function buildQuiver(rig: HumanoidRig, m: SerynMaterials) {
@@ -646,22 +709,21 @@ function buildQuiver(rig: HumanoidRig, m: SerynMaterials) {
   const rim = part(quiver, 'seryn-quiver-rim', new THREE.TorusGeometry(0.086, 0.012, 6, 18), m.gold, [0, 0.36, 0]);
   rim.rotation.x = Math.PI / 2;
 
+  const arrows: THREE.Group[] = [];
   for (let index = 0; index < 5; index++) {
-    const arrow = new THREE.Group();
-    const shaft = part(arrow, 'seryn-arrow-shaft', new THREE.CylinderGeometry(0.007, 0.007, 0.69, 8), m.silver);
-    shaft.position.y = 0.30;
-    part(arrow, 'seryn-arrowhead', new THREE.ConeGeometry(0.026, 0.090, 5), m.crystal, [0, 0.690, 0]);
-    const fletching = part(arrow, 'seryn-fletching', new THREE.ConeGeometry(0.023, 0.085, 4), m.teal, [0, -0.055, 0]);
-    fletching.rotation.z = Math.PI;
+    const arrow = createSerynArrow(m, `seryn-quiver-arrow-${index}`);
+    arrow.scale.setScalar(0.96);
     arrow.position.x = (index - 2) * 0.023;
+    arrow.position.y = 0.025 + Math.abs(index - 2) * 0.012;
     arrow.position.z = Math.abs(index - 2) * 0.009;
     quiver.add(arrow);
+    arrows.push(arrow);
   }
 
   quiver.position.set(-0.225, 0.015, -0.120);
   quiver.rotation.set(0.06, -0.08, 0.31);
   rig.sockets.back.add(quiver);
-  return quiver;
+  return { quiver, arrows };
 }
 
 function configureSoles(rig: HumanoidRig) {
@@ -683,13 +745,45 @@ export function buildSeryn(): SerynRig {
   buildFace(rig, materials);
   const hair = buildHair(rig, materials);
   const clothMeshes = buildClothing(rig, materials);
-  const { bow, bowString } = buildBow(rig, materials);
-  const quiver = buildQuiver(rig, materials);
+  const {
+    bow,
+    bowString,
+    bowRestPosition,
+    bowRestRotation,
+    arrowLaunchSocket,
+    nockedArrow,
+  } = buildBow(rig, materials);
+  const { quiver, arrows: quiverArrows } = buildQuiver(rig, materials);
+
+  const handArrow = createSerynArrow(materials, 'seryn-hand-arrow');
+  handArrow.visible = false;
+  handArrow.rotation.set(0.12, 0.16, -0.42);
+  handArrow.position.set(-0.018, -0.018, 0.010);
+  rig.sockets.rightHand.add(handArrow);
+
+  // Unattached prototype used by the world runtime when a basic attack is released.
+  // Clones share the authored geometry/materials and become independent world objects.
+  const projectileArrowPrototype = createSerynArrow(materials, 'seryn-basic-attack-arrow');
+  projectileArrowPrototype.visible = false;
+
   configureSoles(rig);
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v16-straight-recurve-bow';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v17-archer-attack-rig';
 
-  return Object.assign(rig, { bow, bowString, quiver, hair, clothMeshes });
+  return Object.assign(rig, {
+    bow,
+    bowString,
+    bowRestPosition,
+    bowRestRotation,
+    arrowLaunchSocket,
+    handArrow,
+    nockedArrow,
+    projectileArrowPrototype,
+    quiver,
+    quiverArrows,
+    hair,
+    clothMeshes,
+  });
 }

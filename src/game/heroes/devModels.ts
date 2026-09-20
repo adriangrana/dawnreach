@@ -1,10 +1,11 @@
+import * as THREE from 'three';
 import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from '../characters/animateHumanoid';
 import type { HumanoidRig } from '../characters/humanoidRig';
 import { animateAlden } from './alden/animateAlden';
 import { buildAlden, type AldenRig } from './alden/buildAlden';
 import { createAldenMaterials } from './alden/materials';
 import { listHeroDefinitions } from './catalog';
-import { animateSeryn } from './seryn/animateSeryn';
+import { animateSeryn, SERYN_ATTACK_RELEASE_PROGRESS } from './seryn/animateSeryn';
 import { buildSeryn, type SerynRig } from './seryn/buildSeryn';
 import type { HeroId } from './types';
 
@@ -53,17 +54,46 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
   },
   H002: () => {
     const rig = buildSeryn();
+    const previewArrow = rig.projectileArrowPrototype.clone(true);
+    previewArrow.name = 'seryn-dev-attack-projectile';
+    previewArrow.visible = false;
+    rig.root.add(previewArrow);
+
+    const arrowAxis = new THREE.Vector3(0, 1, 0);
+    const forward = new THREE.Vector3(0, 0, 1);
+    const launchWorld = new THREE.Vector3();
+    const launchLocal = new THREE.Vector3();
+
     return {
       id: 'H002',
       rig,
       animate: (elapsed, moving, delta) => {
         animateSeryn(rig, elapsed, moving, delta, HUMANOID_DEFAULT_MOVE_SPEED);
+
+        const progress = Number(rig.root.userData.serynAttackProgress ?? 0);
+        if (progress >= SERYN_ATTACK_RELEASE_PROGRESS && progress < 1) {
+          rig.root.updateMatrixWorld(true);
+          rig.arrowLaunchSocket.getWorldPosition(launchWorld);
+          launchLocal.copy(launchWorld);
+          rig.root.worldToLocal(launchLocal);
+          const flight = THREE.MathUtils.smoothstep(progress, SERYN_ATTACK_RELEASE_PROGRESS, 1);
+          previewArrow.visible = true;
+          previewArrow.position.set(
+            launchLocal.x,
+            launchLocal.y,
+            launchLocal.z + flight * 4.2,
+          );
+          previewArrow.quaternion.setFromUnitVectors(arrowAxis, forward);
+        } else {
+          previewArrow.visible = false;
+        }
       },
       setAttackProgress: progress => {
         rig.root.userData.serynAttackProgress = progress;
       },
       resetAttack: () => {
         rig.root.userData.serynAttackProgress = 0;
+        previewArrow.visible = false;
       },
     };
   },

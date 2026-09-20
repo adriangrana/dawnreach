@@ -26,7 +26,11 @@ import { ensureAldenAbilityPresentation } from './heroes/alden/abilityPresentati
 import { ensureAldenAbilityEdgePolish } from './heroes/alden/abilityEdgePolish';
 import { ensureWorldLineVfxPolish } from './heroes/alden/lineVfxPolish';
 import { ensureAldenWorldAbilityRuntime, triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
-import { animateSeryn } from './heroes/seryn/animateSeryn';
+import {
+  animateSeryn,
+  SERYN_ATTACK_RELEASE_PROGRESS,
+  SERYN_ATTACK_SWING_RATE,
+} from './heroes/seryn/animateSeryn';
 import { ensureSerynAbilityPresentation, type SerynAbilityPresentationHandle } from './heroes/seryn/abilityPresentation';
 import { buildSeryn, type SerynRig } from './heroes/seryn/buildSeryn';
 import { ensureSerynWorldAbilityRuntime, triggerSerynWorldAbility } from './heroes/seryn/worldAbilityRuntime';
@@ -150,6 +154,9 @@ const FALLBACK_ATTACK_COOLDOWN = 0.72;
 const ATTACK_SWING_RATE = 3.4;
 const ATTACK_IMPACT_SWING_PROGRESS = 0.38;
 const ATTACK_WINDUP_SECONDS = ATTACK_IMPACT_SWING_PROGRESS / ATTACK_SWING_RATE;
+const SERYN_ARROW_SPEED = 19;
+const SERYN_ARROW_HIT_RADIUS = 0.16;
+const SERYN_ARROW_MAX_LIFETIME = 1.25;
 const COMMAND_MARKER_Y = 0.12;
 const WAYPOINT_REACHED_DISTANCE = 0.22;
 const STUCK_REPATH_DELAY = 0.42;
@@ -642,6 +649,9 @@ export async function createDawnreachGame(
   const attackMoveCandidatePosition = new THREE.Vector3();
   const basicAttackSourcePosition = new THREE.Vector3();
   const basicAttackTargetPosition = new THREE.Vector3();
+  const serynArrowTargetPosition = new THREE.Vector3();
+  const serynArrowDirection = new THREE.Vector3();
+  const serynArrowForwardAxis = new THREE.Vector3(0, 1, 0);
   const minimapViewportRaycaster = new THREE.Raycaster();
   const minimapViewportPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const minimapViewportHit = new THREE.Vector3();
@@ -705,6 +715,11 @@ export async function createDawnreachGame(
   let openingAttackReady = true;
   let pendingAttackTarget: GameEntity | null = null;
   let attackImpactApplied = false;
+  const serynBasicAttackProjectiles: Array<{
+    object: THREE.Group;
+    target: GameEntity;
+    age: number;
+  }> = [];
   let holdPositionActive = false;
   let holdPositionTarget: GameEntity | null = null;
   let lastHoldPositionScanAt = -Infinity;
@@ -1089,13 +1104,20 @@ export async function createDawnreachGame(
 
   const triggerAttack = (target: GameEntity | null = null, openingStrike = false) => {
     const attackInterval = getAttackCooldownSeconds();
-    // The opening strike skips only the pre-impact wind-up. Shorten the first cooldown by
-    // exactly that skipped time so the second impact still lands one full attack interval
-    // after the opener; target switching cannot manufacture extra attack speed.
-    attackCooldown = openingStrike
-      ? Math.max(0, attackInterval - ATTACK_WINDUP_SECONDS)
-      : attackInterval;
-    attackSwing = openingStrike ? ATTACK_IMPACT_SWING_PROGRESS : 0.0001;
+
+    if (seryn) {
+      // An archer cannot skip the draw/nock phase: every Seryn basic attack visibly
+      // reaches for an arrow and draws the bow before release.
+      attackCooldown = attackInterval;
+      attackSwing = 0.0001;
+    } else {
+      // Melee opening strike keeps Dawnreach's established wind-up skip behaviour.
+      attackCooldown = openingStrike
+        ? Math.max(0, attackInterval - ATTACK_WINDUP_SECONDS)
+        : attackInterval;
+      attackSwing = openingStrike ? ATTACK_IMPACT_SWING_PROGRESS : 0.0001;
+    }
+
     pendingAttackTarget = target;
     attackImpactApplied = false;
   };
@@ -1161,8 +1183,13 @@ export async function createDawnreachGame(
     return true;
   };
 
-  const applyBasicAttackImpact = (target: GameEntity) => {
-    if (!isHostileAttackTarget(target)) return;
+  const applyBasicAttackImpact = (target: GameEntity, committedProjectile = false) => {
+    if (committedProjectile) {
+      if (!target.targetable || !target.alive || target.currentHp <= 0 || target.maxHp <= 0) return;
+      if (target.team === localHeroEntity.team && target.kind !== 'creep') return;
+    } else if (!isHostileAttackTarget(target)) {
+      return;
+    }
     const overlay = getHeroState?.() ?? null;
     const baseDamage = Math.max(1, overlay?.stats.attackDamage ?? 66);
     const damage = calculateTowerAuraAdjustedDamage(localHeroEntity, target, baseDamage);
@@ -1237,6 +1264,77 @@ export async function createDawnreachGame(
 
     if (!aliveAfterHit && attackOrder?.kind === 'target' && attackOrder.target === target) {
       continueTargetAttackChain(target);
+    }
+  };
+
+  const getSerynArrowAimPoint = (target: GameEntity, out: THREE.Vector3) => {
+    target.root.getWorldPosition(out);
+    const aimHeight = target.kind === 'hero' ? 1.35
+      : target.kind === 'creep' ? 0.62
+        : target.kind === 'tower' ? 2.05
+          : target.kind === 'building' ? 1.45
+            : target.kind === 'jungle-creature' ? 1.05
+              : 0.65;
+    out.y += aimHeight;
+    return out;
+  };
+
+  const launchSerynBasicAttackArrow = (target: GameEntity) => {
+    if (!seryn || !target.alive || target.currentHp <= 0) return;
+
+    // Update after the final attack pose so the projectile begins exactly at the nocked
+    // arrow / bow centre rather than at the hero origin.
+    seryn.root.updateMatrixWorld(true);
+    const projectile = seryn.projectileArrowPrototype.clone(true);
+    projectile.name = 'seryn-basic-attack-projectile';
+    projectile.visible = true;
+    projectile.scale.setScalar(heroPresentationScale * 1.08);
+    seryn.arrowLaunchSocket.getWorldPosition(projectile.position);
+
+    getSerynArrowAimPoint(target, serynArrowTargetPosition);
+    serynArrowDirection.copy(serynArrowTargetPosition).sub(projectile.position);
+    if (serynArrowDirection.lengthSq() > 1e-8) {
+      serynArrowDirection.normalize();
+      projectile.quaternion.setFromUnitVectors(serynArrowForwardAxis, serynArrowDirection);
+    }
+
+    scene.add(projectile);
+    serynBasicAttackProjectiles.push({ object: projectile, target, age: 0 });
+  };
+
+  const updateSerynBasicAttackProjectiles = (dt: number) => {
+    for (let index = serynBasicAttackProjectiles.length - 1; index >= 0; index--) {
+      const projectile = serynBasicAttackProjectiles[index];
+      projectile.age += dt;
+      const target = projectile.target;
+
+      if (
+        projectile.age >= SERYN_ARROW_MAX_LIFETIME
+        || !target.root.parent
+        || !target.alive
+        || target.currentHp <= 0
+      ) {
+        projectile.object.removeFromParent();
+        serynBasicAttackProjectiles.splice(index, 1);
+        continue;
+      }
+
+      getSerynArrowAimPoint(target, serynArrowTargetPosition);
+      serynArrowDirection.copy(serynArrowTargetPosition).sub(projectile.object.position);
+      const distance = serynArrowDirection.length();
+      const travel = SERYN_ARROW_SPEED * dt;
+
+      if (distance <= Math.max(SERYN_ARROW_HIT_RADIUS, travel)) {
+        projectile.object.position.copy(serynArrowTargetPosition);
+        projectile.object.removeFromParent();
+        serynBasicAttackProjectiles.splice(index, 1);
+        applyBasicAttackImpact(target, true);
+        continue;
+      }
+
+      serynArrowDirection.multiplyScalar(1 / Math.max(distance, 1e-6));
+      projectile.object.position.addScaledVector(serynArrowDirection, travel);
+      projectile.object.quaternion.setFromUnitVectors(serynArrowForwardAxis, serynArrowDirection);
     }
   };
 
@@ -1786,15 +1884,16 @@ export async function createDawnreachGame(
       hero.model.rotation.y = currentYaw;
 
       localHeroMoving = moving;
-      if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
-      else if (seryn) animateSeryn(seryn, elapsed, moving, dt, heroAnimationSpeed);
-      else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
+      let releasedAttackTarget: GameEntity | null = null;
       if (attackSwing > 0) {
-        attackSwing = Math.min(1, attackSwing + dt * ATTACK_SWING_RATE);
-        if (!attackImpactApplied && attackSwing >= ATTACK_IMPACT_SWING_PROGRESS) {
+        const swingRate = seryn ? SERYN_ATTACK_SWING_RATE : ATTACK_SWING_RATE;
+        const impactProgress = seryn ? SERYN_ATTACK_RELEASE_PROGRESS : ATTACK_IMPACT_SWING_PROGRESS;
+        attackSwing = Math.min(1, attackSwing + dt * swingRate);
+
+        if (!attackImpactApplied && attackSwing >= impactProgress) {
           attackImpactApplied = true;
-          if (pendingAttackTarget) applyBasicAttackImpact(pendingAttackTarget);
+          releasedAttackTarget = pendingAttackTarget;
         }
 
         if (seryn) seryn.root.userData.serynAttackProgress = attackSwing;
@@ -1807,14 +1906,31 @@ export async function createDawnreachGame(
             swordRestRotation.z + slash * 0.34,
           );
         }
+      } else if (seryn) {
+        seryn.root.userData.serynAttackProgress = 0;
+      }
 
-        if (attackSwing >= 1) {
-          attackSwing = 0;
-          pendingAttackTarget = null;
-          attackImpactApplied = false;
-          if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
-          if (seryn) seryn.root.userData.serynAttackProgress = 0;
-        }
+      // Pose first. Seryn's release socket must already be in the drawn-bow position
+      // before the projectile is detached into world space.
+      if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
+      else if (seryn) animateSeryn(seryn, elapsed, moving, dt, heroAnimationSpeed);
+      else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
+
+      if (releasedAttackTarget) {
+        if (seryn) launchSerynBasicAttackArrow(releasedAttackTarget);
+        else applyBasicAttackImpact(releasedAttackTarget);
+      }
+
+      if (attackSwing >= 1) {
+        attackSwing = 0;
+        pendingAttackTarget = null;
+        attackImpactApplied = false;
+        if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
+        if (seryn) seryn.root.userData.serynAttackProgress = 0;
+      }
+
+      if (serynBasicAttackProjectiles.length > 0) {
+        updateSerynBasicAttackProjectiles(dt);
       }
     }
 
