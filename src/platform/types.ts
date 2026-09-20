@@ -15,6 +15,10 @@ export type PlatformUser = Readonly<{
   rankedGames: number;
 }>;
 
+export type RankingEntry = PlatformUser & Readonly<{
+  position: number;
+}>;
+
 export type PlatformSession = Readonly<{
   id: string;
   createdAt: number;

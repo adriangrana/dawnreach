@@ -2477,6 +2477,10 @@ export function createPlatformServer(options = {}) {
           matches: profileMatchHistory(user.id, url.searchParams.get('limit') || 50),
         });
       }
+      if (req.method === 'GET' && url.pathname === '/api/rankings') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        return json(req, res, 200, store.rankedLeaderboard(url.searchParams.get('limit') || 100));
+      }
       if (req.method === 'GET' && url.pathname === '/api/auth/sessions') {
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });
         return json(req, res, 200, { sessions: sessions.sessionsFor(user.id, token) });

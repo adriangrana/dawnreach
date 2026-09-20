@@ -4,6 +4,7 @@ import type {
   DirectMessage,
   PlatformSession,
   PlatformUser,
+  RankingEntry,
   SocialSnapshot,
   MatchSummary,
 } from './types';
@@ -107,4 +108,11 @@ export async function getProfileMatchHistory(limit = 50) {
   const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
   const result = await request<{ matches: MatchSummary[] }>(`/api/profile/matches?limit=${safeLimit}`, {}, true);
   return result.matches;
+}
+
+
+export async function getRankedLeaderboard(limit = 100) {
+  const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+  const result = await request<{ entries: RankingEntry[]; total: number }>(`/api/rankings?limit=${safeLimit}`, {}, true);
+  return result;
 }

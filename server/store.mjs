@@ -91,6 +91,25 @@ export class PlatformStore {
     return this.#state.users.find(user => user.username.toLowerCase() === key) || null;
   }
 
+  rankedLeaderboard(limit = 100) {
+    const capped = Math.max(1, Math.min(500, Math.floor(Number(limit) || 100)));
+    const ranked = this.#state.users
+      .filter(user => user.calibrated)
+      .sort((left, right) =>
+        right.rating - left.rating
+        || right.wins - left.wins
+        || right.rankedGames - left.rankedGames
+        || left.username.localeCompare(right.username));
+
+    return {
+      total: ranked.length,
+      entries: ranked.slice(0, capped).map((user, index) => ({
+        ...this.publicUser(user),
+        position: index + 1,
+      })),
+    };
+  }
+
   searchUsers(query, viewerId, limit = 20) {
     const needle = normalizeUsername(query).toLowerCase();
     if (needle.length < 2) return [];
