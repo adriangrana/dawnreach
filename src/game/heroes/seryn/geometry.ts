@@ -456,83 +456,99 @@ export function createSerynHeadGeometry(widthSegments = 128, heightSegments = 92
  * indexed surface. No tubes, cones or detached locks are used. The lower vertices carry
  * flex/phase attributes so the same mesh can be animated with secondary hair motion.
  */
-export function createSerynHairGeometry(radialSegments = 112, verticalSegments = 52) {
+export function createSerynHairGeometry(radialSegments = 128, verticalSegments = 58) {
   const positions: number[] = [];
   const uvs: number[] = [];
   const flexValues: number[] = [];
   const phaseValues: number[] = [];
   const indices: number[] = [];
 
-  const crownY = 0.255;
-  const crownRadiusX = 0.178;
-  const crownRadiusZ = 0.174;
+  const crownY = 0.252;
+  const crownCenterZ = -0.010;
+  const crownRadiusX = 0.180;
+  const crownRadiusZ = 0.176;
+  const capRows = 0.54;
 
+  // Build the complete hairstyle as one connected shell. The first half hugs the
+  // cranium like a proper scalp cap; only the outer/temple/back sectors continue down
+  // into the hanging hair. The centre forehead remains open instead of becoming two
+  // curtains over the eyes.
   for (let row = 0; row <= verticalSegments; row++) {
     const v = row / verticalSegments;
-    const capProgress = smoothstep(0, 0.44, v);
-    const hanging = smoothstep(0.36, 1, v);
+    const onCap = v <= capRows;
+    const capT = THREE.MathUtils.clamp(v / capRows, 0, 1);
+    const hangT = onCap ? 0 : THREE.MathUtils.clamp((v - capRows) / (1 - capRows), 0, 1);
 
     for (let column = 0; column <= radialSegments; column++) {
       const u = column / radialSegments;
       const theta = -Math.PI + u * Math.PI * 2;
+      const absTheta = Math.abs(theta);
       const sinTheta = Math.sin(theta);
       const cosTheta = Math.cos(theta);
-      const frontness = Math.max(0, cosTheta);
-      const backness = Math.max(0, -cosTheta);
-      const side = Math.abs(sinTheta);
+      const sideWeight = Math.abs(sinTheta);
+      const backWeight = Math.max(0, -cosTheta);
 
-      // Hairline stays high in the centre of the forehead, then falls rapidly into
-      // long temple curtains. Back/side hair reaches the upper shoulder line.
-      const frontCenter = Math.exp(-0.5 * Math.pow(theta / 0.39, 2));
-      const temple = Math.exp(-0.5 * Math.pow((Math.abs(theta) - 0.82) / 0.24, 2));
-      const bottomY = -0.455 + 0.555 * frontCenter + 0.105 * temple;
+      // Keep a broad clear forehead. The old version only protected a very narrow
+      // centre strip, so neighbouring sectors dropped all the way across both eyes.
+      const foreheadOpen = 1 - smoothstep(0.58, 0.98, absTheta);
+      const templeBlend = smoothstep(0.70, 1.24, absTheta) * (1 - smoothstep(1.55, 2.25, absTheta));
 
-      const yCurve = Math.pow(v, 0.92);
-      const y = THREE.MathUtils.lerp(crownY, bottomY, yCurve);
+      const hairlineY = 0.035 + 0.105 * foreheadOpen + 0.018 * templeBlend;
+      const bottomY = -0.425 + 0.535 * foreheadOpen + 0.110 * templeBlend;
 
-      // Crown grows smoothly out of the part instead of starting as a hard cap.
-      const crownSpread = Math.sin(capProgress * Math.PI * 0.5);
-      const lowerTaper = 1 - 0.075 * hanging;
-      const rx = crownRadiusX * crownSpread * lowerTaper;
-      const rz = crownRadiusZ * crownSpread * (1 - 0.035 * hanging);
+      let x: number;
+      let y: number;
+      let z: number;
+      let flex = 0;
 
-      // A real parting: upper-front vertices separate subtly left/right and the crown
-      // gains a shallow central valley instead of a perfect hemisphere.
-      const partInfluence = Math.exp(-Math.pow(theta / 0.34, 2)) * (1 - smoothstep(0.18, 0.58, v));
-      const partDirection = theta === 0 ? 0 : Math.sign(theta);
-      const partOffsetX = partDirection * 0.010 * partInfluence;
-      const partValleyY = 0.009 * partInfluence;
+      if (onCap) {
+        // Spherical-cap style fit to the head: no cone from one top point and no
+        // exposed pink scalp wedge. A small top ring is closed below by one cap vertex.
+        const phi = capT * Math.PI * 0.53;
+        const radial = 0.018 + Math.sin(phi) * 0.162;
+        const ySkull = crownY - (1 - Math.cos(phi)) * 0.185;
+        const hairlinePull = smoothstep(0.72, 1, capT);
 
-      // Lower front-side hair falls almost vertically beside the face; back hair keeps
-      // a fuller rounded silhouette. This prevents a helmet/bowl-cut appearance.
-      const faceCurtain = hanging * frontness * side;
-      const backFullness = hanging * backness;
-      const x = sinTheta * rx
-        + partOffsetX
-        + Math.sign(sinTheta || 1) * 0.010 * faceCurtain;
-      let z = cosTheta * rz;
-      z = THREE.MathUtils.lerp(z, 0.068 * cosTheta, faceCurtain * 0.52);
-      z -= 0.012 * backFullness;
+        x = sinTheta * radial;
+        y = THREE.MathUtils.lerp(ySkull, hairlineY, hairlinePull);
+        z = crownCenterZ + cosTheta * (0.018 + Math.sin(phi) * 0.158);
 
-      // Broad waves are actual surface undulation, while the fine strand detail comes
-      // from the anisotropic-looking procedural hair material.
-      const wave = Math.sin(theta * 5.0 + v * 3.2) * 0.0045 * hanging;
-      const fine = Math.sin(theta * 23.0 + v * 5.0) * 0.0015 * (0.25 + hanging * 0.75);
-      const radialNormalX = sinTheta;
-      const radialNormalZ = cosTheta;
+        // Subtle off-centre part in the front crown.
+        const part = Math.exp(-Math.pow(theta / 0.32, 2)) * (1 - smoothstep(0.15, 0.88, capT));
+        x += (theta < 0 ? -1 : 1) * 0.007 * part;
+        y -= 0.0045 * part;
+      } else {
+        const waveFalloff = 1 - 0.055 * hangT;
+        const rx = crownRadiusX * waveFalloff;
+        const rz = crownRadiusZ * (1 - 0.035 * hangT);
 
+        x = sinTheta * rx;
+        y = THREE.MathUtils.lerp(hairlineY, bottomY, Math.pow(hangT, 0.92));
+        z = crownCenterZ + cosTheta * rz;
+
+        // Long hair stays outside the face. At the front-centre sectors the lower
+        // vertices remain near the hairline; only temple/side/back sectors descend.
+        const curtain = (1 - foreheadOpen) * Math.max(0.20, sideWeight);
+        x += Math.sign(sinTheta || 1) * 0.010 * curtain * hangT;
+        z = THREE.MathUtils.lerp(z, cosTheta * 0.084, curtain * 0.42 * hangT);
+        z -= 0.012 * backWeight * hangT;
+
+        flex = hangT * hangT * (0.45 + 0.55 * Math.max(sideWeight, backWeight));
+      }
+
+      // Large, soft waves sculpted into the shell itself. Strand-scale detail is in
+      // the hair material/bump map, keeping the silhouette smooth and professional.
+      const wave = Math.sin(theta * 4.0 + v * 2.4) * 0.0034 * (0.25 + hangT * 0.75);
+      const radialX = sinTheta;
+      const radialZ = cosTheta;
       positions.push(
-        x + radialNormalX * (wave + fine),
-        y - partValleyY,
-        z + radialNormalZ * (wave + fine),
+        x + radialX * wave,
+        y,
+        z + radialZ * wave,
       );
       uvs.push(u, v);
-
-      // Only the hanging lengths flex strongly. Crown vertices remain stable against
-      // the skull so the hairstyle can be animated without looking rubbery.
-      const flex = hanging * hanging * (0.55 + 0.45 * Math.max(side, backness));
       flexValues.push(flex);
-      phaseValues.push(theta + v * 2.6);
+      phaseValues.push(theta + v * 2.4);
     }
   }
 
@@ -543,9 +559,21 @@ export function createSerynHairGeometry(radialSegments = 112, verticalSegments =
       const b = a + 1;
       const d = (row + 1) * stride + column;
       const c = d + 1;
-      // Outward-facing winding for the shell.
       indices.push(a, d, b, b, d, c);
     }
+  }
+
+  // Close the small top ring as part of the same indexed mesh, eliminating the visible
+  // bald scalp opening at the crown.
+  const topCenter = positions.length / 3;
+  positions.push(0, crownY + 0.006, crownCenterZ);
+  uvs.push(0.5, 0);
+  flexValues.push(0);
+  phaseValues.push(0);
+  for (let column = 0; column < radialSegments; column++) {
+    const a = column;
+    const b = column + 1;
+    indices.push(topCenter, a, b);
   }
 
   const result = new THREE.BufferGeometry();
