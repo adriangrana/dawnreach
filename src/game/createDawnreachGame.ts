@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from './characters/animateHumanoid';
 import { buildHumanoidBody } from './characters/buildHumanoidBody';
+import type { HumanoidRig } from './characters/humanoidRig';
 import { createEntitySelectionController } from './entities/entitySelection';
 import {
   GameEntityRegistry,
@@ -25,6 +26,10 @@ import { ensureAldenAbilityPresentation } from './heroes/alden/abilityPresentati
 import { ensureAldenAbilityEdgePolish } from './heroes/alden/abilityEdgePolish';
 import { ensureWorldLineVfxPolish } from './heroes/alden/lineVfxPolish';
 import { ensureAldenWorldAbilityRuntime, triggerAldenWorldAbility } from './heroes/alden/worldAbilityRuntime';
+import { animateSeryn } from './heroes/seryn/animateSeryn';
+import { ensureSerynAbilityPresentation, type SerynAbilityPresentationHandle } from './heroes/seryn/abilityPresentation';
+import { buildSeryn, type SerynRig } from './heroes/seryn/buildSeryn';
+import { ensureSerynWorldAbilityRuntime, triggerSerynWorldAbility } from './heroes/seryn/worldAbilityRuntime';
 import { upgradeBasePresentation } from './map/basePresentation';
 import { animateRiverSurface, buildDawnreachMap } from './map/buildDawnreachMap';
 import { createMapCollisionWorld } from './map/collisionWorld';
@@ -40,13 +45,13 @@ import {
 import type { NavigationPath } from './navigation/navigationWorld';
 import { prepareHeavyRevealAssets } from './shared/prepareHeavyRevealAssets';
 import { createProceduralTextures } from './shared/textures';
-import { HERO_PROGRESSION_TUNING, type AbilityKey, type HeroStats, type MatchHeroState } from './match';
+import { HERO_PROGRESSION_TUNING, getHeroDefinition, type AbilityKey, type HeroStats, type MatchHeroState } from './match';
 import { toMatchGameTimeMs } from './match/matchPauseRuntime';
 import { createVisionSystem } from './vision/visionSystem';
 
 type HeroOverlayState = {
   hero: MatchHeroState;
-  stats: Pick<HeroStats, 'maxHp' | 'maxResource' | 'attackDamage' | 'attackSpeed'>;
+  stats: Pick<HeroStats, 'maxHp' | 'maxResource' | 'attackDamage' | 'attackSpeed' | 'abilityPowerPercent' | 'attackRange'>;
 };
 
 export type DawnreachSharedPlayer = Readonly<{
@@ -311,11 +316,15 @@ export async function createDawnreachGame(
   scene.add(waterEffects.group);
 
   const previewHumanoid = new URLSearchParams(window.location.search).get('rig') === 'humanoid';
-  const alden = previewHumanoid ? null : buildAlden(createAldenMaterials());
-  const hero = alden ?? buildHumanoidBody();
-  const heroPresentationScale = alden ? GAME_HERO_SCALE : 1;
-  const heroMoveSpeed = alden ? GAME_MOVE_SPEED : HUMANOID_DEFAULT_MOVE_SPEED;
-  const heroAnimationSpeed = alden ? heroMoveSpeed / heroPresentationScale : heroMoveSpeed;
+  const localHeroId = localSharedPlayer?.heroId ?? getHeroState?.()?.hero.definitionId ?? 'H001';
+  const localHeroDefinition = getHeroDefinition(localHeroId);
+  const alden = !previewHumanoid && localHeroId === 'H001' ? buildAlden(createAldenMaterials()) : null;
+  const seryn = !previewHumanoid && localHeroId === 'H002' ? buildSeryn() : null;
+  const hero = alden ?? seryn ?? buildHumanoidBody({ name: localHeroDefinition.displayName.toLowerCase() });
+  const heroPresentationScale = (alden || seryn) ? GAME_HERO_SCALE : 1;
+  const heroMoveSpeed = (alden || seryn) ? GAME_MOVE_SPEED : HUMANOID_DEFAULT_MOVE_SPEED;
+  const heroAnimationSpeed = (alden || seryn) ? heroMoveSpeed / heroPresentationScale : heroMoveSpeed;
+  const localAttackRange = ATTACK_RANGE * Math.max(0.35, localHeroDefinition.baseStats.attackRange / 175);
 
   hero.root.scale.setScalar(heroPresentationScale);
   const heroOverlay = addHeroOverlay(
@@ -330,7 +339,7 @@ export async function createDawnreachGame(
   registerAuthoredMapEntities(entityRegistry, battlefield, localTeam);
   const localHeroEntity = entityRegistry.register(hero.root, {
     id: localWorldEntityId,
-    displayName: alden ? 'Alden' : 'Humanoid Preview',
+    displayName: previewHumanoid ? 'Humanoid Preview' : localHeroDefinition.displayName,
     kind: 'hero',
     team: localTeam,
     selectable: true,
@@ -341,6 +350,8 @@ export async function createDawnreachGame(
     visibilityPolicy: 'vision-only',
     interaction: 'unit',
     selectionRadius: 0.78,
+    attackRange: localAttackRange,
+    definitionId: localHeroId,
   });
 
   // The React match state owns the authoritative local HP/resource/level. Keep the world
@@ -389,15 +400,22 @@ export async function createDawnreachGame(
     localHeroEntity.root.userData.currentResource = localHeroEntity.currentResource;
     localHeroEntity.root.userData.level = localHeroEntity.level;
     localHeroEntity.root.userData.alive = localHeroEntity.alive;
+    localHeroEntity.root.userData.attackDamage = overlay.stats.attackDamage;
+    localHeroEntity.root.userData.attackSpeed = overlay.stats.attackSpeed;
+    localHeroEntity.root.userData.abilityPowerPercent = overlay.stats.abilityPowerPercent;
+    localHeroEntity.attackRange = ATTACK_RANGE * Math.max(0.35, overlay.stats.attackRange / 175);
+    localHeroEntity.root.userData.attackRange = localHeroEntity.attackRange;
     return overlay;
   };
   syncLocalHeroEntityState();
 
+  type HeroAbilityPresentation = ReturnType<typeof ensureAldenAbilityPresentation> | SerynAbilityPresentationHandle;
   type RemoteHeroRuntime = {
     player: DawnreachSharedPlayer;
-    rig: AldenRig;
+    rig: HumanoidRig;
+    animate: (elapsed: number, moving: boolean, delta: number) => void;
     entity: GameEntity;
-    abilityPresentation: ReturnType<typeof ensureAldenAbilityPresentation> | null;
+    abilityPresentation: HeroAbilityPresentation | null;
     targetPosition: THREE.Vector3;
     targetYaw: number;
     moving: boolean;
@@ -408,7 +426,15 @@ export async function createDawnreachGame(
   const remoteHeroes = new Map<string, RemoteHeroRuntime>();
   for (const player of sharedPlayers) {
     if (player.userId === localPlayerId) continue;
-    const remoteRig = buildAlden(createAldenMaterials());
+    const remoteDefinition = getHeroDefinition(player.heroId);
+    const remoteAlden = player.heroId === 'H001' ? buildAlden(createAldenMaterials()) : null;
+    const remoteSeryn = player.heroId === 'H002' ? buildSeryn() : null;
+    const remoteRig: HumanoidRig = remoteAlden ?? remoteSeryn ?? buildHumanoidBody({ name: remoteDefinition.displayName.toLowerCase() });
+    const animateRemote = remoteAlden
+      ? (time: number, moving: boolean, delta: number) => animateAlden(remoteAlden, time, moving, delta, heroAnimationSpeed)
+      : remoteSeryn
+        ? (time: number, moving: boolean, delta: number) => animateSeryn(remoteSeryn, time, moving, delta, heroAnimationSpeed)
+        : (time: number, moving: boolean, delta: number) => animateHumanoid(remoteRig, time, moving, delta, heroAnimationSpeed);
     remoteRig.root.scale.setScalar(GAME_HERO_SCALE);
     remoteRig.root.userData.networkRemoteHero = true;
     remoteRig.root.userData.networkOwnerUserId = player.userId;
@@ -428,6 +454,7 @@ export async function createDawnreachGame(
       visibilityPolicy: 'vision-only',
       interaction: 'unit',
       selectionRadius: 0.78,
+      attackRange: ATTACK_RANGE * Math.max(0.35, remoteDefinition.baseStats.attackRange / 175),
       maxHp: 700,
       currentHp: 700,
       maxResource: 300,
@@ -439,6 +466,7 @@ export async function createDawnreachGame(
     remoteHeroes.set(player.userId, {
       player,
       rig: remoteRig,
+      animate: animateRemote,
       entity,
       abilityPresentation: null,
       targetPosition: remoteRig.root.position.clone(),
@@ -538,6 +566,15 @@ export async function createDawnreachGame(
       { observeHudCasts: false },
     )
     : null;
+  const serynAbilityRuntime = seryn
+    ? ensureSerynWorldAbilityRuntime(
+      scene,
+      entityRegistry,
+      localHeroEntity,
+      renderer.domElement,
+      camera,
+    )
+    : null;
   const aldenAbilityPresentation = alden
     ? ensureAldenAbilityPresentation(
       scene,
@@ -548,21 +585,40 @@ export async function createDawnreachGame(
       { observeHudCasts: false },
     )
     : null;
-  for (const remote of remoteHeroes.values()) {
-    if (remote.player.heroId !== 'H001') continue;
-    remote.abilityPresentation = ensureAldenAbilityPresentation(
+  const serynAbilityPresentation = seryn
+    ? ensureSerynAbilityPresentation(
       scene,
       entityRegistry,
-      remote.entity,
+      localHeroEntity,
       renderer.domElement,
       camera,
-      {
-        interactive: false,
-        cameraShake: false,
-        observeHudCasts: false,
-        targetImpacts: false,
-      },
-    );
+    )
+    : null;
+  const localAbilityPresentation: HeroAbilityPresentation | null = aldenAbilityPresentation ?? serynAbilityPresentation;
+  for (const remote of remoteHeroes.values()) {
+    if (remote.player.heroId === 'H001') {
+      remote.abilityPresentation = ensureAldenAbilityPresentation(
+        scene,
+        entityRegistry,
+        remote.entity,
+        renderer.domElement,
+        camera,
+        {
+          interactive: false,
+          cameraShake: false,
+          observeHudCasts: false,
+          targetImpacts: false,
+        },
+      );
+    } else if (remote.player.heroId === 'H002') {
+      remote.abilityPresentation = ensureSerynAbilityPresentation(
+        scene,
+        entityRegistry,
+        remote.entity,
+        renderer.domElement,
+        camera,
+      );
+    }
   }
   const aldenAbilityEdgePolish = alden
     ? ensureAldenAbilityEdgePolish(scene)
@@ -741,6 +797,7 @@ export async function createDawnreachGame(
     attackMarker.visible = false;
     disarmAttack();
     if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
+    if (seryn) seryn.root.userData.serynAttackProgress = 0;
   };
 
   const applyNavigationPath = (path: NavigationPath, requested: Point3) => {
@@ -944,7 +1001,7 @@ export async function createDawnreachGame(
     const combatHullRadius = target.kind === 'jungle-creature'
       ? Math.max(0, target.selectionRadius)
       : Math.max(0, target.selectionRadius) * 0.45;
-    return ATTACK_RANGE + combatHullRadius;
+    return localHeroEntity.attackRange + combatHullRadius;
   };
 
   const findAttackMoveTarget = (commandPoint: Point3) => {
@@ -1730,6 +1787,7 @@ export async function createDawnreachGame(
 
       localHeroMoving = moving;
       if (alden) animateAlden(alden, elapsed, moving, dt, heroAnimationSpeed);
+      else if (seryn) animateSeryn(seryn, elapsed, moving, dt, heroAnimationSpeed);
       else animateHumanoid(hero, elapsed, moving, dt, heroAnimationSpeed);
 
       if (attackSwing > 0) {
@@ -1738,6 +1796,8 @@ export async function createDawnreachGame(
           attackImpactApplied = true;
           if (pendingAttackTarget) applyBasicAttackImpact(pendingAttackTarget);
         }
+
+        if (seryn) seryn.root.userData.serynAttackProgress = attackSwing;
 
         if (alden && swordRestRotation) {
           const slash = Math.sin(attackSwing * Math.PI);
@@ -1753,6 +1813,7 @@ export async function createDawnreachGame(
           pendingAttackTarget = null;
           attackImpactApplied = false;
           if (alden && swordRestRotation) alden.sword.rotation.copy(swordRestRotation);
+          if (seryn) seryn.root.userData.serynAttackProgress = 0;
         }
       }
     }
@@ -1795,7 +1856,7 @@ export async function createDawnreachGame(
       const renderedYaw = remote.rig.model.rotation.y + yawDelta * Math.min(1, dt * 12);
       remote.rig.model.rotation.y = renderedYaw;
       const remoteMoving = remote.moving || distance > 0.035 || Math.abs(dy) > 0.05;
-      animateAlden(remote.rig, elapsed, remoteMoving, dt, heroAnimationSpeed);
+      remote.animate(elapsed, remoteMoving, dt);
       remote.abilityPresentation?.update(abilityFrameNowMs, true);
       // Network facing is persistent world state. Ability/locomotion presentation may bend
       // joints, but it must never own the remote model yaw after this frame.
@@ -1814,7 +1875,8 @@ export async function createDawnreachGame(
       remote.rig.root.position.clone(),
     ] as const);
     aldenAbilityRuntime?.update(abilityFrameNowMs);
-    aldenAbilityPresentation?.update(abilityFrameNowMs, false);
+    serynAbilityRuntime?.update(abilityFrameNowMs);
+    localAbilityPresentation?.update(abilityFrameNowMs, false);
     aldenAbilityEdgePolish?.update();
     aldenLineVfxPolish?.update();
     for (const [remote, position] of remotePositionsBeforeAbilityFx) {
@@ -1886,8 +1948,10 @@ export async function createDawnreachGame(
     },
     castLocalAbility(key: AbilityKey, rank: number, nowMs = toMatchGameTimeMs(performance.now())) {
       syncLocalHeroEntityState();
-      const cast = triggerAldenWorldAbility(scene, key, rank, nowMs);
-      if (cast) aldenAbilityPresentation?.presentCast(key, nowMs);
+      const cast = localHeroId === 'H002'
+        ? triggerSerynWorldAbility(scene, key, rank, nowMs)
+        : triggerAldenWorldAbility(scene, key, rank, nowMs);
+      if (cast) localAbilityPresentation?.presentCast(key, nowMs, currentYaw);
       return cast;
     },
     presentRemoteAbilityCast(
@@ -2258,7 +2322,9 @@ export async function createDawnreachGame(
       aldenLineVfxPolish?.dispose();
       aldenAbilityEdgePolish?.dispose();
       aldenAbilityPresentation?.dispose();
+      serynAbilityPresentation?.dispose();
       aldenAbilityRuntime?.dispose();
+      serynAbilityRuntime?.dispose();
       selection.dispose();
       heroOverlay.dispose();
       disposeScene(scene);
