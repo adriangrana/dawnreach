@@ -279,16 +279,6 @@
   color: #9ed7ff;
   margin: auto;
 }
-.dr-profile-rank-emblem::before,
-.dr-profile-rank-emblem::after {
-  content: '';
-  position: absolute;
-  inset: 9px 28px;
-  border: 2px solid #bca469;
-  transform: rotate(45deg);
-  box-shadow: 0 0 18px rgba(72, 175, 244, .18);
-}
-.dr-profile-rank-emblem::after { inset: 28px 9px; border-color: #4da8dc; }
 .dr-profile-rank-emblem svg { width: 48px; height: 48px; z-index: 2; stroke-width: 1.2; }
 .dr-profile-rank-copy { display: grid; gap: 6px; }
 .dr-profile-rank-copy small { color: #8aa6b8; font-size: 8px; letter-spacing: .13em; }
