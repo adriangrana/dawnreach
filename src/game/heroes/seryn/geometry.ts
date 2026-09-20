@@ -601,55 +601,81 @@ export type SerynClothPanelOptions = Readonly<{
   xDrift?: number;
   flare?: number;
   foldDepth?: number;
+  curveDepth?: number;
+  thickness?: number;
+  edgeCurl?: number;
   hemWave?: number;
   bias?: number;
 }>;
 
 /**
- * Dense connected cloth panel with animation metadata.
+ * Dense closed cloth shell with real curvature, thickness and animation metadata.
  *
- * This is the garment equivalent of Seryn's unified hair mesh: the visible silhouette
- * is a subdivided surface, not a primitive. Lower rows carry more flex so tunic/cape
- * fabric can receive secondary motion while the waist/shoulder seam stays anchored.
+ * The old garment panels were single mathematical planes. This version builds two
+ * subdivided surfaces plus stitched side/top/hem edges, so light can describe actual
+ * volume. Curvature and pleats are part of the geometry instead of being faked only
+ * by colour.
  */
 export function createSerynClothPanelGeometry(
   options: SerynClothPanelOptions,
-  widthSegments = 24,
-  lengthSegments = 34,
+  widthSegments = 30,
+  lengthSegments = 40,
 ) {
   const positions: number[] = [];
   const uvs: number[] = [];
   const flexValues: number[] = [];
   const phaseValues: number[] = [];
   const indices: number[] = [];
+  const thickness = options.thickness ?? 0.012;
+  const layerStride = (widthSegments + 1) * (lengthSegments + 1);
 
-  for (let row = 0; row <= lengthSegments; row++) {
+  const sample = (row: number, column: number) => {
     const v = row / lengthSegments;
-    const eased = Math.pow(v, 1.08);
+    const u = column / widthSegments;
+    const eased = Math.pow(v, 1.06);
+    const across = u * 2 - 1;
     const width = THREE.MathUtils.lerp(options.widthTop, options.widthBottom, eased)
       * (1 + (options.flare ?? 0) * eased);
     const zBase = THREE.MathUtils.lerp(options.zTop ?? 0, options.zBottom ?? 0, eased);
     const drift = (options.xDrift ?? 0) * eased * eased;
+    const centreBulge = (1 - across * across) * (options.curveDepth ?? 0.020);
+    const pleatEnvelope = (0.22 + eased * 0.78) * (0.42 + 0.58 * (1 - Math.abs(across)));
+    const fold =
+      Math.sin(u * Math.PI * 6 + v * 1.35 + (options.bias ?? 0))
+      * (options.foldDepth ?? 0.012)
+      * pleatEnvelope;
+    const edgeCurl = Math.sign(across)
+      * Math.pow(Math.abs(across), 3.4)
+      * (options.edgeCurl ?? 0.004)
+      * eased;
+    const hem =
+      Math.sin(u * Math.PI * 3 + (options.bias ?? 0))
+      * (options.hemWave ?? 0)
+      * Math.pow(v, 5);
 
-    for (let column = 0; column <= widthSegments; column++) {
-      const u = column / widthSegments;
-      const across = u * 2 - 1;
-      const edge = Math.pow(Math.abs(across), 1.55);
-      const fold = Math.sin((u * Math.PI * 4) + v * 1.2 + (options.bias ?? 0))
-        * (options.foldDepth ?? 0.008)
-        * (0.25 + eased * 0.75);
-      const hem = Math.sin(u * Math.PI * 3 + (options.bias ?? 0))
-        * (options.hemWave ?? 0)
-        * Math.pow(v, 5);
+    return {
+      x: across * width * 0.5 + drift + edgeCurl,
+      y: -options.length * eased + hem,
+      z: zBase + centreBulge + fold,
+      u,
+      v,
+      flex: Math.pow(v, 2.15),
+      phase: u * Math.PI * 2 + v * 2.7 + (options.bias ?? 0),
+    };
+  };
 
-      positions.push(
-        across * width * 0.5 + drift,
-        -options.length * eased + hem,
-        zBase + fold - edge * 0.006 * eased,
-      );
-      uvs.push(u, v);
-      flexValues.push(Math.pow(v, 2.15));
-      phaseValues.push(u * Math.PI * 2 + v * 2.7 + (options.bias ?? 0));
+  // Front and back fabric surfaces. Vertices are intentionally separate so normals do
+  // not smear across the cloth edge.
+  for (let layer = 0; layer < 2; layer++) {
+    const offset = layer === 0 ? thickness * 0.5 : -thickness * 0.5;
+    for (let row = 0; row <= lengthSegments; row++) {
+      for (let column = 0; column <= widthSegments; column++) {
+        const p = sample(row, column);
+        positions.push(p.x, p.y, p.z + offset);
+        uvs.push(p.u, p.v);
+        flexValues.push(p.flex);
+        phaseValues.push(p.phase);
+      }
     }
   }
 
@@ -660,8 +686,42 @@ export function createSerynClothPanelGeometry(
       const b = a + 1;
       const d = (row + 1) * stride + column;
       const c = d + 1;
+      // Front (+Z).
       indices.push(a, d, b, b, d, c);
+
+      const ab = layerStride + a;
+      const bb = layerStride + b;
+      const db = layerStride + d;
+      const cb = layerStride + c;
+      // Back (-Z).
+      indices.push(ab, bb, db, bb, cb, db);
     }
+  }
+
+  const stitch = (frontA: number, frontB: number, backA: number, backB: number) => {
+    indices.push(frontA, backA, frontB, frontB, backA, backB);
+  };
+
+  // Stitched left/right edges.
+  for (let row = 0; row < lengthSegments; row++) {
+    const leftA = row * stride;
+    const leftB = (row + 1) * stride;
+    stitch(leftA, leftB, layerStride + leftA, layerStride + leftB);
+
+    const rightA = row * stride + widthSegments;
+    const rightB = (row + 1) * stride + widthSegments;
+    stitch(rightB, rightA, layerStride + rightB, layerStride + rightA);
+  }
+
+  // Stitched top and sculpted hem.
+  for (let column = 0; column < widthSegments; column++) {
+    const topA = column;
+    const topB = column + 1;
+    stitch(topB, topA, layerStride + topB, layerStride + topA);
+
+    const hemA = lengthSegments * stride + column;
+    const hemB = hemA + 1;
+    stitch(hemA, hemB, layerStride + hemA, layerStride + hemB);
   }
 
   const result = new THREE.BufferGeometry();

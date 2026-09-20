@@ -278,8 +278,8 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     options: Parameters<typeof createSerynClothPanelGeometry>[0],
     position: [number, number, number],
     rotation: [number, number, number] = [0, 0, 0],
-    widthSegments = 24,
-    lengthSegments = 34,
+    widthSegments = 30,
+    lengthSegments = 40,
   ) => {
     const mesh = part(
       parent,
@@ -295,281 +295,254 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
   };
 
   // ---------------------------------------------------------------------------
-  // 1) FITTED TROUSERS / INNER LEGGINGS
+  // FITTED BASE: PANTS + BLOUSE
+  // Every radius below is deliberately larger than the underlying anatomy. The skin
+  // stays inside the garment instead of poking through it during rotation/animation.
   // ---------------------------------------------------------------------------
-  // Narrow midnight base layer follows the actual legs; it no longer turns the entire
-  // pelvis into the oversized rounded "diaper" silhouette from the old outfit.
-  loft(rig.pelvis, 'seryn-fitted-waist', [
-    { y: -0.22, rx: 0.168, rz: 0.132 },
-    { y: -0.10, rx: 0.248, rz: 0.166 },
-    { y: 0.05, rx: 0.286, rz: 0.181 },
-    { y: 0.18, rx: 0.218, rz: 0.148 },
-    { y: 0.225, rx: 0.182, rz: 0.132 },
-  ], m.blackLeather, 38);
+  loft(rig.pelvis, 'seryn-pants-waist', [
+    { y: -0.235, rx: 0.178, rz: 0.143 },
+    { y: -0.165, rx: 0.241, rz: 0.176, back: 0.018 },
+    { y: -0.045, rx: 0.306, rz: 0.211, back: 0.034 },
+    { y: 0.090, rx: 0.314, rz: 0.207, back: 0.030 },
+    { y: 0.215, rx: 0.226, rz: 0.160 },
+  ], m.navyDark, 44);
 
   for (const side of [-1, 1]) {
     const thigh = side > 0 ? rig.leftLeg : rig.rightLeg;
-    loft(thigh, 'seryn-fitted-trouser-leg', [
-      { y: -0.015, rx: 0.114, rz: 0.109 },
-      { y: -0.16, rx: 0.121, rz: 0.112 },
-      { y: -0.37, rx: 0.096, rz: 0.090 },
-      { y: -0.57, rx: 0.072, rz: 0.068 },
-    ], m.navyDark, 30);
-
-    // A narrow gold side seam gives the leggings the couture/armored feel of the art.
-    curve(thigh, 'seryn-trouser-gold-seam', [
-      new THREE.Vector3(side * 0.095, -0.030, 0.020),
-      new THREE.Vector3(side * 0.103, -0.185, 0.020),
-      new THREE.Vector3(side * 0.082, -0.390, 0.018),
-      new THREE.Vector3(side * 0.060, -0.555, 0.014),
-    ], 0.0048, m.gold, 0.0035, 18);
-  }
-
-  // ---------------------------------------------------------------------------
-  // 2) SHORT + BLOUSE / CORSET
-  // ---------------------------------------------------------------------------
-  // Ivory fitted blouse is a continuous torso shell under the dark corset.
-  loft(rig.torso, 'seryn-ivory-blouse', [
-    { y: -0.545, rx: 0.174, rz: 0.128 },
-    { y: -0.39, rx: 0.187, rz: 0.136 },
-    { y: -0.20, rx: 0.209, rz: 0.147 },
-    { y: -0.03, rx: 0.244, rz: 0.160 },
-    { y: 0.13, rx: 0.281, rz: 0.176, front: 0.042 },
-    { y: 0.28, rx: 0.281, rz: 0.166, front: 0.028 },
-    { y: 0.405, rx: 0.223, rz: 0.143 },
-    { y: 0.475, rx: 0.157, rz: 0.110 },
-  ], m.ivory, 42);
-
-  // Dark fitted corset follows the bust/waist with a pointed lower edge.
-  loft(rig.torso, 'seryn-midnight-corset', [
-    { y: -0.500, rx: 0.180, rz: 0.136 },
-    { y: -0.36, rx: 0.195, rz: 0.145 },
-    { y: -0.18, rx: 0.218, rz: 0.154 },
-    { y: 0.02, rx: 0.252, rz: 0.168, front: 0.030 },
-    { y: 0.17, rx: 0.284, rz: 0.181, front: 0.047 },
-    { y: 0.27, rx: 0.276, rz: 0.171, front: 0.026 },
-  ], m.navyDark, 42);
-
-  const corsetCenter = panel(rig.torso, 'seryn-corset-center-panel', [
-    [-0.082, 0.215], [0.082, 0.215], [0.107, 0.045],
-    [0.080, -0.205], [0, -0.315], [-0.080, -0.205], [-0.107, 0.045],
-  ], m.blackLeather, [0, -0.015, 0.190], 0.020, 0.008);
-  corsetCenter.scale.z = 0.70;
-
-  for (const side of [-1, 1]) {
-    curve(rig.torso, 'seryn-corset-gold-piping', [
-      new THREE.Vector3(side * 0.090, 0.235, 0.196),
-      new THREE.Vector3(side * 0.125, 0.050, 0.205),
-      new THREE.Vector3(side * 0.104, -0.230, 0.192),
-    ], 0.006, m.gold, 0.004, 18);
-  }
-
-  const chestPrism = part(
-    rig.torso,
-    'seryn-corset-prism',
-    new THREE.OctahedronGeometry(0.052, 0),
-    m.crystal,
-    [0, 0.030, 0.226],
-  );
-  chestPrism.scale.set(0.52, 1.30, 0.38);
-
-  // Short/hip armour: fitted instead of spherical, built as waist bands and side plates.
-  loft(rig.pelvis, 'seryn-tailored-short', [
-    { y: -0.205, rx: 0.172, rz: 0.137 },
-    { y: -0.105, rx: 0.248, rz: 0.171 },
-    { y: 0.035, rx: 0.292, rz: 0.188 },
-    { y: 0.155, rx: 0.245, rz: 0.164 },
-    { y: 0.205, rx: 0.190, rz: 0.139 },
-  ], m.blackLeather, 40);
-
-  for (const side of [-1, 1]) {
-    const hipGuard = panel(rig.pelvis, 'seryn-hip-guard', [
-      [side * 0.020, 0.125],
-      [side * 0.180, 0.105],
-      [side * 0.245, 0.025],
-      [side * 0.205, -0.145],
-      [side * 0.080, -0.190],
-      [side * 0.025, -0.040],
-    ], m.silverDark, [side * 0.060, 0.015, 0.120], 0.016, 0.007);
-    hipGuard.rotation.y = side * -0.18;
-    const hipGem = part(
-      rig.pelvis,
-      'seryn-hip-prism',
-      new THREE.OctahedronGeometry(0.030, 0),
-      m.crystal,
-      [side * 0.220, 0.010, 0.152],
-    );
-    hipGem.scale.set(0.48, 1.05, 0.30);
-  }
-
-  // Ivory upper sleeves from the concept art, then dark leather/brass forearm armor.
-  for (const side of [-1, 1]) {
+    const shin = side > 0 ? rig.leftShin : rig.rightShin;
     const arm = side > 0 ? rig.leftArm : rig.rightArm;
     const forearm = side > 0 ? rig.leftForearm : rig.rightForearm;
-    const shin = side > 0 ? rig.leftShin : rig.rightShin;
     const foot = side > 0 ? rig.leftFoot : rig.rightFoot;
 
+    // Real trouser legs, slightly proud of the skin from hip to knee.
+    loft(thigh, 'seryn-fitted-trouser-leg', [
+      { y: 0.035, rx: 0.123, rz: 0.119 },
+      { y: -0.120, rx: 0.129, rz: 0.121 },
+      { y: -0.310, rx: 0.111, rz: 0.103 },
+      { y: -0.500, rx: 0.084, rz: 0.079 },
+      { y: -0.600, rx: 0.076, rz: 0.072 },
+    ], m.navyDark, 34, true, false);
+
+    curve(thigh, 'seryn-trouser-gold-seam', [
+      new THREE.Vector3(side * 0.109, 0.010, 0.018),
+      new THREE.Vector3(side * 0.116, -0.165, 0.020),
+      new THREE.Vector3(side * 0.096, -0.375, 0.018),
+      new THREE.Vector3(side * 0.070, -0.575, 0.014),
+    ], 0.0045, m.gold, 0.0032, 20);
+
+    // Ivory fitted upper sleeves overlap the shoulder/arm skin instead of terminating
+    // inside it.
     loft(arm, 'seryn-ivory-upper-sleeve', [
-      { y: 0.035, rx: 0.100, rz: 0.091 },
-      { y: -0.060, rx: 0.102, rz: 0.093 },
-      { y: -0.160, rx: 0.090, rz: 0.081 },
-      { y: -0.300, rx: 0.071, rz: 0.064 },
-    ], m.ivory, 30, true, false);
+      { y: 0.050, rx: 0.106, rz: 0.097 },
+      { y: -0.045, rx: 0.111, rz: 0.099 },
+      { y: -0.145, rx: 0.100, rz: 0.090 },
+      { y: -0.270, rx: 0.083, rz: 0.075 },
+      { y: -0.320, rx: 0.076, rz: 0.069 },
+    ], m.ivory, 34, true, false);
 
     loft(forearm, 'seryn-black-bracer', [
-      { y: -0.030, rx: 0.068, rz: 0.062 },
-      { y: -0.125, rx: 0.073, rz: 0.066 },
-      { y: -0.290, rx: 0.060, rz: 0.054 },
-      { y: -0.390, rx: 0.050, rz: 0.046 },
-    ], m.blackLeather, 28);
+      { y: -0.020, rx: 0.071, rz: 0.066 },
+      { y: -0.125, rx: 0.076, rz: 0.069 },
+      { y: -0.290, rx: 0.063, rz: 0.057 },
+      { y: -0.400, rx: 0.052, rz: 0.048 },
+    ], m.blackLeather, 30);
     for (let band = 0; band < 4; band++) {
-      const bandY = -0.080 - band * 0.095;
+      const bandY = -0.078 - band * 0.095;
       const ring = part(
         forearm,
-        'seryn-bracer-gold-band',
-        new THREE.TorusGeometry(0.066 - band * 0.0042, 0.0048, 5, 24),
+        'seryn-bracer-band',
+        new THREE.TorusGeometry(0.069 - band * 0.0043, 0.0046, 6, 26),
         band % 2 === 0 ? m.gold : m.silver,
         [0, bandY, 0],
       );
       ring.rotation.x = Math.PI / 2;
     }
-    const bracerGem = part(forearm, 'seryn-bracer-prism', new THREE.OctahedronGeometry(0.029, 0), m.crystal, [0, -0.225, 0.062]);
-    bracerGem.scale.set(0.46, 1.12, 0.30);
+    const bracerGem = part(forearm, 'seryn-bracer-prism', new THREE.OctahedronGeometry(0.028, 0), m.crystal, [0, -0.225, 0.066]);
+    bracerGem.scale.set(0.46, 1.10, 0.30);
 
-    // Tall black boot body with layered metallic greave filigree.
+    // Boots overlap the trouser cuff and knee so no skin ring appears between pieces.
     loft(shin, 'seryn-tall-black-boot', [
-      { y: -0.005, rx: 0.072, rz: 0.066 },
-      { y: -0.13, rx: 0.085, rz: 0.077 },
-      { y: -0.31, rx: 0.073, rz: 0.068 },
-      { y: -0.490, rx: 0.054, rz: 0.051 },
-    ], m.blackLeather, 30);
+      { y: 0.040, rx: 0.068, rz: 0.064 },
+      { y: -0.080, rx: 0.081, rz: 0.074 },
+      { y: -0.235, rx: 0.083, rz: 0.076 },
+      { y: -0.390, rx: 0.067, rz: 0.062 },
+      { y: -0.505, rx: 0.052, rz: 0.049 },
+    ], m.blackLeather, 32, true, false);
+
     const greave = panel(shin, 'seryn-ornate-greave', [
       [-0.050, 0.205], [0.050, 0.205], [0.065, 0.085],
       [0.050, -0.100], [0.022, -0.205], [0, -0.235],
       [-0.022, -0.205], [-0.050, -0.100], [-0.065, 0.085],
-    ], m.gold, [0, -0.230, 0.075], 0.014, 0.005);
+    ], m.gold, [0, -0.230, 0.081], 0.014, 0.005);
     greave.scale.y = 0.92;
     const innerGreave = panel(shin, 'seryn-greave-dark-inlay', [
       [-0.034, 0.155], [0.034, 0.155], [0.044, 0.040],
       [0.028, -0.125], [0, -0.185], [-0.028, -0.125], [-0.044, 0.040],
-    ], m.silverDark, [0, -0.230, 0.083], 0.010, 0.003);
+    ], m.silverDark, [0, -0.230, 0.089], 0.010, 0.003);
     innerGreave.scale.y = 0.92;
-    const bootGem = part(shin, 'seryn-boot-prism', new THREE.OctahedronGeometry(0.026, 0), m.crystal, [0, -0.228, 0.094]);
+    const bootGem = part(shin, 'seryn-boot-prism', new THREE.OctahedronGeometry(0.026, 0), m.crystal, [0, -0.228, 0.100]);
     bootGem.scale.set(0.44, 1.05, 0.28);
 
-    rounded(foot, 'seryn-boot-foot', [0.086, 0.060, 0.186], [0, -0.032, 0.078], m.blackLeather, 22);
-    const toe = rounded(foot, 'seryn-armored-toe', [0.080, 0.037, 0.112], [0, -0.018, 0.154], m.silverDark, 20);
-    toe.scale.y = 0.72;
+    rounded(foot, 'seryn-boot-foot', [0.089, 0.064, 0.190], [0, -0.032, 0.080], m.blackLeather, 24);
+    const toe = rounded(foot, 'seryn-armored-toe', [0.082, 0.040, 0.116], [0, -0.016, 0.156], m.silverDark, 22);
+    toe.scale.y = 0.74;
   }
 
+  loft(rig.torso, 'seryn-ivory-blouse', [
+    { y: -0.558, rx: 0.179, rz: 0.133 },
+    { y: -0.420, rx: 0.192, rz: 0.140 },
+    { y: -0.260, rx: 0.211, rz: 0.151 },
+    { y: -0.080, rx: 0.241, rz: 0.162 },
+    { y: 0.080, rx: 0.281, rz: 0.181, front: 0.034 },
+    { y: 0.210, rx: 0.300, rz: 0.190, front: 0.050 },
+    { y: 0.310, rx: 0.292, rz: 0.178, front: 0.030 },
+    { y: 0.390, rx: 0.246, rz: 0.160, front: 0.016 },
+    { y: 0.470, rx: 0.168, rz: 0.119 },
+  ], m.ivory, 46);
+
+  // Fabric over the anatomical shoulder bridge. It is slightly larger than the skin
+  // bridge on every section so the shoulder never protrudes through the sleeve.
+  for (const side of [-1, 1]) {
+    shoulderBlend(rig.torso, 'seryn-ivory-shoulder-shell', [
+      { x: side * 0.070, y: 0.459, z: -0.004, ry: 0.065, rz: 0.093 },
+      { x: side * 0.135, y: 0.436, z: 0.000, ry: 0.073, rz: 0.101 },
+      { x: side * 0.205, y: 0.399, z: 0.004, ry: 0.084, rz: 0.105 },
+      { x: side * 0.270, y: 0.358, z: 0.004, ry: 0.094, rz: 0.103 },
+      { x: side * 0.325, y: 0.319, z: 0.002, ry: 0.102, rz: 0.099 },
+      { x: side * 0.365, y: 0.296, z: 0.000, ry: 0.104, rz: 0.097 },
+      { x: side * 0.400, y: 0.286, z: -0.001, ry: 0.100, rz: 0.094 },
+      { x: side * 0.433, y: 0.282, z: -0.002, ry: 0.091, rz: 0.086 },
+    ], m.ivory, 38);
+  }
+
+  // Dark structured corset sits OUTSIDE the blouse.
+  loft(rig.torso, 'seryn-midnight-corset', [
+    { y: -0.505, rx: 0.186, rz: 0.143 },
+    { y: -0.360, rx: 0.202, rz: 0.151 },
+    { y: -0.180, rx: 0.226, rz: 0.160 },
+    { y: 0.020, rx: 0.260, rz: 0.175, front: 0.033 },
+    { y: 0.170, rx: 0.292, rz: 0.190, front: 0.050 },
+    { y: 0.270, rx: 0.286, rz: 0.180, front: 0.029 },
+  ], m.navyDark, 46);
+
+  const corsetCenter = panel(rig.torso, 'seryn-corset-center-panel', [
+    [-0.082, 0.215], [0.082, 0.215], [0.107, 0.045],
+    [0.080, -0.205], [0, -0.315], [-0.080, -0.205], [-0.107, 0.045],
+  ], m.blackLeather, [0, -0.015, 0.201], 0.022, 0.009);
+  corsetCenter.scale.z = 0.72;
+
+  for (const side of [-1, 1]) {
+    curve(rig.torso, 'seryn-corset-gold-piping', [
+      new THREE.Vector3(side * 0.094, 0.235, 0.207),
+      new THREE.Vector3(side * 0.130, 0.050, 0.216),
+      new THREE.Vector3(side * 0.108, -0.230, 0.202),
+    ], 0.006, m.gold, 0.004, 20);
+  }
+  const chestPrism = part(rig.torso, 'seryn-corset-prism', new THREE.OctahedronGeometry(0.052, 0), m.crystal, [0, 0.030, 0.237]);
+  chestPrism.scale.set(0.52, 1.30, 0.38);
+
+  // Narrow waist/belt instead of a second bulky pelvis shell.
+  loft(rig.torso, 'seryn-waist-belt', [
+    { y: -0.535, rx: 0.181, rz: 0.139 },
+    { y: -0.485, rx: 0.191, rz: 0.146 },
+    { y: -0.425, rx: 0.188, rz: 0.142 },
+  ], m.blackLeather, 34);
+
   // ---------------------------------------------------------------------------
-  // 3) OUTER TUNIC / SPLIT SKIRT
+  // VOLUMETRIC SPLIT TUNIC
   // ---------------------------------------------------------------------------
-  // The reference uses multiple long overlapping ivory + midnight panels. Each panel
-  // is a dense flexible surface, not a single plane or primitive.
   const outerPanels = [
-    { name: 'seryn-ivory-front-left', material: m.ivory, x: -0.095, z: 0.188, rotY: -0.08, widthTop: 0.18, widthBottom: 0.27, length: 1.13, drift: -0.11, bias: 0.2 },
-    { name: 'seryn-ivory-front-right', material: m.ivory, x: 0.095, z: 0.188, rotY: 0.08, widthTop: 0.18, widthBottom: 0.27, length: 1.13, drift: 0.11, bias: 1.0 },
-    { name: 'seryn-blue-side-left', material: m.cloakBlue, x: -0.205, z: 0.090, rotY: -0.34, widthTop: 0.19, widthBottom: 0.34, length: 1.24, drift: -0.18, bias: 1.8 },
-    { name: 'seryn-blue-side-right', material: m.cloakBlueDark, x: 0.205, z: 0.090, rotY: 0.34, widthTop: 0.19, widthBottom: 0.34, length: 1.24, drift: 0.18, bias: 2.6 },
+    { name: 'seryn-ivory-front-left', material: m.ivory, x: -0.088, z: 0.153, rotY: -0.09, widthTop: 0.205, widthBottom: 0.285, length: 1.08, drift: -0.105, curve: 0.030, bias: 0.2 },
+    { name: 'seryn-ivory-front-right', material: m.ivory, x: 0.088, z: 0.153, rotY: 0.09, widthTop: 0.205, widthBottom: 0.285, length: 1.08, drift: 0.105, curve: 0.030, bias: 1.0 },
+    { name: 'seryn-blue-side-left', material: m.cloakBlue, x: -0.215, z: 0.018, rotY: -1.08, widthTop: 0.205, widthBottom: 0.330, length: 1.18, drift: -0.120, curve: 0.024, bias: 1.8 },
+    { name: 'seryn-blue-side-right', material: m.cloakBlueDark, x: 0.215, z: 0.018, rotY: 1.08, widthTop: 0.205, widthBottom: 0.330, length: 1.18, drift: 0.120, curve: 0.024, bias: 2.6 },
   ] as const;
 
-  for (const panelSpec of outerPanels) {
+  for (const spec of outerPanels) {
     clothPanel(
       rig.torso,
-      panelSpec.name,
-      panelSpec.material,
+      spec.name,
+      spec.material,
       {
-        widthTop: panelSpec.widthTop,
-        widthBottom: panelSpec.widthBottom,
-        length: panelSpec.length,
+        widthTop: spec.widthTop,
+        widthBottom: spec.widthBottom,
+        length: spec.length,
         zTop: 0,
-        zBottom: -0.025,
-        xDrift: panelSpec.drift,
-        flare: 0.18,
-        foldDepth: 0.012,
-        hemWave: 0.035,
-        bias: panelSpec.bias,
+        zBottom: -0.020,
+        xDrift: spec.drift,
+        flare: 0.14,
+        foldDepth: 0.014,
+        curveDepth: spec.curve,
+        thickness: 0.014,
+        edgeCurl: 0.008,
+        hemWave: 0.030,
+        bias: spec.bias,
       },
-      [panelSpec.x, -0.440, panelSpec.z],
-      [0.03, panelSpec.rotY, 0],
-      26,
-      38,
+      [spec.x, -0.445, spec.z],
+      [0.025, spec.rotY, 0],
+      34,
+      46,
     );
   }
 
-  // Leather/gold harness crossing the bodice, as in the concept.
+  // Leather/gold harness layered above blouse/corset.
   for (const side of [-1, 1]) {
     curve(rig.torso, 'seryn-cross-harness', [
-      new THREE.Vector3(side * 0.205, 0.245, 0.205),
-      new THREE.Vector3(side * 0.110, 0.050, 0.223),
-      new THREE.Vector3(side * 0.020, -0.235, 0.205),
-      new THREE.Vector3(side * -0.070, -0.430, 0.173),
-    ], 0.016, m.leather, 0.014, 22);
+      new THREE.Vector3(side * 0.208, 0.245, 0.216),
+      new THREE.Vector3(side * 0.112, 0.050, 0.236),
+      new THREE.Vector3(side * 0.020, -0.235, 0.218),
+      new THREE.Vector3(side * -0.070, -0.430, 0.184),
+    ], 0.015, m.leather, 0.013, 24);
     curve(rig.torso, 'seryn-harness-gold-edge', [
-      new THREE.Vector3(side * 0.205, 0.245, 0.219),
-      new THREE.Vector3(side * 0.110, 0.050, 0.237),
-      new THREE.Vector3(side * 0.020, -0.235, 0.219),
-      new THREE.Vector3(side * -0.070, -0.430, 0.187),
-    ], 0.0045, m.gold, 0.0035, 20);
+      new THREE.Vector3(side * 0.208, 0.245, 0.230),
+      new THREE.Vector3(side * 0.112, 0.050, 0.250),
+      new THREE.Vector3(side * 0.020, -0.235, 0.232),
+      new THREE.Vector3(side * -0.070, -0.430, 0.198),
+    ], 0.0042, m.gold, 0.0034, 22);
   }
 
   // ---------------------------------------------------------------------------
-  // 4) SHOULDER DRAPE + LONG CAPE
+  // MANTLE + LAYERED CAPE
   // ---------------------------------------------------------------------------
-  // A fitted blue mantle wraps the neck/shoulders before the free cape begins.
   loft(rig.torso, 'seryn-blue-mantle', [
-    { y: 0.365, rx: 0.300, rz: 0.165 },
-    { y: 0.430, rx: 0.270, rz: 0.150 },
-    { y: 0.510, rx: 0.198, rz: 0.126 },
-    { y: 0.565, rx: 0.155, rz: 0.108 },
-  ], m.cloakBlue, 42);
+    { y: 0.350, rx: 0.312, rz: 0.176 },
+    { y: 0.420, rx: 0.287, rz: 0.160 },
+    { y: 0.500, rx: 0.210, rz: 0.138 },
+    { y: 0.565, rx: 0.162, rz: 0.116 },
+  ], m.cloakBlue, 46);
 
-  // Main cape is one large connected animated mesh from both shoulders to near ankle.
-  clothPanel(
-    rig.torso,
-    'seryn-main-cape',
-    m.cloakBlue,
-    {
-      widthTop: 0.60,
-      widthBottom: 1.02,
-      length: 1.88,
-      zTop: 0,
-      zBottom: -0.16,
-      xDrift: -0.16,
-      flare: 0.24,
-      foldDepth: 0.024,
-      hemWave: 0.085,
-      bias: 0.65,
-    },
-    [0.015, 0.325, -0.205],
-    [-0.08, 0, -0.035],
-    48,
-    54,
-  );
+  const capeLayers = [
+    { name: 'seryn-cape-center', material: m.cloakBlueDark, x: 0.000, widthTop: 0.39, widthBottom: 0.58, length: 1.72, drift: 0.02, rotY: 0.00, curve: -0.034, bias: 0.4 },
+    { name: 'seryn-cape-left', material: m.cloakBlue, x: -0.205, widthTop: 0.34, widthBottom: 0.55, length: 1.62, drift: -0.16, rotY: -0.16, curve: -0.030, bias: 1.4 },
+    { name: 'seryn-cape-right', material: m.cloakBlue, x: 0.205, widthTop: 0.34, widthBottom: 0.55, length: 1.66, drift: 0.17, rotY: 0.16, curve: -0.030, bias: 2.3 },
+  ] as const;
 
-  // Second narrower back layer gives the multi-tail silhouette visible in the art.
-  clothPanel(
-    rig.torso,
-    'seryn-cape-underlayer',
-    m.cloakBlueDark,
-    {
-      widthTop: 0.42,
-      widthBottom: 0.70,
-      length: 1.58,
-      zTop: 0,
-      zBottom: -0.11,
-      xDrift: 0.22,
-      flare: 0.18,
-      foldDepth: 0.018,
-      hemWave: 0.070,
-      bias: 2.2,
-    },
-    [-0.035, 0.300, -0.225],
-    [-0.06, 0, 0.025],
-    36,
-    46,
-  );
+  for (const spec of capeLayers) {
+    clothPanel(
+      rig.torso,
+      spec.name,
+      spec.material,
+      {
+        widthTop: spec.widthTop,
+        widthBottom: spec.widthBottom,
+        length: spec.length,
+        zTop: 0,
+        zBottom: -0.105,
+        xDrift: spec.drift,
+        flare: 0.18,
+        foldDepth: 0.020,
+        curveDepth: spec.curve,
+        thickness: 0.016,
+        edgeCurl: 0.010,
+        hemWave: 0.075,
+        bias: spec.bias,
+      },
+      [spec.x, 0.320, -0.205],
+      [-0.060, spec.rotY, 0],
+      38,
+      52,
+    );
+  }
 
   return clothMeshes;
 }
@@ -669,7 +642,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v12-layered-ceremonial-outfit';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v13-volumetric-fitted-outfit';
 
   return Object.assign(rig, { bow, bowString, quiver, hair, clothMeshes });
 }

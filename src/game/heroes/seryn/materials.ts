@@ -50,27 +50,64 @@ function skinBumpTexture() {
 }
 
 function clothTexture(base: string, thread: string) {
-  return makeCanvasTexture(256, (ctx, size) => {
+  return makeCanvasTexture(512, (ctx, size) => {
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, size, size);
-    for (let x = 0; x < size; x += 4) {
-      ctx.strokeStyle = x % 8 === 0 ? thread : 'rgba(0,0,0,0.055)';
-      ctx.lineWidth = 1;
+    for (let x = 0; x < size; x += 3) {
+      ctx.strokeStyle = x % 9 === 0 ? thread : 'rgba(0,0,0,0.040)';
+      ctx.lineWidth = 0.55;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, size);
+      ctx.lineTo(x + 1.2, size);
       ctx.stroke();
     }
-    for (let y = 0; y < size; y += 5) {
-      ctx.strokeStyle = y % 10 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.04)';
+    for (let y = 0; y < size; y += 4) {
+      ctx.strokeStyle = y % 12 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.030)';
+      ctx.lineWidth = 0.45;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(size, y);
       ctx.stroke();
     }
-  }, 5, 5);
+  }, 4.2, 4.8);
 }
 
+function clothBumpTexture(seedValue = 0x728aa1) {
+  const random = seeded(seedValue);
+  const texture = makeCanvasTexture(512, (ctx, size) => {
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, size, size);
+
+    // Warp and weft.
+    for (let x = 0; x < size; x += 3) {
+      const shade = 118 + Math.floor(random() * 24);
+      ctx.strokeStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + 1.0, size);
+      ctx.stroke();
+    }
+    for (let y = 0; y < size; y += 4) {
+      const shade = 122 + Math.floor(random() * 20);
+      ctx.strokeStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size, y);
+      ctx.stroke();
+    }
+
+    // Tiny fibre irregularity.
+    for (let i = 0; i < 7000; i++) {
+      const shade = 112 + Math.floor(random() * 34);
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.fillRect(random() * size, random() * size, 1, 1);
+    }
+  }, 4.2, 4.8);
+  texture.colorSpace = THREE.NoColorSpace;
+  return texture;
+}
 
 function ceremonialClothTexture(base: string, accent: string, gold = false) {
   const random = seeded(parseInt(base.replace('#', ''), 16) || 0x9471);
@@ -286,45 +323,66 @@ export function createSerynMaterials() {
   const hairShadow = hair.clone();
   hairShadow.color.setHex(0x9aa9b9);
 
-  const navy = new THREE.MeshStandardMaterial({
-    map: clothTexture('#122e50', 'rgba(120,187,220,0.05)'),
-    roughness: 0.94,
-    metalness: 0.02,
-  });
-  const navyDark = new THREE.MeshStandardMaterial({
-    map: clothTexture('#08182c', 'rgba(70,132,170,0.045)'),
-    roughness: 0.96,
+  const clothBump = clothBumpTexture();
+  const navy = new THREE.MeshPhysicalMaterial({
+    map: clothTexture('#122e50', 'rgba(120,187,220,0.055)'),
+    bumpMap: clothBump,
+    bumpScale: 0.014,
+    roughness: 0.80,
     metalness: 0.01,
+    sheen: 0.26,
+    sheenColor: new THREE.Color(0x6397b6),
   });
-  const teal = new THREE.MeshStandardMaterial({
-    map: clothTexture('#2b6670', 'rgba(154,232,229,0.045)'),
-    roughness: 0.96,
+  const navyDark = new THREE.MeshPhysicalMaterial({
+    map: clothTexture('#08182c', 'rgba(70,132,170,0.050)'),
+    bumpMap: clothBump,
+    bumpScale: 0.013,
+    roughness: 0.82,
     metalness: 0.01,
+    sheen: 0.20,
+    sheenColor: new THREE.Color(0x416985),
+  });
+  const teal = new THREE.MeshPhysicalMaterial({
+    map: clothTexture('#2b6670', 'rgba(154,232,229,0.055)'),
+    bumpMap: clothBump,
+    bumpScale: 0.014,
+    roughness: 0.82,
+    metalness: 0.01,
+    sheen: 0.24,
+    sheenColor: new THREE.Color(0x91dad9),
     side: THREE.DoubleSide,
   });
   const ivory = new THREE.MeshPhysicalMaterial({
-    map: ceremonialClothTexture('#d8d4c7', 'rgba(255,255,255,0.055)'),
+    map: ceremonialClothTexture('#d8d4c7', 'rgba(255,255,255,0.060)'),
+    bumpMap: clothBumpTexture(0xf0ece2),
+    bumpScale: 0.018,
     color: 0xf0ece2,
-    roughness: 0.88,
+    roughness: 0.78,
     metalness: 0,
-    sheen: 0.18,
+    sheen: 0.30,
     sheenColor: new THREE.Color(0xffffff),
     side: THREE.DoubleSide,
   });
   const cloakBlue = new THREE.MeshPhysicalMaterial({
-    map: ceremonialClothTexture('#173d61', 'rgba(129,190,222,0.050)', true),
+    map: ceremonialClothTexture('#173d61', 'rgba(129,190,222,0.055)', true),
+    bumpMap: clothBumpTexture(0x24577b),
+    bumpScale: 0.020,
     color: 0x24577b,
-    roughness: 0.91,
+    roughness: 0.77,
     metalness: 0.01,
-    sheen: 0.22,
+    sheen: 0.34,
     sheenColor: new THREE.Color(0x8cd8ef),
     side: THREE.DoubleSide,
   });
-  const cloakBlueDark = new THREE.MeshStandardMaterial({
-    map: ceremonialClothTexture('#0b2035', 'rgba(90,150,190,0.045)', true),
+  const cloakBlueDark = new THREE.MeshPhysicalMaterial({
+    map: ceremonialClothTexture('#0b2035', 'rgba(90,150,190,0.050)', true),
+    bumpMap: clothBumpTexture(0x17314a),
+    bumpScale: 0.018,
     color: 0x17314a,
-    roughness: 0.94,
+    roughness: 0.80,
     metalness: 0.01,
+    sheen: 0.24,
+    sheenColor: new THREE.Color(0x507f9c),
     side: THREE.DoubleSide,
   });
   const blackLeather = new THREE.MeshStandardMaterial({
