@@ -10,6 +10,7 @@
   --dusk: #e65a64;
   --gold: #d6b56b;
   --minimap-size: clamp(182px, 14.5vw, 248px);
+  --dawnreach-cursor-default: url('/assets/cursors/dawnreach-pointer.svg') 3 2, default;
 }
 
 * {
@@ -23,6 +24,18 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  cursor: var(--dawnreach-cursor-default);
+}
+
+/*
+ * Dawnreach uses one authored pointer everywhere: menus, post-match, profile,
+ * HUD and in-world UI. This intentionally suppresses the browser hand/text
+ * cursors so moving between the client shell and the battlefield never changes
+ * the pointer identity. Runtime command cursors (for example Attack) are still
+ * allowed to override this through inline canvas styles.
+ */
+#root * {
+  cursor: var(--dawnreach-cursor-default);
 }
 
 body {

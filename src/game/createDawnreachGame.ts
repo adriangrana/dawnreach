@@ -155,6 +155,7 @@ const TARGET_REPATH_DISTANCE = 0.75;
 const TARGET_REPATH_COOLDOWN = 0.35;
 const VISION_UPDATE_INTERVAL = 0.1;
 const RESPAWN_HOLD_KEY = 'dawnreachRespawnHold';
+const DEFAULT_CURSOR = 'url("/assets/cursors/dawnreach-pointer.svg") 3 2, default';
 const ATTACK_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23ff625b' stroke-width='2'/%3E%3Cpath d='M16 2v6M16 24v6M2 16h6M24 16h6' stroke='%23ffd2a4' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M10 22L22 10M19 8l5 5M9 23l-1 3 3-1' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 16 16, crosshair`;
 
 function readAttackMovePriorityMode(): AttackMovePriorityMode {
@@ -227,6 +228,7 @@ export async function createDawnreachGame(
   renderer.domElement.style.display = 'block';
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
+  renderer.domElement.style.cursor = DEFAULT_CURSOR;
   host.appendChild(renderer.domElement);
 
   const camera = new THREE.OrthographicCamera(-10, 10, 9, -9, 0.1, 120);
@@ -816,8 +818,8 @@ export async function createDawnreachGame(
   };
 
   const setCommandCursor = (armed: boolean) => {
-    renderer.domElement.style.cursor = armed ? ATTACK_CURSOR : '';
-    if (minimapHost) minimapHost.style.cursor = armed ? ATTACK_CURSOR : 'default';
+    renderer.domElement.style.cursor = armed ? ATTACK_CURSOR : DEFAULT_CURSOR;
+    if (minimapHost) minimapHost.style.cursor = armed ? ATTACK_CURSOR : DEFAULT_CURSOR;
   };
 
   const disarmAttack = () => {
