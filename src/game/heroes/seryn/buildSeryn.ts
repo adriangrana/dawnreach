@@ -573,7 +573,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v9-unified-sculpted-head';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v10-sculpted-ears-eyes';
 
   return Object.assign(rig, { bow, bowString, quiver });
 }
