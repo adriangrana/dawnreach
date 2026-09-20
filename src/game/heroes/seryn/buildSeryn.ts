@@ -537,15 +537,6 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     hipPanel.rotation.y = side * -0.28;
     hipPanel.rotation.z = side * 0.05;
 
-    const pouch = rounded(
-      rig.pelvis,
-      'seryn-belt-pouch',
-      [0.070, 0.090, 0.040],
-      [side * 0.205, -0.120, -0.135],
-      m.leather,
-      14,
-    );
-    pouch.rotation.y = side * 0.15;
   }
 }
 
