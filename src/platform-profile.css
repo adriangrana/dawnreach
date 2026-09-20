@@ -220,6 +220,28 @@
 .dr-profile-match-row.is-neutral .dr-profile-match-result { color: #9baebc; }
 .dr-profile-match-row > svg { width: 14px; height: 14px; color: #6f8799; }
 
+/* The compact Recent Matches card shares the same row component as the full
+   Match History view, but it has substantially less horizontal space. Keep
+   every statistic visible instead of letting the wide history grid clip. */
+.dr-profile-recent-panel .dr-profile-match-row {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(126px, 1fr) 58px 62px 60px 54px 12px;
+  gap: 6px;
+  padding-inline: 8px;
+}
+.dr-profile-recent-panel .dr-profile-match-row > * { min-width: 0; }
+.dr-profile-recent-panel .dr-profile-match-hero { gap: 7px; }
+.dr-profile-recent-panel .dr-profile-match-hero img { width: 42px; height: 42px; flex: 0 0 42px; }
+.dr-profile-recent-panel .dr-profile-match-hero strong,
+.dr-profile-recent-panel .dr-profile-match-kda b,
+.dr-profile-recent-panel .dr-profile-match-networth b,
+.dr-profile-recent-panel .dr-profile-match-time b { font-size: 9px; }
+.dr-profile-recent-panel .dr-profile-match-result { font-size: 9px; white-space: nowrap; }
+.dr-profile-recent-panel .dr-profile-match-networth,
+.dr-profile-recent-panel .dr-profile-match-time { justify-items: end; text-align: right; }
+.dr-profile-recent-panel .dr-profile-match-row > svg { width: 12px; height: 12px; justify-self: end; }
+
 .dr-profile-ranked-panel { min-height: 300px; }
 .dr-profile-ranked-content {
   min-height: 148px;
