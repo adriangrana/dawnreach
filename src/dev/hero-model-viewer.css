@@ -1,0 +1,227 @@
+.hero-model-viewer {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  background: #071019;
+  color: #eaf5ff;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.hero-model-viewer-panel {
+  position: relative;
+  z-index: 2;
+  padding: 24px 20px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(11, 24, 37, 0.98), rgba(5, 12, 20, 0.98));
+  border-right: 1px solid rgba(118, 205, 255, 0.18);
+  box-shadow: 20px 0 50px rgba(0, 0, 0, 0.28);
+}
+
+.hero-model-viewer-brand {
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.hero-model-viewer-brand span,
+.hero-model-viewer-panel h2,
+.hero-model-viewer-stage-title span,
+.hero-model-viewer-data dt {
+  letter-spacing: 0.17em;
+  font-size: 10px;
+  color: #74caef;
+}
+.hero-model-viewer-brand strong {
+  display: block;
+  margin-top: 4px;
+  font-family: Georgia, serif;
+  font-size: 24px;
+  letter-spacing: 0.05em;
+}
+.hero-model-viewer-brand small {
+  display: block;
+  margin-top: 6px;
+  color: #71889b;
+}
+
+.hero-model-viewer-panel section {
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.hero-model-viewer-panel h2 {
+  margin: 0 0 11px;
+  font-weight: 700;
+}
+.hero-model-viewer-roster {
+  display: grid;
+  gap: 7px;
+}
+.hero-model-viewer-roster button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.025);
+  color: #dceaf3;
+  text-align: left;
+  cursor: pointer;
+}
+.hero-model-viewer-roster button.is-active {
+  border-color: rgba(93, 213, 255, .65);
+  background: rgba(72, 185, 230, .12);
+  box-shadow: inset 3px 0 #62d7ff;
+}
+.hero-model-viewer-roster img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  background: #0c1720;
+}
+.hero-model-viewer-roster strong,
+.hero-model-viewer-roster small {
+  display: block;
+}
+.hero-model-viewer-roster small {
+  margin-top: 2px;
+  color: #7991a3;
+  font-size: 10px;
+}
+
+.hero-model-viewer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.hero-model-viewer-grid button,
+.hero-model-viewer-wide {
+  min-height: 34px;
+  border: 1px solid rgba(129, 203, 238, .22);
+  background: rgba(11, 31, 45, .9);
+  color: #a9bed0;
+  font-size: 10px;
+  letter-spacing: .09em;
+  cursor: pointer;
+}
+.hero-model-viewer-grid button:hover,
+.hero-model-viewer-wide:hover,
+.hero-model-viewer-grid button.is-active {
+  color: #fff;
+  border-color: #69d8ff;
+  background: rgba(54, 167, 211, .18);
+}
+.hero-model-viewer-wide {
+  width: 100%;
+  margin-top: 7px;
+}
+
+.hero-model-viewer-panel label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  color: #9eb2c1;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+.hero-model-viewer-panel input {
+  accent-color: #61d7ff;
+}
+
+.hero-model-viewer-data dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+.hero-model-viewer-data dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+.hero-model-viewer-data dt,
+.hero-model-viewer-data dd {
+  margin: 0;
+}
+.hero-model-viewer-data dd {
+  max-width: 155px;
+  text-align: right;
+  color: #b9cbd7;
+  font-size: 11px;
+}
+
+.hero-model-viewer-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.hero-model-viewer-canvas-host,
+.hero-model-viewer-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero-model-viewer-canvas {
+  cursor: grab;
+  touch-action: none;
+}
+.hero-model-viewer-canvas:active {
+  cursor: grabbing;
+}
+
+.hero-model-viewer-stage-title {
+  position: absolute;
+  top: 28px;
+  left: 32px;
+  pointer-events: none;
+  text-shadow: 0 2px 18px #000;
+}
+.hero-model-viewer-stage-title strong {
+  display: block;
+  margin-top: 3px;
+  font-family: Georgia, serif;
+  font-size: clamp(34px, 4vw, 66px);
+  line-height: .95;
+  letter-spacing: .025em;
+}
+.hero-model-viewer-stage-title small {
+  display: block;
+  margin-top: 9px;
+  color: #91aabd;
+  letter-spacing: .12em;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.hero-model-viewer-help {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  color: rgba(190, 220, 236, .58);
+  font-size: 9px;
+  letter-spacing: .11em;
+  pointer-events: none;
+}
+.hero-model-viewer-help span {
+  padding: 6px 8px;
+  background: rgba(4, 11, 17, .62);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+@media (max-width: 800px) {
+  .hero-model-viewer {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .hero-model-viewer-panel {
+    padding: 16px 12px;
+  }
+  .hero-model-viewer-stage-title {
+    left: 20px;
+    top: 20px;
+  }
+}

@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import PlatformShell from './platform/PlatformShell';
+import HeroModelViewer from './dev/HeroModelViewer';
 import { bootstrapAuthTokenStorage } from './platform/authToken';
 import './styles.css';
 import './hud-overrides.css';
@@ -50,6 +51,7 @@ import './platform-post-match.css';
 import './platform-profile.css';
 import './platform-heroes.css';
 import './platform-ranking.css';
+import './dev/hero-model-viewer.css';
 
 const BOOT_SPLASH_ID = 'dawnreach-boot-splash';
 const BOOT_SPLASH_MAX_WAIT_MS = 12_000;
@@ -108,15 +110,30 @@ function dismissBootSplash() {
   window.setTimeout(() => splash.remove(), 280);
 }
 
+function isHeroModelViewerRoute() {
+  const params = new URLSearchParams(window.location.search);
+  return window.location.pathname.replace(/\/+$/, '') === '/dev/hero-viewer'
+    || params.has('hero-viewer');
+}
+
 async function boot() {
+  const root = ReactDOM.createRoot(document.getElementById('root')!);
+  if (isHeroModelViewerRoute()) {
+    root.render(<HeroModelViewer />);
+    await waitForPlatformReady();
+    dismissBootSplash();
+    return;
+  }
+
   await bootstrapAuthTokenStorage();
-  ReactDOM.createRoot(document.getElementById('root')!).render(<PlatformShell />);
+  root.render(<PlatformShell />);
   await waitForPlatformReady();
   dismissBootSplash();
 }
 
 void boot().catch(error => {
   console.error('[Dawnreach] Platform boot failed.', error);
-  ReactDOM.createRoot(document.getElementById('root')!).render(<PlatformShell />);
+  const root = ReactDOM.createRoot(document.getElementById('root')!);
+  root.render(isHeroModelViewerRoute() ? <HeroModelViewer /> : <PlatformShell />);
   void waitForPlatformReady().then(dismissBootSplash);
 });
