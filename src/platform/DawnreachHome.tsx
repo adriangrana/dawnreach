@@ -28,13 +28,15 @@ export function DawnreachHomeTopbar({
   realtime,
   onHome,
   onPlay,
+  onProfile,
   onLogout,
 }: {
-  section: 'home' | 'play';
+  section: 'home' | 'play' | 'profile';
   user: PlatformUser;
   realtime: 'connecting' | 'online' | 'offline';
   onHome: () => void;
   onPlay: () => void;
+  onProfile?: () => void;
   onLogout: () => void;
 }) {
   return <header className="platform-topbar dr-home-topbar">
@@ -45,7 +47,7 @@ export function DawnreachHomeTopbar({
       <button disabled>HEROES</button>
       <button disabled>COLLECTION</button>
       <button disabled>RANKING</button>
-      <button disabled>PROFILE</button>
+      <button className={section === 'profile' ? 'is-active' : ''} disabled={!onProfile} onClick={onProfile}>PROFILE</button>
     </nav>
     <div className="dr-home-top-actions">
       <span className="dr-home-currency is-gold" title="Gold"><span className="dr-home-currency-icon" aria-hidden="true"><Coins /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.gold)}</strong></span>

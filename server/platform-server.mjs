@@ -161,6 +161,21 @@ export function createPlatformServer(options = {}) {
     return safe;
   }
 
+  function profileMatchHistory(userId, limit = 50) {
+    const capped = Math.max(1, Math.min(100, Math.floor(Number(limit) || 50)));
+    return store.matches()
+      .filter(match =>
+        ['completed', 'cancelled'].includes(match.status)
+        && match.players?.some(player => player.userId === userId))
+      .sort((left, right) => {
+        const leftAt = Date.parse(left.endedAt || left.createdAt || '') || 0;
+        const rightAt = Date.parse(right.endedAt || right.createdAt || '') || 0;
+        return rightAt - leftAt;
+      })
+      .slice(0, capped)
+      .map(publicMatch);
+  }
+
   function runtimeRoom(matchId) {
     let room = matchRuntimeStates.get(matchId);
     if (!room) {
@@ -2455,6 +2470,12 @@ export function createPlatformServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/api/me') {
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });
         return json(req, res, 200, { user });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/profile/matches') {
+        if (!user) return json(req, res, 401, { error: 'Unauthorized' });
+        return json(req, res, 200, {
+          matches: profileMatchHistory(user.id, url.searchParams.get('limit') || 50),
+        });
       }
       if (req.method === 'GET' && url.pathname === '/api/auth/sessions') {
         if (!user) return json(req, res, 401, { error: 'Unauthorized' });

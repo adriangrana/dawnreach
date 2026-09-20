@@ -5,6 +5,7 @@ import type {
   PlatformSession,
   PlatformUser,
   SocialSnapshot,
+  MatchSummary,
 } from './types';
 
 const DEFAULT_PLATFORM_URL = 'http://127.0.0.1:8790';
@@ -99,4 +100,11 @@ export async function sendPlatformDirectMessage(userId: string, text: string) {
     body: JSON.stringify({ userId, text }),
   }, true);
   return result.message;
+}
+
+
+export async function getProfileMatchHistory(limit = 50) {
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const result = await request<{ matches: MatchSummary[] }>(`/api/profile/matches?limit=${safeLimit}`, {}, true);
+  return result.matches;
 }
