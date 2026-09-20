@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import aldenPortrait from '../game/heroes/alden/images/H001.webp';
 import aldenFullArt from '../game/heroes/alden/images/H001F.png';
+import { getHeroPortrait } from '../game/heroes/assets';
+import { listHeroDefinitions } from '../game/heroes/catalog';
 import { getItemDefinition } from '../game/items/itemDatabase';
 import { getProfileMatchHistory } from './apiClient';
 import type { MatchSummary, PlatformUser, Team } from './types';
@@ -134,7 +136,7 @@ function historyEntry(match: MatchSummary, userId: string): HistoryEntry {
     team: participant?.team ?? finalState?.team ?? null,
     won,
     heroId,
-    heroName: resultPlayer?.heroName || (heroId === 'H001' ? 'Alden' : heroId),
+    heroName: profileHeroName(heroId, resultPlayer?.heroName),
     kills: Number(resultPlayer?.kills ?? finalState?.kills ?? 0),
     deaths: Number(resultPlayer?.deaths ?? finalState?.deaths ?? 0),
     assists: Number(resultPlayer?.assists ?? finalState?.assists ?? 0),
@@ -142,6 +144,17 @@ function historyEntry(match: MatchSummary, userId: string): HistoryEntry {
     netWorth,
     resultLabel,
   };
+}
+
+const PROFILE_HEROES = listHeroDefinitions();
+const PROFILE_HERO_BY_ID = new Map(PROFILE_HEROES.map(hero => [hero.id, hero]));
+
+function profileHeroName(heroId: string, fallback?: string) {
+  return PROFILE_HERO_BY_ID.get(heroId as never)?.displayName || fallback || heroId;
+}
+
+function profileHeroPortrait(heroId: string) {
+  return getHeroPortrait(heroId) || '/assets/icon/dawnreach.png';
 }
 
 function medalSlots() {
@@ -162,7 +175,7 @@ function MatchRows({ entries, onOpenMatch, limit }: { entries: readonly HistoryE
         onClick={() => onOpenMatch?.(entry.match)}
         disabled={!entry.match.postMatchReport || !onOpenMatch}
       >
-        <span className="dr-profile-match-hero"><img src={aldenPortrait} alt="" /><span><strong>{entry.heroName}</strong><small>{entry.match.mode.toUpperCase()}</small></span></span>
+        <span className="dr-profile-match-hero"><img src={profileHeroPortrait(entry.heroId)} alt={entry.heroName} /><span><strong>{entry.heroName}</strong><small>{entry.match.mode.toUpperCase()}</small></span></span>
         <span className="dr-profile-match-kda"><b>{entry.kills} / {entry.deaths} / {entry.assists}</b><small>K / D / A</small></span>
         <strong className="dr-profile-match-result">{entry.resultLabel}</strong>
         <span className="dr-profile-match-networth"><b>{entry.netWorth === null ? '—' : formatNumber(entry.netWorth)}</b><small>NET WORTH</small></span>
@@ -230,8 +243,9 @@ export function DawnreachProfile({
   const ratingHistory = matches.flatMap(match => (match.ratingChanges ?? [])
     .filter(change => change.userId === user.id).map(change => ({ ...change, matchId: match.id, endedAt: match.endedAt }))).slice(0, 5);
   const heroCounts = new Map<string, number>();
-  for (const entry of playedEntries) heroCounts.set(entry.heroName, (heroCounts.get(entry.heroName) || 0) + 1);
-  const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['Alden', 0];
+  for (const entry of playedEntries) heroCounts.set(entry.heroId, (heroCounts.get(entry.heroId) || 0) + 1);
+  const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['H001', 0];
+  const favoriteHeroName = profileHeroName(favoriteHero[0], favoriteHero[0]);
   const historyReady = !loading && !loadError;
 
   const totalKills = playedEntries.reduce((sum, entry) => sum + entry.kills, 0);
@@ -303,7 +317,7 @@ export function DawnreachProfile({
               <article><Swords /><span><small>TOTAL MATCHES</small><strong>{historyReady ? formatNumber(totalMatches) : '—'}</strong></span></article>
               <article><Trophy /><span><small>WIN RATE</small><strong>{historyReady && decisiveEntries.length ? `${winRate.toFixed(1)}%` : '—'}</strong></span></article>
               <article><Clock3 /><span><small>RECORDED TIME</small><strong>{historyReady && totalRecordedMs ? `${Math.floor(totalRecordedMs / 3_600_000)}h ${Math.floor((totalRecordedMs % 3_600_000) / 60_000)}m` : '—'}</strong></span></article>
-              <article className="is-hero"><img src={aldenPortrait} alt="" /><span><small>FAVORITE HERO</small><strong>{historyReady && totalMatches ? favoriteHero[0] : '—'}</strong><em>{historyReady ? `${favoriteHero[1]} recorded matches` : 'History unavailable'}</em></span></article>
+              <article className="is-hero"><img src={profileHeroPortrait(favoriteHero[0])} alt={favoriteHeroName} /><span><small>FAVORITE HERO</small><strong>{historyReady && totalMatches ? favoriteHeroName : '—'}</strong><em>{historyReady ? `${favoriteHero[1]} recorded matches` : 'History unavailable'}</em></span></article>
               <article><Shield /><span><small>PREFERRED ROLE</small><strong>NOT SET</strong><em>Role tracking pending</em></span></article>
               <article><CalendarDays /><span><small>ACCOUNT CREATED</small><strong>SEASON I</strong><em>{formatAccountDate(user.createdAt)}</em></span></article>
             </div>
@@ -345,8 +359,8 @@ export function DawnreachProfile({
             <header><strong>HERO MASTERY</strong><span>FOUNDATION ROSTER</span></header>
             <div className="dr-profile-mastery-grid">
               <article>
-                <img src={aldenPortrait} alt="Alden" />
-                <div><strong>ALDEN</strong><small>{favoriteHero[1]} RECORDED MATCHES</small></div>
+                <img src={profileHeroPortrait(favoriteHero[0])} alt={favoriteHeroName} />
+                <div><strong>{favoriteHeroName.toUpperCase()}</strong><small>{favoriteHero[1]} RECORDED MATCHES</small></div>
                 <span className="dr-profile-mastery-bar"><i style={{ width: favoriteHero[1] ? '68%' : '12%' }} /></span>
               </article>
               {Array.from({ length: 3 }, (_, index) => <article className="is-placeholder" key={index}><div className="dr-profile-future-hero"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>MASTERY SLOT</small></div><span className="dr-profile-mastery-bar"><i /></span></article>)}
