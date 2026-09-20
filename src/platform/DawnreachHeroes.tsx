@@ -175,8 +175,14 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
           <section className="dr-heroes-abilities">
             <header><strong>ABILITIES</strong><span>INNATE · Q · W · E · R</span></header>
             <div>
-              <article><img src={abilityArt(selected.id,'I')} alt="" /><span><b>{selected.innate?.name ?? 'Innate'}</b><small>INNATE</small></span></article>
-              {(['Q','W','E','R'] as const).map(key => <article key={key}><img src={abilityArt(selected.id,key)} alt="" /><span><b>{selected.abilities[key].name}</b><small>{key}</small></span></article>)}
+              <article title={selected.innate?.name ?? 'Innate'} aria-label={selected.innate?.name ?? 'Innate'}>
+                <img src={abilityArt(selected.id,'I')} alt="" />
+                <span><b>{selected.innate?.name ?? 'Innate'}</b><small>INNATE</small></span>
+              </article>
+              {(['Q','W','E','R'] as const).map(key => <article key={key} title={selected.abilities[key].name} aria-label={selected.abilities[key].name}>
+                <img src={abilityArt(selected.id,key)} alt="" />
+                <span><b>{selected.abilities[key].name}</b><small>{key}</small></span>
+              </article>)}
             </div>
           </section>
 
