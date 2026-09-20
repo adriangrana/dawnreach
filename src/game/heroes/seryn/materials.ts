@@ -147,6 +147,15 @@ export function createSerynMaterials() {
   const skinShadow = skin.clone();
   skinShadow.color.setHex(0xaa6d60);
 
+  // The face uses vertex colours for eyes/brows/lips while retaining the skin bump
+  // response. This keeps the head a single connected mesh instead of attaching
+  // separate facial primitives.
+  const face = skin.clone();
+  face.map = null;
+  face.color.setHex(0xffffff);
+  face.vertexColors = true;
+  face.roughness = 0.74;
+
   const hairMap = hairTexture();
   const hair = new THREE.MeshPhysicalMaterial({
     map: hairMap,
@@ -216,7 +225,7 @@ export function createSerynMaterials() {
   const lips = new THREE.MeshStandardMaterial({ color: 0x7c4348, roughness: 0.78 });
 
   return {
-    skin, skinShadow, hair, hairShadow,
+    skin, skinShadow, face, hair, hairShadow,
     navy, navyDark, teal, silver, silverDark, gold, leather, crystal,
     eyeWhite, iris, eyeDark, lips,
   };
