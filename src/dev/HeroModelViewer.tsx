@@ -85,10 +85,19 @@ export default function HeroModelViewer() {
 
   const [heroId, setHeroId] = useState<HeroId>(() => queryHeroId());
   const [animation, setAnimation] = useState<AnimationMode>('idle');
+  const animationRef = useRef<AnimationMode>('idle');
   const [wireframe, setWireframeState] = useState(false);
   const [showBounds, setShowBounds] = useState(false);
   const [showAxes, setShowAxes] = useState(false);
   const definition = useMemo(() => getHeroDefinition(heroId), [heroId]);
+
+  useEffect(() => {
+    animationRef.current = animation;
+    if (animation !== 'attack') {
+      runtimeRef.current?.model.resetAttack();
+      if (runtimeRef.current) runtimeRef.current.attackClock = 0;
+    }
+  }, [animation]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -229,9 +238,10 @@ export default function HeroModelViewer() {
       previous = now;
       runtime.elapsed += dt;
 
-      if (animation !== 'paused') {
-        const moving = animation === 'walk';
-        if (animation === 'attack') {
+      const mode = animationRef.current;
+      if (mode !== 'paused') {
+        const moving = mode === 'walk';
+        if (mode === 'attack') {
           runtime.attackClock = (runtime.attackClock + dt) % 1.15;
           const progress = THREE.MathUtils.clamp(runtime.attackClock / 0.72, 0, 1);
           model.setAttackProgress(progress < 1 ? progress : 0);
@@ -270,7 +280,7 @@ export default function HeroModelViewer() {
       try { renderer.forceContextLoss(); } catch { /* context may already be lost */ }
       renderer.domElement.remove();
     };
-  }, [heroId, animation]);
+  }, [heroId]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
