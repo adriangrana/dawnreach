@@ -5,6 +5,24 @@ export type DamageType = 'physical' | 'magic' | 'true';
 export type HeroResourceType = 'mana' | 'rage' | 'energy';
 export type HeroId = string;
 
+export type HeroDeploymentLane = 'NORTH' | 'MID' | 'SOUTH';
+export type HeroPowerBand = 'Low' | 'Medium' | 'High';
+
+export interface HeroDeploymentPreferences {
+  /** Dawnreach has no fixed jungle/support positions: deployment is NORTH / MID / SOUTH with a 2 / 1 / 2 team split. */
+  primary: readonly HeroDeploymentLane[];
+  secondary: readonly HeroDeploymentLane[];
+}
+
+export interface HeroCombatProfile {
+  burst: HeroPowerBand;
+  sustainedDamage: HeroPowerBand;
+  control: HeroPowerBand;
+  mobility: HeroPowerBand;
+  durability: HeroPowerBand;
+  range: HeroPowerBand;
+}
+
 export enum HeroPrimaryAttribute {
   STR = 'strength',
   AGI = 'agility',
@@ -96,6 +114,13 @@ export interface HeroDefinition {
   className: string;
   primaryRole: string;
   secondaryRoles: readonly string[];
+  /**
+   * Preferred deployment lanes. These are lane affinities, not fixed MOBA jobs.
+   * Dawnreach team deployment is NORTH / MID / SOUTH = 2 / 1 / 2.
+   */
+  deploymentPreferences?: HeroDeploymentPreferences;
+  /** Coarse power-budget profile used by design/UI; not a numerical balance modifier. */
+  combatProfile?: HeroCombatProfile;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   weaponConfiguration: string;
   weaponDesignReason: string;

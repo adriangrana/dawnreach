@@ -152,6 +152,18 @@ export const ALDEN: AldenGameplayDefinition = {
   className: 'Caballero',
   primaryRole: 'Tanque-Bruiser',
   secondaryRoles: ['Frontline', 'Iniciador', 'Daño sostenido'],
+  deploymentPreferences: {
+    primary: ['NORTH', 'SOUTH'],
+    secondary: ['MID'],
+  },
+  combatProfile: {
+    burst: 'Medium',
+    sustainedDamage: 'Medium',
+    control: 'High',
+    mobility: 'Medium',
+    durability: 'High',
+    range: 'Low',
+  },
   difficulty: 'Medium',
   weaponConfiguration: 'Espada larga de caballero, sin escudo',
   weaponDesignReason: 'Alden concentra toda su identidad de combate en una sola espada: inicia con ella, mantiene presión sostenida y convierte una guardia técnica de hoja en su principal herramienta defensiva.',
