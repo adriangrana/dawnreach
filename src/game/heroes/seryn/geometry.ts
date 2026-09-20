@@ -41,16 +41,20 @@ export function createSerynLoftGeometry(
   }
 
   const stride = sides + 1;
+  const ascendsY = sections[sections.length - 1].y >= sections[0].y;
   for (let row = 0; row < sections.length - 1; row++) {
     for (let column = 0; column < sides; column++) {
       const a = row * stride + column;
       const b = a + 1;
       const d = (row + 1) * stride + column;
       const c = d + 1;
-      // Rings are authored clockwise when viewed from +Y. Keep the side triangles
-      // counter-clockwise from the exterior so WebGL front-face culling and generated
-      // normals both point out of the body instead of exposing the hollow interior.
-      indices.push(a, b, d, b, c, d);
+
+      // Torso/head lofts are authored bottom -> top, while limbs are authored
+      // joint -> extremity and therefore run downward in local Y. Their exterior
+      // winding is opposite. Choose the triangle order from the actual section
+      // direction so every loft keeps outward-facing normals.
+      if (ascendsY) indices.push(a, b, d, b, c, d);
+      else indices.push(a, d, b, b, d, c);
     }
   }
 
@@ -68,8 +72,10 @@ export function createSerynLoftGeometry(
     }
   };
 
-  if (capBottom) addCap(0, false);
-  if (capTop) addCap(sections.length - 1, true);
+  // End-cap normals must follow the same authoring direction. For descending
+  // limb lofts the first ring is physically the top end and the last ring the bottom.
+  if (capBottom) addCap(0, !ascendsY);
+  if (capTop) addCap(sections.length - 1, ascendsY);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
