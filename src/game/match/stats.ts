@@ -1,4 +1,5 @@
 import { ALDEN } from '../heroes/alden/gameplay';
+import { SERYN } from '../heroes/seryn/gameplay';
 import {
   HeroAttributes,
   applyHeroAttributeRules,
@@ -61,6 +62,7 @@ export function calculateHeroStats(
   stats = applyTimedItemStatEffects(stats, hero, context.nowMs ?? 0);
 
   if (hero.definitionId === ALDEN.id) stats = applyAldenConditionalStatEffects(stats, hero, context);
+  if (hero.definitionId === SERYN.id) stats = applySerynConditionalStatEffects(stats, hero, context);
   return sanitizeStats(stats);
 }
 
@@ -174,6 +176,20 @@ function applyAldenConditionalStatEffects(
     }
   }
 
+  return sanitizeStats(result);
+}
+
+function applySerynConditionalStatEffects(
+  stats: HeroStats,
+  hero: MatchHeroState,
+  context: HeroStatsContext,
+): HeroStats {
+  const result = { ...stats };
+  const vectorStep = getActiveStatus(hero, 'seryn:vector-step', context.nowMs ?? 0);
+  if (vectorStep?.rank) {
+    const rank = SERYN.w.ranks[Math.min(SERYN.w.ranks.length, Math.max(1, vectorStep.rank)) - 1];
+    result.attackSpeed *= 1 + rank.attackSpeedPercent / 100;
+  }
   return sanitizeStats(result);
 }
 

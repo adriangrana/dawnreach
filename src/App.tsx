@@ -651,14 +651,21 @@ function updateHudRuntime(runtime: HudRuntime, action: HudAction): HudRuntime {
   }
 
   if (action.type === 'world-hero-attack') {
+    const distance = Math.hypot(
+      action.event.targetPosition.x - action.event.attackerPosition.x,
+      action.event.targetPosition.z - action.event.attackerPosition.z,
+    ) / 0.01;
     const resolution = resolveHeroWorldBasicAttackEffects(
       match,
       LOCAL_HERO_ENTITY_ID,
       nowMs,
       worldTargetClass(action.event.targetKind),
+      action.event.targetId,
+      distance,
     );
+    const innateName = getHeroDefinition(getRequiredHero(match, LOCAL_HERO_ENTITY_ID).definitionId).innate?.name ?? 'Innate';
     const feedback = resolution.consumesInnate
-      ? `Voto del Muro Vivo · +${formatHudNumber(resolution.bonusDamage)} daño · +${formatHudNumber(resolution.healing)} vida`
+      ? `${innateName} · +${formatHudNumber(resolution.bonusDamage)} daño${resolution.healing > 0 ? ` · +${formatHudNumber(resolution.healing)} vida` : ''}`
       : runtime.feedback;
     return { ...runtime, match: resolution.state, nowMs, feedback };
   }
@@ -1415,11 +1422,17 @@ export default function App({
     const atMs = toMatchGameTimeMs(event.atMs);
     const normalizedEvent = { ...event, atMs };
     const targetClass = worldTargetClass(event.targetKind);
+    const distance = Math.hypot(
+      event.targetPosition.x - event.attackerPosition.x,
+      event.targetPosition.z - event.attackerPosition.z,
+    ) / 0.01;
     const preview = calculateHeroWorldBasicAttackPreview(
       snapshot.match,
       LOCAL_HERO_ENTITY_ID,
       atMs,
       targetClass,
+      event.targetId,
+      distance,
     );
     if (preview.consumesInnate && preview.bonusDamage > 0) {
       queueWorldDamageAdjustment(event.targetId, preview.bonusDamage);

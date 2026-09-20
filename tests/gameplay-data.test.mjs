@@ -322,3 +322,85 @@ test('Voto del Muro Vivo gains frontal stacks on its ICD and empowers the next b
   assert.ok(hit.state.heroes.h1.currentHp > hpBefore);
   assert.ok(hit.state.heroes.h1.runtime.timestamps['alden:steel-lockout-until'] > 3500);
 });
+
+
+function makeSerynDuel(level = 18) {
+  let state = game.createMatchState('seryn-test', 0);
+  state = game.addPlayerToMatch(state, { playerId: 's', displayName: 'Seryn', team: 'dawn', slotIndex: 1 });
+  state = game.addPlayerToMatch(state, { playerId: 'a', displayName: 'Target', team: 'dusk', slotIndex: 1 });
+  state = game.selectHeroForPlayer(state, 's', 'H002');
+  state = game.selectHeroForPlayer(state, 'a', 'H001');
+  state = game.assignSelectedHeroToPlayer(state, 's', 'seryn');
+  state = game.assignSelectedHeroToPlayer(state, 'a', 'target');
+  if (level !== 1) {
+    state = game.setHeroLevel(state, 'seryn', level);
+    state = game.setHeroLevel(state, 'target', level);
+  }
+  return state;
+}
+
+test('catalog exposes Alden and Seryn as real playable definitions', () => {
+  assert.deepEqual(game.listHeroDefinitions().map(hero => hero.id), ['H001', 'H002']);
+  assert.equal(game.getHeroDefinition('H002').displayName, 'Seryn');
+  assert.equal(game.getHeroDefinition('H002').deploymentPreferences.primary.join('/'), 'NORTH/SOUTH');
+});
+
+test('Seryn W spends mana, starts cooldown and grants only an attack-speed window', () => {
+  let state = makeSerynDuel(7);
+  state = game.upgradeHeroAbility(state, 'seryn', 'W');
+  state = game.upgradeHeroAbility(state, 'seryn', 'W');
+  const before = game.calculateHeroStats(state, 'seryn', { nowMs: 1000 }).attackSpeed;
+  const cast = game.performAbilityAction(state, { actorHeroEntityId: 'seryn', key: 'W', nowMs: 1000 });
+  const after = game.calculateHeroStats(cast.state, 'seryn', { nowMs: 1500 }).attackSpeed;
+  assert.equal(cast.result.targets.length, 0);
+  assert.equal(cast.result.actorHealing, 0);
+  assert.ok(cast.state.heroes.seryn.runtime.statuses['seryn:vector-step']);
+  assert.ok(after > before);
+});
+
+test('Seryn E damages, slows and roots only the abstract center target', () => {
+  let state = makeSerynDuel(7);
+  for (let i = 0; i < 4; i++) state = game.upgradeHeroAbility(state, 'seryn', 'E');
+  const result = game.performAbilityAction(state, {
+    actorHeroEntityId: 'seryn',
+    key: 'E',
+    targetHeroEntityIds: ['target'],
+    nowMs: 1000,
+  });
+  assert.ok(result.result.targets[0].finalDamage > 0);
+  assert.ok(result.state.heroes.target.runtime.statuses['cc:slow:seryn:seryn-e']);
+  assert.ok(result.state.heroes.target.runtime.statuses['cc:root:seryn:seryn-e']);
+});
+
+test('Seryn R applies the three-shot repeated-hit multiplier instead of triple full damage', () => {
+  let state = makeSerynDuel(18);
+  for (let i = 0; i < 3; i++) state = game.upgradeHeroAbility(state, 'seryn', 'R');
+  const preview = game.calculateSerynAbilityAtRank(state, 'seryn', 'R', 3);
+  const stats = game.calculateHeroStats(state, 'seryn');
+  const first = (game.SERYN.r.ranks[2].shotBaseDamage + game.SERYN.r.totalAdRatioPerShot * stats.attackDamage)
+    * (1 + stats.abilityPowerPercent / 100);
+  assert.ok(Math.abs(preview.rawDamage - first * (1 + 2 * game.SERYN.r.repeatedHitDamageMultiplier)) < 1e-9);
+  assert.ok(preview.rawDamage < first * 3);
+});
+
+test('Seryn Línea de Horizonte requires range, three traces and a following attack to proc', () => {
+  let state = makeSerynDuel(10);
+  for (let i = 0; i < 3; i++) {
+    state = game.performBasicAttackAction(state, {
+      actorHeroEntityId: 'seryn',
+      targetHeroEntityId: 'target',
+      nowMs: 1000 + i * 500,
+      distance: 575,
+    }).state;
+  }
+  assert.ok(state.heroes.seryn.runtime.statuses['seryn:aligned:target']);
+  const proc = game.performBasicAttackAction(state, {
+    actorHeroEntityId: 'seryn',
+    targetHeroEntityId: 'target',
+    nowMs: 2600,
+    distance: 575,
+  });
+  assert.ok(proc.result.notes.includes('Línea de Horizonte consumed.'));
+  assert.equal(proc.state.heroes.seryn.runtime.counters['seryn:sightline'], 0);
+  assert.ok(proc.state.heroes.seryn.runtime.timestamps['seryn:sightline-lockout:target'] > 2600);
+});

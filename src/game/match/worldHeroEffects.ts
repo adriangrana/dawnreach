@@ -1,4 +1,5 @@
 import { ALDEN } from '../heroes/alden/gameplay';
+import { SERYN } from '../heroes/seryn/gameplay';
 import type { DamageType } from '../heroes/types';
 import { calculateAldenInnate, type CombatTargetClass } from './combat';
 import { getRequiredHero } from './matchState';
@@ -18,6 +19,67 @@ export type HeroWorldBasicAttackPreview = Readonly<{
   healing: number;
   consumesInnate: boolean;
 }>;
+
+function serynAlignedStatusId(targetEntityId: string) {
+  return `seryn:aligned:${targetEntityId}`;
+}
+
+function serynLockoutKey(targetEntityId: string) {
+  return `seryn:sightline-lockout:${targetEntityId}`;
+}
+
+function clearExpiredSerynSightline(hero: MatchHeroState, nowMs: number) {
+  let changed = false;
+  const bucket = hero.runtime.targetCounters['seryn:sightline'];
+  if (bucket) {
+    for (const [targetId, entry] of Object.entries(bucket)) {
+      if (entry.expiresAtMs > nowMs) continue;
+      delete bucket[targetId];
+      delete hero.runtime.statuses[serynAlignedStatusId(targetId)];
+      changed = true;
+    }
+  }
+  for (const [id, status] of Object.entries(hero.runtime.statuses)) {
+    if (!id.startsWith('seryn:aligned:') || status.expiresAtMs > nowMs) continue;
+    delete hero.runtime.statuses[id];
+    changed = true;
+  }
+  if (changed) hero.runtime.counters['seryn:sightline'] = 0;
+  return changed;
+}
+
+function advanceSerynSightline(
+  hero: MatchHeroState,
+  targetEntityId: string,
+  distance: number,
+  nowMs: number,
+) {
+  clearExpiredSerynSightline(hero, nowMs);
+  if (distance < SERYN.innate.minimumRange) return;
+
+  const alignedId = serynAlignedStatusId(targetEntityId);
+  if (getActiveStatus(hero, alignedId, nowMs)) return;
+  if (nowMs < (hero.runtime.timestamps[serynLockoutKey(targetEntityId)] ?? 0)) return;
+
+  const bucket = hero.runtime.targetCounters['seryn:sightline'] ??= {};
+  const existing = bucket[targetEntityId];
+  const current = existing && existing.expiresAtMs > nowMs ? existing.stacks : 0;
+  const stacks = Math.min(SERYN.innate.maxStacks, current + 1);
+  bucket[targetEntityId] = {
+    stacks,
+    expiresAtMs: nowMs + SERYN.innate.stackDurationSeconds * 1000,
+  };
+  hero.runtime.counters['seryn:sightline'] = stacks;
+
+  if (stacks >= SERYN.innate.maxStacks) {
+    hero.runtime.statuses[alignedId] = {
+      id: alignedId,
+      sourceHeroEntityId: hero.heroEntityId,
+      stacks,
+      expiresAtMs: nowMs + SERYN.innate.alignedWindowSeconds * 1000,
+    };
+  }
+}
 
 export type HeroWorldBasicAttackResolution = HeroWorldBasicAttackPreview & Readonly<{
   state: MatchState;
@@ -59,11 +121,22 @@ function addAldenInnateStack(hero: MatchHeroState, nowMs: number): void {
 export function advanceHeroWorldEffects(state: MatchState, nowMs: number): MatchState {
   let next: MatchState | null = null;
   for (const hero of Object.values(state.heroes)) {
-    if (hero.definitionId !== ALDEN.id) continue;
-    const ready = hero.runtime.statuses['alden:oath-ready'];
-    if (!ready || ready.expiresAtMs > nowMs) continue;
-    next ??= structuredClone(state);
-    clearExpiredAldenInnateReady(getRequiredHero(next, hero.heroEntityId), nowMs);
+    if (hero.definitionId === ALDEN.id) {
+      const ready = hero.runtime.statuses['alden:oath-ready'];
+      if (!ready || ready.expiresAtMs > nowMs) continue;
+      next ??= structuredClone(state);
+      clearExpiredAldenInnateReady(getRequiredHero(next, hero.heroEntityId), nowMs);
+      continue;
+    }
+    if (hero.definitionId === SERYN.id) {
+      const hasExpiredTrace = Object.values(hero.runtime.targetCounters['seryn:sightline'] ?? {})
+        .some(entry => entry.expiresAtMs <= nowMs);
+      const hasExpiredAligned = Object.entries(hero.runtime.statuses)
+        .some(([id, status]) => id.startsWith('seryn:aligned:') && status.expiresAtMs <= nowMs);
+      if (!hasExpiredTrace && !hasExpiredAligned) continue;
+      next ??= structuredClone(state);
+      clearExpiredSerynSightline(getRequiredHero(next, hero.heroEntityId), nowMs);
+    }
   }
   return next ?? state;
 }
@@ -92,18 +165,37 @@ export function calculateHeroWorldBasicAttackPreview(
   heroEntityId: string,
   nowMs: number,
   targetClass: CombatTargetClass = 'player',
+  targetEntityId = '',
+  distance = 0,
 ): HeroWorldBasicAttackPreview {
   const hero = getRequiredHero(state, heroEntityId);
-  if (hero.definitionId !== ALDEN.id || !getActiveStatus(hero, 'alden:oath-ready', nowMs)) {
-    return { bonusDamage: 0, healing: 0, consumesInnate: false };
+  if (hero.definitionId === ALDEN.id) {
+    if (!getActiveStatus(hero, 'alden:oath-ready', nowMs)) {
+      return { bonusDamage: 0, healing: 0, consumesInnate: false };
+    }
+    const innate = calculateAldenInnate(state, heroEntityId, targetClass);
+    return {
+      bonusDamage: innate.bonusDamage,
+      healing: innate.healing,
+      consumesInnate: true,
+    };
   }
 
-  const innate = calculateAldenInnate(state, heroEntityId, targetClass);
-  return {
-    bonusDamage: innate.bonusDamage,
-    healing: innate.healing,
-    consumesInnate: true,
-  };
+  if (hero.definitionId === SERYN.id && targetEntityId && distance >= SERYN.innate.minimumRange) {
+    const aligned = getActiveStatus(hero, serynAlignedStatusId(targetEntityId), nowMs);
+    if (aligned) {
+      const stats = calculateHeroStats(state, heroEntityId, { nowMs });
+      return {
+        bonusDamage: SERYN.innate.bonusDamageBase
+          + SERYN.innate.bonusDamagePerHeroLevel * (hero.level - 1)
+          + SERYN.innate.totalAdRatio * stats.attackDamage,
+        healing: 0,
+        consumesInnate: true,
+      };
+    }
+  }
+
+  return { bonusDamage: 0, healing: 0, consumesInnate: false };
 }
 
 /** Consumes the ready innate on a real world basic attack and applies its self-heal. */
@@ -112,8 +204,33 @@ export function resolveHeroWorldBasicAttackEffects(
   heroEntityId: string,
   nowMs: number,
   targetClass: CombatTargetClass = 'player',
+  targetEntityId = '',
+  distance = 0,
 ): HeroWorldBasicAttackResolution {
-  const preview = calculateHeroWorldBasicAttackPreview(state, heroEntityId, nowMs, targetClass);
+  const preview = calculateHeroWorldBasicAttackPreview(
+    state,
+    heroEntityId,
+    nowMs,
+    targetClass,
+    targetEntityId,
+    distance,
+  );
+  const current = getRequiredHero(state, heroEntityId);
+
+  if (current.definitionId === SERYN.id) {
+    const next = structuredClone(state);
+    const hero = getRequiredHero(next, heroEntityId);
+    if (preview.consumesInnate && targetEntityId) {
+      delete hero.runtime.statuses[serynAlignedStatusId(targetEntityId)];
+      delete hero.runtime.targetCounters['seryn:sightline']?.[targetEntityId];
+      hero.runtime.counters['seryn:sightline'] = 0;
+      hero.runtime.timestamps[serynLockoutKey(targetEntityId)] = nowMs + SERYN.innate.perTargetLockoutSeconds * 1000;
+    } else if (targetEntityId) {
+      advanceSerynSightline(hero, targetEntityId, distance, nowMs);
+    }
+    return { state: next, ...preview };
+  }
+
   if (!preview.consumesInnate) return { state, ...preview };
 
   const next = structuredClone(state);

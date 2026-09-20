@@ -1,6 +1,6 @@
 import { getHeroDefinition } from '../heroes/catalog';
 import type { AbilityKey, HeroId } from '../heroes/types';
-import { calculateAldenAbilityAtRank, performAbilityAction } from './combat';
+import { calculateHeroAbilityAtRank, performAbilityAction } from './combat';
 import {
     addPlayerToMatch, assignSelectedHeroToPlayer, createMatchState, getRequiredHero,
     selectHeroForPlayer, setHeroLevel, setMatchPhase,
@@ -117,8 +117,8 @@ export function getAbilityControl(state: MatchState, heroEntityId: string, key: 
     const ability = definition.abilities[key];
     const rank = hero.abilityRanks[key];
     const passive = ability.type === 'passive';
-    const preview = hero.definitionId === 'H001' && !passive
-        ? calculateAldenAbilityAtRank(state, heroEntityId, key, Math.max(1, rank) as 1 | 2 | 3 | 4)
+    const preview = !passive
+        ? calculateHeroAbilityAtRank(state, heroEntityId, key, Math.max(1, rank) as 1 | 2 | 3 | 4)
         : null;
     const effectiveReadyAtMs = hero.cooldownReadyAtMs[key] - getWorldCooldownReductionMs(heroEntityId, key);
     const remainingMs = Math.max(0, effectiveReadyAtMs - nowMs);
