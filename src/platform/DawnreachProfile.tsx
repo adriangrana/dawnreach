@@ -359,7 +359,7 @@ export function DawnreachProfile({
             <PlaceholderMedals />
           </section>
         </div>
-      </div> : <section className="dr-profile-history-page dr-profile-panel">
+      </div> : section === 'history' ? <section className="dr-profile-history-page dr-profile-panel">
         <header><strong>MATCH HISTORY</strong><span>{entries.length} RECORDED MATCHES</span></header>
         <div className="dr-profile-history-intro"><History /><div><h2>YOUR BATTLES</h2><p>Completed matches are stored with their post-match report. Select a match to reopen its detailed results.</p></div></div>
         {loading
