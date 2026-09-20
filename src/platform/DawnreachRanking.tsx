@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Crown, LockKeyhole, Search, Shield, Sparkles, Swords, Trophy, Users } from 'lucide-react';
 import { getRankedLeaderboard } from './apiClient';
+import { RankBadge, RankProgress, playerRank } from './RankBadge';
 import type { PlatformUser, RankingEntry, SocialSnapshot } from './types';
 
 type RankingScope = 'global' | 'friends';
@@ -21,8 +22,8 @@ function PodiumCard({ entry, place }: { entry: RankingEntry | null; place: 1 | 2
   return <article className={`dr-ranking-podium-card is-place-${place} ${entry ? '' : 'is-empty'}`}>
     <span className="dr-ranking-podium-place">{place}</span>
     {entry ? <>
-      <StandingAvatar entry={entry} />
-      <div><strong>{entry.username}</strong><small>RATED PLAYER</small><b>{formatNumber(entry.rating)} MMR</b></div>
+      <RankBadge player={entry} size="small" />
+      <div><strong>{entry.username}</strong><small>{playerRank(entry).label.toUpperCase()}</small><b>{formatNumber(entry.rating)} MMR</b></div>
     </> : <>
       <span className="dr-ranking-empty-avatar"><LockKeyhole /></span>
       <div><strong>UNCLAIMED</strong><small>RANKED POSITION</small><b>—</b></div>
@@ -68,6 +69,8 @@ export function DawnreachRanking({ user, social }: { user: PlatformUser; social:
   }, [entries, friendIds, query, scope, user.id]);
 
   const viewerStanding = entries.find(entry => entry.id === user.id) ?? null;
+  const rankedViewer = viewerStanding ?? user;
+  const viewerRank = playerRank(rankedViewer);
   const viewerGames = user.wins + user.losses;
   const viewerWinRate = winRate(user);
   const podium: readonly (RankingEntry | null)[] = [entries[0] ?? null, entries[1] ?? null, entries[2] ?? null];
@@ -86,14 +89,14 @@ export function DawnreachRanking({ user, social }: { user: PlatformUser; social:
           <div className="dr-ranking-your-body">
             <div className="dr-ranking-user">
               <span className="dr-ranking-user-avatar">{initials(user.username)}<i><Crown /></i></span>
-              <div><h2>{user.username}</h2><p>Light finds a way.</p><small>{viewerStanding ? `#${viewerStanding.position} GLOBAL` : 'UNRANKED'}</small></div>
+              <div><h2>{user.username}</h2><p>Light finds a way.</p><small>{viewerStanding ? `#${viewerStanding.position} GLOBAL · ${viewerRank.label.toUpperCase()}` : viewerRank.label.toUpperCase()}</small></div>
             </div>
-            <div className="dr-ranking-rank-emblem"><Shield /><span /></div>
+            <div className="dr-ranking-rank-emblem"><RankBadge player={rankedViewer} size="large" /></div>
             <div className="dr-ranking-current">
-              <small>{user.calibrated ? 'CURRENT RATING' : 'RANK CALIBRATION'}</small>
-              <h3>{user.calibrated ? `${formatNumber(user.rating)} MMR` : 'PROVISIONAL'}</h3>
+              <small>{viewerRank.label.toUpperCase()}</small>
+              <h3>{viewerRank.mmr === null ? 'PROVISIONAL' : `${formatNumber(viewerRank.mmr)} MMR`}</h3>
               <b>{user.calibrated ? `${user.rankedGames} RANKED MATCHES` : `${user.calibrationGames} / ${user.calibrationTarget} GAMES`}</b>
-              <span className="dr-ranking-progress"><i style={{ width: `${user.calibrated ? 100 : Math.min(100, (user.calibrationGames / Math.max(1, user.calibrationTarget)) * 100)}%` }} /></span>
+              <RankProgress player={rankedViewer} />
             </div>
             <div className="dr-ranking-user-metrics">
               <article><Swords /><span><small>RANKED MATCHES</small><strong>{formatNumber(user.rankedGames)}</strong></span></article>
@@ -120,13 +123,13 @@ export function DawnreachRanking({ user, social }: { user: PlatformUser; social:
           </div>
 
           <div className="dr-ranking-table">
-            <div className="dr-ranking-table-head"><span>#</span><span>PLAYER</span><span>RATING</span><span>W / L</span><span>WIN RATE</span><span>STATUS</span><span /></div>
+            <div className="dr-ranking-table-head"><span>#</span><span>PLAYER</span><span>RATING</span><span>W / L</span><span>WIN RATE</span><span>RANK</span><span /></div>
             {loading ? <div className="dr-ranking-empty"><Sparkles /><strong>LOADING RANKINGS</strong><span>Reading the competitive ladder…</span></div>
             : error ? <div className="dr-ranking-empty"><Shield /><strong>RANKINGS UNAVAILABLE</strong><span>{error}</span></div>
             : scopedEntries.length ? scopedEntries.map(entry => <article key={entry.id} className={`dr-ranking-row ${entry.id === user.id ? 'is-you' : ''}`}>
               <b>{entry.position}</b>
               <span className="dr-ranking-player-cell"><StandingAvatar entry={entry} /><strong>{entry.username}</strong>{entry.id === user.id && <small>YOU</small>}</span>
-              <strong>{formatNumber(entry.rating)}</strong><span>{entry.wins} / {entry.losses}</span><span>{winRate(entry).toFixed(1)}%</span><span>RATED</span><ChevronRight />
+              <strong>{formatNumber(entry.rating)}</strong><span>{entry.wins} / {entry.losses}</span><span>{winRate(entry).toFixed(1)}%</span><span className="dr-ranking-table-rank"><RankBadge player={entry} size="tiny" label /></span><ChevronRight />
             </article>) : <div className="dr-ranking-empty"><Trophy /><strong>NO RATED PLAYERS YET</strong><span>{scope === 'friends' ? 'No friends are currently calibrated.' : 'Complete ranked calibration to establish the first standings.'}</span></div>}
           </div>
         </section>
@@ -139,8 +142,8 @@ export function DawnreachRanking({ user, social }: { user: PlatformUser; social:
           <blockquote>“GREATER PLAYERS BUILD BRIGHTER WORLDS.”</blockquote>
         </section>
         <section className="dr-ranking-panel dr-ranking-side-rank">
-          <header><strong>YOUR RANK (SEASON I)</strong><span>{viewerStanding ? `#${viewerStanding.position}` : 'UNRANKED'}</span></header>
-          <div className="dr-ranking-side-rank-body"><div className="dr-ranking-side-emblem"><Shield /></div><div><h3>{user.calibrated ? `${formatNumber(user.rating)} MMR` : 'PROVISIONAL'}</h3><strong>{user.calibrated ? 'RATED' : `${user.calibrationGames} / ${user.calibrationTarget} CALIBRATION`}</strong><small>{user.rankedGames} ranked matches</small></div></div>
+          <header><strong>YOUR RANK (SEASON I)</strong><span>{viewerStanding ? `#${viewerStanding.position}` : viewerRank.label.toUpperCase()}</span></header>
+          <div className="dr-ranking-side-rank-body"><div className="dr-ranking-side-emblem"><RankBadge player={rankedViewer} size="large" /></div><div><h3>{viewerRank.label.toUpperCase()}</h3><strong>{viewerRank.mmr === null ? 'PROVISIONAL' : `${formatNumber(viewerRank.mmr)} MMR`}</strong><small>{viewerRank.progressLabel}</small></div></div>
         </section>
         <section className="dr-ranking-panel dr-ranking-rewards">
           <header><strong>SEASON REWARDS</strong><span>NOT DEFINED</span></header>
