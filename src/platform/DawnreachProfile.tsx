@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import aldenPortrait from '../game/heroes/alden/images/H001.webp';
 import aldenFullArt from '../game/heroes/alden/images/H001F.png';
+import { getItemDefinition } from '../game/items/itemDatabase';
 import { getProfileMatchHistory } from './apiClient';
 import type { MatchSummary, PlatformUser, Team } from './types';
 
@@ -32,6 +33,7 @@ type HistoryEntry = Readonly<{
   assists: number;
   durationMs: number;
   netWorth: number | null;
+  resultLabel: 'VICTORY' | 'DEFEAT' | 'CANCELLED' | 'VOID' | 'ENDED';
 }>;
 
 const PROFILE_SECTIONS: readonly Readonly<{ key: ProfileSection; label: string; icon: typeof Trophy; ready: boolean }>[] = [
@@ -71,25 +73,69 @@ function formatMatchDate(value?: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
+function inventoryValue(items: readonly Readonly<{ definitionId: string; quantity: number }>[] | undefined) {
+  if (!items?.length) return 0;
+  return items.reduce((total, item) => {
+    const definition = getItemDefinition(item.definitionId);
+    const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+    return total + (definition?.cost ?? 0) * quantity;
+  }, 0);
+}
+
+function historicalDurationMs(match: MatchSummary) {
+  const report = match.postMatchReport;
+  const recorded = Number(report?.durationMs || 0);
+  if (recorded > 0) return recorded;
+
+  const startedAt = Date.parse(report?.startedAt || match.startedAt || match.createdAt || '');
+  const endedAt = Date.parse(report?.endedAt || match.endedAt || '');
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return 0;
+  return Math.max(0, endedAt - startedAt);
+}
+
 function historyEntry(match: MatchSummary, userId: string): HistoryEntry {
+  const report = match.postMatchReport;
   const participant = match.players.find(player => player.userId === userId) ?? null;
-  const resultPlayer = match.postMatchReport?.players.find(player => player.userId === userId) ?? null;
-  const heroId = resultPlayer?.heroId || match.heroSelections?.[userId]?.heroId || 'H001';
-  const durationMs = Number(match.postMatchReport?.durationMs || 0);
-  const won = match.status === 'cancelled' || !participant || !match.winnerTeam
+  const resultPlayer = report?.players.find(player => player.userId === userId) ?? null;
+  const finalState = report?.finalStates.find(state => state.userId === userId) ?? null;
+  const heroId = resultPlayer?.heroId || finalState?.heroId || match.heroSelections?.[userId]?.heroId || 'H001';
+  const winnerTeam = match.winnerTeam ?? report?.winnerTeam ?? null;
+  const voided = Boolean(report?.voided);
+  const won = match.status === 'cancelled' || voided || !participant || !winnerTeam
     ? null
-    : participant.team === match.winnerTeam;
+    : participant.team === winnerTeam;
+
+  let netWorth: number | null = null;
+  if (resultPlayer?.netWorth !== undefined && Number.isFinite(Number(resultPlayer.netWorth))) {
+    netWorth = Math.max(0, Number(resultPlayer.netWorth));
+  } else if (resultPlayer) {
+    netWorth = Math.max(0, Number(resultPlayer.currentGold || 0)) + inventoryValue(resultPlayer.items);
+  } else if (finalState) {
+    netWorth = Math.max(0, Number(finalState.gold || 0)) + inventoryValue(finalState.inventory);
+  }
+
+  const resultLabel: HistoryEntry['resultLabel'] = match.status === 'cancelled'
+    ? 'CANCELLED'
+    : voided
+      ? 'VOID'
+      : won === true
+        ? 'VICTORY'
+        : won === false
+          ? 'DEFEAT'
+          : 'ENDED';
+
   return {
     match,
-    team: participant?.team ?? null,
+    team: participant?.team ?? finalState?.team ?? null,
     won,
     heroId,
     heroName: resultPlayer?.heroName || (heroId === 'H001' ? 'Alden' : heroId),
-    kills: Number(resultPlayer?.kills || 0),
-    deaths: Number(resultPlayer?.deaths || 0),
-    assists: Number(resultPlayer?.assists || 0),
-    durationMs,
-    netWorth: resultPlayer?.netWorth !== undefined ? Number(resultPlayer.netWorth) : null,
+    kills: Number(resultPlayer?.kills ?? finalState?.kills ?? 0),
+    deaths: Number(resultPlayer?.deaths ?? finalState?.deaths ?? 0),
+    assists: Number(resultPlayer?.assists ?? finalState?.assists ?? 0),
+    durationMs: historicalDurationMs(match),
+    netWorth,
+    resultLabel,
   };
 }
 
@@ -113,7 +159,7 @@ function MatchRows({ entries, onOpenMatch, limit }: { entries: readonly HistoryE
       >
         <span className="dr-profile-match-hero"><img src={aldenPortrait} alt="" /><span><strong>{entry.heroName}</strong><small>{entry.match.mode.toUpperCase()}</small></span></span>
         <span className="dr-profile-match-kda"><b>{entry.kills} / {entry.deaths} / {entry.assists}</b><small>K / D / A</small></span>
-        <strong className="dr-profile-match-result">{entry.won === null ? 'ENDED' : entry.won ? 'VICTORY' : 'DEFEAT'}</strong>
+        <strong className="dr-profile-match-result">{entry.resultLabel}</strong>
         <span className="dr-profile-match-networth"><b>{entry.netWorth === null ? '—' : formatNumber(entry.netWorth)}</b><small>NET WORTH</small></span>
         <span className="dr-profile-match-time"><b>{formatDuration(entry.durationMs)}</b><small>{formatMatchDate(entry.match.endedAt || entry.match.createdAt)}</small></span>
         <ChevronRight />
@@ -150,28 +196,35 @@ export function DawnreachProfile({
   const [section, setSection] = useState<ProfileSection>('overview');
   const [matches, setMatches] = useState<readonly MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadError('');
     void getProfileMatchHistory(50)
       .then(result => { if (active) setMatches(result); })
-      .catch(() => { if (active) setMatches([]); })
+      .catch(error => {
+        if (!active) return;
+        setMatches([]);
+        setLoadError(error instanceof Error ? error.message : 'Could not load match history.');
+      })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [user.id]);
 
   const entries = useMemo(() => matches.map(match => historyEntry(match, user.id)), [matches, user.id]);
-  const completedEntries = entries.filter(entry => entry.won !== null);
-  const recordedWins = completedEntries.filter(entry => entry.won).length;
-  const recordedLosses = completedEntries.filter(entry => entry.won === false).length;
-  const totalRecordedMs = entries.reduce((sum, entry) => sum + entry.durationMs, 0);
-  const totalMatches = user.wins + user.losses;
-  const winRate = totalMatches > 0 ? (user.wins / totalMatches) * 100 : 0;
+  const playedEntries = entries.filter(entry => entry.match.status === 'completed' && !entry.match.postMatchReport?.voided);
+  const decisiveEntries = playedEntries.filter(entry => entry.won !== null);
+  const recordedWins = decisiveEntries.filter(entry => entry.won === true).length;
+  const recordedLosses = decisiveEntries.filter(entry => entry.won === false).length;
+  const totalRecordedMs = playedEntries.reduce((sum, entry) => sum + entry.durationMs, 0);
+  const totalMatches = playedEntries.length;
+  const winRate = decisiveEntries.length > 0 ? (recordedWins / decisiveEntries.length) * 100 : 0;
   const calibrationProgress = Math.min(100, Math.round((user.calibrationGames / Math.max(1, user.calibrationTarget)) * 100));
   const rankProgress = user.calibrated ? 100 : calibrationProgress;
   const heroCounts = new Map<string, number>();
-  for (const entry of completedEntries) heroCounts.set(entry.heroName, (heroCounts.get(entry.heroName) || 0) + 1);
+  for (const entry of playedEntries) heroCounts.set(entry.heroName, (heroCounts.get(entry.heroName) || 0) + 1);
   const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['Alden', 0];
 
   return <section className="dr-profile-page">
@@ -228,7 +281,11 @@ export function DawnreachProfile({
 
           <section className="dr-profile-panel dr-profile-recent-panel">
             <header><strong>RECENT MATCHES</strong><button type="button" onClick={() => setSection('history')}>VIEW ALL <ChevronRight /></button></header>
-            {loading ? <div className="dr-profile-loading">Loading match history…</div> : <MatchRows entries={entries} onOpenMatch={onOpenMatch} limit={5} />}
+            {loading
+              ? <div className="dr-profile-loading">Loading match history…</div>
+              : loadError
+                ? <div className="dr-profile-empty-list"><History /><strong>HISTORY UNAVAILABLE</strong><span>{loadError}</span></div>
+                : <MatchRows entries={entries} onOpenMatch={onOpenMatch} limit={5} />}
           </section>
         </div>
 
@@ -277,8 +334,17 @@ export function DawnreachProfile({
       </div> : <section className="dr-profile-history-page dr-profile-panel">
         <header><strong>MATCH HISTORY</strong><span>{entries.length} RECORDED MATCHES</span></header>
         <div className="dr-profile-history-intro"><History /><div><h2>YOUR BATTLES</h2><p>Completed matches are stored with their post-match report. Select a match to reopen its detailed results.</p></div></div>
-        {loading ? <div className="dr-profile-loading">Loading match history…</div> : <MatchRows entries={entries} onOpenMatch={onOpenMatch} />}
-        {!!entries.length && <footer><span>{recordedWins} victories</span><span>{recordedLosses} defeats</span><span>{entries.length - completedEntries.length} cancelled / neutral</span></footer>}
+        {loading
+          ? <div className="dr-profile-loading">Loading match history…</div>
+          : loadError
+            ? <div className="dr-profile-empty-list"><History /><strong>HISTORY UNAVAILABLE</strong><span>{loadError}</span></div>
+            : <MatchRows entries={entries} onOpenMatch={onOpenMatch} />}
+        {!!entries.length && !loadError && <footer>
+          <span>{recordedWins} victories</span>
+          <span>{recordedLosses} defeats</span>
+          <span>{entries.filter(entry => entry.match.status === 'cancelled').length} cancelled</span>
+          <span>{entries.filter(entry => entry.match.postMatchReport?.voided).length} void</span>
+        </footer>}
       </section>}
 
       <footer className="dr-profile-footer">
