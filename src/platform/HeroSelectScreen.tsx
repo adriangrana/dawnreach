@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getHeroAbilityArt, getHeroFullArt, getHeroInnateArt, getHeroPortrait } from '../game/heroes/assets';
+import { getHeroAbilityArt, getHeroFullArt, getHeroPassiveArt, getHeroPortrait } from '../game/heroes/assets';
 import { ALDEN } from '../game/heroes/alden/gameplay';
 import { getHeroDefinition, hasHeroDefinition, listHeroDefinitions } from '../game/heroes/catalog';
 import { SERYN } from '../game/heroes/seryn/gameplay';
@@ -60,7 +60,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'P',
     label: 'PASSIVE',
     name: ALDEN.innate.name,
-    art: getHeroInnateArt('H001'),
+    art: getHeroPassiveArt('H001'),
     typeLabel: 'Pasiva innata',
     description: ALDEN.innate.technicalDescription,
     lore: ALDEN.innate.description,
@@ -247,7 +247,7 @@ const SERYN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'P',
     label: 'PASSIVE',
     name: SERYN.innate.name,
-    art: getHeroInnateArt('H002'),
+    art: getHeroPassiveArt('H002'),
     typeLabel: 'Pasiva innata · posicionamiento / daño',
     description: SERYN.innate.technicalDescription,
     lore: SERYN.innate.description,
@@ -801,7 +801,7 @@ export function HeroSelectScreen({
 
       <section className="dr-hero-select-roster">
         <header>
-          <div className="dr-hero-select-roster-tabs"><button className="is-active" type="button">ALL</button><button type="button" disabled>VANGUARD</button><button type="button" disabled>CONTROL</button><button type="button" disabled>ASSAULT</button></div>
+          <div className="dr-hero-select-roster-tabs"><button className="is-active" type="button">ALL</button><button type="button" disabled>NORTH</button><button type="button" disabled>MID</button><button type="button" disabled>SOUTH</button></div>
           <label><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search heroes…" /></label>
         </header>
         <div>

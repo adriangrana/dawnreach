@@ -1,8 +1,8 @@
 # H002 — Seryn, la Vigía del Horizonte
 
-Estado: **diseño/gameplay definido; todavía no registrada como héroe jugable**.
+Estado: **registrada como H002 y conectada al roster, Hero Select y runtime de combate**.
 
-La decisión es intencional. Seryn no debe aparecer en Hero Select ni en la página HEROES hasta que existan sus imágenes, modelo/rig, animaciones y resolver de combate. Registrar una definición incompleta rompería la presentación y permitiría seleccionar un héroe cuyo runtime todavía no existe.
+Seryn comparte la infraestructura genérica de héroes con Alden: catálogo, selección, loading, HUD, minimapa, MatchState y resolución de combate. Su modelo 3D actual es procedural y específico de H002; puede refinarse visualmente sin cambiar su definición de gameplay.
 
 ## Identidad
 
@@ -70,14 +70,11 @@ Tres disparos por una línea de 1200. El primero contra un objetivo hace daño c
 
 ## Orden de implementación
 
-1. Cerrar arte definitivo y generar los assets de `images/`.
-2. Construir `buildSeryn.ts` reutilizando el rig humanoide compartido; no copiar el rig de Alden.
-3. Crear `animateSeryn.ts` para idle, básico, Q/W/E/R.
-4. Crear resolver de combate de H002 y eliminar el supuesto actual de `combat.ts` / `abilityControls.ts` de que solo H001 tiene resolver.
-5. Crear runtime/presentación de habilidades y VFX.
-6. Registrar H002 en `catalog.ts`.
-7. Conectar imágenes en HEROES, Hero Select, Loading, HUD, scoreboard y post-match.
-8. Añadir tests de duelo H001 vs H002 y revisar daño a niveles 1/6/11/18/30.
+1. Refinar el modelo/rig procedural de Seryn cuando exista el turnaround definitivo.
+2. Completar animaciones específicas de Q/W/E/R sobre el rig actual.
+3. Generar `H002P.webp` para la innata **Línea de Horizonte**.
+4. Sustituir `H002W.png` por `H002W.webp` cuando esté disponible la versión comprimida.
+5. Continuar pruebas de duelo H001 vs H002 y revisar daño a niveles 1/6/11/18/30.
 
 ## Assets
 

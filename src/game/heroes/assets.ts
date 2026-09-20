@@ -1,6 +1,6 @@
 import type { AbilityKey, HeroId } from './types';
 
-export type HeroAssetKind = '' | 'F' | 'I' | AbilityKey;
+export type HeroAssetKind = '' | 'F' | 'I' | 'P' | AbilityKey;
 
 const HERO_IMAGE_ASSETS = {
   ...import.meta.glob<string>('./*/images/*.webp', { eager: true, query: '?url', import: 'default' }),
@@ -23,14 +23,13 @@ export function getHeroAsset(heroId: HeroId | string, kind: HeroAssetKind = ''):
   const id = String(heroId).toUpperCase();
   const direct = ASSET_BY_KEY.get(`${id}:${kind}`);
   if (direct) return direct;
-  if (kind === 'I') {
-    const legacyPassive = ASSET_BY_KEY.get(`${id}:P`);
-    if (legacyPassive) return legacyPassive;
-  }
   return kind === '' ? '' : ASSET_BY_KEY.get(`${id}:`) ?? '';
 }
 
 export const getHeroPortrait = (heroId: HeroId | string) => getHeroAsset(heroId, '');
 export const getHeroFullArt = (heroId: HeroId | string) => getHeroAsset(heroId, 'F');
-export const getHeroInnateArt = (heroId: HeroId | string) => getHeroAsset(heroId, 'I');
+/** I = minimap / world marker portrait, not the passive ability icon. */
+export const getHeroMinimapArt = (heroId: HeroId | string) => getHeroAsset(heroId, 'I');
+/** P = passive / innate ability icon. */
+export const getHeroPassiveArt = (heroId: HeroId | string) => getHeroAsset(heroId, 'P');
 export const getHeroAbilityArt = (heroId: HeroId | string, key: AbilityKey) => getHeroAsset(heroId, key);

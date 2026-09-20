@@ -13,7 +13,7 @@ import {
   Star,
   Swords,
 } from 'lucide-react';
-import { getHeroAbilityArt, getHeroFullArt, getHeroInnateArt, getHeroPortrait } from '../game/heroes/assets';
+import { getHeroAbilityArt, getHeroFullArt, getHeroPassiveArt, getHeroPortrait } from '../game/heroes/assets';
 import { calculateDefinitionAttributesAtLevel, calculateDefinitionStatsAtLevel } from '../game/heroes/heroAttributes';
 import { listHeroDefinitions } from '../game/heroes/catalog';
 import { HeroPrimaryAttribute, type HeroDefinition } from '../game/heroes/types';
@@ -56,8 +56,8 @@ function heroFullArt(heroId: string) {
   return getHeroFullArt(heroId) || getHeroPortrait(heroId);
 }
 
-function abilityArt(heroId: string, key: 'I' | 'Q' | 'W' | 'E' | 'R') {
-  return key === 'I' ? getHeroInnateArt(heroId) : getHeroAbilityArt(heroId, key);
+function abilityArt(heroId: string, key: 'P' | 'Q' | 'W' | 'E' | 'R') {
+  return key === 'P' ? getHeroPassiveArt(heroId) : getHeroAbilityArt(heroId, key);
 }
 
 function primaryAttributeLabel(attribute: HeroPrimaryAttribute) {
@@ -231,7 +231,9 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
             <header><strong>ABILITIES</strong><span>INNATE · Q · W · E · R</span></header>
             <div>
               <article title={selected.innate?.name ?? 'Innate'} aria-label={selected.innate?.name ?? 'Innate'}>
-                <img src={abilityArt(selected.id,'I')} alt="" />
+                {abilityArt(selected.id, 'P')
+                  ? <img src={abilityArt(selected.id, 'P')} alt="" />
+                  : <span className="dr-heroes-ability-placeholder" aria-hidden="true"><Sparkles /></span>}
                 <span><b>{selected.innate?.name ?? 'Innate'}</b><small>INNATE</small></span>
               </article>
               {(['Q','W','E','R'] as const).map(key => <article key={key} title={selected.abilities[key].name} aria-label={selected.abilities[key].name}>

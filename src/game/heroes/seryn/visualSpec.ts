@@ -25,6 +25,7 @@ export const SERYN_REQUIRED_RUNTIME_IMAGES = [
   'H002.webp',
   'H002F.webp',
   'H002I.webp',
+  'H002P.webp',
   'H002Q.webp',
   'H002W.webp',
   'H002E.webp',

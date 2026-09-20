@@ -73,7 +73,7 @@ import {
   setCombatHudServerAuthority,
   setCombatHudStats,
 } from './hud/combatStatsOverlay';
-import { getHeroAbilityArt, getHeroInnateArt, getHeroPortrait } from './game/heroes/assets';
+import { getHeroAbilityArt, getHeroMinimapArt, getHeroPortrait } from './game/heroes/assets';
 import {
   ABILITY_KEYS, LOCAL_HERO_ENTITY_ID,
   advanceHeroPassiveGold, advanceHeroWorldEffects, applyHeroProgressionReward, applyHeroWorldDamageReaction,
@@ -1056,7 +1056,7 @@ function GameHud({
         <div className="minimap-field">
           <div ref={minimapRef} className="minimap-live"
             style={{ position: 'absolute', inset: 0, zIndex: 10, overflow: 'hidden', background: '#07100e' }} />
-          <img ref={minimapHeroRef} className="minimap-hero-icon" src={getHeroInnateArt(localHero.definitionId) || getHeroPortrait(localHero.definitionId)} alt="" draggable={false}
+          <img ref={minimapHeroRef} className="minimap-hero-icon" src={getHeroMinimapArt(localHero.definitionId) || getHeroPortrait(localHero.definitionId)} alt="" draggable={false}
             onError={hideMissingImage} style={{ opacity: localHeroDead ? 0 : 1 }} />
         </div>
         <div className="minimap-tools"><span><ZoomIn /></span><span><Eye /></span><span><Crosshair /></span></div>

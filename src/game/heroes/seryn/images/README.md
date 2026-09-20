@@ -6,7 +6,8 @@ No hay placeholders binarios: se generarán juntos antes de registrar H002 como 
 
 - `H002.webp` — retrato principal del héroe, lectura clara incluso a 48–64 px.
 - `H002F.webp` — arte de cuerpo completo para HEROES/Profile/Hero Select; fondo transparente.
-- `H002I.webp` — icono de la innata **Línea de Horizonte**.
+- `H002I.webp` — rostro recortado con transparencia para minimapa / world marker.
+- `H002P.webp` — icono de la innata **Línea de Horizonte**.
 - `H002Q.webp` — icono **Flecha de Refracción**.
 - `H002W.webp` — icono **Paso de Vector**.
 - `H002E.webp` — icono **Ancla Prismática**.
