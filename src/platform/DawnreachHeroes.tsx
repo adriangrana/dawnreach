@@ -14,6 +14,13 @@ import {
 import { calculateDefinitionAttributesAtLevel, calculateDefinitionStatsAtLevel } from '../game/heroes/heroAttributes';
 import { listHeroDefinitions } from '../game/heroes/catalog';
 import { HeroPrimaryAttribute, type HeroDefinition } from '../game/heroes/types';
+import aldenPortrait from '../game/heroes/alden/images/H001.webp';
+import aldenFullArt from '../game/heroes/alden/images/H001F.png';
+import aldenInnate from '../game/heroes/alden/images/H001I.webp';
+import aldenQ from '../game/heroes/alden/images/H001Q.webp';
+import aldenW from '../game/heroes/alden/images/H001W.webp';
+import aldenE from '../game/heroes/alden/images/H001E.webp';
+import aldenR from '../game/heroes/alden/images/H001R.webp';
 
 type HeroFilter = 'all' | 'tank' | 'bruiser' | 'damage' | 'support' | 'control';
 
@@ -27,15 +34,16 @@ const HERO_FILTERS: readonly Readonly<{ key: HeroFilter; label: string }>[] = [
 ];
 
 function heroPortrait(heroId: string) {
-  return heroId === 'H001' ? '/src/game/heroes/alden/images/H001.webp' : '';
+  return heroId === 'H001' ? aldenPortrait : '';
 }
 
 function heroFullArt(heroId: string) {
-  return heroId === 'H001' ? '/src/game/heroes/alden/images/H001F.png' : '';
+  return heroId === 'H001' ? aldenFullArt : '';
 }
 
 function abilityArt(heroId: string, key: 'I' | 'Q' | 'W' | 'E' | 'R') {
-  return heroId === 'H001' ? `/src/game/heroes/alden/images/H001${key}.webp` : '';
+  if (heroId !== 'H001') return '';
+  return { I: aldenInnate, Q: aldenQ, W: aldenW, E: aldenE, R: aldenR }[key];
 }
 
 function primaryAttributeLabel(attribute: HeroPrimaryAttribute) {
