@@ -1,5 +1,6 @@
 .dr-profile-page {
-  min-height: calc(100vh - 72px);
+  height: calc(100vh - 70px);
+  min-height: 0;
   display: grid;
   grid-template-columns: 214px minmax(0, 1fr);
   color: #dce6ef;
@@ -8,11 +9,13 @@
     url('/assets/images/dawnreach_home_background.webp') center / cover fixed;
   font: 12px/1.35 "Segoe UI", sans-serif;
   isolation: isolate;
+  overflow: hidden;
 }
 .dr-profile-page * { box-sizing: border-box; }
 .dr-profile-sidebar {
   position: relative;
-  min-height: calc(100vh - 72px);
+  height: 100%;
+  min-height: 0;
   padding: 34px 0 26px;
   border-right: 1px solid rgba(104, 139, 166, .26);
   background: linear-gradient(180deg, rgba(5, 18, 31, .97), rgba(4, 14, 23, .92));
@@ -64,7 +67,23 @@
 }
 .dr-profile-sidebar blockquote small { display: block; margin-top: 10px; color: #b29d72; font-size: 9px; }
 
-.dr-profile-body { min-width: 0; padding: 0 18px 18px; }
+.dr-profile-body {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 18px 42px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 166, 188, .42) rgba(4, 15, 24, .42);
+}
+.dr-profile-body::-webkit-scrollbar { width: 8px; }
+.dr-profile-body::-webkit-scrollbar-track { background: rgba(4, 15, 24, .42); }
+.dr-profile-body::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(4, 15, 24, .42);
+  background: rgba(137, 166, 188, .42);
+}
+.dr-profile-body::-webkit-scrollbar-thumb:hover { background: rgba(188, 164, 103, .62); }
 .dr-profile-identity {
   position: relative;
   height: 196px;
@@ -332,8 +351,8 @@
 .dr-profile-achievement-slot strong { color: #a7b3bc; font-size: 8px; font-weight: 600; }
 .dr-profile-achievement-slot small { color: #667d8e; font-size: 6px; letter-spacing: .08em; }
 
-.dr-profile-history-page { max-width: 1240px; margin: 22px auto 28px; }
-.dr-profile-history-page .dr-profile-match-list { padding-bottom: 14px; }
+.dr-profile-history-page { max-width: 1240px; margin: 22px auto 36px; }
+.dr-profile-history-page .dr-profile-match-list { padding-bottom: 24px; }
 .dr-profile-history-page .dr-profile-match-row:last-child { border-bottom: 1px solid rgba(120, 151, 176, .13); }
 .dr-profile-history-intro { min-height: 86px; display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(123, 154, 178, .16); }
 .dr-profile-history-intro > svg { width: 34px; height: 34px; color: #c7ad72; stroke-width: 1.4; }
