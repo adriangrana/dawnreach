@@ -217,6 +217,7 @@ export function DawnreachProfile({
   onOpenMatch?: (match: MatchSummary) => void;
 }) {
   const [section, setSection] = useState<ProfileSection>('overview');
+  const [selectedMasteryHeroId, setSelectedMasteryHeroId] = useState<string | null>(null);
   const [matches, setMatches] = useState<readonly MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -290,7 +291,10 @@ export function DawnreachProfile({
       masteryLevel: heroEntries.length ? Math.max(1, Math.ceil(heroEntries.length / 5)) : 0,
     };
   });
-  const featuredMastery = masteryRecords.find(record => record.hero.id === featuredHeroId) ?? masteryRecords[0] ?? null;
+  const activeMasteryHeroId = selectedMasteryHeroId && PROFILE_HERO_BY_ID.has(selectedMasteryHeroId)
+    ? selectedMasteryHeroId
+    : featuredHeroId;
+  const featuredMastery = masteryRecords.find(record => record.hero.id === activeMasteryHeroId) ?? masteryRecords[0] ?? null;
   const overviewMasteryRecords = [...masteryRecords]
     .sort((left, right) => right.entries.length - left.entries.length)
     .slice(0, 4);
@@ -383,9 +387,18 @@ export function DawnreachProfile({
             <header><strong>HERO MASTERY</strong><span>FOUNDATION ROSTER</span></header>
             <div className="dr-profile-mastery-grid">
               {overviewMasteryRecords.map(record => <article key={record.hero.id}>
-                <img src={profileHeroPortrait(record.hero.id)} alt={record.hero.displayName} />
-                <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} RECORDED MATCHES</small></div>
-                <span className="dr-profile-mastery-bar"><i style={{ width: `${record.progress}%` }} /></span>
+                <button
+                  type="button"
+                  aria-label={`Open ${record.hero.displayName} mastery`}
+                  onClick={() => {
+                    setSelectedMasteryHeroId(record.hero.id);
+                    setSection('mastery');
+                  }}
+                >
+                  <img src={profileHeroPortrait(record.hero.id)} alt="" />
+                  <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} RECORDED MATCHES</small></div>
+                  <span className="dr-profile-mastery-bar"><i style={{ width: `${record.progress}%` }} /></span>
+                </button>
               </article>)}
               {Array.from({ length: Math.max(0, 4 - overviewMasteryRecords.length) }, (_, index) => <article className="is-placeholder" key={`future-${index}`}><div className="dr-profile-future-hero"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>MASTERY SLOT</small></div><span className="dr-profile-mastery-bar"><i /></span></article>)}
             </div>
@@ -452,11 +465,21 @@ export function DawnreachProfile({
           <section className="dr-profile-panel dr-profile-roster-panel">
             <header><strong>HERO ROSTER</strong><span>MASTERY COLLECTION</span></header>
             <div className="dr-profile-roster-grid">
-              {masteryRecords.map(record => <article className="is-owned" key={record.hero.id}>
-                <img src={profileHeroPortrait(record.hero.id)} alt={record.hero.displayName} />
-                <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} MATCHES</small></div>
-                <span><i style={{ width: `${record.progress}%` }} /></span>
-              </article>)}
+              {masteryRecords.map(record => {
+                const selected = record.hero.id === featuredMastery?.hero.id;
+                return <article className={`is-owned${selected ? ' is-selected' : ''}`} key={record.hero.id}>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    aria-label={`View ${record.hero.displayName} mastery`}
+                    onClick={() => setSelectedMasteryHeroId(record.hero.id)}
+                  >
+                    <img src={profileHeroPortrait(record.hero.id)} alt="" />
+                    <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} MATCHES</small></div>
+                    <span><i style={{ width: `${record.progress}%` }} /></span>
+                  </button>
+                </article>;
+              })}
               {Array.from({ length: Math.max(0, 8 - masteryRecords.length) }, (_, index) => <article className="is-locked" key={`future-${index}`}><div className="dr-profile-roster-placeholder"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>NOT YET AVAILABLE</small></div><span><i /></span></article>)}
             </div>
           </section>
