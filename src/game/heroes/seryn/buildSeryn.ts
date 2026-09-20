@@ -91,8 +91,10 @@ function configureSkeleton(rig: HumanoidRig) {
   rig.leftFoot.position.y = -0.535;
   rig.rightFoot.position.y = -0.535;
 
-  rig.leftArm.position.set(0.365, 0.285, 0);
-  rig.rightArm.position.set(-0.365, 0.285, 0);
+  // Pull the shoulder pivots inward so the arm originates inside the shoulder girdle
+  // instead of hanging from the outside of the torso like a separate mannequin piece.
+  rig.leftArm.position.set(0.335, 0.305, 0);
+  rig.rightArm.position.set(-0.335, 0.305, 0);
   rig.leftForearm.position.y = -0.47;
   rig.rightForearm.position.y = -0.47;
   rig.sockets.leftHand.position.y = -0.445;
@@ -117,15 +119,35 @@ function buildAnatomy(rig: HumanoidRig, m: SerynMaterials) {
     { y: -0.08, rx: 0.222, rz: 0.145 },
     { y: 0.08, rx: 0.260, rz: 0.157, front: 0.030 },
     { y: 0.21, rx: 0.278, rz: 0.165, front: 0.045 },
-    { y: 0.34, rx: 0.262, rz: 0.148, front: 0.020 },
-    { y: 0.46, rx: 0.198, rz: 0.116 },
+    { y: 0.31, rx: 0.270, rz: 0.154, front: 0.026 },
+    { y: 0.39, rx: 0.224, rz: 0.138, front: 0.014 },
+    { y: 0.47, rx: 0.145, rz: 0.098 },
+    { y: 0.52, rx: 0.094, rz: 0.076 },
   ], m.skin, 36);
 
   loft(rig.torso, 'seryn-body-neck', [
-    { y: 0.43, rx: 0.066, rz: 0.062 },
-    { y: 0.58, rx: 0.072, rz: 0.065 },
+    { y: 0.49, rx: 0.072, rz: 0.064 },
+    { y: 0.59, rx: 0.071, rz: 0.064 },
     { y: 0.71, rx: 0.067, rz: 0.061 },
   ], m.skin, 24);
+
+  // Build a real shoulder girdle: trapezius/clavicle volume grows continuously from the
+  // neck into the deltoid. These overlapping anatomical meshes deliberately intersect;
+  // the overlap hides the rig seam through the full idle/walk/attack range.
+  for (const side of [-1, 1]) {
+    curve(rig.torso, 'seryn-trapezius', [
+      new THREE.Vector3(side * 0.070, 0.500, -0.005),
+      new THREE.Vector3(side * 0.145, 0.455, 0.000),
+      new THREE.Vector3(side * 0.235, 0.395, 0.000),
+      new THREE.Vector3(side * 0.310, 0.330, 0.000),
+    ], 0.052, m.skin, 0.073, 22);
+    curve(rig.torso, 'seryn-clavicle-volume', [
+      new THREE.Vector3(side * 0.062, 0.405, 0.105),
+      new THREE.Vector3(side * 0.155, 0.390, 0.115),
+      new THREE.Vector3(side * 0.245, 0.350, 0.095),
+      new THREE.Vector3(side * 0.315, 0.305, 0.060),
+    ], 0.032, m.skin, 0.050, 18);
+  }
 
   for (const side of [-1, 1]) {
     const arm = side > 0 ? rig.leftArm : rig.rightArm;
@@ -135,12 +157,16 @@ function buildAnatomy(rig: HumanoidRig, m: SerynMaterials) {
     const shin = side > 0 ? rig.leftShin : rig.rightShin;
     const foot = side > 0 ? rig.leftFoot : rig.rightFoot;
 
+    // Deltoid overlaps both the torso-side shoulder bridge and the upper arm so there
+    // is no visible ball-and-socket seam at the shoulder.
+    const deltoid = rounded(arm, 'seryn-body-deltoid', [0.092, 0.110, 0.088], [0, -0.038, 0.003], m.skin, 24);
+    deltoid.rotation.z = side * -0.035;
     loft(arm, 'seryn-body-upper-arm', [
-      { y: 0, rx: 0.071, rz: 0.066 },
-      { y: -0.14, rx: 0.078, rz: 0.070 },
-      { y: -0.32, rx: 0.065, rz: 0.058 },
+      { y: 0.015, rx: 0.079, rz: 0.073 },
+      { y: -0.11, rx: 0.082, rz: 0.073 },
+      { y: -0.30, rx: 0.066, rz: 0.059 },
       { y: -0.455, rx: 0.052, rz: 0.049 },
-    ], m.skin, 24);
+    ], m.skin, 26);
 
     rounded(forearm, 'seryn-body-elbow', [0.055, 0.058, 0.053], [0, 0, 0], m.skin, 18);
     loft(forearm, 'seryn-body-forearm', [
@@ -341,8 +367,10 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     { y: -0.08, rx: 0.237, rz: 0.158 },
     { y: 0.08, rx: 0.275, rz: 0.171, front: 0.034 },
     { y: 0.21, rx: 0.294, rz: 0.180, front: 0.048 },
-    { y: 0.34, rx: 0.278, rz: 0.162, front: 0.022 },
-    { y: 0.43, rx: 0.215, rz: 0.129 },
+    { y: 0.31, rx: 0.285, rz: 0.168, front: 0.028 },
+    { y: 0.39, rx: 0.238, rz: 0.150, front: 0.015 },
+    { y: 0.47, rx: 0.157, rz: 0.108 },
+    { y: 0.515, rx: 0.104, rz: 0.082 },
   ], m.navy, 36);
 
   loft(rig.pelvis, 'seryn-underlayer-hips', [
@@ -405,18 +433,39 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     const shin = side > 0 ? rig.leftShin : rig.rightShin;
     const foot = side > 0 ? rig.leftFoot : rig.rightFoot;
 
-    const pauldronBase = rounded(arm, 'seryn-pauldron-base', [0.132, 0.052, 0.122], [0, -0.025, 0], m.silverDark, 20);
-    pauldronBase.rotation.z = side * -0.12;
-    const pauldronTop = rounded(arm, 'seryn-pauldron-top', [0.110, 0.038, 0.105], [side * 0.010, -0.010, 0.018], m.silver, 18);
-    pauldronTop.rotation.z = side * -0.15;
-    const shoulderFin = part(arm, 'seryn-pauldron-fin', new THREE.ConeGeometry(0.030, 0.175, 5), m.gold, [side * 0.105, -0.020, 0.005]);
-    shoulderFin.rotation.z = side * -Math.PI / 2;
+    // Continue the tunic across the shoulder before adding armor. This cloth bridge
+    // visually joins neck -> shoulder -> arm and removes the old floating oval caps.
+    curve(rig.torso, 'seryn-shoulder-cloth-bridge', [
+      new THREE.Vector3(side * 0.082, 0.486, 0.015),
+      new THREE.Vector3(side * 0.170, 0.438, 0.018),
+      new THREE.Vector3(side * 0.255, 0.375, 0.012),
+      new THREE.Vector3(side * 0.315, 0.320, 0.005),
+    ], 0.060, m.navy, 0.080, 22);
 
     loft(arm, 'seryn-upper-sleeve', [
-      { y: -0.055, rx: 0.079, rz: 0.071 },
-      { y: -0.18, rx: 0.081, rz: 0.073 },
+      { y: 0.015, rx: 0.088, rz: 0.080 },
+      { y: -0.10, rx: 0.090, rz: 0.081 },
+      { y: -0.20, rx: 0.082, rz: 0.073 },
       { y: -0.31, rx: 0.070, rz: 0.063 },
-    ], m.navyDark, 22);
+    ], m.navyDark, 24);
+
+    // Low-profile layered shoulder armor follows the deltoid instead of replacing it.
+    const shoulderPlate = panel(arm, 'seryn-shoulder-plate', [
+      [-0.105, 0.055], [-0.055, 0.095], [0.045, 0.092], [0.105, 0.050],
+      [0.092, -0.015], [0.020, -0.047], [-0.075, -0.036],
+    ], m.silverDark, [0, -0.010, 0.080], 0.014, 0.006);
+    shoulderPlate.rotation.x = -0.72;
+    shoulderPlate.rotation.z = side * -0.11;
+
+    const shoulderRidge = curve(arm, 'seryn-shoulder-ridge', [
+      new THREE.Vector3(side * -0.070, 0.030, 0.090),
+      new THREE.Vector3(0, 0.060, 0.102),
+      new THREE.Vector3(side * 0.070, 0.024, 0.090),
+    ], 0.010, m.silver, 0.007, 12);
+    shoulderRidge.rotation.z = side * -0.04;
+
+    const shoulderFin = part(arm, 'seryn-pauldron-fin', new THREE.ConeGeometry(0.022, 0.105, 5), m.gold, [side * 0.082, 0.005, 0.018]);
+    shoulderFin.rotation.z = side * -Math.PI / 2;
 
     loft(forearm, 'seryn-bracer-base', [
       { y: -0.045, rx: 0.065, rz: 0.060 },
@@ -594,7 +643,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v4-detailed';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v5-natural-shoulders';
 
   return Object.assign(rig, { bow, bowString, quiver });
 }
