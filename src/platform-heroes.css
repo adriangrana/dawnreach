@@ -29,59 +29,112 @@
 .dr-heroes-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 172px minmax(560px, 1fr) minmax(410px, 438px);
+  grid-template-columns: 214px minmax(560px, 1fr) minmax(410px, 438px);
 }
 
 .dr-heroes-filters {
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px 1fr auto;
-  border-right: 1px solid rgba(124, 151, 171, .25);
-  background: rgba(4, 16, 27, .94);
+  grid-template-rows: minmax(0, 1fr) 190px;
+  border-right: 1px solid rgba(124, 151, 171, .22);
+  background:
+    linear-gradient(180deg, rgba(4, 16, 27, .96), rgba(4, 16, 27, .92)),
+    url('/assets/images/dawnreach_home_background.webp') left bottom / cover;
 }
-.dr-heroes-filters > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid rgba(124, 151, 171, .18);
-}
-.dr-heroes-filters > header strong { color: #e7dec9; font: 12px Georgia, serif; letter-spacing: .08em; }
-.dr-heroes-filters > header span { color: #637d8f; font-size: 7px; letter-spacing: .12em; }
-.dr-heroes-filters nav { display: grid; align-content: start; }
-.dr-heroes-filters nav button {
-  min-height: 58px;
+.dr-heroes-filter-groups {
+  min-height: 0;
   display: grid;
-  grid-template-columns: 38px 1fr;
+  align-content: start;
+}
+.dr-heroes-filter-group {
+  display: grid;
+  align-content: start;
+}
+.dr-heroes-filter-group.is-secondary {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(124, 151, 171, .16);
+}
+.dr-heroes-filter-row {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  padding: 0 14px;
+  gap: 10px;
+  padding: 0 18px;
   border: 0;
-  border-left: 3px solid transparent;
+  border-left: 2px solid transparent;
   border-bottom: 1px solid rgba(124, 151, 171, .10);
-  color: #7891a3;
+  color: #7d93a3;
   background: transparent;
   text-align: left;
-  font-size: 9px;
-  letter-spacing: .10em;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
 }
-.dr-heroes-filters nav button.is-active {
+.dr-heroes-filter-row:hover {
+  color: #d4dee5;
+  background: linear-gradient(90deg, rgba(48, 84, 112, .20), rgba(10, 24, 37, .06));
+}
+.dr-heroes-filter-row.is-active {
   color: #efe3c7;
-  border-left-color: #d4b266;
-  background: linear-gradient(90deg, rgba(197, 157, 75, .15), rgba(46, 93, 126, .08));
+  border-left-color: #d7b86d;
+  background:
+    linear-gradient(90deg, rgba(194, 158, 83, .16), rgba(35, 77, 107, .14)),
+    rgba(13, 25, 39, .75);
+  box-shadow: inset 0 0 0 1px rgba(184, 147, 75, .14);
 }
-.dr-heroes-filter-icon { width: 26px; height: 26px; display: grid; place-items: center; color: #6e92a9; }
-.dr-heroes-filter-icon svg { width: 18px; height: 18px; stroke-width: 1.35; }
-.dr-heroes-filters nav button.is-active .dr-heroes-filter-icon { color: #d7bd7b; }
-.dr-heroes-owned-summary {
+.dr-heroes-filter-row-icon {
+  width: 22px;
+  height: 22px;
   display: grid;
-  gap: 4px;
-  padding: 18px;
-  border-top: 1px solid rgba(124,151,171,.16);
+  place-items: center;
+  color: #6f8ea5;
 }
-.dr-heroes-owned-summary small { color: #72899a; font-size: 7px; letter-spacing: .1em; }
-.dr-heroes-owned-summary strong { color: #e6dec9; font: 22px Georgia, serif; }
-.dr-heroes-owned-summary span { color: #62c7e9; font-size: 7px; letter-spacing: .12em; }
+.dr-heroes-filter-row.is-active .dr-heroes-filter-row-icon { color: #d6b86f; }
+.dr-heroes-filter-row-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.55;
+}
+.dr-heroes-filter-row-label {
+  min-width: 0;
+  color: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  white-space: nowrap;
+}
+.dr-heroes-filter-row-count {
+  color: #6f8596;
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+.dr-heroes-filter-row.is-active .dr-heroes-filter-row-count { color: #d5d8dc; }
+.dr-heroes-filter-footer {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid rgba(124, 151, 171, .14);
+  background: linear-gradient(180deg, rgba(6, 18, 30, .18), rgba(3, 10, 17, .78));
+}
+.dr-heroes-filter-footer-art {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(3, 10, 17, .10), rgba(3, 10, 17, .84)),
+    url('/assets/images/dawnreach_home_background.webp') 16% 88% / 220% no-repeat;
+  opacity: .9;
+}
+.dr-heroes-filter-footer p {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  margin: 0;
+  color: #d4c4a0;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: .22em;
+  line-height: 1.8;
+}
 
 .dr-heroes-browser {
   min-width: 0;
@@ -276,17 +329,21 @@
 .dr-heroes-detail-actions button svg { width:13px; }
 
 @media (max-width: 1420px) {
-  .dr-heroes-layout { grid-template-columns: 156px minmax(470px,1fr) 390px; }
+  .dr-heroes-layout { grid-template-columns: 196px minmax(470px,1fr) 390px; }
   .dr-heroes-grid { grid-template-columns:repeat(5,minmax(98px,1fr)); }
 }
 @media (max-width: 1180px) {
-  .dr-heroes-layout { grid-template-columns: 146px minmax(390px,1fr) 360px; }
+  .dr-heroes-layout { grid-template-columns: 178px minmax(390px,1fr) 360px; }
+  .dr-heroes-filter-row { padding-inline: 14px; grid-template-columns: 30px minmax(0,1fr) auto; gap: 7px; }
+  .dr-heroes-filter-row-label, .dr-heroes-filter-row-count { font-size: 8px; }
   .dr-heroes-grid { grid-template-columns:repeat(4,minmax(96px,1fr)); }
 }
 @media (max-width: 980px) {
   .dr-heroes-layout { grid-template-columns:72px minmax(0,1fr); }
-  .dr-heroes-filters nav button { grid-template-columns:1fr; place-items:center; padding:0; }
-  .dr-heroes-filters nav button > span:last-child, .dr-heroes-filters > header span, .dr-heroes-owned-summary { display:none; }
+  .dr-heroes-filters { grid-template-rows: minmax(0,1fr); }
+  .dr-heroes-filter-row { grid-template-columns:1fr; place-items:center; padding:0; }
+  .dr-heroes-filter-row-label, .dr-heroes-filter-row-count, .dr-heroes-filter-footer { display:none; }
+  .dr-heroes-filter-group.is-secondary { margin-top:12px; padding-top:12px; }
   .dr-heroes-detail { display:none; }
 }
 @media (max-width: 680px) {

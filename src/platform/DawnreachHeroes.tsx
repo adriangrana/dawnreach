@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ChevronRight,
+  Clock3,
   Crosshair,
   Footprints,
   Gauge,
@@ -9,6 +10,7 @@ import {
   Search,
   Shield,
   Sparkles,
+  Star,
   Swords,
 } from 'lucide-react';
 import { calculateDefinitionAttributesAtLevel, calculateDefinitionStatsAtLevel } from '../game/heroes/heroAttributes';
@@ -22,15 +24,36 @@ import aldenW from '../game/heroes/alden/images/H001W.webp';
 import aldenE from '../game/heroes/alden/images/H001E.webp';
 import aldenR from '../game/heroes/alden/images/H001R.webp';
 
-type HeroFilter = 'all' | 'tank' | 'bruiser' | 'damage' | 'support' | 'control';
+type HeroFilter = 'all' | 'top' | 'jungle' | 'mid' | 'carry' | 'support' | 'favorites' | 'recent';
 
-const HERO_FILTERS: readonly Readonly<{ key: HeroFilter; label: string }>[] = [
-  { key: 'all', label: 'ALL' },
-  { key: 'tank', label: 'TANK' },
-  { key: 'bruiser', label: 'BRUISER' },
-  { key: 'damage', label: 'DAMAGE' },
-  { key: 'support', label: 'SUPPORT' },
-  { key: 'control', label: 'CONTROL' },
+type SidebarFilterItem = Readonly<{
+  key: HeroFilter;
+  label: string;
+  icon: typeof Sparkles;
+}>;
+
+const HERO_FILTER_GROUPS: readonly Readonly<{
+  key: string;
+  items: readonly SidebarFilterItem[];
+}>[] = [
+  {
+    key: 'primary',
+    items: [
+      { key: 'all', label: 'ALL HEROES', icon: Sparkles },
+      { key: 'top', label: 'TOP', icon: Shield },
+      { key: 'jungle', label: 'JUNGLE', icon: Sparkles },
+      { key: 'mid', label: 'MID', icon: Crosshair },
+      { key: 'carry', label: 'CARRY', icon: Swords },
+      { key: 'support', label: 'SUPPORT', icon: Heart },
+    ],
+  },
+  {
+    key: 'secondary',
+    items: [
+      { key: 'favorites', label: 'FAVORITES', icon: Star },
+      { key: 'recent', label: 'RECENTLY PLAYED', icon: Clock3 },
+    ],
+  },
 ];
 
 function heroPortrait(heroId: string) {
@@ -56,14 +79,48 @@ function difficultyBars(difficulty: HeroDefinition['difficulty']) {
   return difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 2 : 3;
 }
 
-function matchesFilter(hero: HeroDefinition, filter: HeroFilter) {
-  if (filter === 'all') return true;
+function inferHeroLane(hero: HeroDefinition): 'top' | 'jungle' | 'mid' | 'carry' | 'support' {
   const roleText = [hero.primaryRole, hero.className, ...hero.secondaryRoles].join(' ').toLowerCase();
-  if (filter === 'tank') return roleText.includes('tank') || roleText.includes('tanque') || roleText.includes('frontline');
-  if (filter === 'bruiser') return roleText.includes('bruiser') || roleText.includes('sostenido');
-  if (filter === 'damage') return roleText.includes('damage') || roleText.includes('daño');
-  if (filter === 'support') return roleText.includes('support') || roleText.includes('apoyo');
-  return roleText.includes('control') || roleText.includes('iniciador');
+
+  if (
+    roleText.includes('support')
+    || roleText.includes('apoyo')
+    || roleText.includes('healer')
+    || roleText.includes('utility')
+  ) return 'support';
+
+  if (
+    roleText.includes('jungle')
+    || roleText.includes('jungler')
+    || roleText.includes('ganker')
+  ) return 'jungle';
+
+  if (
+    roleText.includes('mid')
+    || roleText.includes('mage')
+    || roleText.includes('caster')
+    || roleText.includes('assassin')
+  ) return 'mid';
+
+  if (
+    roleText.includes('carry')
+    || roleText.includes('marksman')
+    || roleText.includes('adc')
+  ) return 'carry';
+
+  return 'top';
+}
+
+function matchesFilter(
+  hero: HeroDefinition,
+  filter: HeroFilter,
+  favoriteHeroIds: ReadonlySet<string>,
+  recentHeroIds: ReadonlySet<string>,
+) {
+  if (filter === 'all') return true;
+  if (filter === 'favorites') return favoriteHeroIds.has(hero.id);
+  if (filter === 'recent') return recentHeroIds.has(hero.id);
+  return inferHeroLane(hero) === filter;
 }
 
 function FutureHeroCard({ index }: { index: number }) {
@@ -79,15 +136,31 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(heroes[0]?.id ?? '');
 
+  // Favorites and recent-played data do not exist as persistent account data yet.
+  // Keep the filters functional and truthful instead of inventing ownership/history.
+  const favoriteHeroIds = useMemo(() => new Set<string>(), []);
+  const recentHeroIds = useMemo(() => new Set<string>(), []);
+
+  const filterCounts = useMemo<Record<HeroFilter, number>>(() => ({
+    all: heroes.length,
+    top: heroes.filter(hero => inferHeroLane(hero) === 'top').length,
+    jungle: heroes.filter(hero => inferHeroLane(hero) === 'jungle').length,
+    mid: heroes.filter(hero => inferHeroLane(hero) === 'mid').length,
+    carry: heroes.filter(hero => inferHeroLane(hero) === 'carry').length,
+    support: heroes.filter(hero => inferHeroLane(hero) === 'support').length,
+    favorites: heroes.filter(hero => favoriteHeroIds.has(hero.id)).length,
+    recent: heroes.filter(hero => recentHeroIds.has(hero.id)).length,
+  }), [heroes, favoriteHeroIds, recentHeroIds]);
+
   const visibleHeroes = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return heroes.filter(hero => {
-      if (!matchesFilter(hero, filter)) return false;
+      if (!matchesFilter(hero, filter, favoriteHeroIds, recentHeroIds)) return false;
       if (!normalized) return true;
       return [hero.displayName, hero.className, hero.primaryRole, ...hero.secondaryRoles]
         .some(value => value.toLowerCase().includes(normalized));
     });
-  }, [heroes, filter, query]);
+  }, [heroes, filter, query, favoriteHeroIds, recentHeroIds]);
 
   const selected = heroes.find(hero => hero.id === selectedId) ?? visibleHeroes[0] ?? heroes[0] ?? null;
   if (!selected) return null;
@@ -104,16 +177,33 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
 
     <div className="dr-heroes-layout">
       <aside className="dr-heroes-filters">
-        <header><strong>FILTER</strong><span>ROLE</span></header>
-        <nav>
-          {HERO_FILTERS.map(item => <button
-            key={item.key}
-            type="button"
-            className={filter === item.key ? 'is-active' : ''}
-            onClick={() => setFilter(item.key)}
-          ><span className="dr-heroes-filter-icon">{item.key === 'tank' ? <Shield /> : item.key === 'all' ? <Sparkles /> : <Swords />}</span><span>{item.label}</span></button>)}
-        </nav>
-        <div className="dr-heroes-owned-summary"><small>FOUNDATION ROSTER</small><strong>{heroes.length} / {heroes.length}</strong><span>AVAILABLE</span></div>
+        <div className="dr-heroes-filter-groups">
+          {HERO_FILTER_GROUPS.map(group => (
+            <section
+              key={group.key}
+              className={`dr-heroes-filter-group ${group.key === 'secondary' ? 'is-secondary' : ''}`}
+            >
+              {group.items.map(item => {
+                const Icon = item.icon;
+                return <button
+                  key={item.key}
+                  type="button"
+                  className={`dr-heroes-filter-row ${filter === item.key ? 'is-active' : ''}`}
+                  onClick={() => setFilter(item.key)}
+                >
+                  <span className="dr-heroes-filter-row-icon"><Icon /></span>
+                  <span className="dr-heroes-filter-row-label">{item.label}</span>
+                  <span className="dr-heroes-filter-row-count">({filterCounts[item.key]})</span>
+                </button>;
+              })}
+            </section>
+          ))}
+        </div>
+
+        <div className="dr-heroes-filter-footer">
+          <div className="dr-heroes-filter-footer-art" />
+          <p>DIFFERENT PATHS<br />SAME DAWN</p>
+        </div>
       </aside>
 
       <main className="dr-heroes-browser">
