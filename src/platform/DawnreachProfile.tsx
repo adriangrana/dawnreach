@@ -73,6 +73,10 @@ function formatMatchDate(value?: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
+function matchEndedAt(match: MatchSummary) {
+  return match.postMatchReport?.endedAt || match.endedAt || match.createdAt;
+}
+
 function inventoryValue(items: readonly Readonly<{ definitionId: string; quantity: number }>[] | undefined) {
   if (!items?.length) return 0;
   return items.reduce((total, item) => {
@@ -161,7 +165,7 @@ function MatchRows({ entries, onOpenMatch, limit }: { entries: readonly HistoryE
         <span className="dr-profile-match-kda"><b>{entry.kills} / {entry.deaths} / {entry.assists}</b><small>K / D / A</small></span>
         <strong className="dr-profile-match-result">{entry.resultLabel}</strong>
         <span className="dr-profile-match-networth"><b>{entry.netWorth === null ? '—' : formatNumber(entry.netWorth)}</b><small>NET WORTH</small></span>
-        <span className="dr-profile-match-time"><b>{formatDuration(entry.durationMs)}</b><small>{formatMatchDate(entry.match.endedAt || entry.match.createdAt)}</small></span>
+        <span className="dr-profile-match-time"><b>{formatDuration(entry.durationMs)}</b><small>{formatMatchDate(matchEndedAt(entry.match))}</small></span>
         <ChevronRight />
       </button>
     ))}
@@ -226,6 +230,7 @@ export function DawnreachProfile({
   const heroCounts = new Map<string, number>();
   for (const entry of playedEntries) heroCounts.set(entry.heroName, (heroCounts.get(entry.heroName) || 0) + 1);
   const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['Alden', 0];
+  const historyReady = !loading && !loadError;
 
   return <section className="dr-profile-page">
     <aside className="dr-profile-sidebar">
@@ -270,10 +275,10 @@ export function DawnreachProfile({
           <section className="dr-profile-panel dr-profile-summary-panel">
             <header><strong>OVERVIEW</strong><span>PLAYER ID <b>#{user.id.slice(0, 8).toUpperCase()}</b></span></header>
             <div className="dr-profile-summary-grid">
-              <article><Swords /><span><small>TOTAL MATCHES</small><strong>{formatNumber(totalMatches)}</strong></span></article>
-              <article><Trophy /><span><small>WIN RATE</small><strong>{totalMatches ? `${winRate.toFixed(1)}%` : '—'}</strong></span></article>
-              <article><Clock3 /><span><small>RECORDED TIME</small><strong>{totalRecordedMs ? `${Math.floor(totalRecordedMs / 3_600_000)}h ${Math.floor((totalRecordedMs % 3_600_000) / 60_000)}m` : '—'}</strong></span></article>
-              <article className="is-hero"><img src={aldenPortrait} alt="" /><span><small>FAVORITE HERO</small><strong>{favoriteHero[0]}</strong><em>{favoriteHero[1]} recorded matches</em></span></article>
+              <article><Swords /><span><small>TOTAL MATCHES</small><strong>{historyReady ? formatNumber(totalMatches) : '—'}</strong></span></article>
+              <article><Trophy /><span><small>WIN RATE</small><strong>{historyReady && decisiveEntries.length ? `${winRate.toFixed(1)}%` : '—'}</strong></span></article>
+              <article><Clock3 /><span><small>RECORDED TIME</small><strong>{historyReady && totalRecordedMs ? `${Math.floor(totalRecordedMs / 3_600_000)}h ${Math.floor((totalRecordedMs % 3_600_000) / 60_000)}m` : '—'}</strong></span></article>
+              <article className="is-hero"><img src={aldenPortrait} alt="" /><span><small>FAVORITE HERO</small><strong>{historyReady && totalMatches ? favoriteHero[0] : '—'}</strong><em>{historyReady ? `${favoriteHero[1]} recorded matches` : 'History unavailable'}</em></span></article>
               <article><Shield /><span><small>PREFERRED ROLE</small><strong>NOT SET</strong><em>Role tracking pending</em></span></article>
               <article><CalendarDays /><span><small>ACCOUNT CREATED</small><strong>SEASON I</strong><em>{formatAccountDate(user.createdAt)}</em></span></article>
             </div>
