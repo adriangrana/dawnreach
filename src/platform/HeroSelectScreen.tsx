@@ -60,7 +60,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'P',
     label: 'PASSIVE',
     name: ALDEN.innate.name,
-    art: getHeroPassiveArt('H001'),
+    art: getHeroPassiveArt(ALDEN.id),
     typeLabel: 'Pasiva innata',
     description: ALDEN.innate.technicalDescription,
     lore: ALDEN.innate.description,
@@ -104,7 +104,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'Q',
     label: 'Q',
     name: ALDEN.abilities.Q.name,
-    art: getHeroAbilityArt('H001', 'Q'),
+    art: getHeroAbilityArt(ALDEN.id, 'Q'),
     typeLabel: 'Activa · daño físico / movilidad / slow',
     description: ALDEN.abilities.Q.technicalDescription,
     lore: ALDEN.abilities.Q.lore,
@@ -137,7 +137,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'W',
     label: 'W',
     name: ALDEN.abilities.W.name,
-    art: getHeroAbilityArt('H001', 'W'),
+    art: getHeroAbilityArt(ALDEN.id, 'W'),
     typeLabel: 'Activa · defensa / represalia / control',
     description: ALDEN.abilities.W.technicalDescription,
     lore: ALDEN.abilities.W.lore,
@@ -172,7 +172,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'E',
     label: 'E',
     name: ALDEN.abilities.E.name,
-    art: getHeroAbilityArt('H001', 'E'),
+    art: getHeroAbilityArt(ALDEN.id, 'E'),
     typeLabel: 'Activa + pasiva · daño / velocidad / curación',
     description: ALDEN.abilities.E.technicalDescription,
     lore: ALDEN.abilities.E.lore,
@@ -207,7 +207,7 @@ const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'R',
     label: 'R',
     name: ALDEN.abilities.R.name,
-    art: getHeroAbilityArt('H001', 'R'),
+    art: getHeroAbilityArt(ALDEN.id, 'R'),
     typeLabel: 'Ultimate · daño / provocación / mitigación',
     description: ALDEN.abilities.R.technicalDescription,
     lore: ALDEN.abilities.R.lore,
@@ -407,8 +407,50 @@ const SERYN_ABILITIES: readonly AbilityTooltipDefinition[] = [
   },
 ];
 
+function genericAbilitiesForHero(heroId: string): readonly AbilityTooltipDefinition[] {
+  if (!hasHeroDefinition(heroId)) return [];
+  const hero = getHeroDefinition(heroId);
+  const generic: AbilityTooltipDefinition[] = [];
+  if (hero.innate) {
+    generic.push({
+      key: 'P',
+      label: 'PASSIVE',
+      name: hero.innate.name,
+      art: getHeroPassiveArt(hero.id),
+      typeLabel: 'Pasiva innata',
+      description: hero.innate.technicalDescription,
+      lore: hero.innate.description,
+      rankLabels: [],
+      rankHeroLevels: [],
+      sections: [],
+    });
+  }
+  for (const key of ['Q', 'W', 'E', 'R'] as const) {
+    const ability = hero.abilities[key];
+    generic.push({
+      key,
+      label: key,
+      name: ability.name,
+      art: getHeroAbilityArt(hero.id, key),
+      typeLabel: ability.type === 'ultimate' ? 'Ultimate' : 'Habilidad',
+      description: ability.technicalDescription,
+      lore: ability.lore,
+      rankLabels: [],
+      rankHeroLevels: ability.unlockLevels,
+      sections: [],
+    });
+  }
+  return generic;
+}
+
+const SPECIALIZED_ABILITY_TOOLTIPS = new Map<string, readonly AbilityTooltipDefinition[]>([
+  [ALDEN.id, ALDEN_ABILITIES],
+  [SERYN.id, SERYN_ABILITIES],
+]);
+
 function abilitiesForHero(heroId: string | null): readonly AbilityTooltipDefinition[] {
-  return heroId === SERYN.id ? SERYN_ABILITIES : ALDEN_ABILITIES;
+  if (!heroId) return [];
+  return SPECIALIZED_ABILITY_TOOLTIPS.get(heroId) ?? genericAbilitiesForHero(heroId);
 }
 
 function percentForPowerBand(value: 'Low' | 'Medium' | 'High' | undefined) {
@@ -416,9 +458,9 @@ function percentForPowerBand(value: 'Low' | 'Medium' | 'High' | undefined) {
 }
 
 function heroSubtitle(heroId: string) {
-  return heroId === ALDEN.id ? 'THE OATHBEARER'
-    : heroId === SERYN.id ? 'THE HORIZON WARDEN'
-      : 'DAWNREACH HERO';
+  if (!hasHeroDefinition(heroId)) return 'DAWNREACH HERO';
+  const hero = getHeroDefinition(heroId);
+  return `${hero.className.toUpperCase()} · ${hero.primaryRole.toUpperCase()}`;
 }
 
 

@@ -40,12 +40,12 @@ function LoadingPlayerCard({
   session: ActiveMatchSession;
   me: PlatformUser;
 }) {
-  const heroId = session.match.heroSelections?.[player.userId]?.heroId || 'H001';
+  const heroId = session.match.heroSelections?.[player.userId]?.heroId || '';
   const definition = hasHeroDefinition(heroId) ? getHeroDefinition(heroId) : null;
   const hero = {
     name: definition?.displayName.toUpperCase() ?? heroId,
     title: definition?.className.toUpperCase() ?? 'DAWNREACH HERO',
-    art: getHeroPortrait(heroId) || getHeroPortrait('H001'),
+    art: getHeroPortrait(heroId) || MARK,
   };
   const progress = Math.max(0, Math.min(100, Number(session.match.loadingProgress?.[player.userId] || 0)));
   const lane = laneFor(player, teammates);

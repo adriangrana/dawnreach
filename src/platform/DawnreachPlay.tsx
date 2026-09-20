@@ -116,7 +116,7 @@ const MODE_COPY: Record<PlayMode, Readonly<{
     title: 'TRAINING',
     lines: ['MASTER YOUR HERO', 'MASTER THE BATTLEFIELD.'],
     estimate: 'No limit',
-    heroSelect: 'Alden',
+    heroSelect: 'Free Pick',
     action: 'ENTER TRAINING',
   },
   custom: {

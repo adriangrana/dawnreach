@@ -15,9 +15,7 @@ import {
   Trophy,
   UserRound,
 } from 'lucide-react';
-import aldenPortrait from '../game/heroes/alden/images/H001.webp';
-import aldenFullArt from '../game/heroes/alden/images/H001F.png';
-import { getHeroPortrait } from '../game/heroes/assets';
+import { getHeroFullArt, getHeroPortrait } from '../game/heroes/assets';
 import { listHeroDefinitions } from '../game/heroes/catalog';
 import { getItemDefinition } from '../game/items/itemDatabase';
 import { getProfileMatchHistory } from './apiClient';
@@ -105,7 +103,7 @@ function historyEntry(match: MatchSummary, userId: string): HistoryEntry {
   const participant = match.players.find(player => player.userId === userId) ?? null;
   const resultPlayer = report?.players.find(player => player.userId === userId) ?? null;
   const finalState = report?.finalStates.find(state => state.userId === userId) ?? null;
-  const heroId = resultPlayer?.heroId || finalState?.heroId || match.heroSelections?.[userId]?.heroId || 'H001';
+  const heroId = resultPlayer?.heroId || finalState?.heroId || match.heroSelections?.[userId]?.heroId || '';
   const winnerTeam = match.winnerTeam ?? report?.winnerTeam ?? null;
   const voided = Boolean(report?.voided);
   const won = match.status === 'cancelled' || voided || !participant || !winnerTeam
@@ -147,14 +145,21 @@ function historyEntry(match: MatchSummary, userId: string): HistoryEntry {
 }
 
 const PROFILE_HEROES = listHeroDefinitions();
-const PROFILE_HERO_BY_ID = new Map(PROFILE_HEROES.map(hero => [hero.id, hero]));
+const PROFILE_HERO_BY_ID = new Map<string, (typeof PROFILE_HEROES)[number]>(
+  PROFILE_HEROES.map(hero => [hero.id, hero]),
+);
+const PROFILE_FALLBACK_HERO_ID = PROFILE_HEROES[0]?.id ?? '';
 
 function profileHeroName(heroId: string, fallback?: string) {
-  return PROFILE_HERO_BY_ID.get(heroId as never)?.displayName || fallback || heroId;
+  return PROFILE_HERO_BY_ID.get(heroId)?.displayName || fallback || (heroId ? heroId : 'Unknown Hero');
 }
 
 function profileHeroPortrait(heroId: string) {
   return getHeroPortrait(heroId) || '/assets/icon/dawnreach.png';
+}
+
+function profileHeroFullArt(heroId: string) {
+  return getHeroFullArt(heroId) || getHeroPortrait(heroId) || '/assets/icon/dawnreach.png';
 }
 
 function medalSlots() {
@@ -244,8 +249,10 @@ export function DawnreachProfile({
     .filter(change => change.userId === user.id).map(change => ({ ...change, matchId: match.id, endedAt: match.endedAt }))).slice(0, 5);
   const heroCounts = new Map<string, number>();
   for (const entry of playedEntries) heroCounts.set(entry.heroId, (heroCounts.get(entry.heroId) || 0) + 1);
-  const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['H001', 0];
+  const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [PROFILE_FALLBACK_HERO_ID, 0];
   const favoriteHeroName = profileHeroName(favoriteHero[0], favoriteHero[0]);
+  const featuredHeroId = favoriteHero[0] || PROFILE_FALLBACK_HERO_ID;
+  const featuredHeroArt = profileHeroFullArt(featuredHeroId);
   const historyReady = !loading && !loadError;
 
   const totalKills = playedEntries.reduce((sum, entry) => sum + entry.kills, 0);
@@ -261,15 +268,32 @@ export function DawnreachProfile({
   const modeCounts = new Map<string, number>();
   for (const entry of playedEntries) modeCounts.set(entry.match.mode, (modeCounts.get(entry.match.mode) || 0) + 1);
 
-  const aldenEntries = playedEntries.filter(entry => entry.heroId === 'H001' || entry.heroName === 'Alden');
-  const aldenWins = aldenEntries.filter(entry => entry.won === true).length;
-  const aldenLosses = aldenEntries.filter(entry => entry.won === false).length;
-  const aldenKills = aldenEntries.reduce((sum, entry) => sum + entry.kills, 0);
-  const aldenDeaths = aldenEntries.reduce((sum, entry) => sum + entry.deaths, 0);
-  const aldenAssists = aldenEntries.reduce((sum, entry) => sum + entry.assists, 0);
-  const aldenWinRate = aldenWins + aldenLosses ? (aldenWins / (aldenWins + aldenLosses)) * 100 : 0;
-  const aldenKda = (aldenKills + aldenAssists) / Math.max(1, aldenDeaths);
-  const masteryProgress = Math.min(100, Math.round((aldenEntries.length / 25) * 100));
+  const masteryRecords = PROFILE_HEROES.map(hero => {
+    const heroEntries = playedEntries.filter(entry => entry.heroId === hero.id);
+    const wins = heroEntries.filter(entry => entry.won === true).length;
+    const losses = heroEntries.filter(entry => entry.won === false).length;
+    const kills = heroEntries.reduce((sum, entry) => sum + entry.kills, 0);
+    const deaths = heroEntries.reduce((sum, entry) => sum + entry.deaths, 0);
+    const assists = heroEntries.reduce((sum, entry) => sum + entry.assists, 0);
+    const progress = Math.min(100, Math.round((heroEntries.length / 25) * 100));
+    return {
+      hero,
+      entries: heroEntries,
+      wins,
+      losses,
+      kills,
+      deaths,
+      assists,
+      winRate: wins + losses ? (wins / (wins + losses)) * 100 : 0,
+      kda: (kills + assists) / Math.max(1, deaths),
+      progress,
+      masteryLevel: heroEntries.length ? Math.max(1, Math.ceil(heroEntries.length / 5)) : 0,
+    };
+  });
+  const featuredMastery = masteryRecords.find(record => record.hero.id === featuredHeroId) ?? masteryRecords[0] ?? null;
+  const overviewMasteryRecords = [...masteryRecords]
+    .sort((left, right) => right.entries.length - left.entries.length)
+    .slice(0, 4);
 
   return <section className="dr-profile-page">
     <aside className="dr-profile-sidebar">
@@ -305,7 +329,7 @@ export function DawnreachProfile({
           <span><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</span>
           <p>Light finds a way.</p>
         </div>
-        <div className="dr-profile-identity-art" aria-hidden="true"><img src={aldenFullArt} alt="" /></div>
+        <div className="dr-profile-identity-art" aria-hidden="true"><img src={featuredHeroArt} alt="" /></div>
         <div className="dr-profile-identity-motto"><strong>VALOR<br />GUIDES US</strong><img src="/assets/icon/dawnreach.png" alt="" /></div>
       </header>
 
@@ -358,12 +382,12 @@ export function DawnreachProfile({
           <section className="dr-profile-panel dr-profile-mastery-panel">
             <header><strong>HERO MASTERY</strong><span>FOUNDATION ROSTER</span></header>
             <div className="dr-profile-mastery-grid">
-              <article>
-                <img src={profileHeroPortrait(favoriteHero[0])} alt={favoriteHeroName} />
-                <div><strong>{favoriteHeroName.toUpperCase()}</strong><small>{favoriteHero[1]} RECORDED MATCHES</small></div>
-                <span className="dr-profile-mastery-bar"><i style={{ width: favoriteHero[1] ? '68%' : '12%' }} /></span>
-              </article>
-              {Array.from({ length: 3 }, (_, index) => <article className="is-placeholder" key={index}><div className="dr-profile-future-hero"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>MASTERY SLOT</small></div><span className="dr-profile-mastery-bar"><i /></span></article>)}
+              {overviewMasteryRecords.map(record => <article key={record.hero.id}>
+                <img src={profileHeroPortrait(record.hero.id)} alt={record.hero.displayName} />
+                <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} RECORDED MATCHES</small></div>
+                <span className="dr-profile-mastery-bar"><i style={{ width: `${record.progress}%` }} /></span>
+              </article>)}
+              {Array.from({ length: Math.max(0, 4 - overviewMasteryRecords.length) }, (_, index) => <article className="is-placeholder" key={`future-${index}`}><div className="dr-profile-future-hero"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>MASTERY SLOT</small></div><span className="dr-profile-mastery-bar"><i /></span></article>)}
             </div>
           </section>
         </div>
@@ -401,16 +425,16 @@ export function DawnreachProfile({
 
         <div className="dr-profile-mastery-page-grid">
           <section className="dr-profile-panel dr-profile-mastery-feature">
-            <header><strong>ALDEN</strong><span>FOUNDATION HERO</span></header>
+            <header><strong>{featuredMastery?.hero.displayName.toUpperCase() ?? 'HERO'}</strong><span>FEATURED MASTERY</span></header>
             <div className="dr-profile-mastery-feature-body">
-              <div className="dr-profile-mastery-portrait"><img src={aldenFullArt} alt="Alden" /></div>
+              <div className="dr-profile-mastery-portrait"><img src={profileHeroFullArt(featuredMastery?.hero.id ?? featuredHeroId)} alt={featuredMastery?.hero.displayName ?? favoriteHeroName} /></div>
               <div className="dr-profile-mastery-feature-copy">
-                <small>DEMOLISHER · FRONTLINE</small>
-                <h3>Alden</h3>
-                <p>Your current mastery record for Dawnreach's first playable hero.</p>
-                <span className="dr-profile-master-level"><b>{aldenEntries.length ? Math.max(1, Math.ceil(aldenEntries.length / 5)) : 0}</b><i>MASTERY LEVEL</i></span>
-                <div className="dr-profile-master-progress"><i style={{ width: `${masteryProgress}%` }} /></div>
-                <em>{aldenEntries.length} / 25 matches toward the current foundation milestone</em>
+                <small>{featuredMastery ? `${featuredMastery.hero.className.toUpperCase()} · ${featuredMastery.hero.primaryRole.toUpperCase()}` : 'DAWNREACH HERO'}</small>
+                <h3>{featuredMastery?.hero.displayName ?? favoriteHeroName}</h3>
+                <p>Your current mastery record for this Dawnreach hero.</p>
+                <span className="dr-profile-master-level"><b>{featuredMastery?.masteryLevel ?? 0}</b><i>MASTERY LEVEL</i></span>
+                <div className="dr-profile-master-progress"><i style={{ width: `${featuredMastery?.progress ?? 0}%` }} /></div>
+                <em>{featuredMastery?.entries.length ?? 0} / 25 matches toward the current foundation milestone</em>
               </div>
             </div>
           </section>
@@ -418,18 +442,22 @@ export function DawnreachProfile({
           <section className="dr-profile-panel dr-profile-mastery-stats">
             <header><strong>MASTERY PERFORMANCE</strong><span>RECORDED MATCHES</span></header>
             <div className="dr-profile-stat-tile-grid">
-              <article><small>MATCHES</small><strong>{historyReady ? aldenEntries.length : '—'}</strong></article>
-              <article><small>WIN RATE</small><strong>{historyReady && aldenWins + aldenLosses ? `${aldenWinRate.toFixed(1)}%` : '—'}</strong></article>
-              <article><small>K / D / A</small><strong>{historyReady ? `${aldenKills} / ${aldenDeaths} / ${aldenAssists}` : '—'}</strong></article>
-              <article><small>KDA RATIO</small><strong>{historyReady && aldenEntries.length ? aldenKda.toFixed(2) : '—'}</strong></article>
+              <article><small>MATCHES</small><strong>{historyReady ? featuredMastery?.entries.length ?? 0 : '—'}</strong></article>
+              <article><small>WIN RATE</small><strong>{historyReady && featuredMastery && featuredMastery.wins + featuredMastery.losses ? `${featuredMastery.winRate.toFixed(1)}%` : '—'}</strong></article>
+              <article><small>K / D / A</small><strong>{historyReady && featuredMastery ? `${featuredMastery.kills} / ${featuredMastery.deaths} / ${featuredMastery.assists}` : '—'}</strong></article>
+              <article><small>KDA RATIO</small><strong>{historyReady && featuredMastery?.entries.length ? featuredMastery.kda.toFixed(2) : '—'}</strong></article>
             </div>
           </section>
 
           <section className="dr-profile-panel dr-profile-roster-panel">
             <header><strong>HERO ROSTER</strong><span>MASTERY COLLECTION</span></header>
             <div className="dr-profile-roster-grid">
-              <article className="is-owned"><img src={aldenPortrait} alt="Alden" /><div><strong>ALDEN</strong><small>{aldenEntries.length} MATCHES</small></div><span><i style={{ width: `${masteryProgress}%` }} /></span></article>
-              {Array.from({ length: 7 }, (_, index) => <article className="is-locked" key={index}><div className="dr-profile-roster-placeholder"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>NOT YET AVAILABLE</small></div><span><i /></span></article>)}
+              {masteryRecords.map(record => <article className="is-owned" key={record.hero.id}>
+                <img src={profileHeroPortrait(record.hero.id)} alt={record.hero.displayName} />
+                <div><strong>{record.hero.displayName.toUpperCase()}</strong><small>{record.entries.length} MATCHES</small></div>
+                <span><i style={{ width: `${record.progress}%` }} /></span>
+              </article>)}
+              {Array.from({ length: Math.max(0, 8 - masteryRecords.length) }, (_, index) => <article className="is-locked" key={`future-${index}`}><div className="dr-profile-roster-placeholder"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>NOT YET AVAILABLE</small></div><span><i /></span></article>)}
             </div>
           </section>
         </div>
@@ -474,7 +502,7 @@ export function DawnreachProfile({
             <div className="dr-profile-cosmetic-banner-preview">
               <div className="dr-profile-cosmetic-avatar"><strong>{user.username.slice(0,2).toUpperCase()}</strong></div>
               <div><h3>{user.username}</h3><span>DAWNREACH PLAYER</span><small>A BRIGHTER TOMORROW</small></div>
-              <img src={aldenFullArt} alt="" />
+              <img src={featuredHeroArt} alt="" />
             </div>
           </section>
           <section className="dr-profile-panel dr-profile-equipped-cosmetics">

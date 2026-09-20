@@ -11,8 +11,8 @@ import {
   Trophy,
   Users,
 } from 'lucide-react';
-import aldenPortrait from '../game/heroes/alden/images/H001.webp';
-import aldenFullArt from '../game/heroes/alden/images/H001F.png';
+import { getHeroFullArt, getHeroPortrait } from '../game/heroes/assets';
+import { listHeroDefinitions } from '../game/heroes/catalog';
 import { HomeChatPanel } from './HomeChatPanel';
 import { platformRealtime } from './realtimeClient';
 import { SocialRail } from './SocialRail';
@@ -22,6 +22,11 @@ import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
 const HOME_CURRENCY = { gold: 12_480, crystals: 2_350 } as const;
 const CURRENCY_NUMBER = new Intl.NumberFormat('en-US');
+const HOME_FEATURED_HERO = listHeroDefinitions()[0] ?? null;
+const HOME_FEATURED_HERO_ART = HOME_FEATURED_HERO
+  ? getHeroFullArt(HOME_FEATURED_HERO.id) || getHeroPortrait(HOME_FEATURED_HERO.id)
+  : '';
+const HOME_FEATURED_HERO_PORTRAIT = HOME_FEATURED_HERO ? getHeroPortrait(HOME_FEATURED_HERO.id) : '';
 
 export function DawnreachHomeTopbar({
   section,
@@ -116,14 +121,14 @@ export function DawnreachHomeOverview({
       </aside>
 
       <div className="dr-home-feature-hero" aria-hidden="true">
-        <img src={aldenFullArt} alt="" draggable={false} />
+        {HOME_FEATURED_HERO_ART && <img src={HOME_FEATURED_HERO_ART} alt="" draggable={false} />}
       </div>
 
       <div className="dr-home-feature-copy">
         <span>FEATURED HERO</span>
-        <h1>ALDEN</h1>
-        <h3>THE IRON KING</h3>
-        <p>Frontline initiator and sustained-damage fighter.</p>
+        <h1>{HOME_FEATURED_HERO?.displayName.toUpperCase() ?? 'DAWNREACH'}</h1>
+        <h3>{HOME_FEATURED_HERO?.className.toUpperCase() ?? 'HERO'}</h3>
+        <p>{HOME_FEATURED_HERO?.primaryRole ?? 'Choose your hero and prepare for battle.'}</p>
         <button type="button" onClick={onPlay}>PREPARE FOR BATTLE</button>
       </div>
 
@@ -191,7 +196,7 @@ export function DawnreachSharedFooter({
 }) {
   return <div className="dr-home-lower-strip">
     <article className="dr-home-news-card is-wide"><div><small>DAWNREACH CHRONICLES</small><strong>Beyond the battlefield</strong><span>Discover the realms fighting to control the crown.</span></div></article>
-    <article className="dr-home-news-card is-hero"><img src={aldenPortrait} alt="Alden" /><div><small>HERO</small><strong>Alden</strong></div></article>
+    <article className="dr-home-news-card is-hero">{HOME_FEATURED_HERO_PORTRAIT && <img src={HOME_FEATURED_HERO_PORTRAIT} alt={HOME_FEATURED_HERO?.displayName ?? ''} />}<div><small>HERO</small><strong>{HOME_FEATURED_HERO?.displayName ?? 'Dawnreach'}</strong></div></article>
     <article className="dr-home-news-card is-update"><div><small>UPDATE</small><strong>Foundation Season</strong></div></article>
     <HomeChatPanel me={user} online={online} snapshot={social} party={party} selectedFriendId={selectedChatFriendId} refreshSocial={refreshSocial} onActiveDirectChange={onActiveChatFriendChange} />
     <article className="dr-home-motto-card"><Crown /><strong>TWO REALMS.<br />ONE THRONE.</strong><span>DAWNREACH</span></article>

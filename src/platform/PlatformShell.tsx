@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { LogIn, Shield, Swords, UserPlus, X } from 'lucide-react';
 import GameApp from '../App';
 import { mountGameClientRuntime } from '../game/mountGameClientRuntime';
+import { listHeroDefinitions } from '../game/heroes/catalog';
 import { CustomLobbyPanel } from './CustomLobbyPanel';
 import { HeroSelectScreen } from './HeroSelectScreen';
 import { MatchLoadingScreen } from './MatchLoadingScreen';
@@ -41,6 +42,7 @@ const EMPTY_PARTY: PartySnapshot = { party: null, invites: [], messages: [] };
 const EMPTY_QUEUE: QueueState = { joined: false, mode: 'ranked', count: 0, target: 10 };
 const MATCH_ABANDON_REQUEST_EVENT = 'dawnreach:match-abandon-request';
 const MATCH_POST_MATCH_OPEN_EVENT = 'dawnreach:post-match-open';
+const DEFAULT_LOCAL_HERO_ID = listHeroDefinitions()[0]?.id ?? '';
 
 type Surface = 'booting' | 'auth' | 'home' | 'game';
 type AuthMode = 'login' | 'register';
@@ -51,7 +53,7 @@ function eventType(event: PlatformRealtimeEvent) {
   return typeof event === 'object' && event !== null && 'type' in event ? String(event.type || '') : '';
 }
 
-function LocalGameScreen({ activeMatch, user, localHeroId = 'H001' }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null; localHeroId?: string } = {}) {
+function LocalGameScreen({ activeMatch, user, localHeroId = DEFAULT_LOCAL_HERO_ID }: { activeMatch?: ActiveMatchSession | null; user?: PlatformUser | null; localHeroId?: string } = {}) {
   const [ready, setReady] = useState(false);
   const localMatchPlayer = activeMatch?.match.players.find(player => player.userId === user?.id) ?? null;
   const runtimeMatchId = activeMatch?.match.id ?? null;
@@ -531,10 +533,10 @@ export default function PlatformShell() {
   const [surface, setSurface] = useState<Surface>('booting');
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [error, setError] = useState('');
-  const [localHeroId, setLocalHeroId] = useState('H001');
+  const [localHeroId, setLocalHeroId] = useState(DEFAULT_LOCAL_HERO_ID);
   useEffect(() => { let active = true; const restore = async () => { if (!getAuthToken()) { if (active) setSurface('auth'); return; } try { const restored = await getCurrentPlatformUser(); if (!active) return; setUser(restored); setSurface('home'); } catch (restoreError) { if (!active) return; setError(restoreError instanceof Error ? restoreError.message : 'Could not restore the session.'); setSurface('auth'); } }; void restore(); return () => { active = false; }; }, []);
   const authenticated = (nextUser: PlatformUser) => { setUser(nextUser); setError(''); setSurface('home'); };
   const logout = async () => { platformRealtime.disconnect(); try { await logoutPlatformAccount(); } catch { /* token is cleared in client */ } setUser(null); setSurface('auth'); };
   if (surface === 'game') return <div className="platform-shell platform-shell--game" data-dawnreach-platform-ready="true"><LocalGameScreen localHeroId={localHeroId} /></div>;
-  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restoring session…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={heroId => { setLocalHeroId(heroId || 'H001'); setSurface('game'); }} onLogout={() => void logout()} />}</div>;
+  return <div className="platform-shell" data-dawnreach-platform-ready={surface === 'booting' ? 'false' : 'true'}><div className="platform-shell-backdrop" aria-hidden="true" />{surface === 'booting' && <div className="platform-bootstrap"><img src={DAWNREACH_ICON} alt="" /><strong>DAWNREACH</strong><span>Restoring session…</span></div>}{surface === 'auth' && <AuthSurface error={error} onAuthenticated={authenticated} onLocalGame={() => setSurface('game')} />}{surface === 'home' && user && <HomeSurface user={user} onLocalPlay={heroId => { setLocalHeroId(heroId || DEFAULT_LOCAL_HERO_ID); setSurface('game'); }} onLogout={() => void logout()} />}</div>;
 }

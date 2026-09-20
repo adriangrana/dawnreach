@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Activity, BarChart3, Crown, Gauge, Home, RotateCcw, Shield, Swords, Timer, Trophy, Users, Wifi, WifiOff } from 'lucide-react';
+import { getHeroPortrait } from '../game/heroes/assets';
 import { getHeroDefinition } from '../game/heroes/catalog';
 import { getItemDefinition } from '../game/items/itemDatabase';
 import { getItemIconDataUrl } from '../game/items/itemVisuals';
@@ -14,18 +15,6 @@ import type {
   PlatformUser,
   Team,
 } from './types';
-
-const heroPortraitModules = import.meta.glob<string>('../game/heroes/*/images/*.webp', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-});
-
-const heroPortraitsById = new Map<string, string>();
-for (const [path, url] of Object.entries(heroPortraitModules)) {
-  const match = /\/images\/(H\d+)\.webp$/i.exec(path);
-  if (match?.[1]) heroPortraitsById.set(match[1].toUpperCase(), url);
-}
 
 type FinalPlayer = Readonly<{
   player: MatchPlayer;
@@ -127,13 +116,13 @@ function buildFinalPlayers(result: MatchEndedEvent): FinalPlayer[] {
       const heroId = stored?.heroId
         || result.match.heroSelections?.[player.userId]?.heroId
         || legacy?.heroId
-        || 'H001';
+        || '';
       const stats = stored ?? legacyResultPlayer(player, legacy, heroId, observedAt);
       return {
         player,
         stats,
         heroName: stats.heroName || safeHeroName(heroId),
-        portrait: heroPortraitsById.get(heroId.toUpperCase()),
+        portrait: getHeroPortrait(heroId) || undefined,
       };
     })
     .sort((left, right) => left.player.team.localeCompare(right.player.team) || left.player.slot - right.player.slot);
