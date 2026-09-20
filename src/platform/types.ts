@@ -1,3 +1,4 @@
+import type { RankSummary } from '../../shared/ranked.mjs';
 export type QueueMode = 'ranked' | 'normal';
 export type Team = 'blue' | 'red';
 export type FriendPresenceStatus = 'in_match' | 'in_queue' | 'online' | 'away' | 'offline';
@@ -13,6 +14,8 @@ export type PlatformUser = Readonly<{
   calibrationGames: number;
   calibrationTarget: number;
   rankedGames: number;
+  leaderboardPosition?: number | null;
+  rank?: RankSummary;
 }>;
 
 export type RankingEntry = PlatformUser & Readonly<{
@@ -92,6 +95,10 @@ export type QueuePlayer = Readonly<{
   userId: string;
   username: string;
   rating: number;
+  calibrated?: boolean;
+  calibrationGames?: number;
+  leaderboardPosition?: number | null;
+  rank?: RankSummary;
   joinedAt: number;
   partyId?: string;
 }>;
@@ -128,6 +135,8 @@ export type MatchSummary = Readonly<{
   winnerTeam?: Team | null;
   abandonedUserIds?: readonly string[];
   postMatchReport?: MatchPostMatchReport;
+  ratingSettledAt?: string;
+  ratingChanges?: readonly Readonly<{ userId: string; before: PlatformUser; after: PlatformUser; delta: number | null }>[];
 }>;
 
 export type ActiveMatchSession = Readonly<{
@@ -139,6 +148,8 @@ export type LobbyPlayer = Readonly<{
   userId: string;
   username: string;
   rating: number;
+  calibrated?: boolean;
+  rank?: RankSummary;
   joinedAt: number;
   team: Team;
   slot: number;

@@ -111,7 +111,8 @@ function AuthSurface({ error, onAuthenticated, onLocalGame }: { error: string; o
   </main>;
 }
 
-function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: () => void; onLogout: () => void }) {
+function HomeSurface({ user: initialUser, onLocalPlay, onLogout }: { user: PlatformUser; onLocalPlay: () => void; onLogout: () => void }) {
+  const [user, setUser] = useState(initialUser);
   const [section, setSection] = useState<HomeSection>('home');
   const [playSection, setPlaySection] = useState<PlaySection>('matchmaking');
   const [requestedPlayMode, setRequestedPlayMode] = useState<PlayMode | null>(null);
@@ -192,6 +193,10 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     void refreshSocial().catch(() => undefined);
     const unsubscribe = platformRealtime.subscribe(event => {
       const type = eventType(event);
+      if ((type === 'user.updated' || type === 'session.ready') && 'user' in event && event.user) {
+        const updated = event.user as PlatformUser;
+        if (updated.id === user.id) setUser(updated);
+      }
       if (type === 'presence.snapshot' && 'users' in event && Array.isArray(event.users)) setOnline(event.users as readonly PlatformUser[]);
       if (type === 'social.snapshot' && 'friends' in event && 'incoming' in event && 'outgoing' in event) setSocial(event as unknown as SocialSnapshot);
       if (type === 'party.snapshot' && 'party' in event && 'invites' in event) setParty({

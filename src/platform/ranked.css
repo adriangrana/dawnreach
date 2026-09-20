@@ -1,0 +1,73 @@
+.dr-rank-badge { --rank-color: #d7c99e; display: inline-flex; align-items: center; gap: 10px; min-width: 0; vertical-align: middle; flex-shrink: 0; }
+.dr-rank-badge > img { display: block; width: 48px; height: 46px; object-fit: contain; flex-shrink: 0; mix-blend-mode: screen; mask-image: radial-gradient(ellipse at center, #000 42%, #000d 64%, transparent 76%); }
+.dr-rank-badge.is-tiny > img { width: 30px; height: 30px; }
+.dr-rank-badge.is-large > img { width: 116px; height: 102px; }
+.dr-rank-badge > span { display: grid; gap: 3px; min-width: 0; }
+.dr-rank-badge > span > strong { color: var(--rank-color); font: 500 12px/1.3 'Segoe UI', sans-serif; letter-spacing: .025em; }
+.dr-rank-badge > span > small { color: #9eb2c5; font: 10px/1.3 'Segoe UI', sans-serif; letter-spacing: .025em; }
+.dr-rank-progress { min-width: 0; margin-top: 10px; }
+.dr-rank-progress > div { height: 6px; border: 1px solid #57718966; border-radius: 2px; background: #050f19; overflow: hidden; }
+.dr-rank-progress i { display: block; height: 100%; background: linear-gradient(90deg, #2b719e, var(--rank-color, #7acfff)); }
+.dr-rank-progress > small { display: block; color: #a8b9c9; font: 10px/1.4 'Segoe UI', sans-serif; margin-top: 6px; }
+.dr-rank-ladder { margin-top: 16px; border: 1px solid #b89e6755; border-radius: 5px; background: #071724ed; color: #dbe5ee; }
+.dr-rank-ladder summary { padding: 16px; cursor: pointer; color: #e2c48a; font: 13px Georgia, serif; letter-spacing: .08em; }
+.dr-rank-ladder summary span { display: inline-block; margin-left: 12px; color: #94aec3; font: 10px 'Segoe UI', sans-serif; letter-spacing: .02em; }
+.dr-rank-ladder > p { margin: 0; padding: 0 16px 14px; color: #a9bac9; font-size: 12px; }
+.dr-rank-ladder-grid { display: grid; gap: 10px; padding: 0 12px; }
+.dr-rank-ladder-grid > section { border: 1px solid #7c96b22b; border-left: 2px solid var(--rank-color); border-radius: 3px; overflow: hidden; }
+.dr-rank-ladder-grid header { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; background: #799cc408; }
+.dr-rank-ladder-grid header strong { color: var(--rank-color); font: 14px Georgia, serif; }
+.dr-rank-ladder-grid header small { color: #8da6ba; font-size: 10px; }
+.dr-rank-ladder-grid section > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dr-rank-ladder-grid article { display: grid; justify-items: center; padding: 6px 4px 14px; gap: 4px; border-left: 1px solid #7c96b215; }
+.dr-rank-ladder-grid article > strong { font: 12px Georgia, serif; color: #e6ddc7; }
+.dr-rank-ladder-grid article > small { font-size: 10px; color: #a2b7ca; text-align: center; }
+.dr-rank-ladder-unranked, .dr-rank-ladder-dawnborn { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; }
+.dr-rank-ladder-unranked > span:last-child, .dr-rank-ladder-dawnborn p { color: #98b0c5; font-size: 11px; max-width: 350px; }
+.dr-home-top-actions .dr-rank-badge { margin-inline: 4px; }
+.dr-home-progress-card > .dr-rank-badge { display: flex; }
+.dr-home-progress-card .dr-rank-badge.is-large > img { width: 76px; height: 78px; }
+.dr-home-progress-card { min-height: 108px; }
+.dr-home-progress-card .dr-rank-progress > small { font-size: 9px; }
+.dr-home-progress-card > div { min-width: 0; }
+.dr-profile-rank-emblem:has(.dr-rank-badge), .dr-ranking-rank-emblem:has(.dr-rank-badge), .dr-ranking-side-emblem:has(.dr-rank-badge) { background: transparent; border: 0; box-shadow: none; }
+.dr-profile-rank-history:has(.dr-rank-history-list) { height: auto; min-height: 100px; padding: 12px; }
+.dr-rank-history-list { display: grid; gap: 8px; width: 100%; }
+.dr-rank-history-list > div { display: flex; align-items: center; gap: 8px; color: #a5b9ca; font-size: 10px; }
+.dr-rank-history-list b { margin-left: auto; color: #84d8b0; }
+.dr-rank-history-list b.is-loss { color: #e69aa5; }
+.dr-rank-history-list small { min-width: 65px; text-align: right; }
+.dr-ranking-row .dr-rank-badge > img { width: 32px; height: 34px; }
+.dr-ranking-row .dr-rank-badge > span > strong { font-size: 10px; }
+.dr-ranking-row .dr-rank-badge > span > small { display: none; }
+.dr-ranking-table-head, .dr-ranking-row { grid-template-columns: 40px minmax(140px, 1.2fr) 90px 80px 80px minmax(155px, 1fr) 20px; }
+.dr-ranking-podium-card .dr-rank-badge.is-large > img { width: 90px; height: 84px; }
+.dr-play-ranked-note .dr-rank-badge img { width: 58px; height: 58px; }
+.dr-play-ranked-note:has(.dr-rank-progress) { gap: 14px; }
+.dr-play-ranked-note .dr-rank-progress { max-width: 220px; }
+.platform-social-friends .dr-rank-badge > img, .platform-social-search-result .dr-rank-badge > img { width: 24px; height: 26px; }
+.platform-social-friends .dr-rank-badge { position: absolute; right: 32px; top: 8px; }
+.platform-social-friends button:has(.dr-rank-badge) { position: relative; padding-right: 62px; }
+.dr-custom-player > .dr-rank-badge { margin-left: auto; }
+.dr-loading-player-meta .dr-rank-badge > img { width: 24px; height: 24px; }
+.dr-loading-player-name { display: inline-flex; align-items: center; gap: 5px; }
+.dr-hero-select-player-copy .dr-rank-badge { margin-left: 6px; }
+.dr-hero-select-player-copy .dr-rank-badge > img { width: 24px; height: 24px; }
+.dr-post-ranked-progression { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px; margin: 12px 24px 0; padding: 12px 20px; background: linear-gradient(100deg, #102b3aed, #071321ee); border: 1px solid #c4a96a66; border-radius: 4px; }
+.dr-post-ranked-progression > div > small { color: #a6b6c7; letter-spacing: .1em; font-size: 9px; }
+.dr-post-ranked-progression h3 { margin: 4px 0 0; color: #e9d19a; font: 18px Georgia, serif; }
+.dr-post-ranked-progression .dr-rank-progress { max-width: 400px; }
+.dr-post-mmr-change { display: grid; text-align: right; gap: 4px; }
+.dr-post-mmr-change strong { color: #8adcb4; font: 22px Georgia, serif; }
+.dr-post-mmr-change.is-loss strong { color: #f09da5; }
+.dr-post-mmr-change small { color: #9ab2c7; font-size: 10px; }
+.dr-post-player-copy .dr-rank-badge { float: right; margin-top: -4px; }
+.dr-post-player-copy .dr-rank-badge img { width: 20px; height: 24px; }
+@media (max-width: 800px) {
+  .dr-rank-ladder-grid .dr-rank-badge.is-large > img { width: 64px; height: 65px; }
+  .dr-rank-ladder-grid article > small { font-size: 8px; }
+  .dr-rank-ladder-unranked, .dr-rank-ladder-dawnborn { flex-wrap: wrap; }
+  .dr-home-top-actions > .dr-rank-badge { display: none; }
+  .dr-post-ranked-progression { margin-inline: 12px; padding: 10px; gap: 10px; }
+  .dr-post-ranked-progression .dr-rank-badge.is-large > img { width: 65px; height: 64px; }
+}

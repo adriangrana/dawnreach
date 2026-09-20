@@ -1,11 +1,12 @@
 import fs from 'node:fs';
-import { CALIBRATION_MATCHES, INITIAL_PROVISIONAL_RATING } from './competitive.mjs';
+import { CALIBRATION_MATCHES, INITIAL_PROVISIONAL_RATING, ratingDelta } from './competitive.mjs';
+import { resolveRank } from '../shared/ranked.mjs';
 import { hashPassword, randomToken, verifyPassword } from './security.mjs';
 import { writeJsonAtomic } from './json-file.mjs';
 
 function hydrateUser(raw) {
   const user = { ...raw };
-  user.rating = Number.isFinite(user.rating) ? user.rating : INITIAL_PROVISIONAL_RATING;
+  user.rating = Number.isFinite(user.rating) ? Math.max(0, Math.round(user.rating)) : INITIAL_PROVISIONAL_RATING;
   user.wins = Number.isFinite(user.wins) ? user.wins : 0;
   user.losses = Number.isFinite(user.losses) ? user.losses : 0;
   user.calibrated = typeof user.calibrated === 'boolean' ? user.calibrated : false;
@@ -51,6 +52,7 @@ function cleanMessage(value) {
 
 export class PlatformStore {
   #state;
+  #ladder = null;
 
   constructor(filePath) {
     this.filePath = filePath;
@@ -58,11 +60,13 @@ export class PlatformStore {
   }
 
   #persist() {
+    this.#ladder = null;
     writeJsonAtomic(this.filePath, this.#state);
   }
 
   publicUser(user) {
     if (!user) return null;
+    const leaderboardPosition = user.calibrated ? this.#rankedUsers().findIndex(entry => entry.id === user.id) + 1 || null : null;
     return {
       id: user.id,
       username: user.username,
@@ -74,6 +78,8 @@ export class PlatformStore {
       calibrationGames: user.calibrationGames,
       calibrationTarget: user.calibrationTarget,
       rankedGames: user.rankedGames,
+      leaderboardPosition,
+      rank: resolveRank({ ...user, leaderboardPosition }),
     };
   }
 
@@ -93,21 +99,27 @@ export class PlatformStore {
 
   rankedLeaderboard(limit = 100) {
     const capped = Math.max(1, Math.min(500, Math.floor(Number(limit) || 100)));
-    const ranked = this.#state.users
+    const ranked = this.#rankedUsers();
+
+    return {
+      total: ranked.length,
+      entries: ranked.slice(0, capped).map((user, index) => ({
+        ...this.publicUser(user), position: index + 1,
+      })),
+    };
+  }
+
+  #rankedUsers() {
+    if (this.#ladder) return this.#ladder;
+    this.#ladder = this.#state.users
       .filter(user => user.calibrated)
       .sort((left, right) =>
         right.rating - left.rating
         || right.wins - left.wins
         || right.rankedGames - left.rankedGames
-        || left.username.localeCompare(right.username));
-
-    return {
-      total: ranked.length,
-      entries: ranked.slice(0, capped).map((user, index) => ({
-        ...this.publicUser(user),
-        position: index + 1,
-      })),
-    };
+        || left.username.localeCompare(right.username)
+        || left.id.localeCompare(right.id));
+    return this.#ladder;
   }
 
   searchUsers(query, viewerId, limit = 20) {
@@ -275,6 +287,49 @@ export class PlatformStore {
     Object.assign(match, patch);
     this.#persist();
     return { ...match };
+  }
+
+  /** Persist match result and rating ledger in one atomic write, exactly once. */
+  completeMatch(matchId, patch) {
+    const match = this.#state.matches.find(candidate => candidate.id === matchId);
+    if (!match) return null;
+    if (['completed', 'cancelled'].includes(match.status)) return { ...match };
+    const previous = structuredClone(this.#state);
+    const canRate = match.status === 'in_game' && match.mode === 'ranked' && match.rated
+      && patch.status === 'completed' && !patch.postMatchReport?.voided
+      && ['blue', 'red'].includes(patch.winnerTeam);
+    try {
+      Object.assign(match, patch);
+      if (canRate) {
+        const participants = [...new Map(match.players.map(p => [p.userId, p])).values()]
+          .map(player => ({ player, user: this.getUser(player.userId) })).filter(p => p.user);
+        const teams = ['blue', 'red'].map(team => participants.filter(p => p.player.team === team));
+        if (!teams[0].length || !teams[1].length) throw new Error('Ranked result requires both teams.');
+        const averages = teams.map(team => team.reduce((sum, p) => sum + p.user.rating, 0) / team.length);
+        const changes = participants.map(({ player, user }) => {
+          const before = this.publicUser(user), beforeRating = user.rating;
+          const won = player.team === patch.winnerTeam;
+          const ownTeam = player.team === 'blue' ? 0 : 1;
+          user.rating = Math.max(0, beforeRating + ratingDelta(averages[ownTeam], averages[1 - ownTeam], won, user.calibrated));
+          user.rankedGames += 1;
+          if (won) user.wins += 1; else user.losses += 1;
+          user.calibrationGames = Math.min(CALIBRATION_MATCHES, user.calibrationGames + 1);
+          user.calibrated = user.calibrationGames >= CALIBRATION_MATCHES;
+          return { userId: user.id, before, delta: before.calibrated ? user.rating - beforeRating : null };
+        });
+        this.#ladder = null;
+        match.ratingChanges = changes.map(change => ({ ...change, after: this.publicUser(this.getUser(change.userId)) }));
+        match.ratingSettledAt = patch.endedAt;
+      } else {
+        match.rated = false;
+        match.ratingChanges = [];
+      }
+      this.#persist();
+      return { ...match };
+    } catch (error) {
+      this.#state = previous; this.#ladder = null;
+      throw error;
+    }
   }
 
   activeMatchForUser(userId) {

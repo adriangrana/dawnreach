@@ -16,6 +16,7 @@ import aldenFullArt from '../game/heroes/alden/images/H001F.png';
 import { HomeChatPanel } from './HomeChatPanel';
 import { platformRealtime } from './realtimeClient';
 import { SocialRail } from './SocialRail';
+import { RankBadge, RankProgress, playerRank } from './RankBadge';
 import type { PartySnapshot, PlatformUser, SocialSnapshot } from './types';
 
 const DAWNREACH_ICON = '/assets/icon/dawnreach.png';
@@ -58,6 +59,7 @@ export function DawnreachHomeTopbar({
       <span className="dr-home-currency is-crystal" title="Crystals"><span className="dr-home-currency-icon" aria-hidden="true"><Gem /></span><strong>{CURRENCY_NUMBER.format(HOME_CURRENCY.crystals)}</strong></span>
       <button className="dr-home-icon-button" type="button" disabled aria-label="Messages"><MessageSquare /></button>
       <button className="dr-home-icon-button" type="button" disabled aria-label="Settings"><Settings /></button>
+      <RankBadge player={user} size="tiny" />
       <span className="dr-home-account-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
       <span className="dr-home-account-copy"><strong>{user.username}</strong><small><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</small></span>
       <button className="dr-home-account-menu" type="button" onClick={onLogout} title="Sign out"><ChevronDown /></button>
@@ -93,7 +95,7 @@ export function DawnreachHomeOverview({
   onCustom: () => void;
 }) {
   const games = user.wins + user.losses;
-  const calibrationProgress = Math.min(100, Math.round((user.calibrationGames / Math.max(1, user.calibrationTarget)) * 100));
+  const rank = playerRank(user);
   return <section className="dr-home-overview">
     <div className="dr-home-stage">
       <aside className="dr-home-left-column">
@@ -102,8 +104,8 @@ export function DawnreachHomeOverview({
           <button type="button" disabled>VIEW SEASON</button>
         </article>
         <article className="dr-home-progress-card">
-          <div className="dr-home-progress-medal">{user.calibrated ? user.rating : user.calibrationGames}</div>
-          <div><small>{user.calibrated ? 'RANKING' : 'CALIBRATION'}</small><strong>{user.calibrated ? `${user.rating} MMR` : `${user.calibrationGames} / ${user.calibrationTarget}`}</strong><span className="dr-home-progress-track"><i style={{ width: `${user.calibrated ? 100 : calibrationProgress}%` }} /></span></div>
+          <RankBadge player={user} size="large" />
+          <div><small>{rank.label.toUpperCase()}</small><strong>{user.calibrated ? `${user.rating.toLocaleString('en-US')} MMR` : `${user.calibrationGames} / ${user.calibrationTarget}`}</strong><RankProgress player={user} /></div>
         </article>
         <article className="dr-home-events-card">
           <header><strong>ACTIVITY</strong><button type="button" disabled>SEE ALL</button></header>

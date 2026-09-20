@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { RankBadge, RankProgress } from './RankBadge';
 import {
   CheckCircle2,
   Clock3,
@@ -282,7 +283,7 @@ export function DawnreachPlayScreen({
           <h1>{copy.title}</h1>
           <p>{copy.lines.map(line => <span key={line}>{line}</span>)}</p>
         </div>
-        {selectedMode === 'ranked' && <div className="dr-play-ranked-note"><Trophy /><span><small>{rankedCalibration ? 'CALIBRATION' : 'RANKED RATING'}</small><strong>{rankedCalibration ? `${me.calibrationGames} / ${me.calibrationTarget}` : `${me.rating} MMR`}</strong></span></div>}
+        {selectedMode === 'ranked' && <div className="dr-play-ranked-note"><RankBadge player={me} label /><RankProgress player={me} /></div>}
         <div className="dr-play-match-facts">
           <div><Clock3 /><span><small>Estimated Match Time</small><strong>{copy.estimate}</strong></span></div>
           <div><Map /><span><small>Map</small><strong>Dawnreach</strong></span></div>

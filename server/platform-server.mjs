@@ -158,7 +158,12 @@ export function createPlatformServer(options = {}) {
   function publicMatch(match) {
     if (!match) return null;
     const { resultToken: _secret, ...safe } = match;
-    return safe;
+    return { ...safe, players: safe.players?.map(player => {
+      const user = store.publicUser(store.getUser(player.userId));
+      return { ...player, rating: user?.rating ?? 0, calibrated: user?.calibrated ?? false,
+        calibrationGames: user?.calibrationGames ?? 0, rank: user?.rank,
+        leaderboardPosition: user?.leaderboardPosition ?? null };
+    }) };
   }
 
   function profileMatchHistory(userId, limit = 50) {
@@ -754,7 +759,7 @@ export function createPlatformServer(options = {}) {
       voided,
       endedAt,
     });
-    const updated = store.updateMatch(active.id, {
+    const updated = store.completeMatch(active.id, {
       status: voided ? 'cancelled' : 'completed',
       endedAt,
       endReason,
@@ -780,6 +785,15 @@ export function createPlatformServer(options = {}) {
       durationMs: postMatchReport.durationMs,
       finalStates: postMatchReport.finalStates,
     }, active.players.map(candidate => candidate.userId));
+
+    if (updated.ratingChanges?.length) {
+      // All connected players refresh: a top-500 promotion can displace another user.
+      for (const userId of peersByUser.keys()) {
+        send(userId, { type: 'user.updated', user: store.publicUser(store.getUser(userId)) });
+        send(userId, { type: 'party.snapshot', ...parties.snapshotFor(userId) });
+      }
+      broadcastPresence();
+    }
 
     clearMatchRuntime(active.id);
     if (active.source === 'custom') lobbies.closeByMatch(active.id);

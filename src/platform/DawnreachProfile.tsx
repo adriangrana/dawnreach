@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { RankBadge, RankProgress, playerRank, RankLadder } from './RankBadge';
 import {
   BarChart3,
   CalendarDays,
@@ -225,8 +226,9 @@ export function DawnreachProfile({
   const totalRecordedMs = playedEntries.reduce((sum, entry) => sum + entry.durationMs, 0);
   const totalMatches = playedEntries.length;
   const winRate = decisiveEntries.length > 0 ? (recordedWins / decisiveEntries.length) * 100 : 0;
-  const calibrationProgress = Math.min(100, Math.round((user.calibrationGames / Math.max(1, user.calibrationTarget)) * 100));
-  const rankProgress = user.calibrated ? 100 : calibrationProgress;
+  const rank = playerRank(user);
+  const ratingHistory = matches.flatMap(match => (match.ratingChanges ?? [])
+    .filter(change => change.userId === user.id).map(change => ({ ...change, matchId: match.id, endedAt: match.endedAt }))).slice(0, 5);
   const heroCounts = new Map<string, number>();
   for (const entry of playedEntries) heroCounts.set(entry.heroName, (heroCounts.get(entry.heroName) || 0) + 1);
   const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['Alden', 0];
@@ -285,7 +287,7 @@ export function DawnreachProfile({
         </div>
         <div className="dr-profile-identity-copy">
           <h1>{user.username}</h1>
-          <h2>DAWNREACH PLAYER</h2>
+          <h2><RankBadge player={user} size="tiny" /> {rank.label.toUpperCase()}</h2>
           <span><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</span>
           <p>Light finds a way.</p>
         </div>
@@ -321,19 +323,23 @@ export function DawnreachProfile({
           <section className="dr-profile-panel dr-profile-ranked-panel">
             <header><strong>RANKED PROGRESSION</strong><span>SEASON I</span></header>
             <div className="dr-profile-ranked-content">
-              <div className="dr-profile-rank-emblem"><Crown /><span /></div>
+              <div className="dr-profile-rank-emblem"><RankBadge player={user} size="large" /></div>
               <div className="dr-profile-rank-copy">
-                <small>{user.calibrated ? 'CURRENT RATING' : 'RANK CALIBRATION'}</small>
+                <small>{rank.label.toUpperCase()}</small>
                 <h3>{user.calibrated ? `${formatNumber(user.rating)} MMR` : 'PROVISIONAL'}</h3>
                 <strong>{user.calibrated ? `${user.rankedGames} ranked games` : `${user.calibrationGames} / ${user.calibrationTarget} GAMES`}</strong>
-                <span className="dr-profile-rank-track"><i style={{ width: `${rankProgress}%` }} /></span>
+                <RankProgress player={user} />
               </div>
             </div>
             <div className="dr-profile-rank-history">
-              <div className="dr-profile-rank-grid-lines">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
-              <span>RATING HISTORY WILL APPEAR HERE ONCE SEASONAL TRACKING IS ENABLED.</span>
+              <div className="dr-rank-history-list">{ratingHistory.length ? ratingHistory.map(change => <div key={change.matchId}>
+                <time>{change.endedAt ? new Date(change.endedAt).toLocaleDateString() : 'Ranked match'}</time>
+                <b className={(change.delta ?? 0) < 0 ? 'is-loss' : ''}>{change.delta === null ? 'Calibration' : `${change.delta > 0 ? '+' : ''}${change.delta} MMR`}</b>
+                <small>{change.after.calibrated ? `${change.after.rating} MMR` : `${change.after.calibrationGames} / 5`}</small>
+              </div>) : <small>Complete a ranked match to begin your rating history.</small>}</div>
             </div>
           </section>
+          <RankLadder />
 
           <section className="dr-profile-panel dr-profile-mastery-panel">
             <header><strong>HERO MASTERY</strong><span>FOUNDATION ROSTER</span></header>
