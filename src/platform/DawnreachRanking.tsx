@@ -103,7 +103,7 @@ export function DawnreachRanking({ user, social }: { user: PlatformUser; social:
         </section>
 
         <section className="dr-ranking-panel dr-ranking-board">
-          <div className="dr-ranking-board-toolbar">
+          <div className="dr-ranking-board-toolbar" aria-label={`${total} rated players`}>
             <nav>
               <button type="button" className={scope === 'global' ? 'is-active' : ''} onClick={() => setScope('global')}>GLOBAL</button>
               <button type="button" className={scope === 'friends' ? 'is-active' : ''} onClick={() => setScope('friends')}>FRIENDS</button>
