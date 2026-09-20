@@ -332,7 +332,9 @@
 .dr-profile-achievement-slot strong { color: #a7b3bc; font-size: 8px; font-weight: 600; }
 .dr-profile-achievement-slot small { color: #667d8e; font-size: 6px; letter-spacing: .08em; }
 
-.dr-profile-history-page { max-width: 1240px; margin: 22px auto 0; }
+.dr-profile-history-page { max-width: 1240px; margin: 22px auto 28px; }
+.dr-profile-history-page .dr-profile-match-list { padding-bottom: 14px; }
+.dr-profile-history-page .dr-profile-match-row:last-child { border-bottom: 1px solid rgba(120, 151, 176, .13); }
 .dr-profile-history-intro { min-height: 86px; display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(123, 154, 178, .16); }
 .dr-profile-history-intro > svg { width: 34px; height: 34px; color: #c7ad72; stroke-width: 1.4; }
 .dr-profile-history-intro h2 { margin: 0 0 3px; color: #ede3cb; font: 20px Georgia, serif; }
