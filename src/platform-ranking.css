@@ -17,3 +17,67 @@
 @media(max-width:1280px){.dr-ranking-shell{grid-template-columns:minmax(620px,1fr) 300px}.dr-ranking-hero{grid-template-columns:210px 1fr 210px}.dr-ranking-board-toolbar{grid-template-columns:1fr}.dr-ranking-controls{justify-content:start;border-top:1px solid rgba(126,155,177,.12)}.dr-ranking-your-body{grid-template-columns:1.2fr 90px 1fr}.dr-ranking-user-metrics{grid-column:1/-1;border-top:1px solid rgba(126,155,177,.12)}}
 @media(max-width:980px){.dr-ranking-page{overflow-y:auto}.dr-ranking-shell{grid-template-columns:1fr;overflow:visible}.dr-ranking-side{overflow:visible;grid-template-columns:1fr 1fr}.dr-ranking-hero{grid-template-columns:1fr}.dr-ranking-brand-lockup,.dr-ranking-hero blockquote{display:none}.dr-ranking-table-head,.dr-ranking-row{grid-template-columns:36px minmax(150px,1fr) 80px 80px 18px}.dr-ranking-table-head span:nth-child(5),.dr-ranking-table-head span:nth-child(6){display:none}}
 @media(max-width:680px){.dr-ranking-podium{grid-template-columns:1fr}.dr-ranking-podium-card.is-place-1{order:-1}.dr-ranking-side{grid-template-columns:1fr}.dr-ranking-your-body{grid-template-columns:1fr}.dr-ranking-user,.dr-ranking-current{border:0;border-bottom:1px solid rgba(126,155,177,.12)}.dr-ranking-rank-emblem{margin:8px auto}.dr-ranking-controls>button{display:none}.dr-ranking-controls label{width:100%}}
+
+
+/* Ranking readability pass */
+.dr-ranking-page { grid-template-rows: 132px minmax(0, 1fr); }
+
+.dr-ranking-brand-lockup small { font-size: 9px; }
+.dr-ranking-season-title > small { font-size: 9px; }
+.dr-ranking-season-title p { font-size: 11px; }
+.dr-ranking-hero blockquote { font-size: 11px; line-height: 1.6; }
+
+.dr-ranking-panel > header { min-height: 38px; padding-inline: 14px; }
+.dr-ranking-panel > header strong { font-size: 15px; }
+.dr-ranking-panel > header span { font-size: 9px; }
+
+.dr-ranking-user p { font-size: 12px; }
+.dr-ranking-user small { font-size: 10px; }
+.dr-ranking-current > small { font-size: 9px; }
+.dr-ranking-current > b { font-size: 10px; }
+.dr-ranking-current .dr-rank-progress > small { font-size: 9px; line-height: 1.4; }
+
+.dr-ranking-user-metrics small { font-size: 9px; }
+.dr-ranking-user-metrics strong { font-size: 15px; }
+
+.dr-ranking-board-toolbar { min-height: 48px; }
+.dr-ranking-board-toolbar nav { height: 48px; }
+.dr-ranking-board-toolbar nav button { min-width: 88px; font-size: 10px; }
+.dr-ranking-controls > button { height: 31px; font-size: 9px; }
+.dr-ranking-controls label { height: 31px; }
+.dr-ranking-controls label svg { width: 14px; }
+.dr-ranking-controls input { font-size: 10px; }
+
+.dr-ranking-podium-card { min-height: 116px; }
+.dr-ranking-podium-card > div strong { font-size: 17px; }
+.dr-ranking-podium-card > div small { font-size: 9px; }
+.dr-ranking-podium-card > div b { font-size: 16px; }
+
+.dr-ranking-table-head { min-height: 34px; font-size: 9px; }
+.dr-ranking-row { min-height: 50px; font-size: 11px; }
+.dr-ranking-player-cell .dr-ranking-avatar { font-size: 10px; }
+.dr-ranking-player-cell small { font-size: 8px; }
+.dr-ranking-table-rank .dr-rank-badge > span > strong { font-size: 9px; }
+
+.dr-ranking-empty { min-height: 210px; gap: 10px; }
+.dr-ranking-empty strong { font-size: 11px; }
+.dr-ranking-empty span { font-size: 10px; line-height: 1.5; }
+
+.dr-ranking-season-info > div small { font-size: 9px; }
+.dr-ranking-season-info > div p { font-size: 10px; line-height: 1.45; }
+.dr-ranking-season-info blockquote { font-size: 10px; line-height: 1.5; }
+
+.dr-ranking-side-rank-body strong { font-size: 10px; }
+.dr-ranking-side-rank-body small { font-size: 9px; line-height: 1.4; }
+
+.dr-ranking-rewards article { gap: 6px; }
+.dr-ranking-rewards article strong { font-size: 8px; }
+.dr-ranking-rewards article small { font-size: 7px; }
+
+.dr-ranking-hero-placeholder strong { font-size: 10px; }
+.dr-ranking-hero-placeholder small { font-size: 9px; line-height: 1.4; }
+
+@media (max-width: 1280px) {
+  .dr-ranking-panel > header strong { font-size: 14px; }
+  .dr-ranking-board-toolbar nav button { min-width: 78px; font-size: 9px; }
+}
