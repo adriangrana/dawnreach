@@ -71,6 +71,66 @@ function clothTexture(base: string, thread: string) {
   }, 5, 5);
 }
 
+
+function ceremonialClothTexture(base: string, accent: string, gold = false) {
+  const random = seeded(parseInt(base.replace('#', ''), 16) || 0x9471);
+  return makeCanvasTexture(768, (ctx, size) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, size, size);
+
+    // Fine woven fibre.
+    for (let x = 0; x < size; x += 3) {
+      ctx.strokeStyle = x % 9 === 0 ? accent : 'rgba(0,0,0,0.035)';
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + (x % 2 ? 1.5 : -1.5), size);
+      ctx.stroke();
+    }
+    for (let y = 0; y < size; y += 4) {
+      ctx.strokeStyle = y % 12 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.025)';
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size, y);
+      ctx.stroke();
+    }
+
+    // Soft tonal clouding like worn layered fantasy fabric.
+    for (let patch = 0; patch < 70; patch++) {
+      const x = random() * size;
+      const y = random() * size;
+      const radius = 18 + random() * 70;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      grad.addColorStop(0, random() > 0.5 ? 'rgba(255,255,255,0.028)' : 'rgba(0,0,0,0.035)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+
+    if (gold) {
+      ctx.strokeStyle = 'rgba(206,170,89,0.60)';
+      ctx.lineWidth = 2.1;
+      for (let row = 0; row < 3; row++) {
+        for (let column = 0; column < 3; column++) {
+          const cx = (column + 0.5) * size / 3;
+          const cy = (row + 0.5) * size / 3;
+          const r = 12;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          for (let ray = 0; ray < 8; ray++) {
+            const a = ray / 8 * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * (r + 4), cy + Math.sin(a) * (r + 4));
+            ctx.lineTo(cx + Math.cos(a) * (r + 13), cy + Math.sin(a) * (r + 13));
+            ctx.stroke();
+          }
+        }
+      }
+    }
+  }, 2.2, 2.6);
+}
+
 function brushedTexture(dark: string, light: string) {
   const random = seeded(parseInt(dark.slice(1), 16) || 1);
   return makeCanvasTexture(256, (ctx, size) => {
@@ -242,6 +302,37 @@ export function createSerynMaterials() {
     metalness: 0.01,
     side: THREE.DoubleSide,
   });
+  const ivory = new THREE.MeshPhysicalMaterial({
+    map: ceremonialClothTexture('#d8d4c7', 'rgba(255,255,255,0.055)'),
+    color: 0xf0ece2,
+    roughness: 0.88,
+    metalness: 0,
+    sheen: 0.18,
+    sheenColor: new THREE.Color(0xffffff),
+    side: THREE.DoubleSide,
+  });
+  const cloakBlue = new THREE.MeshPhysicalMaterial({
+    map: ceremonialClothTexture('#173d61', 'rgba(129,190,222,0.050)', true),
+    color: 0x24577b,
+    roughness: 0.91,
+    metalness: 0.01,
+    sheen: 0.22,
+    sheenColor: new THREE.Color(0x8cd8ef),
+    side: THREE.DoubleSide,
+  });
+  const cloakBlueDark = new THREE.MeshStandardMaterial({
+    map: ceremonialClothTexture('#0b2035', 'rgba(90,150,190,0.045)', true),
+    color: 0x17314a,
+    roughness: 0.94,
+    metalness: 0.01,
+    side: THREE.DoubleSide,
+  });
+  const blackLeather = new THREE.MeshStandardMaterial({
+    map: leatherTexture(),
+    color: 0x17171c,
+    roughness: 0.72,
+    metalness: 0.10,
+  });
 
   const silver = new THREE.MeshStandardMaterial({
     map: brushedTexture('#5f6e7a', '#d7e0e8'),
@@ -283,7 +374,8 @@ export function createSerynMaterials() {
 
   return {
     skin, skinShadow, face, hair, hairShadow,
-    navy, navyDark, teal, silver, silverDark, gold, leather, crystal,
+    navy, navyDark, teal, ivory, cloakBlue, cloakBlueDark, blackLeather,
+    silver, silverDark, gold, leather, crystal,
     eyeWhite, iris, eyeDark, lips,
   };
 }

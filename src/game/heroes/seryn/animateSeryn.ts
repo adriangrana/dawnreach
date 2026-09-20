@@ -44,6 +44,40 @@ export function animateSeryn(
     if (normalFrame % 4 === 0) hairGeometry.computeVertexNormals();
   }
 
+  // Tunic and cape use the same progressive-flex principle as the unified hair mesh:
+  // seams at the waist/shoulders remain anchored while the lower fabric follows with
+  // delayed secondary motion. Geometry stays connected and can later be upgraded to a
+  // skeletal/cloth solver without changing the authored outfit meshes.
+  for (const cloth of rig.clothMeshes) {
+    const geometry = cloth.geometry;
+    const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const flex = geometry.getAttribute('clothFlex') as THREE.BufferAttribute;
+    const phase = geometry.getAttribute('clothPhase') as THREE.BufferAttribute;
+    const base = geometry.userData.serynClothBasePositions as Float32Array | undefined;
+    if (!base || !flex || !phase) continue;
+
+    const motion = moving ? 1 : 0.28;
+    const travelBack = moving ? 0.020 : 0.004;
+    for (let index = 0; index < position.count; index++) {
+      const weight = flex.getX(index);
+      const p = phase.getX(index);
+      const baseIndex = index * 3;
+      const lateral = Math.sin(elapsed * (moving ? 4.6 : 1.25) + p) * 0.011 * weight * motion;
+      const lift = Math.sin(elapsed * (moving ? 5.4 : 1.55) + p * 0.73) * 0.007 * weight * motion;
+      const back = Math.abs(Math.sin(elapsed * 2.1 + p * 0.33)) * travelBack * weight;
+      position.setXYZ(
+        index,
+        base[baseIndex] + lateral,
+        base[baseIndex + 1] + lift,
+        base[baseIndex + 2] - back,
+      );
+    }
+    position.needsUpdate = true;
+    const frame = ((cloth.userData.serynClothNormalFrame as number | undefined) ?? 0) + 1;
+    cloth.userData.serynClothNormalFrame = frame;
+    if (frame % 5 === 0) geometry.computeVertexNormals();
+  }
+
   if (attackActive) {
     const draw = Math.sin(Math.min(1, attackProgress / 0.55) * Math.PI * 0.5);
     const release = attackProgress > 0.55 ? (attackProgress - 0.55) / 0.45 : 0;

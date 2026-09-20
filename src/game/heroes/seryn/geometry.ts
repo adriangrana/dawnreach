@@ -590,3 +590,91 @@ export function createSerynHairGeometry(radialSegments = 128, verticalSegments =
   result.userData.serynHairBasePositions = new Float32Array(position.array as ArrayLike<number>);
   return result;
 }
+
+
+export type SerynClothPanelOptions = Readonly<{
+  widthTop: number;
+  widthBottom: number;
+  length: number;
+  zTop?: number;
+  zBottom?: number;
+  xDrift?: number;
+  flare?: number;
+  foldDepth?: number;
+  hemWave?: number;
+  bias?: number;
+}>;
+
+/**
+ * Dense connected cloth panel with animation metadata.
+ *
+ * This is the garment equivalent of Seryn's unified hair mesh: the visible silhouette
+ * is a subdivided surface, not a primitive. Lower rows carry more flex so tunic/cape
+ * fabric can receive secondary motion while the waist/shoulder seam stays anchored.
+ */
+export function createSerynClothPanelGeometry(
+  options: SerynClothPanelOptions,
+  widthSegments = 24,
+  lengthSegments = 34,
+) {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const flexValues: number[] = [];
+  const phaseValues: number[] = [];
+  const indices: number[] = [];
+
+  for (let row = 0; row <= lengthSegments; row++) {
+    const v = row / lengthSegments;
+    const eased = Math.pow(v, 1.08);
+    const width = THREE.MathUtils.lerp(options.widthTop, options.widthBottom, eased)
+      * (1 + (options.flare ?? 0) * eased);
+    const zBase = THREE.MathUtils.lerp(options.zTop ?? 0, options.zBottom ?? 0, eased);
+    const drift = (options.xDrift ?? 0) * eased * eased;
+
+    for (let column = 0; column <= widthSegments; column++) {
+      const u = column / widthSegments;
+      const across = u * 2 - 1;
+      const edge = Math.pow(Math.abs(across), 1.55);
+      const fold = Math.sin((u * Math.PI * 4) + v * 1.2 + (options.bias ?? 0))
+        * (options.foldDepth ?? 0.008)
+        * (0.25 + eased * 0.75);
+      const hem = Math.sin(u * Math.PI * 3 + (options.bias ?? 0))
+        * (options.hemWave ?? 0)
+        * Math.pow(v, 5);
+
+      positions.push(
+        across * width * 0.5 + drift,
+        -options.length * eased + hem,
+        zBase + fold - edge * 0.006 * eased,
+      );
+      uvs.push(u, v);
+      flexValues.push(Math.pow(v, 2.15));
+      phaseValues.push(u * Math.PI * 2 + v * 2.7 + (options.bias ?? 0));
+    }
+  }
+
+  const stride = widthSegments + 1;
+  for (let row = 0; row < lengthSegments; row++) {
+    for (let column = 0; column < widthSegments; column++) {
+      const a = row * stride + column;
+      const b = a + 1;
+      const d = (row + 1) * stride + column;
+      const c = d + 1;
+      indices.push(a, d, b, b, d, c);
+    }
+  }
+
+  const result = new THREE.BufferGeometry();
+  result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  result.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  result.setAttribute('clothFlex', new THREE.Float32BufferAttribute(flexValues, 1));
+  result.setAttribute('clothPhase', new THREE.Float32BufferAttribute(phaseValues, 1));
+  result.setIndex(indices);
+  result.computeVertexNormals();
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+
+  const position = result.getAttribute('position') as THREE.BufferAttribute;
+  result.userData.serynClothBasePositions = new Float32Array(position.array as ArrayLike<number>);
+  return result;
+}
