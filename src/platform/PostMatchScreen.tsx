@@ -474,7 +474,9 @@ export function PostMatchScreen({
   me,
   realtime,
   onContinue,
+  onHome,
   onPlay,
+  onProfile,
   onPlayAgain,
   onLogout,
 }: {
@@ -482,7 +484,9 @@ export function PostMatchScreen({
   me: PlatformUser;
   realtime: 'connecting' | 'online' | 'offline';
   onContinue: () => void;
+  onHome: () => void;
   onPlay: () => void;
+  onProfile: () => void;
   onPlayAgain: () => void;
   onLogout: () => void;
 }) {
@@ -531,8 +535,9 @@ export function PostMatchScreen({
         section="home"
         user={me}
         realtime={realtime}
-        onHome={onContinue}
+        onHome={onHome}
         onPlay={onPlay}
+        onProfile={onProfile}
         onLogout={onLogout}
       />
 

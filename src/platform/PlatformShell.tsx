@@ -404,12 +404,26 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       setPostMatchReturnSection('home');
       setRequestedPlayMode(null);
     };
+    const openPostMatchHome = () => {
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setPostMatchReturnSection('home');
+      setSection('home');
+      setRequestedPlayMode(null);
+    };
     const openPostMatchPlay = () => {
       setPostMatch(null);
       setPostMatchVisible(false);
       setPostMatchReturnSection('home');
       setSection('play');
       setPlaySection('matchmaking');
+      setRequestedPlayMode(null);
+    };
+    const openPostMatchProfile = () => {
+      setPostMatch(null);
+      setPostMatchVisible(false);
+      setPostMatchReturnSection('home');
+      setSection('profile');
       setRequestedPlayMode(null);
     };
     const playAgain = () => {
@@ -427,7 +441,9 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       me={user}
       realtime={realtime}
       onContinue={continueToHome}
+      onHome={openPostMatchHome}
       onPlay={openPostMatchPlay}
+      onProfile={openPostMatchProfile}
       onPlayAgain={playAgain}
       onLogout={onLogout}
     />;
