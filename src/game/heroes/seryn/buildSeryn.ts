@@ -155,14 +155,21 @@ function buildAnatomy(rig: HumanoidRig, m: SerynMaterials) {
       { x: side * 0.205, y: 0.395, z: 0.004, ry: 0.074, rz: 0.094 },
       { x: side * 0.270, y: 0.354, z: 0.004, ry: 0.084, rz: 0.092 },
       { x: side * 0.325, y: 0.315, z: 0.002, ry: 0.092, rz: 0.088 },
-      { x: side * 0.355, y: 0.295, z: 0.000, ry: 0.091, rz: 0.084 },
-    ], m.skin, 32);
+      { x: side * 0.365, y: 0.292, z: 0.000, ry: 0.094, rz: 0.086 },
+      // Extend the bridge through the whole deltoid width. The arm pivot is at
+      // |x|=0.335 and its top radius is ~0.094, so the outer shoulder reaches ~0.429.
+      // Ending near that edge makes the torso bridge overlap the full shoulder cap
+      // rather than stopping around the middle of the arm.
+      { x: side * 0.398, y: 0.282, z: -0.001, ry: 0.091, rz: 0.083 },
+      { x: side * 0.428, y: 0.278, z: -0.002, ry: 0.082, rz: 0.076 },
+    ], m.skin, 34);
 
     curve(rig.torso, 'seryn-clavicle-line', [
       new THREE.Vector3(side * 0.060, 0.410, 0.116),
       new THREE.Vector3(side * 0.145, 0.398, 0.120),
       new THREE.Vector3(side * 0.235, 0.366, 0.108),
       new THREE.Vector3(side * 0.315, 0.322, 0.076),
+      new THREE.Vector3(side * 0.365, 0.294, 0.050),
     ], 0.012, m.skinShadow, 0.007, 18);
   }
 
@@ -637,7 +644,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v7-anatomical-shoulder-bridge';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v8-full-deltoid-bridge';
 
   return Object.assign(rig, { bow, bowString, quiver });
 }
