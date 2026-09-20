@@ -10,28 +10,24 @@ import {
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import ALDEN_SELECTION_ART from '../game/heroes/alden/images/H001.webp';
-import ALDEN_PASSIVE from '../game/heroes/alden/images/H001P.webp';
-import ALDEN_FOCUS_ART from '../game/heroes/alden/images/H001F.png';
-import ALDEN_Q from '../game/heroes/alden/images/H001Q.webp';
-import ALDEN_W from '../game/heroes/alden/images/H001W.webp';
-import ALDEN_E from '../game/heroes/alden/images/H001E.webp';
-import ALDEN_R from '../game/heroes/alden/images/H001R.webp';
+import { getHeroAbilityArt, getHeroFullArt, getHeroInnateArt, getHeroPortrait } from '../game/heroes/assets';
 import { ALDEN } from '../game/heroes/alden/gameplay';
+import { getHeroDefinition, hasHeroDefinition, listHeroDefinitions } from '../game/heroes/catalog';
+import { SERYN } from '../game/heroes/seryn/gameplay';
 import { platformRealtime } from './realtimeClient';
 import type { HeroSelectPlayer, HeroSelectState, PlatformUser, Team } from './types';
 
-const HERO_FOCUS_ART: Record<string, string> = {
-  H001: ALDEN_FOCUS_ART,
-};
+const HERO_NAMES: Record<string, string> = Object.fromEntries(
+  listHeroDefinitions().map(hero => [hero.id, hero.displayName]),
+);
 
-const HERO_SELECTION_ART: Record<string, string> = {
-  H001: ALDEN_SELECTION_ART,
-};
+function heroSelectionArt(heroId: string) {
+  return getHeroPortrait(heroId) || getHeroFullArt(heroId);
+}
 
-const HERO_NAMES: Record<string, string> = {
-  H001: ALDEN.displayName,
-};
+function heroFocusArt(heroId: string) {
+  return getHeroFullArt(heroId) || getHeroPortrait(heroId);
+}
 
 type AbilityTooltipRow = Readonly<{
   label: string;
@@ -59,12 +55,12 @@ type AbilityTooltipDefinition = Readonly<{
 const basicRankLabels = ['N1', 'N2', 'N3', 'N4'] as const;
 const ultimateRankLabels = ['N1', 'N2', 'N3'] as const;
 
-const ABILITIES: readonly AbilityTooltipDefinition[] = [
+const ALDEN_ABILITIES: readonly AbilityTooltipDefinition[] = [
   {
     key: 'P',
     label: 'PASSIVE',
     name: ALDEN.innate.name,
-    art: ALDEN_PASSIVE,
+    art: getHeroInnateArt('H001'),
     typeLabel: 'Pasiva innata',
     description: ALDEN.innate.technicalDescription,
     lore: ALDEN.innate.description,
@@ -108,7 +104,7 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'Q',
     label: 'Q',
     name: ALDEN.abilities.Q.name,
-    art: ALDEN_Q,
+    art: getHeroAbilityArt('H001', 'Q'),
     typeLabel: 'Activa · daño físico / movilidad / slow',
     description: ALDEN.abilities.Q.technicalDescription,
     lore: ALDEN.abilities.Q.lore,
@@ -141,7 +137,7 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'W',
     label: 'W',
     name: ALDEN.abilities.W.name,
-    art: ALDEN_W,
+    art: getHeroAbilityArt('H001', 'W'),
     typeLabel: 'Activa · defensa / represalia / control',
     description: ALDEN.abilities.W.technicalDescription,
     lore: ALDEN.abilities.W.lore,
@@ -176,7 +172,7 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'E',
     label: 'E',
     name: ALDEN.abilities.E.name,
-    art: ALDEN_E,
+    art: getHeroAbilityArt('H001', 'E'),
     typeLabel: 'Activa + pasiva · daño / velocidad / curación',
     description: ALDEN.abilities.E.technicalDescription,
     lore: ALDEN.abilities.E.lore,
@@ -211,7 +207,7 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
     key: 'R',
     label: 'R',
     name: ALDEN.abilities.R.name,
-    art: ALDEN_R,
+    art: getHeroAbilityArt('H001', 'R'),
     typeLabel: 'Ultimate · daño / provocación / mitigación',
     description: ALDEN.abilities.R.technicalDescription,
     lore: ALDEN.abilities.R.lore,
@@ -245,6 +241,186 @@ const ABILITIES: readonly AbilityTooltipDefinition[] = [
     ],
   },
 ];
+
+const SERYN_ABILITIES: readonly AbilityTooltipDefinition[] = [
+  {
+    key: 'P',
+    label: 'PASSIVE',
+    name: SERYN.innate.name,
+    art: getHeroInnateArt('H002'),
+    typeLabel: 'Pasiva innata · posicionamiento / daño',
+    description: SERYN.innate.technicalDescription,
+    lore: SERYN.innate.description,
+    rankLabels: ['NIVEL 1', 'NIVEL 10', 'NIVEL 20', 'NIVEL 30'],
+    rankHeroLevels: [1, 10, 20, 30],
+    sections: [
+      {
+        title: 'ESCALADO POR NIVEL DE HÉROE',
+        rows: [{
+          label: 'Daño adicional',
+          values: [1, 10, 20, 30].map(level => {
+            const flat = SERYN.innate.bonusDamageBase + SERYN.innate.bonusDamagePerHeroLevel * (level - 1);
+            return `${Number(flat.toFixed(1))} + ${Math.round(SERYN.innate.totalAdRatio * 100)}% AD total`;
+          }),
+        }],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Distancia mínima', values: [`${SERYN.innate.minimumRange}`] },
+          { label: 'Trazos máximos', values: [String(SERYN.innate.maxStacks)] },
+          { label: 'Duración de Trazo', values: [`${SERYN.innate.stackDurationSeconds}s`] },
+          { label: 'Ventana Alineado', values: [`${SERYN.innate.alignedWindowSeconds}s`] },
+          { label: 'Bloqueo por objetivo', values: [`${SERYN.innate.perTargetLockoutSeconds}s`] },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'Q',
+    label: 'Q',
+    name: SERYN.abilities.Q.name,
+    art: getHeroAbilityArt('H002', 'Q'),
+    typeLabel: 'Activa · skillshot / daño físico / poke',
+    description: SERYN.abilities.Q.technicalDescription,
+    lore: SERYN.abilities.Q.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: SERYN.abilities.Q.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Daño base', values: SERYN.q.ranks.map(rank => String(rank.baseDamage)) },
+          { label: 'Coste de maná', values: SERYN.q.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: SERYN.q.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Escalado', values: [`${Math.round(SERYN.q.totalAdRatio * 100)}% AD total`] },
+          { label: 'Alcance', values: [String(SERYN.q.range)] },
+          { label: 'Anchura', values: [String(SERYN.q.width)] },
+          { label: 'Tiempo de casteo', values: [`${SERYN.q.castTimeSeconds}s`] },
+          { label: 'Daño al atravesar unidades normales', values: [`${Math.round(SERYN.q.normalEnemyPierceDamageMultiplier * 100)}%`] },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'W',
+    label: 'W',
+    name: SERYN.abilities.W.name,
+    art: getHeroAbilityArt('H002', 'W'),
+    typeLabel: 'Activa · movilidad / velocidad de ataque',
+    description: SERYN.abilities.W.technicalDescription,
+    lore: SERYN.abilities.W.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: SERYN.abilities.W.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Velocidad de ataque', values: SERYN.w.ranks.map(rank => `+${rank.attackSpeedPercent}%`) },
+          { label: 'Coste de maná', values: SERYN.w.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: SERYN.w.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Desplazamiento', values: [`${SERYN.w.dashRange} unidades`] },
+          { label: 'Duración del dash', values: [`${SERYN.w.dashDurationSeconds}s`] },
+          { label: 'Duración del buff', values: [`${SERYN.w.buffDurationSeconds}s`] },
+          { label: 'Daño', values: ['0'] },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'E',
+    label: 'E',
+    name: SERYN.abilities.E.name,
+    art: getHeroAbilityArt('H002', 'E'),
+    typeLabel: 'Activa · daño mágico / slow / root',
+    description: SERYN.abilities.E.technicalDescription,
+    lore: SERYN.abilities.E.lore,
+    rankLabels: basicRankLabels,
+    rankHeroLevels: SERYN.abilities.E.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Daño base', values: SERYN.e.ranks.map(rank => String(rank.baseDamage)) },
+          { label: 'Ralentización', values: SERYN.e.ranks.map(rank => `${rank.slowPercent}%`) },
+          { label: 'Raíz central', values: SERYN.e.ranks.map(rank => `${rank.rootDurationSeconds}s`) },
+          { label: 'Coste de maná', values: SERYN.e.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: SERYN.e.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Escalado', values: [`${Math.round(SERYN.e.totalAdRatio * 100)}% AD total`] },
+          { label: 'Alcance', values: [String(SERYN.e.castRange)] },
+          { label: 'Radio', values: [String(SERYN.e.radius)] },
+          { label: 'Radio central', values: [String(SERYN.e.centerRadius)] },
+          { label: 'Armado', values: [`${SERYN.e.armDelaySeconds}s`] },
+          { label: 'Duración slow', values: [`${SERYN.e.slowDurationSeconds}s`] },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'R',
+    label: 'R',
+    name: SERYN.abilities.R.name,
+    art: getHeroAbilityArt('H002', 'R'),
+    typeLabel: 'Ultimate · 3 disparos lineales / slow',
+    description: SERYN.abilities.R.technicalDescription,
+    lore: SERYN.abilities.R.lore,
+    rankLabels: ultimateRankLabels,
+    rankHeroLevels: SERYN.abilities.R.unlockLevels,
+    sections: [
+      {
+        title: 'ESCALADO POR RANGO',
+        rows: [
+          { label: 'Daño por primer impacto', values: SERYN.r.ranks.map(rank => String(rank.shotBaseDamage)) },
+          { label: 'Ralentización', values: SERYN.r.ranks.map(rank => `${rank.slowPercent}%`) },
+          { label: 'Coste de maná', values: SERYN.r.ranks.map(rank => String(rank.manaCost)) },
+          { label: 'Cooldown', values: SERYN.r.ranks.map(rank => `${rank.cooldownSeconds}s`) },
+        ],
+      },
+      {
+        title: 'VALORES FIJOS',
+        rows: [
+          { label: 'Disparos', values: [String(SERYN.r.shotCount)] },
+          { label: 'Escalado por disparo', values: [`${Math.round(SERYN.r.totalAdRatioPerShot * 100)}% AD total`] },
+          { label: 'Daño de impactos repetidos', values: [`${Math.round(SERYN.r.repeatedHitDamageMultiplier * 100)}%`] },
+          { label: 'Alcance', values: [String(SERYN.r.range)] },
+          { label: 'Anchura', values: [String(SERYN.r.width)] },
+          { label: 'Preparación', values: [`${SERYN.r.startupSeconds}s`] },
+          { label: 'Intervalo', values: [`${SERYN.r.shotIntervalSeconds}s`] },
+        ],
+      },
+    ],
+  },
+];
+
+function abilitiesForHero(heroId: string | null): readonly AbilityTooltipDefinition[] {
+  return heroId === SERYN.id ? SERYN_ABILITIES : ALDEN_ABILITIES;
+}
+
+function percentForPowerBand(value: 'Low' | 'Medium' | 'High' | undefined) {
+  return value === 'High' ? 86 : value === 'Medium' ? 58 : 32;
+}
+
+function heroSubtitle(heroId: string) {
+  return heroId === ALDEN.id ? 'THE OATHBEARER'
+    : heroId === SERYN.id ? 'THE HORIZON WARDEN'
+      : 'DAWNREACH HERO';
+}
+
 
 function AbilityTooltipOverlay({
   ability,
@@ -344,7 +520,7 @@ function HeroSelectPlayerCard({
   const heroName = selected ? HERO_NAMES[selected] || selected : null;
   return <article className={`dr-hero-select-player is-${player.team}${player.userId === me.id ? ' is-self' : ''}${player.selection.locked ? ' is-locked' : ''}`}>
     {side === 'left' && <div className="dr-hero-select-player-portrait">
-      {selected ? <img src={HERO_SELECTION_ART[selected] || HERO_FOCUS_ART[selected]} alt="" draggable={false} /> : <span />}
+      {selected ? <img src={heroSelectionArt(selected)} alt="" draggable={false} /> : <span />}
     </div>}
     <div className="dr-hero-select-player-copy">
       <div><strong>{player.username}</strong>{player.userId === me.id && <em>YOU</em>}</div>
@@ -352,7 +528,7 @@ function HeroSelectPlayerCard({
       <small>{player.selection.locked ? `LOCKED · ${heroName}` : selected ? `PICKING · ${heroName}` : 'WAITING…'}</small>
     </div>
     {side === 'right' && <div className="dr-hero-select-player-portrait">
-      {selected ? <img src={HERO_SELECTION_ART[selected] || HERO_FOCUS_ART[selected]} alt="" draggable={false} /> : <span />}
+      {selected ? <img src={heroSelectionArt(selected)} alt="" draggable={false} /> : <span />}
     </div>}
   </article>;
 }
@@ -445,6 +621,9 @@ export function HeroSelectScreen({
   const leftPlayers = state.players.filter(player => player.team === myTeam);
   const rightPlayers = state.players.filter(player => player.team !== myTeam);
   const selected = selectedHeroId || meState?.selection.heroId || state.availableHeroIds[0] || null;
+  const selectedDefinition = selected && hasHeroDefinition(selected) ? getHeroDefinition(selected) : null;
+  const selectedAbilities = abilitiesForHero(selected);
+  const selectedCombatProfile = selectedDefinition?.combatProfile;
   const isLocked = Boolean(meState?.selection.locked);
   const filteredHeroes = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -553,21 +732,27 @@ export function HeroSelectScreen({
 
       <section className="dr-hero-select-focus">
         <div className="dr-hero-select-hero-copy">
-          <blockquote><span>“STRENGTH BUILDS WALLS.</span><strong>BUT HOPE BUILDS WORLDS.”</strong></blockquote>
+          <blockquote>
+            <span>{selected === SERYN.id ? '“DISTANCE REVEALS THE PATH.' : '“STRENGTH BUILDS WALLS.'}</span>
+            <strong>{selected === SERYN.id ? 'I ONLY HAVE TO FIND THE LINE.”' : 'BUT HOPE BUILDS WORLDS.”'}</strong>
+          </blockquote>
           <div className="dr-hero-select-name">
             <h1>{selected ? HERO_NAMES[selected] || selected : 'CHOOSE A HERO'}</h1>
-            <p>{selected === 'H001' ? 'THE OATHBEARER' : 'DAWNREACH HERO'}</p>
-            {selected === 'H001' && <div><span>FIGHTER</span><span>VANGUARD</span><span>INITIATOR</span></div>}
+            <p>{selected ? heroSubtitle(selected) : 'DAWNREACH HERO'}</p>
+            {selectedDefinition && <div>
+              <span>{selectedDefinition.primaryRole.toUpperCase()}</span>
+              {selectedDefinition.deploymentPreferences?.primary.map(lane => <span key={lane}>{lane}</span>)}
+            </div>}
           </div>
         </div>
 
-        {selected && <img className="dr-hero-select-main-art" src={HERO_FOCUS_ART[selected] || HERO_SELECTION_ART[selected]} alt={HERO_NAMES[selected] || selected} draggable={false} />}
+        {selected && <img className="dr-hero-select-main-art" src={heroFocusArt(selected)} alt={HERO_NAMES[selected] || selected} draggable={false} />}
 
         <aside className="dr-hero-select-overview">
           <nav><button type="button" className="is-active">OVERVIEW</button><button type="button" disabled>SKINS</button></nav>
-          <p>{selected === 'H001' ? ALDEN.lore : 'Select a hero to inspect their battlefield identity.'}</p>
+          <p>{selectedDefinition?.lore ?? 'Select a hero to inspect their battlefield identity.'}</p>
           <div className="dr-hero-select-abilities">
-            {ABILITIES.map(ability => <article
+            {selectedAbilities.map(ability => <article
               key={ability.key}
               className="dr-hero-select-ability"
               tabIndex={0}
@@ -584,10 +769,10 @@ export function HeroSelectScreen({
           </div>
           {abilityTooltip && <AbilityTooltipOverlay ability={abilityTooltip.ability} anchor={abilityTooltip.anchor} />}
           <div className="dr-hero-select-ratings">
-            <label><span>DURABILITY</span><i><b style={{ width: '82%' }} /></i></label>
-            <label><span>DAMAGE</span><i><b style={{ width: '48%' }} /></i></label>
-            <label><span>MOBILITY</span><i><b style={{ width: '52%' }} /></i></label>
-            <label><span>UTILITY</span><i><b style={{ width: '68%' }} /></i></label>
+            <label><span>DURABILITY</span><i><b style={{ width: `${percentForPowerBand(selectedCombatProfile?.durability)}%` }} /></i></label>
+            <label><span>DAMAGE</span><i><b style={{ width: `${percentForPowerBand(selectedCombatProfile?.sustainedDamage)}%` }} /></i></label>
+            <label><span>MOBILITY</span><i><b style={{ width: `${percentForPowerBand(selectedCombatProfile?.mobility)}%` }} /></i></label>
+            <label><span>CONTROL</span><i><b style={{ width: `${percentForPowerBand(selectedCombatProfile?.control)}%` }} /></i></label>
           </div>
         </aside>
 
@@ -604,7 +789,7 @@ export function HeroSelectScreen({
           DEVELOPMENT ROSTER · duplicate heroes temporarily allowed until Dawnreach has enough heroes for unique team picks.
         </div>}
         {state.draftRulesDeferred && <div className="dr-hero-select-draft-note">
-          Draft bans are visually reserved but disabled while the playable roster contains only Alden.
+          Draft bans are visually reserved while the playable roster is still below the required unique-pick size.
         </div>}
       </section>
 
@@ -627,7 +812,7 @@ export function HeroSelectScreen({
             disabled={isLocked}
             onClick={() => chooseHero(heroId)}
           >
-            <img src={HERO_SELECTION_ART[heroId] || HERO_FOCUS_ART[heroId]} alt="" draggable={false} />
+            <img src={heroSelectionArt(heroId)} alt="" draggable={false} />
             <span>{HERO_NAMES[heroId] || heroId}</span>
           </button>)}
         </div>
