@@ -1,5 +1,6 @@
 import { ALDEN, type AldenGameplayDefinition } from '../heroes/alden/gameplay';
 import { getHeroDefinition } from '../heroes/catalog';
+import { SERYN } from '../heroes/seryn/gameplay';
 import type { AbilityKey, DamageType } from '../heroes/types';
 import { getRequiredHero } from './matchState';
 import { applyAbilityPowerToDamage, calculateCombatStats, calculateHeroStats, getActiveStatus } from './stats';
@@ -48,6 +49,8 @@ export interface BasicAttackInput {
   targetHeroEntityId: string;
   nowMs: number;
   critical?: boolean;
+  /** Distance in Dawnreach gameplay units. Required for distance-gated passives such as Seryn's innate. */
+  distance?: number;
 }
 
 export interface ActionResolution {
@@ -184,6 +187,118 @@ export function calculateAldenAbilityAtRank(
   };
 }
 
+
+export function calculateSerynAbilityAtRank(
+  state: MatchState,
+  heroEntityId: string,
+  key: AbilityKey,
+  rank: 1 | 2 | 3 | 4,
+): AldenAbilityPreview {
+  const hero = getRequiredHero(state, heroEntityId);
+  if (hero.definitionId !== SERYN.id) throw new Error(`${heroEntityId} is not Seryn.`);
+  const stats = calculateHeroStats(state, heroEntityId);
+  const rankIndex = rank - 1;
+
+  if (key === 'Q') {
+    const data = SERYN.q.ranks[Math.min(rankIndex, SERYN.q.ranks.length - 1)];
+    return {
+      heroEntityId,
+      key,
+      rank,
+      resourceCost: data.manaCost,
+      cooldownSeconds: data.cooldownSeconds,
+      damageType: 'physical',
+      rawDamage: applyAbilityPowerToDamage(data.baseDamage + SERYN.q.totalAdRatio * stats.attackDamage, stats),
+      healing: 0,
+      effects: {
+        range: SERYN.q.range,
+        width: SERYN.q.width,
+        castTimeSeconds: SERYN.q.castTimeSeconds,
+        normalEnemyPierceDamageMultiplier: SERYN.q.normalEnemyPierceDamageMultiplier,
+      },
+    };
+  }
+
+  if (key === 'W') {
+    const data = SERYN.w.ranks[Math.min(rankIndex, SERYN.w.ranks.length - 1)];
+    return {
+      heroEntityId,
+      key,
+      rank,
+      resourceCost: data.manaCost,
+      cooldownSeconds: data.cooldownSeconds,
+      damageType: null,
+      rawDamage: 0,
+      healing: 0,
+      effects: {
+        dashRange: SERYN.w.dashRange,
+        dashDurationSeconds: SERYN.w.dashDurationSeconds,
+        buffDurationSeconds: SERYN.w.buffDurationSeconds,
+        attackSpeedPercent: data.attackSpeedPercent,
+      },
+    };
+  }
+
+  if (key === 'E') {
+    const data = SERYN.e.ranks[Math.min(rankIndex, SERYN.e.ranks.length - 1)];
+    return {
+      heroEntityId,
+      key,
+      rank,
+      resourceCost: data.manaCost,
+      cooldownSeconds: data.cooldownSeconds,
+      damageType: 'magic',
+      rawDamage: applyAbilityPowerToDamage(data.baseDamage + SERYN.e.totalAdRatio * stats.attackDamage, stats),
+      healing: 0,
+      effects: {
+        castRange: SERYN.e.castRange,
+        radius: SERYN.e.radius,
+        centerRadius: SERYN.e.centerRadius,
+        armDelaySeconds: SERYN.e.armDelaySeconds,
+        slowPercent: data.slowPercent,
+        slowDurationSeconds: SERYN.e.slowDurationSeconds,
+        rootDurationSeconds: data.rootDurationSeconds,
+      },
+    };
+  }
+
+  const data = SERYN.r.ranks[Math.min(rankIndex, SERYN.r.ranks.length - 1)];
+  const firstShot = applyAbilityPowerToDamage(data.shotBaseDamage + SERYN.r.totalAdRatioPerShot * stats.attackDamage, stats);
+  const fullSequenceDamage = firstShot * (1 + (SERYN.r.shotCount - 1) * SERYN.r.repeatedHitDamageMultiplier);
+  return {
+    heroEntityId,
+    key,
+    rank,
+    resourceCost: data.manaCost,
+    cooldownSeconds: data.cooldownSeconds,
+    damageType: 'physical',
+    rawDamage: fullSequenceDamage,
+    healing: 0,
+    effects: {
+      range: SERYN.r.range,
+      width: SERYN.r.width,
+      shotCount: SERYN.r.shotCount,
+      startupSeconds: SERYN.r.startupSeconds,
+      shotIntervalSeconds: SERYN.r.shotIntervalSeconds,
+      repeatedHitDamageMultiplier: SERYN.r.repeatedHitDamageMultiplier,
+      slowPercent: data.slowPercent,
+      slowDurationSeconds: SERYN.r.slowDurationSeconds,
+    },
+  };
+}
+
+export function calculateHeroAbilityAtRank(
+  state: MatchState,
+  heroEntityId: string,
+  key: AbilityKey,
+  rank: 1 | 2 | 3 | 4,
+): AldenAbilityPreview {
+  const hero = getRequiredHero(state, heroEntityId);
+  if (hero.definitionId === ALDEN.id) return calculateAldenAbilityAtRank(state, heroEntityId, key, rank);
+  if (hero.definitionId === SERYN.id) return calculateSerynAbilityAtRank(state, heroEntityId, key, rank);
+  throw new Error(`No ability preview resolver is registered for ${hero.definitionId}.`);
+}
+
 export function calculateAldenInnate(
   state: MatchState,
   heroEntityId: string,
@@ -214,6 +329,7 @@ export function performAbilityAction(state: MatchState, input: AbilityActionInpu
   if (getHeroDefinition(actor.definitionId).abilities[input.key].type === 'passive') {
     throw new Error(`${input.key} is passive and cannot be cast.`);
   }
+  if (actor.definitionId === SERYN.id) return performSerynAbilityAction(state, input);
   if (actor.definitionId !== ALDEN.id) throw new Error(`No combat resolver is registered for ${actor.definitionId}.`);
   const rank = actor.abilityRanks[input.key];
   if (rank < 1 || rank > 4) throw new Error(`${input.key} has not been learned by ${actor.heroEntityId}.`);
@@ -367,6 +483,131 @@ export function performAbilityAction(state: MatchState, input: AbilityActionInpu
   };
 }
 
+
+function performSerynAbilityAction(state: MatchState, input: AbilityActionInput): ActionResolution {
+  const actor = getRequiredHero(state, input.actorHeroEntityId);
+  const rank = actor.abilityRanks[input.key];
+  const maxRank = input.key === 'R' ? 3 : 4;
+  if (rank < 1 || rank > maxRank) throw new Error(`${input.key} has not been learned by ${actor.heroEntityId}.`);
+  if (actor.cooldownReadyAtMs[input.key] > input.nowMs) {
+    throw new Error(`${input.key} is on cooldown for ${(actor.cooldownReadyAtMs[input.key] - input.nowMs) / 1000}s.`);
+  }
+
+  const preview = calculateSerynAbilityAtRank(
+    state,
+    actor.heroEntityId,
+    input.key,
+    rank as 1 | 2 | 3 | 4,
+  );
+  if (actor.currentResource < preview.resourceCost) {
+    throw new Error(`${actor.heroEntityId} does not have enough ${SERYN.resource.displayName}.`);
+  }
+
+  const next = structuredClone(state);
+  const nextActor = getRequiredHero(next, actor.heroEntityId);
+  const actorHpBefore = nextActor.currentHp;
+  nextActor.currentResource -= preview.resourceCost;
+  nextActor.cooldownReadyAtMs[input.key] = input.nowMs + preview.cooldownSeconds * 1000;
+
+  const targets = [...(input.targetHeroEntityIds ?? [])];
+  const targetResults: ActionTargetResult[] = [];
+  const notes: string[] = [];
+
+  if (input.key === 'W') {
+    nextActor.runtime.statuses['seryn:vector-step'] = {
+      id: 'seryn:vector-step',
+      sourceHeroEntityId: nextActor.heroEntityId,
+      rank,
+      expiresAtMs: input.nowMs + SERYN.w.buffDurationSeconds * 1000,
+      data: { attackSpeedPercent: SERYN.w.ranks[rank - 1].attackSpeedPercent },
+    };
+    notes.push(`Paso de Vector: ${SERYN.w.dashRange} units dash and attack-speed buff armed.`);
+  } else if (input.key === 'Q') {
+    const targetId = targets[0];
+    if (targetId) {
+      const damage = applyDamageMutable(next, {
+        sourceHeroEntityId: nextActor.heroEntityId,
+        targetHeroEntityId: targetId,
+        rawDamage: preview.rawDamage,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+      }, input.nowMs);
+      targetResults.push(toTargetResult(targetId, preview.rawDamage, damage, [], 0));
+    }
+  } else if (input.key === 'E') {
+    const data = SERYN.e.ranks[rank - 1];
+    targets.forEach((targetId, index) => {
+      const target = getRequiredHero(next, targetId);
+      const damage = applyDamageMutable(next, {
+        sourceHeroEntityId: nextActor.heroEntityId,
+        targetHeroEntityId: targetId,
+        rawDamage: preview.rawDamage,
+        damageType: 'magic',
+        isDirect: true,
+        isFromFront: true,
+      }, input.nowMs);
+      const statuses: string[] = [];
+      const slowId = `cc:slow:${nextActor.heroEntityId}:seryn-e`;
+      target.runtime.statuses[slowId] = timedStatus(
+        slowId,
+        nextActor.heroEntityId,
+        input.nowMs,
+        SERYN.e.slowDurationSeconds,
+        { slowPercent: data.slowPercent },
+      );
+      statuses.push(slowId);
+      // MatchState has no spatial coordinates. The first supplied target represents the
+      // center hit; the live-world resolver performs the real 95-unit center-radius check.
+      if (index === 0) {
+        const rootId = `cc:root:${nextActor.heroEntityId}:seryn-e`;
+        const rootDuration = applyTenacityToDuration(next, targetId, data.rootDurationSeconds, input.nowMs);
+        target.runtime.statuses[rootId] = timedStatus(rootId, nextActor.heroEntityId, input.nowMs, rootDuration);
+        statuses.push(rootId);
+      }
+      targetResults.push(toTargetResult(targetId, preview.rawDamage, damage, statuses, 0));
+    });
+  } else if (input.key === 'R') {
+    const data = SERYN.r.ranks[rank - 1];
+    targets.forEach(targetId => {
+      const target = getRequiredHero(next, targetId);
+      const damage = applyDamageMutable(next, {
+        sourceHeroEntityId: nextActor.heroEntityId,
+        targetHeroEntityId: targetId,
+        rawDamage: preview.rawDamage,
+        damageType: 'physical',
+        isDirect: true,
+        isFromFront: true,
+      }, input.nowMs);
+      const slowId = `cc:slow:${nextActor.heroEntityId}:seryn-r`;
+      target.runtime.statuses[slowId] = timedStatus(
+        slowId,
+        nextActor.heroEntityId,
+        input.nowMs,
+        SERYN.r.slowDurationSeconds,
+        { slowPercent: data.slowPercent },
+      );
+      targetResults.push(toTargetResult(targetId, preview.rawDamage, damage, [slowId], 0));
+    });
+    notes.push(`Meridiano Partido resolves ${SERYN.r.shotCount} shots; repeated hits use ${Math.round(SERYN.r.repeatedHitDamageMultiplier * 100)}% damage.`);
+  }
+
+  return {
+    state: next,
+    result: {
+      action: input.key,
+      actorHeroEntityId: nextActor.heroEntityId,
+      resourceSpent: preview.resourceCost,
+      actorHealing: 0,
+      actorHpBefore,
+      actorHpAfter: nextActor.currentHp,
+      cooldownReadyAtMs: nextActor.cooldownReadyAtMs[input.key],
+      targets: targetResults,
+      notes,
+    },
+  };
+}
+
 export function performBasicAttackAction(state: MatchState, input: BasicAttackInput): ActionResolution {
   const actor = getRequiredHero(state, input.actorHeroEntityId);
   const target = getRequiredHero(state, input.targetHeroEntityId);
@@ -408,6 +649,44 @@ export function performBasicAttackAction(state: MatchState, input: BasicAttackIn
       nextActor.runtime.counters['alden:steel'] = 0;
       nextActor.runtime.timestamps['alden:steel-lockout-until'] = input.nowMs + innate.procLockoutSeconds * 1000;
       notes.push('Voto del Muro Vivo consumed.');
+    }
+  }
+
+  if (nextActor.definitionId === SERYN.id) {
+    const distance = Math.max(0, input.distance ?? 0);
+    const alignedId = `seryn:aligned:${nextTarget.heroEntityId}`;
+    const aligned = getActiveStatus(nextActor, alignedId, input.nowMs);
+    const lockoutKey = `seryn:sightline-lockout:${nextTarget.heroEntityId}`;
+    const lockoutUntil = nextActor.runtime.timestamps[lockoutKey] ?? 0;
+
+    if (aligned && distance >= SERYN.innate.minimumRange) {
+      const bonusDamage = SERYN.innate.bonusDamageBase
+        + SERYN.innate.bonusDamagePerHeroLevel * (nextActor.level - 1)
+        + SERYN.innate.totalAdRatio * stats.attackDamage;
+      rawDamage += bonusDamage;
+      delete nextActor.runtime.statuses[alignedId];
+      delete nextActor.runtime.targetCounters['seryn:sightline']?.[nextTarget.heroEntityId];
+      nextActor.runtime.counters['seryn:sightline'] = 0;
+      nextActor.runtime.timestamps[lockoutKey] = input.nowMs + SERYN.innate.perTargetLockoutSeconds * 1000;
+      notes.push('Línea de Horizonte consumed.');
+    } else if (distance >= SERYN.innate.minimumRange && input.nowMs >= lockoutUntil) {
+      const bucket = nextActor.runtime.targetCounters['seryn:sightline'] ??= {};
+      const existing = bucket[nextTarget.heroEntityId];
+      const current = existing && existing.expiresAtMs > input.nowMs ? existing.stacks : 0;
+      const stacks = Math.min(SERYN.innate.maxStacks, current + 1);
+      bucket[nextTarget.heroEntityId] = {
+        stacks,
+        expiresAtMs: input.nowMs + SERYN.innate.stackDurationSeconds * 1000,
+      };
+      nextActor.runtime.counters['seryn:sightline'] = stacks;
+      if (stacks >= SERYN.innate.maxStacks) {
+        nextActor.runtime.statuses[alignedId] = timedStatus(
+          alignedId,
+          nextActor.heroEntityId,
+          input.nowMs,
+          SERYN.innate.alignedWindowSeconds,
+        );
+      }
     }
   }
 
