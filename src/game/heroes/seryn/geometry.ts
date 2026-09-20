@@ -47,7 +47,10 @@ export function createSerynLoftGeometry(
       const b = a + 1;
       const d = (row + 1) * stride + column;
       const c = d + 1;
-      indices.push(a, d, b, b, d, c);
+      // Rings are authored clockwise when viewed from +Y. Keep the side triangles
+      // counter-clockwise from the exterior so WebGL front-face culling and generated
+      // normals both point out of the body instead of exposing the hollow interior.
+      indices.push(a, b, d, b, c, d);
     }
   }
 
