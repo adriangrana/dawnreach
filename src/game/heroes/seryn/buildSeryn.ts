@@ -662,7 +662,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v14-inertial-cloth';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v15-leg-colliding-cloth';
 
   return Object.assign(rig, { bow, bowString, quiver, hair, clothMeshes });
 }
