@@ -265,6 +265,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
         setHeroSelect(null);
         setPostMatch(null);
         setPostMatchVisible(false);
+        setPostMatchReturnSection('home');
         setActiveMatch({ stage: 'in_game', match: event.match as ActiveMatchSession['match'] });
         setSharedGameVisible(true);
         setNotice('');
@@ -406,6 +407,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
     const openPostMatchPlay = () => {
       setPostMatch(null);
       setPostMatchVisible(false);
+      setPostMatchReturnSection('home');
       setSection('play');
       setPlaySection('matchmaking');
       setRequestedPlayMode(null);
@@ -414,6 +416,7 @@ function HomeSurface({ user, onLocalPlay, onLogout }: { user: PlatformUser; onLo
       const mode = postMatch.match.mode;
       setPostMatch(null);
       setPostMatchVisible(false);
+      setPostMatchReturnSection('home');
       setSection('play');
       setPlaySection(mode === 'custom' ? 'custom' : 'matchmaking');
       setRequestedPlayMode(mode === 'normal' || mode === 'ranked' || mode === 'custom' ? mode : null);
