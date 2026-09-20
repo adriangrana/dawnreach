@@ -39,10 +39,10 @@ type HistoryEntry = Readonly<{
 const PROFILE_SECTIONS: readonly Readonly<{ key: ProfileSection; label: string; icon: typeof Trophy; ready: boolean }>[] = [
   { key: 'overview', label: 'OVERVIEW', icon: UserRound, ready: true },
   { key: 'history', label: 'MATCH HISTORY', icon: History, ready: true },
-  { key: 'mastery', label: 'HERO MASTERY', icon: Swords, ready: false },
-  { key: 'achievements', label: 'ACHIEVEMENTS', icon: Trophy, ready: false },
-  { key: 'cosmetics', label: 'COSMETICS', icon: Sparkles, ready: false },
-  { key: 'stats', label: 'STATS', icon: BarChart3, ready: false },
+  { key: 'mastery', label: 'HERO MASTERY', icon: Swords, ready: true },
+  { key: 'achievements', label: 'ACHIEVEMENTS', icon: Trophy, ready: true },
+  { key: 'cosmetics', label: 'COSMETICS', icon: Sparkles, ready: true },
+  { key: 'stats', label: 'STATS', icon: BarChart3, ready: true },
 ];
 
 function formatNumber(value: number) {
@@ -232,6 +232,29 @@ export function DawnreachProfile({
   const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['Alden', 0];
   const historyReady = !loading && !loadError;
 
+  const totalKills = playedEntries.reduce((sum, entry) => sum + entry.kills, 0);
+  const totalDeaths = playedEntries.reduce((sum, entry) => sum + entry.deaths, 0);
+  const totalAssists = playedEntries.reduce((sum, entry) => sum + entry.assists, 0);
+  const overallKda = (totalKills + totalAssists) / Math.max(1, totalDeaths);
+  const netWorthEntries = playedEntries.filter(entry => entry.netWorth !== null);
+  const averageNetWorth = netWorthEntries.length
+    ? netWorthEntries.reduce((sum, entry) => sum + Number(entry.netWorth || 0), 0) / netWorthEntries.length
+    : 0;
+  const averageDurationMs = playedEntries.length ? totalRecordedMs / playedEntries.length : 0;
+  const longestDurationMs = playedEntries.reduce((longest, entry) => Math.max(longest, entry.durationMs), 0);
+  const modeCounts = new Map<string, number>();
+  for (const entry of playedEntries) modeCounts.set(entry.match.mode, (modeCounts.get(entry.match.mode) || 0) + 1);
+
+  const aldenEntries = playedEntries.filter(entry => entry.heroId === 'H001' || entry.heroName === 'Alden');
+  const aldenWins = aldenEntries.filter(entry => entry.won === true).length;
+  const aldenLosses = aldenEntries.filter(entry => entry.won === false).length;
+  const aldenKills = aldenEntries.reduce((sum, entry) => sum + entry.kills, 0);
+  const aldenDeaths = aldenEntries.reduce((sum, entry) => sum + entry.deaths, 0);
+  const aldenAssists = aldenEntries.reduce((sum, entry) => sum + entry.assists, 0);
+  const aldenWinRate = aldenWins + aldenLosses ? (aldenWins / (aldenWins + aldenLosses)) * 100 : 0;
+  const aldenKda = (aldenKills + aldenAssists) / Math.max(1, aldenDeaths);
+  const masteryProgress = Math.min(100, Math.round((aldenEntries.length / 25) * 100));
+
   return <section className="dr-profile-page">
     <aside className="dr-profile-sidebar">
       <div className="dr-profile-side-rule" />
@@ -350,6 +373,154 @@ export function DawnreachProfile({
           <span>{entries.filter(entry => entry.match.status === 'cancelled').length} cancelled</span>
           <span>{entries.filter(entry => entry.match.postMatchReport?.voided).length} void</span>
         </footer>}
+      </section> : section === 'mastery' ? <section className="dr-profile-section-page">
+        <div className="dr-profile-section-heading">
+          <div><small>PROFILE PROGRESSION</small><h2>HERO MASTERY</h2><p>Performance and experience with each Dawnreach hero, built from your recorded matches.</p></div>
+          <Swords />
+        </div>
+
+        <div className="dr-profile-mastery-page-grid">
+          <section className="dr-profile-panel dr-profile-mastery-feature">
+            <header><strong>ALDEN</strong><span>FOUNDATION HERO</span></header>
+            <div className="dr-profile-mastery-feature-body">
+              <div className="dr-profile-mastery-portrait"><img src={aldenFullArt} alt="Alden" /></div>
+              <div className="dr-profile-mastery-feature-copy">
+                <small>DEMOLISHER · FRONTLINE</small>
+                <h3>Alden</h3>
+                <p>Your current mastery record for Dawnreach's first playable hero.</p>
+                <span className="dr-profile-master-level"><b>{aldenEntries.length ? Math.max(1, Math.ceil(aldenEntries.length / 5)) : 0}</b><i>MASTERY LEVEL</i></span>
+                <div className="dr-profile-master-progress"><i style={{ width: `${masteryProgress}%` }} /></div>
+                <em>{aldenEntries.length} / 25 matches toward the current foundation milestone</em>
+              </div>
+            </div>
+          </section>
+
+          <section className="dr-profile-panel dr-profile-mastery-stats">
+            <header><strong>MASTERY PERFORMANCE</strong><span>RECORDED MATCHES</span></header>
+            <div className="dr-profile-stat-tile-grid">
+              <article><small>MATCHES</small><strong>{historyReady ? aldenEntries.length : '—'}</strong></article>
+              <article><small>WIN RATE</small><strong>{historyReady && aldenWins + aldenLosses ? `${aldenWinRate.toFixed(1)}%` : '—'}</strong></article>
+              <article><small>K / D / A</small><strong>{historyReady ? `${aldenKills} / ${aldenDeaths} / ${aldenAssists}` : '—'}</strong></article>
+              <article><small>KDA RATIO</small><strong>{historyReady && aldenEntries.length ? aldenKda.toFixed(2) : '—'}</strong></article>
+            </div>
+          </section>
+
+          <section className="dr-profile-panel dr-profile-roster-panel">
+            <header><strong>HERO ROSTER</strong><span>MASTERY COLLECTION</span></header>
+            <div className="dr-profile-roster-grid">
+              <article className="is-owned"><img src={aldenPortrait} alt="Alden" /><div><strong>ALDEN</strong><small>{aldenEntries.length} MATCHES</small></div><span><i style={{ width: `${masteryProgress}%` }} /></span></article>
+              {Array.from({ length: 7 }, (_, index) => <article className="is-locked" key={index}><div className="dr-profile-roster-placeholder"><LockKeyhole /></div><div><strong>FUTURE HERO</strong><small>NOT YET AVAILABLE</small></div><span><i /></span></article>)}
+            </div>
+          </section>
+        </div>
+      </section> : section === 'achievements' ? <section className="dr-profile-section-page">
+        <div className="dr-profile-section-heading">
+          <div><small>PROFILE PROGRESSION</small><h2>ACHIEVEMENTS</h2><p>The achievement system is reserved here without inventing medals or requirements before they are defined.</p></div>
+          <Trophy />
+        </div>
+
+        <div className="dr-profile-achievements-page-grid">
+          <section className="dr-profile-panel dr-profile-achievement-showcase">
+            <header><strong>FEATURED MEDALS</strong><span>4 DISPLAY SLOTS</span></header>
+            <PlaceholderMedals />
+          </section>
+          <section className="dr-profile-panel dr-profile-achievement-summary">
+            <header><strong>ACHIEVEMENT SUMMARY</strong><span>SYSTEM FOUNDATION</span></header>
+            <div className="dr-profile-stat-tile-grid">
+              <article><small>UNLOCKED</small><strong>0</strong></article>
+              <article><small>TOTAL DEFINED</small><strong>—</strong></article>
+              <article><small>COMPLETION</small><strong>—</strong></article>
+              <article><small>RAREST</small><strong>—</strong></article>
+            </div>
+          </section>
+          <section className="dr-profile-panel dr-profile-achievement-catalog">
+            <header><strong>ACHIEVEMENT CATALOG</strong><span>AWAITING FINAL DEFINITIONS</span></header>
+            <div className="dr-profile-achievement-category-grid">
+              {['COMBAT', 'VICTORIES', 'HERO MASTERY', 'OBJECTIVES', 'COLLECTION', 'SOCIAL'].map(label => (
+                <article key={label}><div><LockKeyhole /></div><span><strong>{label}</strong><small>Achievement definitions pending</small></span><b>—</b></article>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section> : section === 'cosmetics' ? <section className="dr-profile-section-page">
+        <div className="dr-profile-section-heading">
+          <div><small>PLAYER IDENTITY</small><h2>COSMETICS</h2><p>Profile presentation slots are prepared now; owned cosmetics can be wired in when the collection system is defined.</p></div>
+          <Sparkles />
+        </div>
+
+        <div className="dr-profile-cosmetics-grid">
+          <section className="dr-profile-panel dr-profile-cosmetic-preview">
+            <header><strong>PROFILE PREVIEW</strong><span>FOUNDATION LOADOUT</span></header>
+            <div className="dr-profile-cosmetic-banner-preview">
+              <div className="dr-profile-cosmetic-avatar"><strong>{user.username.slice(0,2).toUpperCase()}</strong></div>
+              <div><h3>{user.username}</h3><span>DAWNREACH PLAYER</span><small>A BRIGHTER TOMORROW</small></div>
+              <img src={aldenFullArt} alt="" />
+            </div>
+          </section>
+          <section className="dr-profile-panel dr-profile-equipped-cosmetics">
+            <header><strong>EQUIPPED</strong><span>4 PROFILE SLOTS</span></header>
+            <div className="dr-profile-equipped-grid">
+              <article><Sparkles /><span><small>BANNER</small><strong>FOUNDATION</strong></span></article>
+              <article><UserRound /><span><small>AVATAR</small><strong>INITIALS</strong></span></article>
+              <article><Crown /><span><small>FRAME</small><strong>FOUNDATION</strong></span></article>
+              <article><Medal /><span><small>TITLE</small><strong>DAWNREACH PLAYER</strong></span></article>
+            </div>
+          </section>
+          <section className="dr-profile-panel dr-profile-cosmetic-collection">
+            <header><strong>COLLECTION SLOTS</strong><span>COMING WITH COLLECTION</span></header>
+            <div className="dr-profile-cosmetic-slot-grid">
+              {Array.from({ length: 12 }, (_, index) => <article key={index}><LockKeyhole /><strong>UNASSIGNED</strong><small>COSMETIC SLOT</small></article>)}
+            </div>
+          </section>
+        </div>
+      </section> : <section className="dr-profile-section-page">
+        <div className="dr-profile-section-heading">
+          <div><small>ACCOUNT PERFORMANCE</small><h2>STATS</h2><p>Aggregate performance from the matches currently stored in your Dawnreach history.</p></div>
+          <BarChart3 />
+        </div>
+
+        <div className="dr-profile-stats-page-grid">
+          <section className="dr-profile-panel dr-profile-stats-overall">
+            <header><strong>OVERALL PERFORMANCE</strong><span>ALL RECORDED MODES</span></header>
+            <div className="dr-profile-stat-tile-grid is-large">
+              <article><small>MATCHES</small><strong>{historyReady ? totalMatches : '—'}</strong></article>
+              <article><small>WIN RATE</small><strong>{historyReady && decisiveEntries.length ? `${winRate.toFixed(1)}%` : '—'}</strong></article>
+              <article><small>K / D / A</small><strong>{historyReady ? `${totalKills} / ${totalDeaths} / ${totalAssists}` : '—'}</strong></article>
+              <article><small>KDA RATIO</small><strong>{historyReady && playedEntries.length ? overallKda.toFixed(2) : '—'}</strong></article>
+              <article><small>AVG NET WORTH</small><strong>{historyReady && netWorthEntries.length ? formatNumber(averageNetWorth) : '—'}</strong></article>
+              <article><small>PLAY TIME</small><strong>{historyReady && totalRecordedMs ? `${Math.floor(totalRecordedMs / 3_600_000)}h ${Math.floor((totalRecordedMs % 3_600_000) / 60_000)}m` : '—'}</strong></article>
+            </div>
+          </section>
+
+          <section className="dr-profile-panel dr-profile-stats-modes">
+            <header><strong>MODES PLAYED</strong><span>RECORDED HISTORY</span></header>
+            <div className="dr-profile-mode-stats">
+              {['custom','normal','ranked'].map(mode => {
+                const count = modeCounts.get(mode) || 0;
+                const width = totalMatches ? Math.round((count / totalMatches) * 100) : 0;
+                return <article key={mode}><span><strong>{mode.toUpperCase()}</strong><small>{count} matches</small></span><div><i style={{ width: `${width}%` }} /></div><b>{width}%</b></article>;
+              })}
+            </div>
+          </section>
+
+          <section className="dr-profile-panel dr-profile-stats-records">
+            <header><strong>MATCH RECORDS</strong><span>AVAILABLE TELEMETRY</span></header>
+            <div className="dr-profile-stat-tile-grid">
+              <article><small>AVG MATCH</small><strong>{historyReady && averageDurationMs ? formatDuration(averageDurationMs) : '—'}</strong></article>
+              <article><small>LONGEST MATCH</small><strong>{historyReady && longestDurationMs ? formatDuration(longestDurationMs) : '—'}</strong></article>
+              <article><small>VICTORIES</small><strong>{historyReady ? recordedWins : '—'}</strong></article>
+              <article><small>DEFEATS</small><strong>{historyReady ? recordedLosses : '—'}</strong></article>
+            </div>
+          </section>
+
+          <section className="dr-profile-panel dr-profile-stats-recent">
+            <header><strong>RECENT FORM</strong><span>LAST 5 MATCHES</span></header>
+            <div className="dr-profile-form-strip">
+              {entries.slice(0,5).map(entry => <span key={entry.match.id} className={entry.won === true ? 'is-win' : entry.won === false ? 'is-loss' : 'is-neutral'}><b>{entry.won === true ? 'W' : entry.won === false ? 'L' : '—'}</b><small>{entry.heroName}</small></span>)}
+              {!entries.length && <em>No recorded matches yet.</em>}
+            </div>
+          </section>
+        </div>
       </section>}
 
       <footer className="dr-profile-footer">
