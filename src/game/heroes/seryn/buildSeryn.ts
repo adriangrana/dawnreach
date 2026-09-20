@@ -280,6 +280,12 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     rotation: [number, number, number] = [0, 0, 0],
     widthSegments = 30,
     lengthSegments = 40,
+    dynamics: {
+      role: 'front' | 'side-left' | 'side-right' | 'cape';
+      inertia: number;
+      gravity: number;
+      collisionMargin: number;
+    } = { role: 'front', inertia: 1, gravity: 1, collisionMargin: 0.004 },
   ) => {
     const mesh = part(
       parent,
@@ -290,6 +296,11 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     );
     mesh.rotation.set(...rotation);
     mesh.frustumCulled = false;
+    mesh.userData.serynClothDynamics = {
+      ...dynamics,
+      basePosition: mesh.position.clone(),
+      baseRotation: new THREE.Euler(mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, mesh.rotation.order),
+    };
     clothMeshes.push(mesh);
     return mesh;
   };
@@ -452,8 +463,8 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
   // VOLUMETRIC SPLIT TUNIC
   // ---------------------------------------------------------------------------
   const outerPanels = [
-    { name: 'seryn-ivory-front-left', material: m.ivory, x: -0.088, z: 0.153, rotY: -0.09, widthTop: 0.205, widthBottom: 0.285, length: 1.08, drift: -0.105, curve: 0.030, bias: 0.2 },
-    { name: 'seryn-ivory-front-right', material: m.ivory, x: 0.088, z: 0.153, rotY: 0.09, widthTop: 0.205, widthBottom: 0.285, length: 1.08, drift: 0.105, curve: 0.030, bias: 1.0 },
+    { name: 'seryn-ivory-front-left', material: m.ivory, x: -0.088, z: 0.188, rotY: -0.09, widthTop: 0.215, widthBottom: 0.292, length: 1.08, drift: -0.105, curve: 0.044, bias: 0.2 },
+    { name: 'seryn-ivory-front-right', material: m.ivory, x: 0.088, z: 0.188, rotY: 0.09, widthTop: 0.215, widthBottom: 0.292, length: 1.08, drift: 0.105, curve: 0.044, bias: 1.0 },
     { name: 'seryn-blue-side-left', material: m.cloakBlue, x: -0.215, z: 0.018, rotY: -1.08, widthTop: 0.205, widthBottom: 0.330, length: 1.18, drift: -0.120, curve: 0.024, bias: 1.8 },
     { name: 'seryn-blue-side-right', material: m.cloakBlueDark, x: 0.215, z: 0.018, rotY: 1.08, widthTop: 0.205, widthBottom: 0.330, length: 1.18, drift: 0.120, curve: 0.024, bias: 2.6 },
   ] as const;
@@ -482,6 +493,14 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
       [0.025, spec.rotY, 0],
       34,
       46,
+      spec.name.includes('front')
+        ? { role: 'front', inertia: 0.72, gravity: 0.62, collisionMargin: 0.010 }
+        : {
+            role: spec.name.includes('left') ? 'side-left' : 'side-right',
+            inertia: 0.88,
+            gravity: 0.78,
+            collisionMargin: 0.008,
+          },
     );
   }
 
@@ -537,10 +556,11 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
         hemWave: 0.075,
         bias: spec.bias,
       },
-      [spec.x, 0.320, -0.205],
+      [spec.x, 0.320, -0.225],
       [-0.060, spec.rotY, 0],
-      38,
-      52,
+      42,
+      58,
+      { role: 'cape', inertia: 1.35, gravity: 1.12, collisionMargin: 0.014 },
     );
   }
 
@@ -642,7 +662,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v13-volumetric-fitted-outfit';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v14-inertial-cloth';
 
   return Object.assign(rig, { bow, bowString, quiver, hair, clothMeshes });
 }
