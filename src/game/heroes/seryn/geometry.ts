@@ -10,6 +10,14 @@ export type SerynLoftSection = Readonly<{
   back?: number;
 }>;
 
+export type SerynShoulderSection = Readonly<{
+  x: number;
+  y: number;
+  z?: number;
+  ry: number;
+  rz: number;
+}>;
+
 export function createSerynLoftGeometry(
   sections: readonly SerynLoftSection[],
   sides = 32,
@@ -178,4 +186,67 @@ export function createHairBladeGeometry(
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+export function createSerynShoulderBlendGeometry(
+  sections: readonly SerynShoulderSection[],
+  sides = 28,
+  capStart = false,
+  capEnd = false,
+) {
+  if (sections.length < 2) throw new RangeError('A shoulder blend needs at least two sections.');
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  for (let row = 0; row < sections.length; row++) {
+    const section = sections[row];
+    for (let column = 0; column <= sides; column++) {
+      const angle = column / sides * Math.PI * 2;
+      positions.push(
+        section.x,
+        section.y + Math.sin(angle) * section.ry,
+        (section.z ?? 0) + Math.cos(angle) * section.rz,
+      );
+      uvs.push(column / sides, row / (sections.length - 1));
+    }
+  }
+
+  const stride = sides + 1;
+  const increasesX = sections[sections.length - 1].x >= sections[0].x;
+  for (let row = 0; row < sections.length - 1; row++) {
+    for (let column = 0; column < sides; column++) {
+      const a = row * stride + column;
+      const b = a + 1;
+      const d = (row + 1) * stride + column;
+      const c = d + 1;
+      if (increasesX) indices.push(a, d, b, b, d, c);
+      else indices.push(a, b, d, b, c, d);
+    }
+  }
+
+  const addCap = (row: number, outwardPositiveX: boolean) => {
+    const section = sections[row];
+    const center = positions.length / 3;
+    positions.push(section.x, section.y, section.z ?? 0);
+    uvs.push(0.5, 0.5);
+    const ring = row * stride;
+    for (let column = 0; column < sides; column++) {
+      const a = ring + column;
+      const b = ring + column + 1;
+      if (outwardPositiveX) indices.push(center, b, a);
+      else indices.push(center, a, b);
+    }
+  };
+
+  if (capStart) addCap(0, !increasesX);
+  if (capEnd) addCap(sections.length - 1, increasesX);
+
+  const result = new THREE.BufferGeometry();
+  result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  result.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  result.setIndex(indices);
+  result.computeVertexNormals();
+  result.computeBoundingSphere();
+  return result;
 }

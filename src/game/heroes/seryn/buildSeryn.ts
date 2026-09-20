@@ -4,8 +4,10 @@ import {
   createHairBladeGeometry,
   createPanelGeometry,
   createSerynLoftGeometry,
+  createSerynShoulderBlendGeometry,
   createTaperedCurveGeometry,
   type SerynLoftSection,
+  type SerynShoulderSection,
 } from './geometry';
 import { createSerynMaterials, type SerynMaterials } from './materials';
 
@@ -50,8 +52,20 @@ function loft(
   sections: readonly SerynLoftSection[],
   material: THREE.Material,
   sides = 30,
+  capLast = true,
+  capFirst = true,
 ) {
-  return part(parent, name, createSerynLoftGeometry(sections, sides), material);
+  return part(parent, name, createSerynLoftGeometry(sections, sides, capLast, capFirst), material);
+}
+
+function shoulderBlend(
+  parent: THREE.Object3D,
+  name: string,
+  sections: readonly SerynShoulderSection[],
+  material: THREE.Material,
+  sides = 30,
+) {
+  return part(parent, name, createSerynShoulderBlendGeometry(sections, sides, false, false), material);
 }
 
 function curve(
@@ -131,52 +145,25 @@ function buildAnatomy(rig: HumanoidRig, m: SerynMaterials) {
     { y: 0.71, rx: 0.067, rz: 0.061 },
   ], m.skin, 24);
 
-  // One continuous anatomical shoulder yoke. This follows the same principle as a
-  // sculpted character base mesh: the neck flows through trapezius/clavicle into both
-  // acromion points as a single volume instead of being assembled from capsules.
-  const shoulderGirdle = panel(rig.torso, 'seryn-anatomical-shoulder-girdle', [
-    [-0.405, 0.275],
-    [-0.375, 0.315],
-    [-0.325, 0.345],
-    [-0.265, 0.365],
-    [-0.205, 0.395],
-    [-0.150, 0.435],
-    [-0.110, 0.485],
-    [-0.082, 0.525],
-    [-0.060, 0.550],
-    [0.060, 0.550],
-    [0.082, 0.525],
-    [0.110, 0.485],
-    [0.150, 0.435],
-    [0.205, 0.395],
-    [0.265, 0.365],
-    [0.325, 0.345],
-    [0.375, 0.315],
-    [0.405, 0.275],
-    [0.390, 0.205],
-    [0.325, 0.215],
-    [0.260, 0.235],
-    [0.190, 0.260],
-    [0.115, 0.285],
-    [0.055, 0.300],
-    [-0.055, 0.300],
-    [-0.115, 0.285],
-    [-0.190, 0.260],
-    [-0.260, 0.235],
-    [-0.325, 0.215],
-    [-0.390, 0.205],
-  ], m.skin, [0, 0, -0.092], 0.190, 0.026);
-  shoulderGirdle.scale.z = 0.92;
-
-  // Subtle front clavicles sit on the same continuous mass and define the feminine
-  // shoulder slope without creating separate spherical joints.
+  // Anatomical shoulder bridge: an actual 3D cross-axis loft from the base of the neck
+  // into the deltoid. The first rings live inside the upper torso and the final rings
+  // overlap the arm root, so the visible surface reads as one continuous body mass.
   for (const side of [-1, 1]) {
+    shoulderBlend(rig.torso, 'seryn-anatomical-shoulder-bridge', [
+      { x: side * 0.070, y: 0.455, z: -0.004, ry: 0.055, rz: 0.082 },
+      { x: side * 0.135, y: 0.432, z: 0.000, ry: 0.063, rz: 0.090 },
+      { x: side * 0.205, y: 0.395, z: 0.004, ry: 0.074, rz: 0.094 },
+      { x: side * 0.270, y: 0.354, z: 0.004, ry: 0.084, rz: 0.092 },
+      { x: side * 0.325, y: 0.315, z: 0.002, ry: 0.092, rz: 0.088 },
+      { x: side * 0.355, y: 0.295, z: 0.000, ry: 0.091, rz: 0.084 },
+    ], m.skin, 32);
+
     curve(rig.torso, 'seryn-clavicle-line', [
-      new THREE.Vector3(side * 0.060, 0.405, 0.112),
-      new THREE.Vector3(side * 0.145, 0.392, 0.118),
-      new THREE.Vector3(side * 0.235, 0.360, 0.108),
-      new THREE.Vector3(side * 0.315, 0.318, 0.076),
-    ], 0.018, m.skinShadow, 0.012, 18);
+      new THREE.Vector3(side * 0.060, 0.410, 0.116),
+      new THREE.Vector3(side * 0.145, 0.398, 0.120),
+      new THREE.Vector3(side * 0.235, 0.366, 0.108),
+      new THREE.Vector3(side * 0.315, 0.322, 0.076),
+    ], 0.012, m.skinShadow, 0.007, 18);
   }
 
   for (const side of [-1, 1]) {
@@ -191,13 +178,13 @@ function buildAnatomy(rig: HumanoidRig, m: SerynMaterials) {
     // shoulder yoke and tapers naturally into the biceps/triceps, eliminating the
     // visible oval shoulder piece.
     loft(arm, 'seryn-body-upper-arm', [
-      { y: 0.030, rx: 0.096, rz: 0.087 },
-      { y: -0.045, rx: 0.101, rz: 0.090 },
-      { y: -0.135, rx: 0.088, rz: 0.079 },
-      { y: -0.260, rx: 0.072, rz: 0.065 },
-      { y: -0.365, rx: 0.061, rz: 0.055 },
+      { y: 0.050, rx: 0.094, rz: 0.086 },
+      { y: -0.025, rx: 0.099, rz: 0.090 },
+      { y: -0.110, rx: 0.091, rz: 0.081 },
+      { y: -0.230, rx: 0.075, rz: 0.067 },
+      { y: -0.350, rx: 0.062, rz: 0.056 },
       { y: -0.455, rx: 0.052, rz: 0.049 },
-    ], m.skin, 30);
+    ], m.skin, 30, true, false);
 
     rounded(forearm, 'seryn-body-elbow', [0.055, 0.058, 0.053], [0, 0, 0], m.skin, 18);
     loft(forearm, 'seryn-body-forearm', [
@@ -467,12 +454,12 @@ function buildClothing(rig: HumanoidRig, m: SerynMaterials) {
     // Sleeve starts inside the anatomical shoulder. No pauldron is used here yet:
     // the base body must read correctly before armor is layered over it.
     loft(arm, 'seryn-upper-sleeve', [
-      { y: 0.020, rx: 0.101, rz: 0.091 },
-      { y: -0.060, rx: 0.104, rz: 0.093 },
-      { y: -0.145, rx: 0.091, rz: 0.081 },
+      { y: 0.035, rx: 0.098, rz: 0.090 },
+      { y: -0.045, rx: 0.101, rz: 0.092 },
+      { y: -0.135, rx: 0.090, rz: 0.081 },
       { y: -0.225, rx: 0.080, rz: 0.071 },
       { y: -0.310, rx: 0.070, rz: 0.063 },
-    ], m.navyDark, 28);
+    ], m.navyDark, 28, true, false);
 
     loft(forearm, 'seryn-bracer-base', [
       { y: -0.045, rx: 0.065, rz: 0.060 },
@@ -650,7 +637,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v6-continuous-shoulder-girdle';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v7-anatomical-shoulder-bridge';
 
   return Object.assign(rig, { bow, bowString, quiver });
 }
