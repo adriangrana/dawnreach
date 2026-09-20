@@ -8,6 +8,13 @@ import type { ActiveMatchSession, MatchPlayer, PlatformUser, Team } from './type
 const BACKGROUND = '/assets/images/ciudadela_celestial_entre_las_nubes.webp';
 const MARK = '/assets/icon/dawnreach.png';
 
+const TIPS = [
+  'Vision around objectives can decide a fight before it begins.',
+  'Two heroes pressure North, one controls Mid, and two hold South.',
+  'A coordinated retreat is stronger than five isolated escapes.',
+  'Information wins battles. Watch the lanes before committing to a fight.',
+] as const;
+
 function laneFor(player: MatchPlayer, teammates: readonly MatchPlayer[]) {
   const ordered = [...teammates].sort((a, b) => a.slot - b.slot);
   const index = Math.max(0, ordered.findIndex(candidate => candidate.userId === player.userId));
