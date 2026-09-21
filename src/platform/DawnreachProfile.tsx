@@ -253,7 +253,7 @@ export function DawnreachProfile({
   const favoriteHero = [...heroCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [PROFILE_FALLBACK_HERO_ID, 0];
   const favoriteHeroName = profileHeroName(favoriteHero[0], favoriteHero[0]);
   const featuredHeroId = favoriteHero[0] || PROFILE_FALLBACK_HERO_ID;
-  const featuredHeroArt = profileHeroFullArt(featuredHeroId);
+  const favoriteHeroArt = profileHeroFullArt(featuredHeroId);
   const historyReady = !loading && !loadError;
 
   const totalKills = playedEntries.reduce((sum, entry) => sum + entry.kills, 0);
@@ -295,6 +295,8 @@ export function DawnreachProfile({
     ? selectedMasteryHeroId
     : featuredHeroId;
   const featuredMastery = masteryRecords.find(record => record.hero.id === activeMasteryHeroId) ?? masteryRecords[0] ?? null;
+  const headerHeroId = section === 'mastery' ? activeMasteryHeroId : featuredHeroId;
+  const headerHeroArt = profileHeroFullArt(headerHeroId);
   const overviewMasteryRecords = [...masteryRecords]
     .sort((left, right) => right.entries.length - left.entries.length)
     .slice(0, 4);
@@ -333,7 +335,7 @@ export function DawnreachProfile({
           <span><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</span>
           <p>Light finds a way.</p>
         </div>
-        <div className="dr-profile-identity-art" aria-hidden="true"><img src={featuredHeroArt} alt="" /></div>
+        <div className="dr-profile-identity-art" aria-hidden="true"><img src={headerHeroArt} alt="" /></div>
         <div className="dr-profile-identity-motto"><strong>VALOR<br />GUIDES US</strong><img src="/assets/icon/dawnreach.png" alt="" /></div>
       </header>
 
@@ -525,7 +527,7 @@ export function DawnreachProfile({
             <div className="dr-profile-cosmetic-banner-preview">
               <div className="dr-profile-cosmetic-avatar"><strong>{user.username.slice(0,2).toUpperCase()}</strong></div>
               <div><h3>{user.username}</h3><span>DAWNREACH PLAYER</span><small>A BRIGHTER TOMORROW</small></div>
-              <img src={featuredHeroArt} alt="" />
+              <img src={favoriteHeroArt} alt="" />
             </div>
           </section>
           <section className="dr-profile-panel dr-profile-equipped-cosmetics">
