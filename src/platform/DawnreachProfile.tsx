@@ -295,8 +295,6 @@ export function DawnreachProfile({
     ? selectedMasteryHeroId
     : featuredHeroId;
   const featuredMastery = masteryRecords.find(record => record.hero.id === activeMasteryHeroId) ?? masteryRecords[0] ?? null;
-  const headerHeroId = section === 'mastery' ? activeMasteryHeroId : featuredHeroId;
-  const headerHeroArt = profileHeroFullArt(headerHeroId);
   const overviewMasteryRecords = [...masteryRecords]
     .sort((left, right) => right.entries.length - left.entries.length)
     .slice(0, 4);
@@ -335,7 +333,6 @@ export function DawnreachProfile({
           <span><i className={`platform-presence is-${realtime}`} /> {realtime === 'online' ? 'Online' : realtime === 'connecting' ? 'Connecting…' : 'Offline'}</span>
           <p>Light finds a way.</p>
         </div>
-        <div className="dr-profile-identity-art" aria-hidden="true"><img src={headerHeroArt} alt="" /></div>
         <div className="dr-profile-identity-motto"><strong>VALOR<br />GUIDES US</strong><img src="/assets/icon/dawnreach.png" alt="" /></div>
       </header>
 
