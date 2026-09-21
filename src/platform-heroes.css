@@ -410,7 +410,7 @@
 .dr-heroes-ability-tooltip {
   position: fixed;
   z-index: 1200;
-  width: 330px;
+  width: min(330px, calc(100vw - 24px));
   max-height: min(430px, calc(100vh - 24px));
   overflow: auto;
   pointer-events: none;

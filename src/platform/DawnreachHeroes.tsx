@@ -88,11 +88,33 @@ function abilityTypeLabel(hero: HeroDefinition, key: DisplayAbilityKey) {
 
 function abilityTooltipPosition(target: HTMLElement) {
   const rect = target.getBoundingClientRect();
-  const width = 330;
+  const viewportPadding = 12;
   const gap = 12;
+  const width = Math.min(330, Math.max(220, window.innerWidth - viewportPadding * 2));
+  const maxHeight = Math.min(430, Math.max(180, window.innerHeight - viewportPadding * 2));
+
+  // Prefer the left side of the ability row. If there is not enough horizontal room,
+  // fall back to the right side and finally clamp to the viewport.
   const preferredLeft = rect.left - width - gap;
-  const left = Math.max(12, Math.min(window.innerWidth - width - 12, preferredLeft));
-  const top = Math.max(12, Math.min(window.innerHeight - 260, rect.top - 18));
+  const alternateLeft = rect.right + gap;
+  const unclampedLeft = preferredLeft >= viewportPadding
+    ? preferredLeft
+    : alternateLeft + width <= window.innerWidth - viewportPadding
+      ? alternateLeft
+      : preferredLeft;
+  const left = Math.max(
+    viewportPadding,
+    Math.min(window.innerWidth - width - viewportPadding, unclampedLeft),
+  );
+
+  // The tooltip CSS is capped to maxHeight. Clamp its TOP using that same cap so even
+  // the longest tooltip can never extend below the visible browser viewport.
+  const preferredTop = rect.top - 18;
+  const top = Math.max(
+    viewportPadding,
+    Math.min(window.innerHeight - maxHeight - viewportPadding, preferredTop),
+  );
+
   return { left, top };
 }
 
