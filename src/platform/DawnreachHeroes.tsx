@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FocusEvent, type MouseEvent } from 'react';
 import {
   ChevronRight,
   Clock3,
@@ -19,6 +19,13 @@ import { listHeroDefinitions } from '../game/heroes/catalog';
 import { HeroPrimaryAttribute, type HeroDefinition } from '../game/heroes/types';
 
 type HeroFilter = 'all' | 'north' | 'mid' | 'south' | 'favorites' | 'recent';
+type DisplayAbilityKey = 'P' | 'Q' | 'W' | 'E' | 'R';
+
+type AbilityTooltipState = Readonly<{
+  key: DisplayAbilityKey;
+  left: number;
+  top: number;
+}>;
 
 type SidebarFilterItem = Readonly<{
   key: HeroFilter;
@@ -70,6 +77,25 @@ function difficultyBars(difficulty: HeroDefinition['difficulty']) {
   return difficulty === 'Easy' ? 1 : difficulty === 'Medium' ? 2 : 3;
 }
 
+function abilityTypeLabel(hero: HeroDefinition, key: DisplayAbilityKey) {
+  if (key === 'P') return 'INNATE';
+  const type = hero.abilities[key].type;
+  if (type === 'ultimate') return 'ULTIMATE';
+  if (type === 'passive') return 'PASSIVE';
+  if (type === 'active_with_passive') return 'ACTIVE + PASSIVE';
+  return 'ACTIVE';
+}
+
+function abilityTooltipPosition(target: HTMLElement) {
+  const rect = target.getBoundingClientRect();
+  const width = 330;
+  const gap = 12;
+  const preferredLeft = rect.left - width - gap;
+  const left = Math.max(12, Math.min(window.innerWidth - width - 12, preferredLeft));
+  const top = Math.max(12, Math.min(window.innerHeight - 260, rect.top - 18));
+  return { left, top };
+}
+
 function heroMatchesLane(hero: HeroDefinition, lane: 'north' | 'mid' | 'south') {
   const wanted = lane.toUpperCase();
   return Boolean(
@@ -102,6 +128,7 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
   const [filter, setFilter] = useState<HeroFilter>('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(heroes[0]?.id ?? '');
+  const [abilityTooltip, setAbilityTooltip] = useState<AbilityTooltipState | null>(null);
 
   // Favorites and recent-played data do not exist as persistent account data yet.
   // Keep the filters functional and truthful instead of inventing ownership/history.
@@ -128,6 +155,11 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
   }, [heroes, filter, query, favoriteHeroIds, recentHeroIds]);
 
   const selected = heroes.find(hero => hero.id === selectedId) ?? visibleHeroes[0] ?? heroes[0] ?? null;
+
+  useEffect(() => {
+    setAbilityTooltip(null);
+  }, [selected?.id]);
+
   if (!selected) return null;
 
   const stats = calculateDefinitionStatsAtLevel(selected, 1);
@@ -228,20 +260,79 @@ export function DawnreachHeroes({ onPlay, onPractice }: { onPlay: () => void; on
           </section>
 
           <section className="dr-heroes-abilities">
-            <header><strong>ABILITIES</strong><span>INNATE · Q · W · E · R</span></header>
+            <header><strong>ABILITIES</strong><span>HOVER FOR DETAILS</span></header>
             <div>
-              <article title={selected.innate?.name ?? 'Innate'} aria-label={selected.innate?.name ?? 'Innate'}>
-                {abilityArt(selected.id, 'P')
-                  ? <img src={abilityArt(selected.id, 'P')} alt="" />
-                  : <span className="dr-heroes-ability-placeholder" aria-hidden="true"><Sparkles /></span>}
-                <span><b>{selected.innate?.name ?? 'Innate'}</b><small>INNATE</small></span>
-              </article>
-              {(['Q','W','E','R'] as const).map(key => <article key={key} title={selected.abilities[key].name} aria-label={selected.abilities[key].name}>
-                <img src={abilityArt(selected.id,key)} alt="" />
-                <span><b>{selected.abilities[key].name}</b><small>{key}</small></span>
-              </article>)}
+              {(['P','Q','W','E','R'] as const).map(key => {
+                const isInnate = key === 'P';
+                const name = isInnate ? selected.innate?.name ?? 'Innate' : selected.abilities[key].name;
+                const showTooltip = (
+                  target: HTMLElement,
+                  abilityKey: DisplayAbilityKey,
+                ) => {
+                  const position = abilityTooltipPosition(target);
+                  setAbilityTooltip({ key: abilityKey, ...position });
+                };
+                const handleMouseEnter = (event: MouseEvent<HTMLButtonElement>) => showTooltip(event.currentTarget, key);
+                const handleFocus = (event: FocusEvent<HTMLButtonElement>) => showTooltip(event.currentTarget, key);
+
+                return <article key={key}>
+                  <button
+                    type="button"
+                    className="dr-heroes-ability-trigger"
+                    aria-label={`View ${name} details`}
+                    aria-describedby={abilityTooltip?.key === key ? 'dr-heroes-ability-tooltip' : undefined}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={() => setAbilityTooltip(current => current?.key === key ? null : current)}
+                    onFocus={handleFocus}
+                    onBlur={() => setAbilityTooltip(current => current?.key === key ? null : current)}
+                  >
+                    {abilityArt(selected.id, key)
+                      ? <img src={abilityArt(selected.id, key)} alt="" />
+                      : <span className="dr-heroes-ability-placeholder" aria-hidden="true"><Sparkles /></span>}
+                    <span><b>{name}</b><small>{isInnate ? 'INNATE' : key}</small></span>
+                  </button>
+                </article>;
+              })}
             </div>
           </section>
+
+          {abilityTooltip && (() => {
+            const key = abilityTooltip.key;
+            const innate = key === 'P' ? selected.innate : null;
+            const ability = key === 'P' ? null : selected.abilities[key];
+            const name = innate?.name ?? ability?.name ?? 'Innate';
+            const description = innate?.description ?? ability?.lore ?? '';
+            const technicalDescription = innate?.technicalDescription ?? ability?.technicalDescription ?? '';
+            const unlockLevels = ability?.unlockLevels ?? [];
+
+            return <aside
+              id="dr-heroes-ability-tooltip"
+              className="dr-heroes-ability-tooltip"
+              role="tooltip"
+              style={{ left: abilityTooltip.left, top: abilityTooltip.top }}
+            >
+              <div className="dr-heroes-ability-tooltip-head">
+                <span className="dr-heroes-ability-tooltip-icon">
+                  {abilityArt(selected.id, key)
+                    ? <img src={abilityArt(selected.id, key)} alt="" />
+                    : <Sparkles />}
+                </span>
+                <span>
+                  <small>{key === 'P' ? 'INNATE' : key} · {abilityTypeLabel(selected, key)}</small>
+                  <strong>{name}</strong>
+                </span>
+              </div>
+              {description && <p>{description}</p>}
+              {technicalDescription && <div className="dr-heroes-ability-tooltip-tech">
+                <small>ABILITY DETAILS</small>
+                <p>{technicalDescription}</p>
+              </div>}
+              {!!unlockLevels.length && <footer>
+                <span>RANK LEVELS</span>
+                <strong>{unlockLevels.join(' · ')}</strong>
+              </footer>}
+            </aside>;
+          })()}
 
           <div className="dr-heroes-detail-actions">
             <button type="button" onClick={() => onPractice(selected.id)}>PRACTICE</button>
