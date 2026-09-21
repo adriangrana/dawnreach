@@ -67,6 +67,13 @@ export function createPlatformServer(options = {}) {
   const matchRuntimeTimelineEvents = new Map();
   const matchDisconnectGraceStates = new Map();
   const HERO_KILL_CREDIT_WINDOW_MS = 10_000;
+  const HERO_KILL_GOLD_REWARD = 300;
+  const LANE_CREEP_GOLD_REWARDS = Object.freeze({
+    melee: 33,
+    flagbearer: 33,
+    ranged: 44,
+    siege: 70,
+  });
   const HERO_NAMES = Object.freeze({ H001: 'Alden', H002: 'Seryn' });
   const MATCH_RECONNECT_GRACE_MS = Math.max(50, Number(options.matchReconnectGraceMs) || 60_000);
   const HERO_RESPAWN_BASE_SECONDS = Number.isFinite(Number(options.heroRespawnBaseSeconds))
@@ -1170,7 +1177,7 @@ export function createPlatformServer(options = {}) {
     const now = Date.now();
     const combatLocks = runtimeCombatLocks(active.id);
     const combatLock = combatLocks.get(userId) || null;
-    const inventory = Array.isArray(payload?.inventory)
+    const proposedInventory = Array.isArray(payload?.inventory)
       ? payload.inventory.slice(0, 7).map((item, index) => {
         const raw = item && typeof item === 'object' ? item : {};
         return {
@@ -1183,6 +1190,17 @@ export function createPlatformServer(options = {}) {
       }).filter(item => item.definitionId)
       : (previous?.inventory || []);
     const nonNegativeCounter = (value, fallback = 0) => Math.max(0, Math.min(999999, Math.floor(finite(value, fallback))));
+    const previousEconomyRevision = Math.max(0, Math.floor(finite(previous?.economyRevision, 0)));
+    const reportedEconomyRevision = Math.max(0, Math.floor(finite(payload?.economyRevision, 0)));
+    // Gold/inventory are client-driven between authoritative economy events (passive
+    // income, purchases, sales), but a server-awarded kill bumps this generation.
+    // Until the owner echoes that exact generation, stale 80 ms snapshots cannot erase
+    // the awarded gold or roll inventory back.
+    const economyRevisionAcknowledged = !previous
+      || reportedEconomyRevision === previousEconomyRevision;
+    const inventory = previous && !economyRevisionAcknowledged
+      ? (previous.inventory || [])
+      : proposedInventory;
     const payloadRespawnRemainingMs = clamp(payload?.respawnRemainingMs, 0, 120000);
     const payloadRespawnDurationMs = clamp(payload?.respawnDurationMs, 0, 120000);
     const abilityRanks = {};
@@ -1314,7 +1332,9 @@ export function createPlatformServer(options = {}) {
           creditedKillerState = {
             ...killerRuntime,
             kills: Number(killerRuntime.kills || 0) + 1,
-            sequence: killerRuntime.sequence + 1,
+            gold: Math.max(0, Number(killerRuntime.gold || 0)) + HERO_KILL_GOLD_REWARD,
+            economyRevision: Math.max(0, Number(killerRuntime.economyRevision || 0)) + 1,
+            sequence: Number(killerRuntime.sequence || 0) + 1,
             sentAt: now,
           };
           runtimeRoom(active.id).set(killerPlayer.userId, creditedKillerState);
@@ -1399,7 +1419,10 @@ export function createPlatformServer(options = {}) {
       assists: previous ? nonNegativeCounter(payload?.assists, previous.assists) : 0,
       lastHits: previous ? nonNegativeCounter(previous.lastHits, 0) : 0,
       denies: previous ? nonNegativeCounter(previous.denies, 0) : 0,
-      gold: nonNegativeCounter(payload?.gold, previous?.gold),
+      economyRevision: previousEconomyRevision,
+      gold: previous && !economyRevisionAcknowledged
+        ? nonNegativeCounter(previous.gold, 0)
+        : nonNegativeCounter(payload?.gold, previous?.gold),
       damageDealt: Math.max(0, Number(previous?.damageDealt || 0)),
       damageTaken: Math.max(0, Number(previous?.damageTaken || 0)),
       healingDone: Math.max(0, Number(previous?.healingDone || 0)),
@@ -1625,6 +1648,8 @@ export function createPlatformServer(options = {}) {
           creditedKillerState = {
             ...killerRuntime,
             kills: Number(killerRuntime.kills || 0) + 1,
+            gold: Math.max(0, Number(killerRuntime.gold || 0)) + HERO_KILL_GOLD_REWARD,
+            economyRevision: Math.max(0, Number(killerRuntime.economyRevision || 0)) + 1,
             sequence: Number(killerRuntime.sequence || 0) + 1,
             sentAt: now,
           };
@@ -1890,10 +1915,15 @@ export function createPlatformServer(options = {}) {
       const room = runtimeRoom(active.id);
       const sourceRuntime = room.get(userId) || null;
       if (sourceRuntime) {
+        const goldReward = alliedTarget
+          ? 0
+          : Math.max(0, Number(LANE_CREEP_GOLD_REWARDS[target.type] || 0));
         creditedSourceState = {
           ...sourceRuntime,
           lastHits: Number(sourceRuntime.lastHits || 0) + (alliedTarget ? 0 : 1),
           denies: Number(sourceRuntime.denies || 0) + (alliedTarget ? 1 : 0),
+          gold: Math.max(0, Number(sourceRuntime.gold || 0)) + goldReward,
+          economyRevision: Math.max(0, Number(sourceRuntime.economyRevision || 0)) + (goldReward > 0 ? 1 : 0),
           sequence: Number(sourceRuntime.sequence || 0) + 1,
           sentAt: Date.now(),
         };

@@ -1074,6 +1074,162 @@ test('server owns last-hit and deny counters for creep deaths', async () => {
   });
 });
 
+test('server awards economy to a non-simulation player and rejects stale gold rollback', async () => {
+  await withServer(async ({ platform }) => {
+    const match = {
+      id: 'server-owned-economy-non-host',
+      mode: 'normal',
+      source: 'matchmaking',
+      rated: false,
+      status: 'in_game',
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      players: [
+        { userId: 'economy-host', username: 'Economy Host', rating: 1000, joinedAt: 1, team: 'blue', slot: 0 },
+        { userId: 'economy-client', username: 'Economy Client', rating: 1000, joinedAt: 1, team: 'red', slot: 0 },
+      ],
+      resultToken: 'secret',
+      mapSha256: null,
+      heroSelections: {
+        'economy-host': { heroId: 'H001', locked: true, lockedAt: Date.now() },
+        'economy-client': { heroId: 'H002', locked: true, lockedAt: Date.now() },
+      },
+    };
+    platform.store.addMatch(match);
+
+    for (const [userId, team, x] of [
+      ['economy-host', 'blue', -4],
+      ['economy-client', 'red', 4],
+    ]) {
+      platform.reportMatchRuntimeState(userId, {
+        matchId: match.id,
+        sequence: 1,
+        economyRevision: 0,
+        position: { x, y: 5.28, z: 0 },
+        yaw: 0,
+        moving: false,
+        currentHp: 700,
+        maxHp: 700,
+        currentResource: 300,
+        maxResource: 300,
+        level: 1,
+        alive: true,
+        gold: 600,
+        inventory: [],
+        abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+      });
+    }
+
+    // Blue/slot 0 owns the disposable world-simulation lease. Red is intentionally the
+    // non-host/non-simulator and must still receive its own last-hit gold.
+    platform.reportMatchRuntimeCreeps('economy-host', {
+      matchId: match.id,
+      sequence: 1,
+      sentAt: Date.now(),
+      elapsedSeconds: 10,
+      creeps: [{
+        id: 'lane-creep:blue:mid:1:1',
+        team: 'blue',
+        lane: 'mid',
+        type: 'ranged',
+        position: { x: 0, y: 0, z: 0 },
+        yaw: 0,
+        currentHp: 40,
+        maxHp: 400,
+        alive: true,
+        state: 'COMBAT',
+        moving: false,
+        seed: 1,
+        attackSequence: 0,
+      }],
+    });
+    platform.reportMatchRuntimeCreepDamage('economy-client', {
+      matchId: match.id,
+      creepId: 'lane-creep:blue:mid:1:1',
+      amount: 50,
+    });
+
+    let client = platform.runtimeSnapshot(match.id).find(state => state.userId === 'economy-client');
+    assert.equal(client.lastHits, 1);
+    assert.equal(client.gold, 644);
+    assert.equal(client.economyRevision, 1);
+
+    // A packet already in flight before the reward cannot erase it.
+    platform.reportMatchRuntimeState('economy-client', {
+      matchId: match.id,
+      sequence: 2,
+      economyRevision: 0,
+      position: { x: 4, y: 5.28, z: 0 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      gold: 600,
+      inventory: [],
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    client = platform.runtimeSnapshot(match.id).find(state => state.userId === 'economy-client');
+    assert.equal(client.gold, 644);
+    assert.equal(client.economyRevision, 1);
+
+    // Once the client has acknowledged revision 1, normal passive/client economy deltas
+    // can continue from the server-awarded balance.
+    platform.reportMatchRuntimeState('economy-client', {
+      matchId: match.id,
+      sequence: 3,
+      economyRevision: 1,
+      position: { x: 4, y: 5.28, z: 0 },
+      yaw: 0,
+      moving: false,
+      currentHp: 700,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      gold: 645,
+      inventory: [],
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    client = platform.runtimeSnapshot(match.id).find(state => state.userId === 'economy-client');
+    assert.equal(client.gold, 645);
+
+    // The same non-host hero receives the server-side hero-kill bounty.
+    platform.reportMatchRuntimeState('economy-host', {
+      matchId: match.id,
+      sequence: 2,
+      economyRevision: 0,
+      position: { x: -4, y: 5.28, z: 0 },
+      yaw: 0,
+      moving: false,
+      currentHp: 50,
+      maxHp: 700,
+      currentResource: 300,
+      maxResource: 300,
+      level: 1,
+      alive: true,
+      gold: 600,
+      inventory: [],
+      abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
+    });
+    platform.reportMatchRuntimeCombat('economy-client', {
+      matchId: match.id,
+      targetUserId: 'economy-host',
+      reason: 'damage',
+      amount: 100,
+    });
+
+    client = platform.runtimeSnapshot(match.id).find(state => state.userId === 'economy-client');
+    assert.equal(client.kills, 1);
+    assert.equal(client.gold, 945);
+    assert.equal(client.economyRevision, 2);
+  });
+});
+
 test('server keeps creep and structure HP canonical against stale simulator snapshots', async () => {
   await withServer(async ({ platform }) => {
     const match = {
