@@ -64,7 +64,11 @@ function configureSkeleton(rig: HumanoidRig) {
   // Heroic female proportions: long legs, narrow ribcage/shoulders and a wider pelvis.
   rig.pelvis.position.y = 1.31;
   rig.torso.position.y = 1.88;
-  rig.head.position.y = 0.75;
+  // The MakeHuman CC0 portrait includes the cervical column in the same anatomical
+  // mesh as the head. Seat that neck substantially inside the shoulder/collar volume
+  // instead of balancing the skull on the full visible neck length. This shortens the
+  // apparent neck without scaling/distorting the authored head topology.
+  rig.head.position.y = 0.64;
   // The anatomical skull's cervical axis sits behind its geometric centre.
   // Align that axis with the torso, rather than bending the neck back to the collar.
   rig.head.position.z = 0.065;
@@ -283,7 +287,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v18-tailored-skinned-model';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v19-seated-cervical-head';
 
   return Object.assign(rig, {
     bow,
