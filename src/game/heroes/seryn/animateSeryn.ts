@@ -5,6 +5,60 @@ import type { SerynRig } from './buildSeryn';
 export const SERYN_ATTACK_RELEASE_PROGRESS = 0.64;
 export const SERYN_ATTACK_SWING_RATE = 2.2;
 
+function deterministicUnit(seed: number) {
+  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function idleBlinkAmount(elapsed: number) {
+  // One short blink in each four-second window, with a deterministic offset so the
+  // cadence never reads as a metronome. Every fifth window adds a subtle second blink.
+  const window = 4;
+  const index = Math.floor(elapsed / window);
+  const start = index * window + .85 + deterministicUnit(index) * 1.65;
+  const blink = (time: number) => {
+    const t = elapsed - time;
+    if (t < 0 || t > .18) return 0;
+    if (t < .055) return THREE.MathUtils.smoothstep(t, 0, .055);
+    if (t < .095) return 1;
+    return 1 - THREE.MathUtils.smoothstep(t, .095, .18);
+  };
+  const primary = blink(start);
+  const doubleBlink = index % 5 === 3 ? blink(start + .27) * .82 : 0;
+  return Math.max(primary, doubleBlink);
+}
+
+function updateIdleFace(rig: SerynRig, elapsed: number, idle: boolean) {
+  const blink = idle ? idleBlinkAmount(elapsed) : 0;
+  for (const eyelid of rig.eyelids) {
+    eyelid.visible = blink > .001;
+    eyelid.scale.y = Math.max(.001, blink);
+  }
+
+  // Reset first because the humanoid locomotion animation intentionally leaves the
+  // head joint free. Idle then layers sparse glances instead of continuous pendulum
+  // motion, so she looks attentive rather than mechanically oscillating.
+  rig.head.rotation.set(0, 0, 0);
+  if (!idle) return;
+
+  const cycle = 11.5;
+  const phase = elapsed % cycle;
+  const plateau = (begin: number, settle: number, release: number, end: number) =>
+    THREE.MathUtils.smoothstep(phase, begin, settle)
+      * (1 - THREE.MathUtils.smoothstep(phase, release, end));
+
+  const leftGlance = plateau(1.6, 2.35, 3.55, 4.35);
+  const rightGlance = plateau(6.25, 7.05, 8.55, 9.35);
+  const yaw = THREE.MathUtils.degToRad(7.5) * leftGlance
+    - THREE.MathUtils.degToRad(6.0) * rightGlance;
+  const pitch = THREE.MathUtils.degToRad(-1.6) * leftGlance
+    + THREE.MathUtils.degToRad(.9) * rightGlance;
+  const roll = THREE.MathUtils.degToRad(-1.0) * leftGlance
+    + THREE.MathUtils.degToRad(.8) * rightGlance;
+
+  rig.head.rotation.set(pitch, yaw, roll);
+}
+
 function updateHair(rig: SerynRig, elapsed: number, moving: boolean) {
   const geometry = rig.hair.geometry;
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -238,6 +292,7 @@ export function animateSeryn(
   const attackProgress = Number(rig.root.userData.serynAttackProgress ?? 0);
   const attackActive = attackProgress > 0 && attackProgress < 1;
   const resting = 1 - THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
+  updateIdleFace(rig, elapsed, !moving && !attackActive);
   const easeIntoAttack = attackActive ? 1 - THREE.MathUtils.smoothstep(attackProgress, 0, .28) : 1;
   const relaxed = resting * easeIntoAttack;
   for (const side of [-1, 1]) {
