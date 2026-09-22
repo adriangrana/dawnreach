@@ -130,6 +130,62 @@ function setBowStringDraw(rig: SerynRig, draw: number) {
   position.needsUpdate = true;
 }
 
+const walkBowTorsoWorldQ = new THREE.Quaternion();
+const walkBowParentWorldQ = new THREE.Quaternion();
+const walkBowTargetWorldQ = new THREE.Quaternion();
+const walkBowTargetLocalQ = new THREE.Quaternion();
+const walkBowJointQ = new THREE.Quaternion();
+
+function stabilizeWalkBowOrientation(rig: SerynRig) {
+  const walk = THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
+  if (walk <= 0.0001) return;
+
+  // Preserve the GOOD part of locomotion: the whole left arm swings exactly with the
+  // walk cycle and the grip therefore travels with the hand. Only compensate the bow's
+  // orientation so that parent-joint rotations do not roll the longbow upright/sideways.
+  //
+  // The target below is the mean idle carry orientation relative to the torso. We then
+  // convert that target back into the moving hand socket's local space. Translation is
+  // untouched, so the bow still follows the hand perfectly while walking.
+  rig.root.updateMatrixWorld(true);
+  rig.torso.getWorldQuaternion(walkBowTorsoWorldQ);
+
+  walkBowTargetWorldQ.copy(walkBowTorsoWorldQ);
+  walkBowTargetWorldQ.multiply(
+    walkBowJointQ.setFromEuler(new THREE.Euler(
+      -0.012,
+      0.18,
+      0.075,
+      'XYZ',
+    )),
+  );
+  walkBowTargetWorldQ.multiply(
+    walkBowJointQ.setFromEuler(new THREE.Euler(
+      -THREE.MathUtils.degToRad(9),
+      1.13,
+      0,
+      'XYZ',
+    )),
+  );
+  walkBowTargetWorldQ.multiply(
+    walkBowJointQ.setFromEuler(new THREE.Euler(
+      0.025,
+      0,
+      0.015,
+      'XYZ',
+    )),
+  );
+  walkBowTargetWorldQ.multiply(
+    walkBowJointQ.setFromEuler(rig.bowRestRotation),
+  );
+
+  rig.sockets.leftHand.getWorldQuaternion(walkBowParentWorldQ);
+  walkBowTargetLocalQ.copy(walkBowParentWorldQ).invert().multiply(walkBowTargetWorldQ);
+
+  // Blend through gait.weight so starting/stopping does not snap the weapon.
+  rig.bow.quaternion.slerp(walkBowTargetLocalQ, walk);
+}
+
 function updateArcheryAttackPose(rig: SerynRig, progress: number) {
   const active = progress > 0 && progress < 1;
 
@@ -282,11 +338,14 @@ export function animateSeryn(
   if (attackActive) {
     updateArcheryAttackPose(rig, attackProgress);
   } else {
-    // Outside combat the bow stays rigidly attached to the left-hand socket.
-    // Locomotion is allowed to animate that arm exactly like the opposite arm, so the
-    // bow naturally swings with Seryn's hand instead of being stabilized independently.
     updateArcheryAttackPose(rig, 0);
-    if (!moving) {
+
+    if (moving || rig.gait.weight > 0.0001) {
+      // Arm translation/swing remains completely locomotion-driven. Correct only the
+      // bow roll so its horizontal carry orientation does not get destroyed by the
+      // animated shoulder/forearm hierarchy.
+      stabilizeWalkBowOrientation(rig);
+    } else {
       rig.torso.rotation.y += Math.sin(elapsed * 0.8) * 0.018;
     }
   }

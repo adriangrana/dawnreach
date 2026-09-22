@@ -294,7 +294,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v25-arm-driven-bow-carry';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v26-stable-horizontal-walk-bow';
 
   return Object.assign(rig, {
     bow,
