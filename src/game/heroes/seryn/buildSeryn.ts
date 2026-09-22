@@ -204,10 +204,16 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   nockedArrow.visible = false;
   bow.add(nockedArrow);
 
-  bow.position.set(0.010, -0.105, 0.026);
-  // Let the hand/socket supply the natural pose. Keep only a tiny presentation cant;
-  // no X/Y rotation is applied because that made the planar bow read as warped.
-  bow.rotation.set(0, 0, -0.018);
+  // Idle carry pose: seat the grip through the curled fingers and counter the relaxed
+  // forearm/shoulder angles so the longbow hangs almost vertically beside the leg.
+  // The bow still inherits hand translation, but no longer looks twisted or tipped
+  // forward while Seryn is standing at rest.
+  bow.position.set(0.012, -0.075, 0.040);
+  bow.rotation.set(
+    THREE.MathUtils.degToRad(8.5),
+    0,
+    THREE.MathUtils.degToRad(-4.0),
+  );
   rig.sockets.leftHand.add(bow);
 
   return {
@@ -287,7 +293,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v21-idle-head-glances';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v22-upright-idle-bow';
 
   return Object.assign(rig, {
     bow,
