@@ -130,6 +130,80 @@ function setBowStringDraw(rig: SerynRig, draw: number) {
   position.needsUpdate = true;
 }
 
+function updateWalkBowCarryPose(rig: SerynRig, elapsed: number) {
+  const walk = THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
+  if (walk <= 0.0001) return;
+
+  // Carrying a longbow should not inherit the full generic arm swing. Keep the bow hand
+  // close to the hip and let only a very small amount of gait motion through, otherwise
+  // the hand socket turns the horizontal idle bow back into a near-vertical prop.
+  const phase = rig.gait.phase;
+  const armBob = Math.sin(phase) * THREE.MathUtils.degToRad(1.6);
+  const forearmBob = Math.cos(phase) * THREE.MathUtils.degToRad(1.2);
+
+  rig.leftArm.rotation.x = THREE.MathUtils.lerp(
+    rig.leftArm.rotation.x,
+    THREE.MathUtils.degToRad(-3.0) + armBob,
+    walk,
+  );
+  rig.leftArm.rotation.y = THREE.MathUtils.lerp(
+    rig.leftArm.rotation.y,
+    THREE.MathUtils.degToRad(10.5),
+    walk,
+  );
+  rig.leftArm.rotation.z = THREE.MathUtils.lerp(
+    rig.leftArm.rotation.z,
+    THREE.MathUtils.degToRad(4.3),
+    walk,
+  );
+
+  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(
+    rig.leftForearm.rotation.x,
+    THREE.MathUtils.degToRad(-10.0) + forearmBob,
+    walk,
+  );
+  rig.leftForearm.rotation.y = THREE.MathUtils.lerp(
+    rig.leftForearm.rotation.y,
+    1.13,
+    walk,
+  );
+  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(
+    rig.leftForearm.rotation.z,
+    THREE.MathUtils.degToRad(1.0),
+    walk,
+  );
+
+  rig.sockets.leftHand.rotation.x = THREE.MathUtils.lerp(
+    rig.sockets.leftHand.rotation.x,
+    THREE.MathUtils.degToRad(1.5),
+    walk,
+  );
+  rig.sockets.leftHand.rotation.y = THREE.MathUtils.lerp(
+    rig.sockets.leftHand.rotation.y,
+    THREE.MathUtils.degToRad(-2.0),
+    walk,
+  );
+  rig.sockets.leftHand.rotation.z = THREE.MathUtils.lerp(
+    rig.sockets.leftHand.rotation.z,
+    THREE.MathUtils.degToRad(1.0),
+    walk,
+  );
+
+  // Keep the grip locked in the hand while the bow lies diagonally across the front of
+  // the hips. This is deliberately very close to the idle carry, with only a slight
+  // forward cant so the lower limb clears Seryn's legs and cloth during the gait cycle.
+  rig.bow.position.set(
+    THREE.MathUtils.lerp(rig.bow.position.x, 0.014, walk),
+    THREE.MathUtils.lerp(rig.bow.position.y, -0.064, walk),
+    THREE.MathUtils.lerp(rig.bow.position.z, 0.052, walk),
+  );
+  rig.bow.rotation.set(
+    THREE.MathUtils.lerp(rig.bow.rotation.x, THREE.MathUtils.degToRad(10.0), walk),
+    THREE.MathUtils.lerp(rig.bow.rotation.y, THREE.MathUtils.degToRad(-5.0), walk),
+    THREE.MathUtils.lerp(rig.bow.rotation.z, THREE.MathUtils.degToRad(-82.0), walk),
+  );
+}
+
 function updateArcheryAttackPose(rig: SerynRig, progress: number) {
   const active = progress > 0 && progress < 1;
 
@@ -283,7 +357,9 @@ export function animateSeryn(
     updateArcheryAttackPose(rig, attackProgress);
   } else {
     updateArcheryAttackPose(rig, 0);
-    if (!moving) {
+    if (moving || rig.gait.weight > 0.0001) {
+      updateWalkBowCarryPose(rig, elapsed);
+    } else {
       rig.torso.rotation.y += Math.sin(elapsed * 0.8) * 0.018;
     }
   }
