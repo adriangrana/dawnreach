@@ -2736,9 +2736,14 @@ function disposeScene(scene: THREE.Scene) {
   const disposedTextures = new Set<THREE.Texture>();
   const disposedMaterials = new Set<THREE.Material>();
   const disposedGeometries = new Set<THREE.BufferGeometry>();
+  const disposedSkeletons = new Set<THREE.Skeleton>();
 
   scene.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh || obj instanceof THREE.Sprite || obj instanceof THREE.Points)) return;
+    if (obj instanceof THREE.SkinnedMesh && !disposedSkeletons.has(obj.skeleton)) {
+      disposedSkeletons.add(obj.skeleton);
+      obj.skeleton.dispose();
+    }
     if ((obj instanceof THREE.Mesh || obj instanceof THREE.Points) && !disposedGeometries.has(obj.geometry)) {
       disposedGeometries.add(obj.geometry);
       obj.geometry.dispose();

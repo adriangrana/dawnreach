@@ -12,7 +12,7 @@ function seeded(seed = 0x51e7a2) {
 function skinTexture() {
   const random = seeded(0x5e12a9);
   return makeCanvasTexture(512, (ctx, size) => {
-    ctx.fillStyle = '#c98773';
+    ctx.fillStyle = '#e7b8a0';
     ctx.fillRect(0, 0, size, size);
     for (let patch = 0; patch < 180; patch++) {
       const x = random() * size;
@@ -145,6 +145,27 @@ function ceremonialClothTexture(base: string, accent: string, gold = false) {
     }
 
     if (gold) {
+      // Continuous stitched borders, climbing vines and a woven sun emblem. The
+      // texture spans one garment panel, so the decoration follows its folds.
+      ctx.strokeStyle = 'rgba(207,170,100,0.82)';
+      ctx.lineWidth = 2.0;
+      for (const side of [1, -1]) {
+        const edge = side > 0 ? 16 : size - 16;
+        for (const offset of [0, 8]) {
+          ctx.beginPath(); ctx.moveTo(edge + side * offset, 0); ctx.lineTo(edge + side * offset, size); ctx.stroke();
+        }
+        for (let y = 0; y < size; y += 52) {
+          ctx.beginPath();
+          ctx.moveTo(edge + side * 15, y);
+          ctx.bezierCurveTo(edge + side * 57, y + 14, edge - side * 3, y + 35, edge + side * 15, y + 52);
+          ctx.moveTo(edge + side * 24, y + 21);
+          ctx.quadraticCurveTo(edge + side * 66, y + 9, edge + side * 39, y + 39);
+          ctx.stroke();
+        }
+      }
+      for (const y of [size - 20, size - 28]) {
+        ctx.beginPath(); ctx.moveTo(12, y); ctx.lineTo(size - 12, y); ctx.stroke();
+      }
       ctx.strokeStyle = 'rgba(206,170,89,0.60)';
       ctx.lineWidth = 2.1;
       for (let row = 0; row < 3; row++) {
@@ -165,7 +186,7 @@ function ceremonialClothTexture(base: string, accent: string, gold = false) {
         }
       }
     }
-  }, 2.2, 2.6);
+  }, 1, 1);
 }
 
 function brushedTexture(dark: string, light: string) {
@@ -213,12 +234,12 @@ function hairTexture() {
   const random = seeded(0xa11ce);
   return makeCanvasTexture(768, (ctx, size) => {
     const gradient = ctx.createLinearGradient(0, 0, size, 0);
-    gradient.addColorStop(0.00, '#657684');
-    gradient.addColorStop(0.18, '#b6c1cc');
-    gradient.addColorStop(0.38, '#e7ebef');
-    gradient.addColorStop(0.58, '#bdc7d1');
-    gradient.addColorStop(0.80, '#f0f3f6');
-    gradient.addColorStop(1.00, '#70808e');
+    gradient.addColorStop(0.00, '#84776d');
+    gradient.addColorStop(0.18, '#b5a69b');
+    gradient.addColorStop(0.38, '#e1d3c6');
+    gradient.addColorStop(0.58, '#ad9c8f');
+    gradient.addColorStop(0.80, '#eee0d3');
+    gradient.addColorStop(1.00, '#9c8b7c');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);
 
@@ -283,23 +304,62 @@ function hairBumpTexture() {
   return texture;
 }
 
+function eyeTexture() {
+  const random = seeded(0xe9e002);
+  return makeCanvasTexture(512, (ctx, size) => {
+    ctx.fillStyle = '#c5b9af'; ctx.fillRect(0, 0, size, size);
+    const sclera = ctx.createRadialGradient(256, 256, 35, 256, 256, 300);
+    sclera.addColorStop(0, '#eee8db'); sclera.addColorStop(1, '#b7988c');
+    ctx.fillStyle = sclera; ctx.fillRect(0, 0, size, size);
+    ctx.save(); ctx.translate(256, 256); ctx.scale(1, 1);
+    const iris = ctx.createRadialGradient(0, 0, 20, 0, 0, 76);
+    iris.addColorStop(0, '#8c96a2'); iris.addColorStop(.5, '#778a9f'); iris.addColorStop(.86, '#536579'); iris.addColorStop(1, '#293642');
+    ctx.fillStyle = iris; ctx.beginPath(); ctx.arc(0, 0, 76, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 170; i++) {
+      const a = i / 170 * Math.PI * 2;
+      ctx.strokeStyle = random() > .5 ? 'rgba(204,191,145,.24)' : 'rgba(21,42,49,.33)';
+      ctx.lineWidth = .5 + random(); ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 28, Math.sin(a) * 28);
+      ctx.lineTo(Math.cos(a + .015) * (58 + random() * 16), Math.sin(a + .015) * (58 + random() * 16)); ctx.stroke();
+    }
+    ctx.fillStyle = '#101b20'; ctx.beginPath(); ctx.arc(0, 0, 27, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,246,.8)'; ctx.beginPath(); ctx.arc(-21, -21, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  });
+}
+
+function eyebrowTexture() {
+  const random = seeded(0xb20f);
+  return makeCanvasTexture(512, (ctx, size) => {
+    ctx.clearRect(0, 0, size, size);
+    for (let i = 0; i < 480; i++) {
+      const x = random() * size, t = x / size;
+      const y = size * (.30 + random() * .42);
+      ctx.strokeStyle = `rgba(65,44,34,${.3 + random() * .65})`;
+      ctx.lineWidth = 1 + random() * 2;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + 7, y - 30, x + 15 + t * 22, y - 60 - random() * 60); ctx.stroke();
+    }
+  });
+}
+
 export function createSerynMaterials() {
   const skin = new THREE.MeshPhysicalMaterial({
     map: skinTexture(),
     bumpMap: skinBumpTexture(),
-    bumpScale: 0.006,
+    bumpScale: 0.0006,
     roughness: 0.72,
     metalness: 0,
     clearcoat: 0.03,
     sheen: 0.06,
     sheenColor: new THREE.Color(0xf3b6a2),
+    emissive: 0xc99479,
+    emissiveIntensity: 0.055,
   });
   const skinShadow = skin.clone();
   skinShadow.color.setHex(0xaa6d60);
 
-  // The face uses vertex colours for eyes/brows/lips while retaining the skin bump
-  // response. This keeps the head a single connected mesh instead of attaching
-  // separate facial primitives.
+  // Vertex colours add gentle cheek warmth; eyes and lips have fitted geometry.
   const face = skin.clone();
   face.map = null;
   face.color.setHex(0xffffff);
@@ -310,18 +370,18 @@ export function createSerynMaterials() {
   const hair = new THREE.MeshPhysicalMaterial({
     map: hairMap,
     bumpMap: hairBumpTexture(),
-    bumpScale: 0.010,
-    color: 0xf0f4f8,
-    roughness: 0.52,
+    bumpScale: 0.00035,
+    color: 0xd8c7b8,
+    roughness: 0.62,
     metalness: 0.01,
-    sheen: 0.72,
-    sheenColor: new THREE.Color(0xd8efff),
+    sheen: 0.36,
+    sheenColor: new THREE.Color(0xf2d9aa),
     clearcoat: 0.10,
     clearcoatRoughness: 0.58,
     side: THREE.DoubleSide,
   });
   const hairShadow = hair.clone();
-  hairShadow.color.setHex(0x9aa9b9);
+  hairShadow.color.setHex(0x71523b);
 
   const clothBump = clothBumpTexture();
   const navy = new THREE.MeshPhysicalMaterial({
@@ -353,10 +413,10 @@ export function createSerynMaterials() {
     side: THREE.DoubleSide,
   });
   const ivory = new THREE.MeshPhysicalMaterial({
-    map: ceremonialClothTexture('#d8d4c7', 'rgba(255,255,255,0.060)'),
+    map: ceremonialClothTexture('#e8e0cd', 'rgba(255,255,255,0.060)', true),
     bumpMap: clothBumpTexture(0xf0ece2),
-    bumpScale: 0.018,
-    color: 0xf0ece2,
+    bumpScale: 0.0010,
+    color: 0xffffff,
     roughness: 0.78,
     metalness: 0,
     sheen: 0.30,
@@ -366,8 +426,8 @@ export function createSerynMaterials() {
   const cloakBlue = new THREE.MeshPhysicalMaterial({
     map: ceremonialClothTexture('#173d61', 'rgba(129,190,222,0.055)', true),
     bumpMap: clothBumpTexture(0x24577b),
-    bumpScale: 0.020,
-    color: 0x24577b,
+    bumpScale: 0.00035,
+    color: 0xffffff,
     roughness: 0.77,
     metalness: 0.01,
     sheen: 0.34,
@@ -387,27 +447,27 @@ export function createSerynMaterials() {
   });
   const blackLeather = new THREE.MeshStandardMaterial({
     map: leatherTexture(),
-    color: 0x17171c,
+    color: 0xa3a5b2,
     roughness: 0.72,
     metalness: 0.10,
   });
 
   const silver = new THREE.MeshStandardMaterial({
     map: brushedTexture('#5f6e7a', '#d7e0e8'),
-    color: 0xb7c5d0,
-    metalness: 0.70,
+    color: 0xe0e3dd,
+    metalness: 0.55,
     roughness: 0.34,
   });
   const silverDark = new THREE.MeshStandardMaterial({
     map: brushedTexture('#354654', '#9aabb9'),
-    color: 0x758695,
-    metalness: 0.62,
+    color: 0xc7c9c1,
+    metalness: 0.48,
     roughness: 0.41,
   });
   const gold = new THREE.MeshStandardMaterial({
     map: brushedTexture('#76541f', '#e6c67a'),
-    color: 0xc39a4f,
-    metalness: 0.74,
+    color: 0xffe2a0,
+    metalness: 0.58,
     roughness: 0.32,
   });
   const leather = new THREE.MeshStandardMaterial({
@@ -416,9 +476,9 @@ export function createSerynMaterials() {
     metalness: 0.02,
   });
   const crystal = new THREE.MeshPhysicalMaterial({
-    color: 0x5bdcff,
-    emissive: 0x157fa6,
-    emissiveIntensity: 0.58,
+    color: 0x168cfa,
+    emissive: 0x06438f,
+    emissiveIntensity: 0.24,
     roughness: 0.16,
     metalness: 0.16,
     clearcoat: 0.75,
@@ -426,15 +486,18 @@ export function createSerynMaterials() {
   });
 
   const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xe9e5df, roughness: 0.62 });
-  const iris = new THREE.MeshStandardMaterial({ color: 0x42b9d7, emissive: 0x0c5971, emissiveIntensity: 0.24, roughness: 0.30 });
+  const eyeSurface = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: .26, clearcoat: .8, clearcoatRoughness: .18 });
+  const iris = new THREE.MeshStandardMaterial({ color: 0x65919b, roughness: 0.30 });
   const eyeDark = new THREE.MeshStandardMaterial({ color: 0x15202b, roughness: 0.78 });
-  const lips = new THREE.MeshStandardMaterial({ color: 0x7c4348, roughness: 0.78 });
+  const lips = new THREE.MeshPhysicalMaterial({ color: 0xb66d66, roughness: 0.47, clearcoat: .12, clearcoatRoughness: .45 });
+  const brow = new THREE.MeshStandardMaterial({ map: eyebrowTexture(), transparent: true, alphaTest: .06, depthWrite: false, roughness: .8, side: THREE.DoubleSide });
+  const nostril = new THREE.MeshStandardMaterial({ color: 0x6a3f38, roughness: 1 });
 
   return {
     skin, skinShadow, face, hair, hairShadow,
     navy, navyDark, teal, ivory, cloakBlue, cloakBlueDark, blackLeather,
     silver, silverDark, gold, leather, crystal,
-    eyeWhite, iris, eyeDark, lips,
+    eyeWhite, eyeSurface, iris, eyeDark, lips, brow, nostril,
   };
 }
 

@@ -27,8 +27,14 @@ function queryHeroId(): HeroId {
 function disposeObject(root: THREE.Object3D) {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+  const skeletons = new Set<THREE.Skeleton>();
   root.traverse(object => {
     if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points)) return;
+    if (object instanceof THREE.SkinnedMesh && !skeletons.has(object.skeleton)) {
+      skeletons.add(object.skeleton);
+      object.skeleton.dispose();
+    }
     const geometry = (object as THREE.Mesh).geometry;
     if (geometry && !geometries.has(geometry)) {
       geometries.add(geometry);
@@ -39,6 +45,9 @@ function disposeObject(root: THREE.Object3D) {
     for (const material of list) {
       if (!material || materials.has(material)) continue;
       materials.add(material);
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture && !textures.has(value)) { textures.add(value); value.dispose(); }
+      }
       material.dispose();
     }
   });
@@ -118,10 +127,10 @@ export default function HeroModelViewer() {
     renderer.domElement.className = 'hero-model-viewer-canvas';
     host.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0xb9d9ff, 0x172018, 1.8);
+      const hemi = new THREE.HemisphereLight(0xcbdcf0, 0x51444a, 2.0);
     scene.add(hemi);
 
-    const key = new THREE.DirectionalLight(0xffffff, 4.2);
+      const key = new THREE.DirectionalLight(0xfff4e8, 3.0);
     key.position.set(4.5, 7, 6);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -318,6 +327,15 @@ export default function HeroModelViewer() {
     runtime.orbit.distance = Math.max(4.8, size.y * 2.0);
   };
 
+  const focusFace = () => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    runtime.model.rig.head.getWorldPosition(runtime.orbit.target);
+    runtime.orbit.azimuth = 0;
+    runtime.orbit.elevation = 0;
+    runtime.orbit.distance = 1.65;
+  };
+
   const chooseHero = (nextId: HeroId) => {
     const url = new URL(window.location.href);
     url.searchParams.set('hero', nextId);
@@ -356,6 +374,7 @@ export default function HeroModelViewer() {
           <button type="button" onClick={() => setView('left')}>LEFT</button>
           <button type="button" onClick={() => setView('right')}>RIGHT</button>
         </div>
+        <button className="hero-model-viewer-wide" type="button" onClick={focusFace}>FACE DETAIL</button>
         <button className="hero-model-viewer-wide" type="button" onClick={resetCamera}>RESET CAMERA</button>
       </section>
 
