@@ -1270,11 +1270,13 @@ export default function App({
   const pendingStructureDamageRef = useRef<Array<{ structureId: string; amount: number; sourceUserId: string; atMs: number }>>([]);
   const runtimeAuthorityUserIdRef = useRef<string | null>(matchCreepAuthorityUserId(onlineMatch));
   const pendingAuthorityUserIdRef = useRef<string | null | undefined>(undefined);
+  const economyRevisionRef = useRef(0);
   const authorityMatchIdRef = useRef<string | null>(onlineMatch?.id ?? null);
   if (authorityMatchIdRef.current !== (onlineMatch?.id ?? null)) {
     authorityMatchIdRef.current = onlineMatch?.id ?? null;
     runtimeAuthorityUserIdRef.current = matchCreepAuthorityUserId(onlineMatch);
     pendingAuthorityUserIdRef.current = undefined;
+    economyRevisionRef.current = 0;
     pendingRemoteAbilityCastsRef.current = [];
   }
   const networkSequenceRef = useRef(0);
@@ -1442,8 +1444,26 @@ export default function App({
 
   useEffect(() => subscribeWorldHeroProgressionEvents((event) => {
     if (event.heroEntityId !== LOCAL_WORLD_HERO_ENTITY_ID) return;
-    dispatch({ type: 'world-progression', event: { ...event, atMs: toMatchGameTimeMs(event.atMs) } });
-  }), []);
+    const normalized = { ...event, atMs: toMatchGameTimeMs(event.atMs) };
+
+    if (onlineMatch && localUser && onlineMatch.status === 'in_game') {
+      // The server owns kill economy in multiplayer. The simulation worker can still
+      // discover nearby XP locally, but it must not mint gold/LH/denies for itself or
+      // the worker/host would be the only player paid for shared-world deaths.
+      dispatch({
+        type: 'world-progression',
+        event: {
+          ...normalized,
+          goldDelta: 0,
+          lastHitsDelta: 0,
+          deniesDelta: 0,
+        },
+      });
+      return;
+    }
+
+    dispatch({ type: 'world-progression', event: normalized });
+  }), [onlineMatch?.id, onlineMatch?.status, localUser?.id]);
 
   useEffect(() => {
     const onShopOpen = () => dispatch({ type: 'shop-open', nowMs: performance.now() });
@@ -1651,6 +1671,10 @@ export default function App({
         respawnRevisionRef.current = Math.max(
           0,
           Math.floor(Number(state.respawnRevision) || 0),
+        );
+        economyRevisionRef.current = Math.max(
+          0,
+          Math.floor(Number(state.economyRevision) || 0),
         );
         // The server owns the final combat/death/respawn lifecycle. Reconcile the local HUD
         // and world entity too; previously the owner ignored its own authoritative packet,
@@ -1998,6 +2022,7 @@ export default function App({
         assists: combat.assists,
         lastHits: hero.lastHits,
         denies: hero.denies,
+        economyRevision: economyRevisionRef.current,
         gold: hero.gold,
         inventory: hero.inventory.flatMap(slot => slot.item ? [{
           slot: slot.slot,

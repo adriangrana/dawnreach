@@ -366,6 +366,8 @@ export type MatchRuntimePlayerState = Readonly<{
   assists: number;
   lastHits: number;
   denies: number;
+  /** Server-owned economy generation used to reject stale gold/inventory proposals. */
+  economyRevision?: number;
   gold: number;
   damageDealt?: number;
   damageTaken?: number;
