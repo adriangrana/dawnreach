@@ -287,9 +287,10 @@ export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {
       const across = u * 2 - 1;
       const yAbs = mix(yStart, yEnd, v);
       const arc = Math.sin(v * Math.PI);
-      // Follow the working limb: it bows away from the string through the middle
-      // and only starts returning toward the string near the recurve.
-      const centreX = -.048 - .072 * arc + .018 * v - inset;
+      // Follow the deeper working-limb belly. These panels terminate before the
+      // aggressive tip recurve, so their centre stays behind the string plane while
+      // gradually returning toward it near the outer end.
+      const centreX = -.060 - .105 * arc + .030 * v - inset;
       const width = (.012 + halfWidth * Math.pow(Math.max(0, arc), .72))
         * (1 - .10 * Math.abs(across));
       return [
@@ -381,10 +382,11 @@ export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {
       bow,
       'bow-tip-filigree',
       [
-        [-.052, side * .820, .034],
-        [-.015, side * .900, .030],
-        [.082, side * .995, .022],
-        [.190, side * 1.085, .014],
+        [-.090, side * .820, .034],
+        [-.035, side * .920, .030],
+        [.090, side * 1.020, .024],
+        [.245, side * 1.105, .019],
+        [.385, side * 1.145, .014],
       ],
       .0035,
       m.gold,
