@@ -7,6 +7,9 @@ import { buildSerynAppearance, decorateSerynBow } from './appearance';
 export type SerynRig = HumanoidRig & {
   bow: THREE.Group;
   bowString: THREE.Line;
+  bowStringUpperAnchor: THREE.Vector3;
+  bowStringLowerAnchor: THREE.Vector3;
+  bowStringRestNock: THREE.Vector3;
   bowRestPosition: THREE.Vector3;
   bowRestRotation: THREE.Euler;
   arrowLaunchSocket: THREE.Group;
@@ -255,30 +258,39 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
     tipCrystal.scale.set(0.54, 1.22, 0.34);
   }
 
-  // Blue-white magical string. Its middle point is behind the grip in Z, which gives
-  // the bow real brace depth while preserving the flat front-view silhouette.
+  // The string is physically anchored to the two blue tip crystals. At rest the
+  // middle vertex is exactly collinear with those anchors, so there is no artificial
+  // kink: visually it is one taut segment from blue point to blue point. During draw,
+  // animateSeryn moves only the middle nocking point toward the archer.
+  const bowStringUpperAnchor = new THREE.Vector3(tipX, 1.142, 0.018);
+  const bowStringLowerAnchor = new THREE.Vector3(tipX, -1.142, 0.018);
+  const bowStringRestNock = new THREE.Vector3(tipX, 0, 0.018);
   const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(tipX, tipY, 0),
-    new THREE.Vector3(tipX, 0, -0.120),
-    new THREE.Vector3(tipX, -tipY, 0),
+    bowStringUpperAnchor.clone(),
+    bowStringRestNock.clone(),
+    bowStringLowerAnchor.clone(),
   ]);
   const bowString = new THREE.Line(
     stringGeometry,
-    new THREE.LineBasicMaterial({ color: 0xc7f6ff, transparent: true, opacity: 0.94 }),
+    new THREE.LineBasicMaterial({ color: 0xc7f6ff, transparent: true, opacity: 0.96 }),
   );
   bowString.name = 'seryn-bow-energy-string';
   bow.add(bowString);
 
   decorateSerynBow(bow, m);
 
+  // The projectile detaches just in front of the nocking line. The gameplay runtime
+  // then aims the world projectile at its actual target.
   const arrowLaunchSocket = new THREE.Group();
   arrowLaunchSocket.name = 'seryn-arrow-launch-socket';
-  arrowLaunchSocket.position.set(tipX, 0, 0.045);
+  arrowLaunchSocket.position.copy(bowStringRestNock).add(new THREE.Vector3(0, 0, 0.085));
   bow.add(arrowLaunchSocket);
 
   const nockedArrow = createSerynArrow(m, 'seryn-nocked-arrow');
+  // Arrow geometry is authored along +Y; rotate it so it points through bow-local +Z,
+  // which is the target direction in the attack pose.
   nockedArrow.rotation.x = Math.PI / 2;
-  nockedArrow.position.set(tipX, 0, -0.120);
+  nockedArrow.position.copy(bowStringRestNock);
   nockedArrow.visible = false;
   bow.add(nockedArrow);
 
@@ -295,6 +307,9 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   return {
     bow,
     bowString,
+    bowStringUpperAnchor,
+    bowStringLowerAnchor,
+    bowStringRestNock,
     bowRestPosition: bow.position.clone(),
     bowRestRotation: bow.rotation.clone(),
     arrowLaunchSocket,
@@ -347,6 +362,9 @@ export function buildSeryn(): SerynRig {
   const {
     bow,
     bowString,
+    bowStringUpperAnchor,
+    bowStringLowerAnchor,
+    bowStringRestNock,
     bowRestPosition,
     bowRestRotation,
     arrowLaunchSocket,
@@ -369,11 +387,14 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v29-deep-brace-recurve';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v30-anchored-string-archery';
 
   return Object.assign(rig, {
     bow,
     bowString,
+    bowStringUpperAnchor,
+    bowStringLowerAnchor,
+    bowStringRestNock,
     bowRestPosition,
     bowRestRotation,
     arrowLaunchSocket,

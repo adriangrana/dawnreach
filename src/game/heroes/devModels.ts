@@ -78,12 +78,15 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
           rig.root.worldToLocal(launchLocal);
           const flight = THREE.MathUtils.smoothstep(progress, SERYN_ATTACK_RELEASE_PROGRESS, 1);
           previewArrow.visible = true;
-          previewArrow.position.set(
-            launchLocal.x,
-            launchLocal.y,
-            launchLocal.z + flight * 4.2,
-          );
-          previewArrow.quaternion.setFromUnitVectors(arrowAxis, forward);
+          // Fly from the release socket along the hero's actual facing rather than
+          // assuming root-local +Z after every possible model rotation.
+          rig.model.getWorldQuaternion(previewArrow.quaternion);
+          const localForward = forward.clone().applyQuaternion(previewArrow.quaternion);
+          rig.root.worldToLocal(localForward.add(rig.root.getWorldPosition(new THREE.Vector3())));
+          const localOrigin = rig.root.worldToLocal(rig.root.getWorldPosition(new THREE.Vector3()));
+          localForward.sub(localOrigin).normalize();
+          previewArrow.position.copy(launchLocal).addScaledVector(localForward, flight * 4.2);
+          previewArrow.quaternion.setFromUnitVectors(arrowAxis, localForward);
         } else {
           previewArrow.visible = false;
         }
