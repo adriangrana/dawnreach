@@ -126,7 +126,8 @@ function setBowStringDraw(rig: SerynRig, draw: number) {
   const position = rig.bowString.geometry.getAttribute('position') as THREE.BufferAttribute;
   if (!position || position.count < 3) return;
   const centerZ = THREE.MathUtils.lerp(-0.105, -0.305, draw);
-  position.setXYZ(1, 0.046, 0, centerZ);
+  // The nocking point remains on the chord between the recurved tips.
+  position.setXYZ(1, 0.220, 0, centerZ);
   position.needsUpdate = true;
 }
 
@@ -279,7 +280,7 @@ function updateArcheryAttackPose(rig: SerynRig, progress: number) {
   const stringDraw = draw * (1 - release);
   setBowStringDraw(rig, stringDraw);
   rig.nockedArrow.position.set(
-    0.046,
+    0.220,
     0,
     THREE.MathUtils.lerp(-0.105, -0.305, stringDraw),
   );

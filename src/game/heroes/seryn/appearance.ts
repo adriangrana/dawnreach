@@ -287,7 +287,9 @@ export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {
       const across = u * 2 - 1;
       const yAbs = mix(yStart, yEnd, v);
       const arc = Math.sin(v * Math.PI);
-      const centreX = .080 + .102 * arc + .020 * v - inset;
+      // Follow the working limb: it bows away from the string through the middle
+      // and only starts returning toward the string near the recurve.
+      const centreX = -.048 - .072 * arc + .018 * v - inset;
       const width = (.012 + halfWidth * Math.pow(Math.max(0, arc), .72))
         * (1 - .10 * Math.abs(across));
       return [
@@ -371,18 +373,18 @@ export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {
 
     // Large sapphire power focus where the limb is widest, plus a smaller upper/lower
     // node closer to the recurve. These mirror the reference weapon's blue focal gems.
-    gem(bow, m, [.178, side * .535, .050], .048);
-    gem(bow, m, [.126, side * .825, .038], .027);
+    gem(bow, m, [-.106, side * .535, .050], .048);
+    gem(bow, m, [-.055, side * .825, .038], .027);
 
     // Slim filigree bridge from the decorated plate into the pointed tip housing.
     tube(
       bow,
       'bow-tip-filigree',
       [
-        [.116, side * .820, .034],
-        [.146, side * .900, .030],
-        [.108, side * .995, .022],
-        [.055, side * 1.075, .014],
+        [-.052, side * .820, .034],
+        [-.015, side * .900, .030],
+        [.082, side * .995, .022],
+        [.190, side * 1.085, .014],
       ],
       .0035,
       m.gold,

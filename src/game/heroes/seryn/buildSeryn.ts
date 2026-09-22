@@ -134,15 +134,19 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   // A single coherent recurve silhouette: rigid sculpted riser in the middle, limbs
   // swelling away from the grip, then curling back toward the string at the tips.
   // Everything remains in one XY plane so it reads as an actual bow from every angle.
-  const tipX = 0.055;
-  const tipY = 1.105;
+  // The tips must sit clearly on the string side of the grip. The previous profile
+  // returned the tips almost to the grip axis, which made the weapon read as a flat
+  // decorative moustache when carried horizontally. This profile first bows away from
+  // the string through the working limb, then performs a true recurve into the tips.
+  const tipX = 0.220;
+  const tipY = 1.120;
   const upper = [
-    new THREE.Vector3(-0.010, 0.245, 0),
-    new THREE.Vector3(0.075, 0.355, 0),
-    new THREE.Vector3(0.165, 0.545, 0),
-    new THREE.Vector3(0.205, 0.720, 0),
-    new THREE.Vector3(0.160, 0.885, 0),
-    new THREE.Vector3(0.082, 1.030, 0),
+    new THREE.Vector3(-0.025, 0.245, 0),
+    new THREE.Vector3(-0.082, 0.365, 0),
+    new THREE.Vector3(-0.125, 0.545, 0),
+    new THREE.Vector3(-0.108, 0.720, 0),
+    new THREE.Vector3(-0.038, 0.875, 0),
+    new THREE.Vector3(0.095, 1.015, 0),
     new THREE.Vector3(tipX, tipY, 0),
   ];
   const lower = upper.map(point => new THREE.Vector3(point.x, -point.y, point.z));
@@ -171,8 +175,8 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   const upperRiser = [
     new THREE.Vector3(-0.044, 0.035, 0),
     new THREE.Vector3(-0.058, 0.105, 0),
-    new THREE.Vector3(-0.040, 0.180, 0),
-    new THREE.Vector3(-0.010, 0.245, 0),
+    new THREE.Vector3(-0.052, 0.180, 0),
+    new THREE.Vector3(-0.025, 0.245, 0),
   ];
   const lowerRiser = upperRiser.map(point => new THREE.Vector3(point.x, -point.y, point.z));
   curve(bow, 'seryn-bow-upper-riser-gold', upperRiser, 0.031, m.gold, 0.020, 28);
@@ -233,7 +237,7 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
       'seryn-bow-tip-housing',
       new THREE.ConeGeometry(0.052, 0.155, 5),
       m.gold,
-      [tipX, side * 1.075, 0],
+      [tipX, side * 1.090, 0],
     );
     cap.rotation.z = side > 0 ? 0 : Math.PI;
     cap.scale.z = 0.72;
@@ -243,7 +247,7 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
       'seryn-bow-tip-crystal',
       new THREE.OctahedronGeometry(0.038, 0),
       m.crystal,
-      [tipX, side * 1.078, 0.018],
+      [tipX, side * 1.092, 0.018],
     );
     tipCrystal.scale.set(0.54, 1.22, 0.34);
   }
@@ -362,7 +366,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v27-celestial-recurve-bow';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v28-true-recurve-profile';
 
   return Object.assign(rig, {
     bow,
