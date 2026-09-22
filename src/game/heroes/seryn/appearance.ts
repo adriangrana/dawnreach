@@ -266,10 +266,10 @@ function buildOutfit(rig: HumanoidRig, m: SerynMaterials) {
 
 export function buildSerynAppearance(rig: HumanoidRig, materials: SerynMaterials) {
   rig.head.scale.set(1, .92, 1);
-  const { eyelids } = buildSerynPortrait(rig, materials);
+  buildSerynPortrait(rig, materials);
   const hair = buildSerynHair(rig, materials);
   const clothMeshes = buildOutfit(rig, materials);
-  return { hair, eyelids, clothMeshes };
+  return { hair, clothMeshes };
 }
 
 export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {

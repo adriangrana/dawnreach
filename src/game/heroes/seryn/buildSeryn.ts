@@ -16,7 +16,6 @@ export type SerynRig = HumanoidRig & {
   quiver: THREE.Group;
   quiverArrows: THREE.Group[];
   hair: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-  eyelids: THREE.Group[];
   clothMeshes: THREE.Mesh[];
 };
 
@@ -262,7 +261,7 @@ export function buildSeryn(): SerynRig {
   configureSkeleton(rig);
   const materials = createSerynMaterials();
 
-  const { hair, eyelids, clothMeshes } = buildSerynAppearance(rig, materials);
+  const { hair, clothMeshes } = buildSerynAppearance(rig, materials);
   const {
     bow,
     bowString,
@@ -288,7 +287,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v20-idle-face-life';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v21-idle-head-glances';
 
   return Object.assign(rig, {
     bow,
@@ -302,7 +301,6 @@ export function buildSeryn(): SerynRig {
     quiver,
     quiverArrows,
     hair,
-    eyelids,
     clothMeshes,
   });
 }
