@@ -273,11 +273,125 @@ export function buildSerynAppearance(rig: HumanoidRig, materials: SerynMaterials
 }
 
 export function decorateSerynBow(bow: THREE.Group, m: SerynMaterials) {
-  for (const side of [-1, 1]) {
-    for (const [x, y] of [[.10, .34], [.15, .56], [.13, .78]]) {
-      armorLeaf(bow, m, [x, side * y, .006], .034, .18, .018, [0, 0, side > 0 ? Math.PI : 0]);
+  const createLimbPanel = (
+    side: number,
+    name: string,
+    yStart: number,
+    yEnd: number,
+    halfWidth: number,
+    z: number,
+    material: THREE.Material,
+    inset = 0,
+  ) => {
+    const sample = (u: number, v: number): Point => {
+      const across = u * 2 - 1;
+      const yAbs = mix(yStart, yEnd, v);
+      const arc = Math.sin(v * Math.PI);
+      const centreX = .080 + .102 * arc + .020 * v - inset;
+      const width = (.012 + halfWidth * Math.pow(Math.max(0, arc), .72))
+        * (1 - .10 * Math.abs(across));
+      return [
+        centreX + across * width,
+        side * yAbs,
+        z + .010 * (1 - across * across) * arc,
+      ];
+    };
+
+    const mat = material.clone();
+    mat.side = THREE.DoubleSide;
+    mesh(bow, name, surface(sample, 22, 34), mat);
+
+    // Continuous gold rolled edges make the white/blue inserts read as forged pieces,
+    // not separate floating leaves.
+    for (const edge of [0, 1]) {
+      tube(
+        bow,
+        `${name}-gold-edge`,
+        Array.from({ length: 30 }, (_, index) => sample(edge, index / 29)),
+        .0032,
+        m.gold,
+        .0017,
+      );
     }
-    gem(bow, m, [.142, side * .54, .034], .035);
-    tube(bow, 'bow-filigree', [[.046, side * .98, .008], [.099, side * .88, .027], [.080, side * .79, .034], [.138, side * .70, .028], [.19, side * .60, .020], [.102, side * .46, .029], [.06, side * .25, .019]], .004, m.gold, .002);
+    return sample;
+  };
+
+  for (const side of [-1, 1]) {
+    const ivoryPanel = createLimbPanel(
+      side,
+      'bow-ivory-limb-inlay',
+      .305,
+      .865,
+      .052,
+      .014,
+      m.bowIvory,
+    );
+    const bluePanel = createLimbPanel(
+      side,
+      'bow-blue-limb-inlay',
+      .360,
+      .775,
+      .031,
+      .028,
+      m.bowBlue,
+      .010,
+    );
+
+    // Gold celestial veins sit on the surface and follow the same recurve instead of
+    // being generic leaf meshes pasted over it.
+    tube(
+      bow,
+      'bow-celestial-spine',
+      Array.from({ length: 24 }, (_, index) => {
+        const v = index / 23;
+        const p = ivoryPanel(.5, v);
+        p[2] += .012;
+        return p;
+      }),
+      .0030,
+      m.gold,
+      .0014,
+    );
+    for (const branch of [-1, 1]) {
+      tube(
+        bow,
+        'bow-celestial-branch',
+        Array.from({ length: 11 }, (_, index) => {
+          const v = .20 + index / 10 * .58;
+          const u = .5 + branch * (.08 + .12 * Math.sin(v * Math.PI));
+          const p = bluePanel(u, v);
+          p[2] += .010;
+          return p;
+        }),
+        .0021,
+        m.gold,
+        .0010,
+      );
+    }
+
+    // Large sapphire power focus where the limb is widest, plus a smaller upper/lower
+    // node closer to the recurve. These mirror the reference weapon's blue focal gems.
+    gem(bow, m, [.178, side * .535, .050], .048);
+    gem(bow, m, [.126, side * .825, .038], .027);
+
+    // Slim filigree bridge from the decorated plate into the pointed tip housing.
+    tube(
+      bow,
+      'bow-tip-filigree',
+      [
+        [.116, side * .820, .034],
+        [.146, side * .900, .030],
+        [.108, side * .995, .022],
+        [.055, side * 1.075, .014],
+      ],
+      .0035,
+      m.gold,
+      .0013,
+    );
   }
+
+  // A small central sapphire is embedded in the riser above the grip. Unlike the old
+  // capsule-like centre this sits inside the structural bridge and reads as one weapon.
+  gem(bow, m, [-.018, .205, .046], .030);
 }
+

@@ -129,86 +129,154 @@ function createSerynArrow(m: SerynMaterials, name = 'seryn-arrow') {
 
 function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   const bow = new THREE.Group();
-  bow.name = 'seryn-prism-longbow';
+  bow.name = 'seryn-celestial-recurve-longbow';
 
-  // Keep the entire recurved frame in one geometric plane. The previous lower limb
-  // mirrored X as well as Y and the Z offsets changed along the limb, producing an
-  // unintended S/twist when viewed from the front.
+  // A single coherent recurve silhouette: rigid sculpted riser in the middle, limbs
+  // swelling away from the grip, then curling back toward the string at the tips.
+  // Everything remains in one XY plane so it reads as an actual bow from every angle.
+  const tipX = 0.055;
+  const tipY = 1.105;
   const upper = [
-    new THREE.Vector3(0.000, 0.020, 0),
-    new THREE.Vector3(0.088, 0.255, 0),
-    new THREE.Vector3(0.154, 0.525, 0),
-    new THREE.Vector3(0.128, 0.790, 0),
-    new THREE.Vector3(0.046, 1.020, 0),
+    new THREE.Vector3(-0.010, 0.245, 0),
+    new THREE.Vector3(0.075, 0.355, 0),
+    new THREE.Vector3(0.165, 0.545, 0),
+    new THREE.Vector3(0.205, 0.720, 0),
+    new THREE.Vector3(0.160, 0.885, 0),
+    new THREE.Vector3(0.082, 1.030, 0),
+    new THREE.Vector3(tipX, tipY, 0),
   ];
-  const lower = upper.map(point => new THREE.Vector3(point.x, -point.y, 0));
+  const lower = upper.map(point => new THREE.Vector3(point.x, -point.y, point.z));
 
-  curve(bow, 'seryn-bow-upper-gold', upper, 0.024, m.gold, 0.015, 32);
-  curve(bow, 'seryn-bow-lower-gold', lower, 0.024, m.gold, 0.015, 32);
+  // Gold outer rails carry the main silhouette. Silver and blue inner rails give the
+  // layered forged/enamel construction seen in Seryn's concept bow.
+  curve(bow, 'seryn-bow-upper-outer-rail', upper, 0.027, m.gold, 0.011, 42);
+  curve(bow, 'seryn-bow-lower-outer-rail', lower, 0.027, m.gold, 0.011, 42);
 
-  // Parallel inner spine adds depth without torsion: it stays in a plane parallel to
-  // the main frame instead of wandering through Z.
-  const upperSpine = upper.map(p => new THREE.Vector3(p.x * 0.84 - 0.004, p.y * 0.985, -0.014));
-  const lowerSpine = lower.map(p => new THREE.Vector3(p.x * 0.84 - 0.004, p.y * 0.985, -0.014));
-  curve(bow, 'seryn-bow-upper-spine', upperSpine, 0.013, m.silverDark, 0.008, 32);
-  curve(bow, 'seryn-bow-lower-spine', lowerSpine, 0.013, m.silverDark, 0.008, 32);
+  const upperSilver = upper.map((p, index) =>
+    new THREE.Vector3(p.x * 0.86 - 0.014 + index * 0.0015, p.y * 0.992, -0.017));
+  const lowerSilver = lower.map((p, index) =>
+    new THREE.Vector3(p.x * 0.86 - 0.014 + index * 0.0015, p.y * 0.992, -0.017));
+  curve(bow, 'seryn-bow-upper-silver-spine', upperSilver, 0.015, m.silver, 0.0065, 42);
+  curve(bow, 'seryn-bow-lower-silver-spine', lowerSilver, 0.015, m.silver, 0.0065, 42);
 
-  rounded(bow, 'seryn-bow-grip', [0.042, 0.145, 0.043], [0, 0, 0], m.leather, 20);
+  const upperBlue = upper.slice(0, -1).map((p, index) =>
+    new THREE.Vector3(p.x * 0.70 - 0.022, p.y * 0.985, 0.012 + index * 0.001));
+  const lowerBlue = lower.slice(0, -1).map((p, index) =>
+    new THREE.Vector3(p.x * 0.70 - 0.022, p.y * 0.985, 0.012 + index * 0.001));
+  curve(bow, 'seryn-bow-upper-blue-core', upperBlue, 0.0115, m.bowBlue, 0.004, 34);
+  curve(bow, 'seryn-bow-lower-blue-core', lowerBlue, 0.0115, m.bowBlue, 0.004, 34);
 
-  for (const side of [-1, 1]) {
-    const gem = part(
+  // Sculpted riser. The limbs no longer converge into a floating capsule: these four
+  // rails make a rigid bridge from the lower limb through the grip to the upper limb.
+  const upperRiser = [
+    new THREE.Vector3(-0.044, 0.035, 0),
+    new THREE.Vector3(-0.058, 0.105, 0),
+    new THREE.Vector3(-0.040, 0.180, 0),
+    new THREE.Vector3(-0.010, 0.245, 0),
+  ];
+  const lowerRiser = upperRiser.map(point => new THREE.Vector3(point.x, -point.y, point.z));
+  curve(bow, 'seryn-bow-upper-riser-gold', upperRiser, 0.031, m.gold, 0.020, 28);
+  curve(bow, 'seryn-bow-lower-riser-gold', lowerRiser, 0.031, m.gold, 0.020, 28);
+  curve(
+    bow,
+    'seryn-bow-upper-riser-silver',
+    upperRiser.map(p => new THREE.Vector3(p.x - 0.004, p.y, 0.018)),
+    0.017,
+    m.silverDark,
+    0.010,
+    28,
+  );
+  curve(
+    bow,
+    'seryn-bow-lower-riser-silver',
+    lowerRiser.map(p => new THREE.Vector3(p.x - 0.004, p.y, 0.018)),
+    0.017,
+    m.silverDark,
+    0.010,
+    28,
+  );
+
+  // Deep-blue wrapped grip with gold collars/lacing, integrated into the riser.
+  rounded(bow, 'seryn-bow-grip', [0.056, 0.158, 0.050], [-0.052, 0, 0], m.bowBlue, 30);
+  for (const y of [-0.126, -0.063, 0, 0.063, 0.126]) {
+    const ring = part(
       bow,
-      'seryn-bow-tip-prism',
-      new THREE.OctahedronGeometry(0.056, 0),
-      m.crystal,
-      [0.046, side * 1.020, 0],
+      'seryn-bow-grip-band',
+      new THREE.TorusGeometry(0.056, 0.0045, 6, 24),
+      m.gold,
+      [-0.052, y, 0],
     );
-    gem.scale.set(0.54, 1.40, 0.44);
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.z = 0.88;
+  }
+  for (const side of [-1, 1]) {
+    curve(
+      bow,
+      'seryn-bow-grip-lacing',
+      [
+        new THREE.Vector3(-0.088, side * 0.118, 0.047),
+        new THREE.Vector3(-0.020, side * 0.055, 0.052),
+        new THREE.Vector3(-0.086, side * 0.006, 0.047),
+      ],
+      0.0035,
+      m.gold,
+      0.0022,
+      18,
+    );
   }
 
-  const centerGem = part(
-    bow,
-    'seryn-bow-center-prism',
-    new THREE.OctahedronGeometry(0.065, 0),
-    m.crystal,
-    [0.025, 0.010, 0.032],
-  );
-  centerGem.scale.set(0.58, 1.16, 0.42);
+  // Forged tip housings make the limbs terminate as designed points instead of ending
+  // in a bare tube. The crystal sits inside the gold spear cap.
+  for (const side of [-1, 1]) {
+    const cap = part(
+      bow,
+      'seryn-bow-tip-housing',
+      new THREE.ConeGeometry(0.052, 0.155, 5),
+      m.gold,
+      [tipX, side * 1.075, 0],
+    );
+    cap.rotation.z = side > 0 ? 0 : Math.PI;
+    cap.scale.z = 0.72;
 
-  // The bow limbs run on local Y. During the attack pose the bow is counter-rotated
-  // against the raised arm so local Y stays world-up, while local +Z becomes the firing
-  // direction. The string therefore draws backward on local -Z, not sideways on X.
+    const tipCrystal = part(
+      bow,
+      'seryn-bow-tip-crystal',
+      new THREE.OctahedronGeometry(0.038, 0),
+      m.crystal,
+      [tipX, side * 1.078, 0.018],
+    );
+    tipCrystal.scale.set(0.54, 1.22, 0.34);
+  }
+
+  // Blue-white magical string. Its middle point is behind the grip in Z, which gives
+  // the bow real brace depth while preserving the flat front-view silhouette.
   const stringGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0.046, 1.020, 0),
-    new THREE.Vector3(0.046, 0, -0.105),
-    new THREE.Vector3(0.046, -1.020, 0),
+    new THREE.Vector3(tipX, tipY, 0),
+    new THREE.Vector3(tipX, 0, -0.120),
+    new THREE.Vector3(tipX, -tipY, 0),
   ]);
   const bowString = new THREE.Line(
     stringGeometry,
-    new THREE.LineBasicMaterial({ color: 0xbaf4ff, transparent: true, opacity: 0.90 }),
+    new THREE.LineBasicMaterial({ color: 0xc7f6ff, transparent: true, opacity: 0.94 }),
   );
   bowString.name = 'seryn-bow-energy-string';
   bow.add(bowString);
+
   decorateSerynBow(bow, m);
 
   const arrowLaunchSocket = new THREE.Group();
   arrowLaunchSocket.name = 'seryn-arrow-launch-socket';
-  arrowLaunchSocket.position.set(0.046, 0, 0.045);
+  arrowLaunchSocket.position.set(tipX, 0, 0.045);
   bow.add(arrowLaunchSocket);
 
   const nockedArrow = createSerynArrow(m, 'seryn-nocked-arrow');
-  // Arrow geometry points along local +Y. Rotate it onto bow-local +Z, which is the
-  // character's forward firing axis once the attack pose is applied.
   nockedArrow.rotation.x = Math.PI / 2;
-  nockedArrow.position.set(0.046, 0, -0.105);
+  nockedArrow.position.set(tipX, 0, -0.120);
   nockedArrow.visible = false;
   bow.add(nockedArrow);
 
-  // Idle carry pose: Seryn holds the grip naturally at hip height while the longbow
-  // rests across the front of her body. Rotating around the grip keeps the hand contact
-  // intact: the former upper limb moves down/right and the lower limb rises left, giving
-  // the relaxed horizontal carry shown in the model reference. Attack animation still
-  // takes full control of the bow and raises it into the firing orientation.
+  // Existing authored carry orientation is preserved; the weapon was redesigned in
+  // local bow space so idle/walk/attack animation code does not need to be retuned.
   bow.position.set(0.012, -0.075, 0.040);
   bow.rotation.set(
     THREE.MathUtils.degToRad(8.5),
@@ -294,7 +362,7 @@ export function buildSeryn(): SerynRig {
 
   rig.root.userData.heroDefinitionId = 'H002';
   rig.root.userData.heroAttackStyle = 'ranged';
-  rig.root.userData.serynModelRevision = 'horizon-scout-v26-stable-horizontal-walk-bow';
+  rig.root.userData.serynModelRevision = 'horizon-scout-v27-celestial-recurve-bow';
 
   return Object.assign(rig, {
     bow,

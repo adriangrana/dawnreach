@@ -484,6 +484,26 @@ export function createSerynMaterials() {
     clearcoat: 0.75,
     clearcoatRoughness: 0.12,
   });
+  const bowIvory = new THREE.MeshPhysicalMaterial({
+    color: 0xf4efe4,
+    metalness: 0.22,
+    roughness: 0.27,
+    clearcoat: 0.62,
+    clearcoatRoughness: 0.18,
+    sheen: 0.14,
+    sheenColor: new THREE.Color(0xfff3d1),
+    side: THREE.DoubleSide,
+  });
+  const bowBlue = new THREE.MeshPhysicalMaterial({
+    color: 0x123f82,
+    emissive: 0x031c47,
+    emissiveIntensity: 0.10,
+    metalness: 0.24,
+    roughness: 0.30,
+    clearcoat: 0.58,
+    clearcoatRoughness: 0.16,
+    side: THREE.DoubleSide,
+  });
 
   const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xe9e5df, roughness: 0.62 });
   const eyeSurface = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: .26, clearcoat: .8, clearcoatRoughness: .18 });
@@ -496,7 +516,7 @@ export function createSerynMaterials() {
   return {
     skin, skinShadow, face, hair, hairShadow,
     navy, navyDark, teal, ivory, cloakBlue, cloakBlueDark, blackLeather,
-    silver, silverDark, gold, leather, crystal,
+    silver, silverDark, gold, leather, crystal, bowIvory, bowBlue,
     eyeWhite, eyeSurface, iris, eyeDark, lips, brow, nostril,
   };
 }
