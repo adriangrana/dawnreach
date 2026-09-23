@@ -58,13 +58,20 @@ export function buildSerynHair(rig: HumanoidRig, m: SerynMaterials) {
     g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(index);g.computeVertexNormals();pieces.push(g);
   }
 
-  for(let i=0;i<64;i++) {
-    const angle=i/64*Math.PI*2, phase=Math.sin(i*2.37);
+  for(let i=0;i<54;i++) {
+    const angle=i/54*Math.PI*2, phase=Math.sin(i*2.37);
     const points=Array.from({length:20},(_,j)=>{
       const t=j/19, sweep=.30*Math.sin(t*Math.PI)+.045*Math.sin(t*9+i);
       return scalp(angle+sweep,.035+.965*t,.005+.008*Math.sin(t*Math.PI)**2);
     });
     lock(points,.013+.003*(phase+1),.0032,i*.13);
+  }
+  // A lifted, off-centre front sweep breaks the uniform cap silhouette.
+  for(let i=0;i<10;i++) {
+    const t=i/9;
+    lock([scalp(-.48,.08+t*.30,.018),scalp(-.30,.25+t*.28,.026),
+      scalp(.22,.46+t*.25,.024),scalp(.65,.64+t*.22,.020),
+      scalp(1.18,.80+t*.17,.012),scalp(1.70,1,.006)],.012+.003*Math.sin(t*Math.PI),.0035,i*.19);
   }
   // Waves continue along the back of the skull before leaving it at the nape.
   for(let i=0;i<34;i++) {

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from '../../characters/animateHumanoid';
 import type { SerynRig } from './buildSeryn';
 
-export const SERYN_ATTACK_RELEASE_PROGRESS = 0.64;
-export const SERYN_ATTACK_SWING_RATE = 2.2;
+import { updateArcheryAttackPose } from './archeryPose';
+export { SERYN_ATTACK_RELEASE_PROGRESS, SERYN_ATTACK_SWING_RATE } from './archeryPose';
 
 function updateIdleHead(rig: SerynRig, elapsed: number, idle: boolean) {
   // Reset first because the humanoid locomotion animation intentionally leaves the
@@ -122,65 +122,6 @@ function updateCloth(rig: SerynRig, elapsed: number, moving: boolean, attackActi
 
 function smoothCloth(v: number) { return v * v * (3 - 2 * v); }
 
-const bowStringFingerWorld = new THREE.Vector3();
-const bowStringFingerLocal = new THREE.Vector3();
-
-function setBowStringState(rig: SerynRig, draw: number, releaseVibration = 0) {
-  const position = rig.bowString.geometry.getAttribute('position') as THREE.BufferAttribute;
-  if (!position || position.count < 3) return;
-
-  // Endpoints are rewritten every frame from the authored blue-crystal anchors. This
-  // guarantees that the string can never drift away from either tip as the weapon moves.
-  position.setXYZ(
-    0,
-    rig.bowStringUpperAnchor.x,
-    rig.bowStringUpperAnchor.y,
-    rig.bowStringUpperAnchor.z,
-  );
-  position.setXYZ(
-    2,
-    rig.bowStringLowerAnchor.x,
-    rig.bowStringLowerAnchor.y,
-    rig.bowStringLowerAnchor.z,
-  );
-
-  const amount = THREE.MathUtils.clamp(draw, 0, 1);
-  if (amount <= 0.0001) {
-    position.setXYZ(
-      1,
-      rig.bowStringRestNock.x,
-      rig.bowStringRestNock.y,
-      rig.bowStringRestNock.z + releaseVibration,
-    );
-    position.needsUpdate = true;
-    return;
-  }
-
-  // At full draw the centre of the string follows the string-hand socket itself. The
-  // x/y components are deliberately bounded so the nock stays on a believable central
-  // line, while Z is allowed to travel back toward Seryn's face/neck.
-  rig.root.updateMatrixWorld(true);
-  rig.sockets.rightHand.getWorldPosition(bowStringFingerWorld);
-  bowStringFingerLocal.copy(bowStringFingerWorld);
-  rig.bow.worldToLocal(bowStringFingerLocal);
-
-  const targetX = THREE.MathUtils.clamp(
-    bowStringFingerLocal.x,
-    rig.bowStringRestNock.x - 0.08,
-    rig.bowStringRestNock.x + 0.08,
-  );
-  const targetY = THREE.MathUtils.clamp(bowStringFingerLocal.y, -0.11, 0.11);
-  const targetZ = Math.min(rig.bowStringRestNock.z - 0.02, bowStringFingerLocal.z - 0.015);
-
-  position.setXYZ(
-    1,
-    THREE.MathUtils.lerp(rig.bowStringRestNock.x, targetX, amount),
-    THREE.MathUtils.lerp(rig.bowStringRestNock.y, targetY, amount),
-    THREE.MathUtils.lerp(rig.bowStringRestNock.z, targetZ, amount) + releaseVibration,
-  );
-  position.needsUpdate = true;
-}
-
 const walkBowTorsoWorldQ = new THREE.Quaternion();
 const walkBowParentWorldQ = new THREE.Quaternion();
 const walkBowTargetWorldQ = new THREE.Quaternion();
@@ -237,176 +178,6 @@ function stabilizeWalkBowOrientation(rig: SerynRig) {
   rig.bow.quaternion.slerp(walkBowTargetLocalQ, walk);
 }
 
-const attackBowModelWorldQ = new THREE.Quaternion();
-const attackBowParentWorldQ = new THREE.Quaternion();
-const attackBowTargetLocalQ = new THREE.Quaternion();
-const attackBowRestLocalQ = new THREE.Quaternion();
-const attackBowFollowQ = new THREE.Quaternion();
-
-function orientAttackBow(rig: SerynRig, weight: number, followThroughTilt: number) {
-  const w = THREE.MathUtils.clamp(weight, 0, 1);
-  if (w <= 0.0001) {
-    rig.bow.rotation.copy(rig.bowRestRotation);
-    return;
-  }
-
-  // Hero/model forward (+Z) is the target direction. Giving the bow that world
-  // orientation means: local +Y is vertical, local +Z faces the target, and the string
-  // is on the -Z side facing Seryn. Convert that world pose into the moving left-hand
-  // socket so the grip remains physically attached to the hand.
-  rig.root.updateMatrixWorld(true);
-  rig.model.getWorldQuaternion(attackBowModelWorldQ);
-  if (followThroughTilt !== 0) {
-    attackBowFollowQ.setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
-      THREE.MathUtils.degToRad(9) * followThroughTilt,
-    );
-    attackBowModelWorldQ.multiply(attackBowFollowQ);
-  }
-
-  rig.sockets.leftHand.getWorldQuaternion(attackBowParentWorldQ);
-  attackBowTargetLocalQ
-    .copy(attackBowParentWorldQ)
-    .invert()
-    .multiply(attackBowModelWorldQ);
-
-  attackBowRestLocalQ.setFromEuler(rig.bowRestRotation);
-  rig.bow.quaternion.copy(attackBowRestLocalQ).slerp(attackBowTargetLocalQ, w);
-}
-
-function updateArcheryAttackPose(rig: SerynRig, progress: number) {
-  const active = progress > 0 && progress < 1;
-
-  if (!active) {
-    rig.bow.position.copy(rig.bowRestPosition);
-    rig.bow.rotation.copy(rig.bowRestRotation);
-    rig.handArrow.visible = false;
-    rig.nockedArrow.visible = false;
-    for (const arrow of rig.quiverArrows) arrow.visible = true;
-    setBowStringState(rig, 0);
-    return;
-  }
-
-  const p = THREE.MathUtils.clamp(progress, 0, 1);
-
-  // Six readable phases compressed into the combat swing:
-  // prepare -> take/nock -> raise -> draw/anchor -> release -> follow-through/recover.
-  const quiverReach = THREE.MathUtils.smoothstep(p, 0.02, 0.16);
-  const nockTransfer = THREE.MathUtils.smoothstep(p, 0.12, 0.34);
-  const raise = THREE.MathUtils.smoothstep(p, 0.20, 0.42);
-  const draw = THREE.MathUtils.smoothstep(p, 0.36, SERYN_ATTACK_RELEASE_PROGRESS);
-  const releaseReturn = THREE.MathUtils.smoothstep(
-    p,
-    SERYN_ATTACK_RELEASE_PROGRESS,
-    SERYN_ATTACK_RELEASE_PROGRESS + 0.045,
-  );
-  const followThrough = THREE.MathUtils.smoothstep(p, 0.69, 0.78)
-    * (1 - THREE.MathUtils.smoothstep(p, 0.86, 0.97));
-  const recover = THREE.MathUtils.smoothstep(p, 0.84, 1);
-  const bowPose = Math.max(raise, draw);
-
-  // Bow arm: shoulder stays low, elbow unlocked, forearm/hand drive straight toward the
-  // target. This arm is intentionally held steady through release.
-  rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, -Math.PI * 0.49, bowPose);
-  rig.leftArm.rotation.y = THREE.MathUtils.lerp(rig.leftArm.rotation.y, 0.075, bowPose);
-  rig.leftArm.rotation.z = THREE.MathUtils.lerp(rig.leftArm.rotation.z, 0.025, bowPose);
-  rig.leftForearm.rotation.x = THREE.MathUtils.lerp(rig.leftForearm.rotation.x, -0.035, bowPose);
-  rig.leftForearm.rotation.y = THREE.MathUtils.lerp(rig.leftForearm.rotation.y, 0.035, bowPose);
-  rig.leftForearm.rotation.z = THREE.MathUtils.lerp(rig.leftForearm.rotation.z, -0.02, bowPose);
-  rig.sockets.leftHand.rotation.x = THREE.MathUtils.lerp(rig.sockets.leftHand.rotation.x, 0.025, bowPose);
-  rig.sockets.leftHand.rotation.y = THREE.MathUtils.lerp(rig.sockets.leftHand.rotation.y, -0.025, bowPose);
-
-  rig.bow.position.set(
-    THREE.MathUtils.lerp(rig.bowRestPosition.x, 0.012, bowPose),
-    THREE.MathUtils.lerp(rig.bowRestPosition.y, -0.055, bowPose),
-    THREE.MathUtils.lerp(rig.bowRestPosition.z, 0.030, bowPose),
-  );
-  orientAttackBow(rig, bowPose, followThrough);
-
-  // Subtle chest opening keeps the draw organic while preserving gameplay facing.
-  rig.torso.rotation.y += bowPose * 0.055;
-  rig.head.rotation.y -= bowPose * 0.030;
-
-  if (p < 0.18) {
-    // Reach naturally over the shoulder to the quiver.
-    rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, 1.14, quiverReach);
-    rig.rightArm.rotation.y = THREE.MathUtils.lerp(rig.rightArm.rotation.y, -0.30, quiverReach);
-    rig.rightArm.rotation.z = THREE.MathUtils.lerp(rig.rightArm.rotation.z, -0.22, quiverReach);
-    rig.rightForearm.rotation.x = THREE.MathUtils.lerp(rig.rightForearm.rotation.x, -1.20, quiverReach);
-    rig.rightForearm.rotation.z = THREE.MathUtils.lerp(rig.rightForearm.rotation.z, 0.16, quiverReach);
-  } else {
-    // Nocking: right hand comes forward to the centre of the string.
-    const nockArmX = THREE.MathUtils.lerp(1.14, -1.02, nockTransfer);
-    const nockArmY = THREE.MathUtils.lerp(-0.30, -0.22, nockTransfer);
-    const nockArmZ = THREE.MathUtils.lerp(-0.22, -0.08, nockTransfer);
-    const nockForearmX = THREE.MathUtils.lerp(-1.20, -1.36, nockTransfer);
-
-    // Draw: elbow travels BACK (+X rotation from the hanging arm) while the forearm
-    // folds back up toward the face. At full draw the hand arrives near the cheek/neck
-    // and the elbow remains high rather than collapsing beside the torso.
-    rig.rightArm.rotation.x = THREE.MathUtils.lerp(nockArmX, 1.22, draw);
-    rig.rightArm.rotation.y = THREE.MathUtils.lerp(nockArmY, -0.10, draw);
-    rig.rightArm.rotation.z = THREE.MathUtils.lerp(nockArmZ, -0.30, draw);
-    rig.rightForearm.rotation.x = THREE.MathUtils.lerp(nockForearmX, -3.05, draw);
-    rig.rightForearm.rotation.y = THREE.MathUtils.lerp(0, -0.08, draw);
-    rig.rightForearm.rotation.z = THREE.MathUtils.lerp(0.12, -0.04, draw);
-
-    // Passive release/follow-through: the drawing elbow continues backward and the hand
-    // slips a few centimetres toward the neck instead of opening/pushing the fingers.
-    rig.rightArm.rotation.x += releaseReturn * 0.11;
-    rig.rightArm.rotation.z -= releaseReturn * 0.055;
-    rig.rightForearm.rotation.x += releaseReturn * 0.12;
-  }
-
-  const quiverArrow = rig.quiverArrows[rig.quiverArrows.length - 1];
-  if (quiverArrow) quiverArrow.visible = p < 0.10 || p > 0.94;
-
-  // The arrow is visible in the right hand while moving from quiver to string.
-  rig.handArrow.visible = p >= 0.10 && p < 0.36;
-  if (rig.handArrow.visible) {
-    const carry = THREE.MathUtils.smoothstep(p, 0.10, 0.36);
-    rig.handArrow.position.set(
-      THREE.MathUtils.lerp(-0.018, 0.012, carry),
-      THREE.MathUtils.lerp(-0.020, 0.014, carry),
-      THREE.MathUtils.lerp(0.004, 0.026, carry),
-    );
-    rig.handArrow.rotation.set(
-      THREE.MathUtils.lerp(0.18, -0.05, carry),
-      THREE.MathUtils.lerp(0.16, -0.20, carry),
-      THREE.MathUtils.lerp(-0.42, -Math.PI / 2, carry),
-    );
-  }
-
-  // Once nocked, the arrow and the middle of the string share the same local point.
-  const arrowOnString = p >= 0.33 && p < SERYN_ATTACK_RELEASE_PROGRESS;
-  rig.nockedArrow.visible = arrowOnString;
-
-  const stringDraw = draw * (1 - releaseReturn);
-  const releaseTime = Math.max(0, p - SERYN_ATTACK_RELEASE_PROGRESS);
-  const stringVibration = releaseReturn > 0 && recover < 1
-    ? Math.sin(releaseTime * 150) * Math.exp(-releaseTime * 15) * 0.022
-    : 0;
-  setBowStringState(rig, stringDraw, stringVibration);
-
-  const stringPosition = rig.bowString.geometry.getAttribute('position') as THREE.BufferAttribute;
-  if (stringPosition?.count >= 3) {
-    rig.nockedArrow.position.set(
-      stringPosition.getX(1),
-      stringPosition.getY(1),
-      stringPosition.getZ(1),
-    );
-  }
-
-  // During the actual loose, keep the bow arm locked. The only immediate motion is the
-  // string snapping forward and the drawing arm continuing backward. Afterwards the bow
-  // gets a small forward fall, like a finger-sling follow-through.
-  if (recover > 0) {
-    rig.bow.position.lerp(rig.bowRestPosition, recover);
-    attackBowRestLocalQ.setFromEuler(rig.bowRestRotation);
-    rig.bow.quaternion.slerp(attackBowRestLocalQ, recover);
-  }
-}
-
 export function animateSeryn(
   rig: SerynRig,
   elapsed: number,
@@ -429,8 +200,9 @@ export function animateSeryn(
   const attackActive = attackProgress > 0 && attackProgress < 1;
   const resting = 1 - THREE.MathUtils.smoothstep(rig.gait.weight, 0, 1);
   updateIdleHead(rig, elapsed, !moving && !attackActive);
-  const easeIntoAttack = attackActive ? 1 - THREE.MathUtils.smoothstep(attackProgress, 0, .28) : 1;
-  const relaxed = resting * easeIntoAttack;
+  // Author the same resting baseline on every frame. The attack solver blends over
+  // it, including recovery, so the forearm cannot snap back by 65 degrees at p=1.
+  const relaxed = resting;
   for (const side of [-1, 1]) {
     const arm = side > 0 ? rig.leftArm : rig.rightArm;
     const forearm = side > 0 ? rig.leftForearm : rig.rightForearm;

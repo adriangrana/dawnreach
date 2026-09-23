@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const THREE = require('three');
 const { buildSeryn } = require('../node_modules/.cache/seryn-test/heroes/seryn/buildSeryn.js');
 const { animateSeryn, SERYN_ATTACK_RELEASE_PROGRESS } = require('../node_modules/.cache/seryn-test/heroes/seryn/animateSeryn.js');
+const { SERYN_STRING_FINGERS } = require('../node_modules/.cache/seryn-test/heroes/seryn/archeryPose.js');
 const { createSerynLoftGeometry, createTaperedCurveGeometry } = require('../node_modules/.cache/seryn-test/heroes/seryn/geometry.js');
 
 // Geometry/animation checks do not need a GPU. The viewer separately verifies the
@@ -100,4 +101,56 @@ test('skinned joints deform without detaching the bow or changing arrow release 
     assert.equal(rig.bow.parent, rig.sockets.leftHand);
     assert.equal(rig.nockedArrow.visible, progress >= .40 && progress < SERYN_ATTACK_RELEASE_PROGRESS);
   }
+});
+
+test('archery keeps finger contact and a single firing line at every draw phase and hero transform', () => {
+  for (const scale of [.34, 1, 1.45]) {
+    const rig = buildSeryn();
+    rig.root.position.set(8, .2, -5);
+    rig.root.rotation.y = 1.1;
+    rig.model.scale.setScalar(scale);
+    const world = (object, point = new THREE.Vector3()) => object.localToWorld(point.clone());
+    for (const p of [.34, .4, .48, .57, .639]) {
+      rig.root.userData.serynAttackProgress = p;
+      animateSeryn(rig, 0, false);
+      rig.root.updateMatrixWorld(true);
+      const string = rig.bowString.geometry.attributes.position;
+      const nock = world(rig.bow, new THREE.Vector3().fromBufferAttribute(string, 1));
+      const fingers = world(rig.sockets.rightHand, SERYN_STRING_FINGERS);
+      assert.ok(nock.distanceTo(fingers) / scale < 1e-6, `string must touch fingers at ${p}`);
+      assert.ok(world(rig.nockedArrow).distanceTo(nock) / scale < 1e-6);
+      const rest = world(rig.bow, new THREE.Vector3(-.052, .075, .018));
+      const arrowDirection = new THREE.Vector3(0, 1, 0).transformDirection(rig.nockedArrow.matrixWorld);
+      assert.ok(arrowDirection.dot(rest.clone().sub(nock).normalize()) > .99999, 'arrow passes through the rest');
+      assert.ok(rest.distanceTo(nock) / scale < .97, 'shaft reaches beyond the bow');
+      assert.ok(world(rig.bow, new THREE.Vector3(-.052, 0, 0))
+        .distanceTo(world(rig.sockets.leftHand, new THREE.Vector3(0, -.060, -.018))) / scale < 1e-6, 'grip stays in palm');
+      if (p >= .57) {
+        const forward = new THREE.Vector3(0, 0, 1).transformDirection(rig.model.matrixWorld);
+        assert.ok(arrowDirection.dot(forward) > .999, 'arrow follows gameplay facing');
+        assert.ok(new THREE.Vector3(0, 1, 0).transformDirection(rig.bow.matrixWorld).dot(new THREE.Vector3(0, 1, 0)) > .999);
+        const shoulder = world(rig.rightArm), elbow = world(rig.rightForearm), wrist = world(rig.sockets.rightHand);
+        const bend = elbow.clone().sub(shoulder).angleTo(wrist.clone().sub(elbow));
+        assert.ok(bend > .8 && bend < 2.4, 'drawing elbow must not fold to 180 degrees');
+        assert.ok(Math.abs(elbow.y - fingers.y) / scale < .12, 'drawing elbow stays at arrow height');
+        assert.ok(world(rig.head).distanceTo(fingers) / scale < .26, 'draw anchors beside face');
+      }
+    }
+  }
+});
+
+test('attack recovery blends into the same idle joints without a last-frame wrist snap', () => {
+  const rig = buildSeryn();
+  const joints = [rig.torso, rig.head, rig.leftArm, rig.rightArm, rig.leftForearm, rig.rightForearm,
+    rig.sockets.leftHand, rig.sockets.rightHand, rig.bow];
+  rig.root.userData.serynAttackProgress = .9999;
+  animateSeryn(rig, 0, false);
+  const ending = joints.map(joint => joint.quaternion.clone());
+  rig.root.userData.serynAttackProgress = 0;
+  animateSeryn(rig, 0, false);
+  joints.forEach((joint, i) => assert.ok(joint.quaternion.angleTo(ending[i]) < .001, joint.name));
+  const string = rig.bowString.geometry.attributes.position;
+  assert.ok(new THREE.Vector3().fromBufferAttribute(string, 1).distanceTo(rig.bowStringRestNock) < 1e-7);
+  assert.equal(rig.handArrow.visible, false);
+  assert.equal(rig.nockedArrow.visible, false);
 });

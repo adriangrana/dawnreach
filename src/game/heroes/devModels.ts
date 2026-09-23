@@ -63,6 +63,10 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
     const forward = new THREE.Vector3(0, 0, 1);
     const launchWorld = new THREE.Vector3();
     const launchLocal = new THREE.Vector3();
+    const flightOrigin = new THREE.Vector3();
+    const flightDirection = new THREE.Vector3();
+    let flightActive = false;
+    let previousProgress = 0;
 
     return {
       id: 'H002',
@@ -72,12 +76,11 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
 
         const progress = Number(rig.root.userData.serynAttackProgress ?? 0);
         if (progress >= SERYN_ATTACK_RELEASE_PROGRESS && progress < 1) {
+          if (!flightActive || progress < previousProgress) {
           rig.root.updateMatrixWorld(true);
           rig.arrowLaunchSocket.getWorldPosition(launchWorld);
           launchLocal.copy(launchWorld);
           rig.root.worldToLocal(launchLocal);
-          const flight = THREE.MathUtils.smoothstep(progress, SERYN_ATTACK_RELEASE_PROGRESS, 1);
-          previewArrow.visible = true;
           // Fly from the release socket along the hero's actual facing rather than
           // assuming root-local +Z after every possible model rotation.
           rig.model.getWorldQuaternion(previewArrow.quaternion);
@@ -85,11 +88,19 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
           rig.root.worldToLocal(localForward.add(rig.root.getWorldPosition(new THREE.Vector3())));
           const localOrigin = rig.root.worldToLocal(rig.root.getWorldPosition(new THREE.Vector3()));
           localForward.sub(localOrigin).normalize();
-          previewArrow.position.copy(launchLocal).addScaledVector(localForward, flight * 4.2);
+          flightOrigin.copy(launchLocal);
+          flightDirection.copy(localForward);
           previewArrow.quaternion.setFromUnitVectors(arrowAxis, localForward);
+          flightActive = true;
+          }
+          const flight = (progress - SERYN_ATTACK_RELEASE_PROGRESS) / (1 - SERYN_ATTACK_RELEASE_PROGRESS);
+          previewArrow.visible = true;
+          previewArrow.position.copy(flightOrigin).addScaledVector(flightDirection, flight * 4.2);
         } else {
           previewArrow.visible = false;
+          flightActive = false;
         }
+        previousProgress = progress;
       },
       setAttackProgress: progress => {
         rig.root.userData.serynAttackProgress = progress;
@@ -97,6 +108,7 @@ const BUILDERS: Partial<Record<HeroId, Builder>> = {
       resetAttack: () => {
         rig.root.userData.serynAttackProgress = 0;
         previewArrow.visible = false;
+        flightActive = false;
       },
     };
   },

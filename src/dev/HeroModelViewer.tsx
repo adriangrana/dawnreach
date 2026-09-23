@@ -95,6 +95,8 @@ export default function HeroModelViewer() {
   const [heroId, setHeroId] = useState<HeroId>(() => queryHeroId());
   const [animation, setAnimation] = useState<AnimationMode>('idle');
   const animationRef = useRef<AnimationMode>('idle');
+  const [attackPreview, setAttackPreview] = useState<number | null>(null);
+  const attackPreviewRef = useRef<number | null>(null);
   const [wireframe, setWireframeState] = useState(false);
   const [showBounds, setShowBounds] = useState(false);
   const [showAxes, setShowAxes] = useState(false);
@@ -102,7 +104,7 @@ export default function HeroModelViewer() {
 
   useEffect(() => {
     animationRef.current = animation;
-    if (animation !== 'attack') {
+    if (animation !== 'attack' && animation !== 'paused') {
       runtimeRef.current?.model.resetAttack();
       if (runtimeRef.current) runtimeRef.current.attackClock = 0;
     }
@@ -248,7 +250,10 @@ export default function HeroModelViewer() {
       runtime.elapsed += dt;
 
       const mode = animationRef.current;
-      if (mode !== 'paused') {
+        if (attackPreviewRef.current !== null) {
+          model.setAttackProgress(attackPreviewRef.current);
+          model.animate(attackPreviewRef.current, false, 0);
+        } else if (mode !== 'paused') {
         const moving = mode === 'walk';
         if (mode === 'attack') {
           runtime.attackClock = (runtime.attackClock + dt) % 1.15;
@@ -385,9 +390,24 @@ export default function HeroModelViewer() {
             type="button"
             key={mode}
             className={animation === mode ? 'is-active' : ''}
-            onClick={() => setAnimation(mode)}
-          >{mode.toUpperCase()}</button>)}
-        </div>
+            onClick={() => {
+              attackPreviewRef.current = null;
+              setAttackPreview(null);
+              setAnimation(mode);
+            }}
+            >{mode.toUpperCase()}</button>)}
+          </div>
+          <label style={{ display: 'block', marginTop: 12 }}>
+            ATTACK POSE{attackPreview !== null ? ` · ${Math.round(attackPreview * 100)}%` : ''}
+            <input type="range" aria-label="Attack pose" min="0" max="100" step="1"
+              value={Math.round((attackPreview ?? .6) * 100)} style={{ width: '100%' }}
+              onChange={event => {
+                const progress = Number(event.target.value) / 100;
+                attackPreviewRef.current = progress;
+                setAttackPreview(progress);
+                setAnimation('paused');
+              }} />
+          </label>
       </section>
 
       <section>

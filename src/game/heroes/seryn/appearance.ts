@@ -265,7 +265,7 @@ function buildOutfit(rig: HumanoidRig, m: SerynMaterials) {
 }
 
 export function buildSerynAppearance(rig: HumanoidRig, materials: SerynMaterials) {
-  rig.head.scale.set(1, .92, 1);
+  rig.head.scale.set(.98, 1.00, .96);
   buildSerynPortrait(rig, materials);
   const hair = buildSerynHair(rig, materials);
   const clothMeshes = buildOutfit(rig, materials);

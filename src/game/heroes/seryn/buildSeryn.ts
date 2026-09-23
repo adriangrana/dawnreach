@@ -102,9 +102,9 @@ function createSerynArrow(m: SerynMaterials, name = 'seryn-arrow') {
   const shaft = part(
     arrow,
     `${name}-shaft`,
-    new THREE.CylinderGeometry(0.0065, 0.0065, 0.64, 10),
+    new THREE.CylinderGeometry(0.0055, 0.0055, 0.94, 10),
     m.silver,
-    [0, 0.21, 0],
+    [0, 0.47, 0],
   );
   shaft.castShadow = true;
 
@@ -113,7 +113,7 @@ function createSerynArrow(m: SerynMaterials, name = 'seryn-arrow') {
     `${name}-head`,
     new THREE.ConeGeometry(0.017, 0.087, 4),
     m.silver,
-    [0, 0.57, 0],
+    [0, 0.97, 0],
   );
   head.castShadow = true;
 
@@ -122,7 +122,7 @@ function createSerynArrow(m: SerynMaterials, name = 'seryn-arrow') {
     `${name}-fletching`,
     new THREE.ConeGeometry(0.027, 0.105, 4),
     m.teal,
-    [0, -0.075, 0],
+    [0, 0.065, 0],
   );
   fletching.rotation.z = Math.PI;
   fletching.castShadow = true;
@@ -287,15 +287,14 @@ function buildBow(rig: HumanoidRig, m: SerynMaterials) {
   bow.add(arrowLaunchSocket);
 
   const nockedArrow = createSerynArrow(m, 'seryn-nocked-arrow');
-  // Arrow geometry is authored along +Y; rotate it so it points through bow-local +Z,
-  // which is the target direction in the attack pose.
-  nockedArrow.rotation.x = Math.PI / 2;
+  // Bow-local -X passes from the string through the arrow rest. The animator
+  // aligns this axis to model +Z while keeping local +Y upright.
+  nockedArrow.rotation.z = Math.PI / 2;
   nockedArrow.position.copy(bowStringRestNock);
   nockedArrow.visible = false;
   bow.add(nockedArrow);
 
-  // Existing authored carry orientation is preserved; the weapon was redesigned in
-  // local bow space so idle/walk/attack animation code does not need to be retuned.
+  // Preserve the horizontal carry pose; the attack solver rotates around the grip.
   bow.position.set(0.012, -0.075, 0.040);
   bow.rotation.set(
     THREE.MathUtils.degToRad(8.5),
@@ -331,7 +330,7 @@ function buildQuiver(rig: HumanoidRig, m: SerynMaterials) {
     const arrow = createSerynArrow(m, `seryn-quiver-arrow-${index}`);
     arrow.scale.setScalar(0.96);
     arrow.position.x = (index - 2) * 0.023;
-    arrow.position.y = 0.025 + Math.abs(index - 2) * 0.012;
+    arrow.position.y = -0.32 + Math.abs(index - 2) * 0.012;
     arrow.position.z = Math.abs(index - 2) * 0.009;
     quiver.add(arrow);
     arrows.push(arrow);

@@ -332,11 +332,11 @@ function eyebrowTexture() {
   const random = seeded(0xb20f);
   return makeCanvasTexture(512, (ctx, size) => {
     ctx.clearRect(0, 0, size, size);
-    for (let i = 0; i < 480; i++) {
+    for (let i = 0; i < 980; i++) {
       const x = random() * size, t = x / size;
       const y = size * (.30 + random() * .42);
-      ctx.strokeStyle = `rgba(65,44,34,${.3 + random() * .65})`;
-      ctx.lineWidth = 1 + random() * 2;
+      ctx.strokeStyle = `rgba(48,32,27,${.6 + random() * .38})`;
+      ctx.lineWidth = 1.5 + random() * 2.5;
       ctx.beginPath(); ctx.moveTo(x, y);
       ctx.quadraticCurveTo(x + 7, y - 30, x + 15 + t * 22, y - 60 - random() * 60); ctx.stroke();
     }

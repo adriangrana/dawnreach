@@ -24,7 +24,7 @@ export function buildSerynPortrait(rig: HumanoidRig, materials: SerynMaterials) 
     bumpMap: materials.skin.bumpMap, bumpScale: .00035,
   });
   if (typeof Image !== 'undefined') {
-    skin.map = new THREE.TextureLoader().load('/assets/heroes/seryn/portrait-albedo.png');
+    skin.map = new THREE.TextureLoader().load('/assets/heroes/seryn/portrait-albedo.png?v=2');
     skin.map.colorSpace = THREE.SRGBColorSpace;
     skin.map.anisotropy = 8;
   }
@@ -62,21 +62,10 @@ export function buildSerynPortrait(rig: HumanoidRig, materials: SerynMaterials) 
     const mesh = new THREE.Mesh(g,mat);mesh.name=`seryn-${name}`;rig.head.add(mesh);return mesh;
   };
   for (const side of [-1,1]) {
-    const points:number[]=[],uv:number[]=[],index:number[]=[];
-    for(let i=0;i<=40;i++) for(let row=0;row<2;row++) {
-      const t=i/40,x=side*(.024+.082*t),y=.062+.014*Math.sin(t*Math.PI)-.009*t;
-      const width=(.014+.007*Math.sin(t*Math.PI))*(1-.75*t*t);
-      const p=facePoint(x,y+(row-.5)*width,.0012);points.push(p.x,p.y,p.z);uv.push(t,row);
-      if(i<40 && row===0) {const a=i*2;index.push(a,a+2,a+1,a+1,a+2,a+3);}
-    }
-    const brow=new THREE.BufferGeometry();brow.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
-    brow.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));brow.setIndex(index);brow.computeVertexNormals();
-    add('fitted-arched-eyebrow',brow,materials.brow);
-
     const lashes:THREE.BufferGeometry[]=[];
     for(let i=0;i<22;i++) {
       const t=(i+.5)/22,x=side*(.028+.057*t);
-      const y=.030+.013*Math.sin(t*Math.PI)+.003*t;
+      const y=.030+.011*Math.sin(t*Math.PI)+.006*t;
       const start=facePoint(x,y,.001);
       lashes.push(createTaperedCurveGeometry([start,start.clone().add(new THREE.Vector3(side*.001,.002,.003)),
         start.clone().add(new THREE.Vector3(side*(.002+.003*t),.004+.003*t,.005))],.0005,.00007,6,4));

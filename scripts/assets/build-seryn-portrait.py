@@ -35,11 +35,18 @@ for target, name, weight in [
     ('macrodetails/universal-female-young-averagemuscle-averageweight', 'body', 1),
     ('mouth/mouth-upperlip-volume-incr', 'upper-lip', .23),
     ('mouth/mouth-lowerlip-volume-incr', 'lower-lip', .16),
-    ('nose/nose-point-up', 'nose-tip', .12),
-    ('chin/chin-width-decr', 'chin', .12),
-    ('head/head-invertedtriangular', 'heart-contour', .13),
+    ('nose/nose-point-down', 'nose-tip-down', .10),
+    ('nose/nose-scale-horiz-decr', 'slender-nose', .18),
+    ('chin/chin-width-decr', 'chin', .20),
+    ('head/head-invertedtriangular', 'heart-contour', .18),
     ('mouth/mouth-scale-vert-decr', 'mouth-height', .16),
     ('nose/nose-volume-decr', 'nose-volume', .12),
+    ('eyes/l-eye-corner1-up', 'l-eye-corner1-up', .85),
+    ('eyes/r-eye-corner1-up', 'r-eye-corner1-up', .85),
+    ('eyes/l-eye-height2-decr', 'l-eye-height2-decr', .25),
+    ('eyes/r-eye-height2-decr', 'r-eye-height2-decr', .25),
+    ('ears/l-ear-shape-pointed', 'l-ear-pointed', .85),
+    ('ears/r-ear-shape-pointed', 'r-ear-pointed', .85),
 ]:
     for line in fetch('targets/' + target + '.target', name + '.target').splitlines():
         a = line.split()
@@ -47,7 +54,15 @@ for target, name, weight in [
         i = int(a[0])
         vertices[i] = [p + weight * float(d) for p, d in zip(vertices[i], a[1:4])]
 
-def transform(p): return [p[0] * .20, (p[1] - 6.65) * .20, (p[2] - .58) * .20]
+def transform(p):
+    x,y,z=p[0]*.20,(p[1]-6.65)*.20,(p[2]-.58)*.20
+    # Reference-specific shaping: narrower lower jaw, a defined chin and raised
+    # malar volume. Gates leave the cervical column and the eye globe untouched.
+    front=max(0,min(1,(z-.025)/.075))
+    jaw=math.exp(-((y+.11)/.065)**2)*front
+    chin=math.exp(-(x/.055)**2-((y+.16)/.038)**2)*front
+    cheek=math.exp(-((abs(x)-.085)/.037)**2-((y+.015)/.042)**2)*front
+    return [x*(1-.075*jaw),y-.008*chin+.005*cheek,z+.004*chin+.002*cheek]
 
 # Only the connected skin above the collar; helper geometry never enters the game.
 selected = [f for g, f in source_faces if g == 'body' and min(vertices[i][1] for i, _ in f) > 5.55]
