@@ -175,12 +175,19 @@ export default function HeroModelViewer() {
     }
     scene.add(grid);
 
-    model.rig.root.position.set(0, 0.03, 0);
+    model.rig.root.position.set(0, 0, 0);
     model.rig.root.scale.setScalar(1.45);
     scene.add(model.rig.root);
 
+    // Imported hero assets may use their model origin near the pelvis instead of
+    // at the soles. Ground the rendered geometry from its actual world bounds so
+    // the Model Lab never buries a rigged hero below the inspection floor.
     scene.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(model.rig.root);
+    let box = new THREE.Box3().setFromObject(model.rig.root);
+    model.rig.root.position.y += 0.03 - box.min.y;
+    scene.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(model.rig.root);
+
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const target = new THREE.Vector3(center.x, Math.max(0.8, center.y), center.z);
