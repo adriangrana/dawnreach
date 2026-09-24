@@ -97,6 +97,9 @@ export default function HeroModelViewer() {
   const animationRef = useRef<AnimationMode>('idle');
   const [attackPreview, setAttackPreview] = useState<number | null>(null);
   const attackPreviewRef = useRef<number | null>(null);
+  const [idleLoopSeconds, setIdleLoopSeconds] = useState<number | null>(null);
+  const [idlePreview, setIdlePreview] = useState<number | null>(null);
+  const idlePreviewRef = useRef<number | null>(null);
   const [wireframe, setWireframeState] = useState(false);
   const [showBounds, setShowBounds] = useState(false);
   const [showAxes, setShowAxes] = useState(false);
@@ -123,6 +126,7 @@ export default function HeroModelViewer() {
         disposeObject(model.rig.root);
         return;
       }
+      setIdleLoopSeconds(model.idleLoopSeconds ?? null);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x071019);
@@ -266,7 +270,10 @@ export default function HeroModelViewer() {
       runtime.elapsed += dt;
 
       const mode = animationRef.current;
-        if (attackPreviewRef.current !== null) {
+        if (idlePreviewRef.current !== null) {
+          model.resetAttack();
+          model.animate(idlePreviewRef.current, false, 0);
+        } else if (attackPreviewRef.current !== null) {
           model.setAttackProgress(attackPreviewRef.current);
           model.animate(attackPreviewRef.current, false, 0);
         } else if (mode !== 'paused') {
@@ -368,6 +375,9 @@ export default function HeroModelViewer() {
   };
 
   const chooseHero = (nextId: HeroId) => {
+    idlePreviewRef.current = null;
+    setIdlePreview(null);
+    setIdleLoopSeconds(null);
     const url = new URL(window.location.href);
     url.searchParams.set('hero', nextId);
     history.replaceState(null, '', url);
@@ -419,15 +429,32 @@ export default function HeroModelViewer() {
             onClick={() => {
               attackPreviewRef.current = null;
               setAttackPreview(null);
+              idlePreviewRef.current = null;
+              setIdlePreview(null);
               setAnimation(mode);
             }}
             >{mode.toUpperCase()}</button>)}
           </div>
+          {idleLoopSeconds !== null && <label style={{ display: 'block', marginTop: 12 }}>
+            IDLE POSE · {idlePreview === null ? `${idleLoopSeconds.toFixed(2)}s LOOP` : `${idlePreview.toFixed(2)}s`}
+            <input type="range" aria-label="Idle pose" min="0" max={idleLoopSeconds} step="0.01"
+              value={idlePreview ?? 0} style={{ width: '100%' }}
+              onChange={event => {
+                const seconds = Number(event.target.value);
+                idlePreviewRef.current = seconds;
+                setIdlePreview(seconds);
+                attackPreviewRef.current = null;
+                setAttackPreview(null);
+                setAnimation('paused');
+              }} />
+          </label>}
           <label style={{ display: 'block', marginTop: 12 }}>
             ATTACK POSE{attackPreview !== null ? ` · ${Math.round(attackPreview * 100)}%` : ''}
             <input type="range" aria-label="Attack pose" min="0" max="100" step="1"
               value={Math.round((attackPreview ?? .6) * 100)} style={{ width: '100%' }}
               onChange={event => {
+                idlePreviewRef.current = null;
+                setIdlePreview(null);
                 const progress = Number(event.target.value) / 100;
                 attackPreviewRef.current = progress;
                 setAttackPreview(progress);
