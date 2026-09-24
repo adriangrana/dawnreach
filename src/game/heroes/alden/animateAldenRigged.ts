@@ -5,6 +5,12 @@ export const ALDEN_RIGGED_IDLE_SECONDS = 4;
 export const ALDEN_RIGGED_BREATH_DEGREES = 0.5;
 export const ALDEN_RIGGED_SWAY_DEGREES = 0.2;
 
+// Heavy-armour walk: two steps per 1.2 second loop (~100 steps/min).
+// Translation remains gameplay-owned; this is an in-place locomotion cycle.
+export const ALDEN_RIGGED_WALK_SECONDS = 1.2;
+export const ALDEN_RIGGED_WALK_HIP_DEGREES = 16;
+export const ALDEN_RIGGED_WALK_KNEE_DEGREES = 24;
+
 // Verified against alden-skin-audit.json, not inferred from Rigify conventions.
 // All 87 facial joints are siblings of the spine in this export. Even facial
 // joints with zero weights participate so their authored relationships survive.
@@ -107,6 +113,16 @@ export const ALDEN_IDLE_BRANCHES = [
   ...FACE_BRANCHES, // helmet/mask AND head; never animate them independently
 ] as const;
 
+const ALDEN_WALK_BODY_BRANCHES = [
+  'DEF-spine', // pelvis/torso chain
+  'DEF-pelvis.L', 'DEF-pelvis.R', // rigid waist/hip armour roots
+  'DEF-breast.L', 'DEF-breast.R', // pectoral plates are disconnected roots
+  'DEF-shoulder.L', 'DEF-shoulder.R', // pauldrons/cape weights
+  'DEF-upper_arm.L', 'DEF-upper_arm.R', // arm roots/cape weights
+  'neutral_bone',
+  ...FACE_BRANCHES, // mask/helmet/head roots must follow the torso as one rigid branch set
+] as const;
+
 export function createAldenRiggedIdle(root: THREE.Object3D) {
   const space = findImportedObject(root, 'rig');
   const abdomen = findImportedObject(root, 'DEF-spine.001');
@@ -135,6 +151,135 @@ export function createAldenRiggedIdle(root: THREE.Object3D) {
         THREE.MathUtils.degToRad(ALDEN_RIGGED_SWAY_DEGREES) * Math.sin(phase),
       );
       motion.apply(rotation.setFromEuler(angles));
+    },
+  };
+}
+
+
+type SpaceBoneRotationRuntime = Readonly<{
+  apply(bone: THREE.Object3D, axisInSpace: THREE.Vector3, radians: number): void;
+}>;
+
+function createSpaceBoneRotationRuntime(space: THREE.Object3D): SpaceBoneRotationRuntime {
+  const parentWorld = new THREE.Quaternion();
+  const inverseParentWorld = new THREE.Quaternion();
+  const spaceWorld = new THREE.Quaternion();
+  const inverseSpaceWorld = new THREE.Quaternion();
+  const spaceDelta = new THREE.Quaternion();
+  const worldDelta = new THREE.Quaternion();
+  const localDelta = new THREE.Quaternion();
+
+  return {
+    apply(bone, axisInSpace, radians) {
+      if (!bone.parent || Math.abs(radians) < 1e-8) return;
+
+      // Apply a delta expressed in the imported rig's model space. This avoids relying
+      // on Rigify local bone axes, which are not meaningful after glTF name sanitising
+      // and export. Descendants follow through the actual skeleton hierarchy.
+      space.getWorldQuaternion(spaceWorld);
+      inverseSpaceWorld.copy(spaceWorld).invert();
+      bone.parent.getWorldQuaternion(parentWorld);
+      inverseParentWorld.copy(parentWorld).invert();
+
+      spaceDelta.setFromAxisAngle(axisInSpace, radians);
+      worldDelta.copy(spaceWorld).multiply(spaceDelta).multiply(inverseSpaceWorld);
+      localDelta.copy(inverseParentWorld).multiply(worldDelta).multiply(parentWorld);
+      bone.quaternion.premultiply(localDelta);
+      bone.updateWorldMatrix(false, true);
+    },
+  };
+}
+
+export function createAldenRiggedWalk(root: THREE.Object3D) {
+  const space = findImportedObject(root, 'rig');
+  const spineRoot = findImportedObject(root, 'DEF-spine');
+  const bodyBranches = ALDEN_WALK_BODY_BRANCHES.map(name => findImportedObject(root, name));
+
+  // These roots were verified in docs/animation/alden-skin-audit.json. The unusual
+  // export has torso armour, face/mask, shoulders and arm roots as siblings under rig,
+  // so they must receive one coherent body transform before limb articulation.
+  for (const branch of bodyBranches) {
+    if (branch.parent !== space) throw new Error('Alden walk hierarchy changed; re-audit before animating');
+  }
+
+  const thighL = findImportedObject(root, 'DEF-thigh.L');
+  const thighR = findImportedObject(root, 'DEF-thigh.R');
+  const shinL = findImportedObject(root, 'DEF-shin.L');
+  const shinR = findImportedObject(root, 'DEF-shin.R');
+  const footL = findImportedObject(root, 'DEF-foot.L');
+  const footR = findImportedObject(root, 'DEF-foot.R');
+  const toeL = findImportedObject(root, 'DEF-toe.L');
+  const toeR = findImportedObject(root, 'DEF-toe.R');
+  const upperArmL = findImportedObject(root, 'DEF-upper_arm.L');
+  const upperArmR = findImportedObject(root, 'DEF-upper_arm.R');
+  const forearmL = findImportedObject(root, 'DEF-forearm.L');
+  const forearmR = findImportedObject(root, 'DEF-forearm.R');
+
+  if (thighL.parent !== space || thighR.parent !== space) {
+    throw new Error('Alden thigh roots changed; re-audit before animating');
+  }
+
+  space.updateWorldMatrix(true, true);
+  const pivot = space.worldToLocal(spineRoot.getWorldPosition(new THREE.Vector3()));
+  const bodyMotion = createCoherentBoneMotion(space, bodyBranches, pivot);
+  const rotateBone = createSpaceBoneRotationRuntime(space);
+
+  const xAxis = new THREE.Vector3(1, 0, 0);
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const bodyRotation = new THREE.Quaternion();
+  const bodyAngles = new THREE.Euler(0, 0, 0, 'XYZ');
+  const rad = THREE.MathUtils.degToRad;
+
+  return {
+    reset: bodyMotion.reset,
+    apply(elapsed: number) {
+      const cycle = ((elapsed % ALDEN_RIGGED_WALK_SECONDS) + ALDEN_RIGGED_WALK_SECONDS) % ALDEN_RIGGED_WALK_SECONDS;
+      const phase = cycle * (2 * Math.PI / ALDEN_RIGGED_WALK_SECONDS);
+      const step = Math.sin(phase);
+      const weightShift = Math.cos(phase);
+      const leftSwing = step;
+      const rightSwing = -step;
+
+      // Small whole-body counter-rotation keeps the armour mass connected while the
+      // legs alternate. No root translation is authored here: gameplay owns movement.
+      bodyAngles.set(
+        rad(1.1 + 0.35 * Math.cos(phase * 2)),
+        rad(-1.15 * step),
+        rad(0.55 * weightShift),
+      );
+      bodyMotion.apply(bodyRotation.setFromEuler(bodyAngles));
+
+      // Legs: model-space X is the verified lateral hinge axis (Y up, Z depth).
+      // The first DEF thigh/shin/foot bones carry the dominant weights; their .001
+      // children are retained as exported deformation subdivisions and follow naturally.
+      const hipL = rad(ALDEN_RIGGED_WALK_HIP_DEGREES * leftSwing);
+      const hipR = rad(ALDEN_RIGGED_WALK_HIP_DEGREES * rightSwing);
+      const kneeL = rad(4 + ALDEN_RIGGED_WALK_KNEE_DEGREES * Math.max(0, leftSwing));
+      const kneeR = rad(4 + ALDEN_RIGGED_WALK_KNEE_DEGREES * Math.max(0, rightSwing));
+
+      rotateBone.apply(thighL, xAxis, hipL);
+      rotateBone.apply(shinL, xAxis, -kneeL);
+      rotateBone.apply(footL, xAxis, -hipL * 0.42 + kneeL * 0.38);
+      rotateBone.apply(toeL, xAxis, rad(5) * Math.max(0, -leftSwing));
+
+      rotateBone.apply(thighR, xAxis, hipR);
+      rotateBone.apply(shinR, xAxis, -kneeR);
+      rotateBone.apply(footR, xAxis, -hipR * 0.42 + kneeR * 0.38);
+      rotateBone.apply(toeR, xAxis, rad(5) * Math.max(0, -rightSwing));
+
+      // Alden is heavily armoured and will eventually carry a sword, so the arm swing
+      // stays intentionally restrained. This also avoids exaggerating the cape weights
+      // that the audit found on the upper-arm roots.
+      rotateBone.apply(upperArmL, xAxis, rad(-3.5 * leftSwing));
+      rotateBone.apply(upperArmR, xAxis, rad(-3.5 * rightSwing));
+      rotateBone.apply(forearmL, xAxis, rad(1.2 * leftSwing));
+      rotateBone.apply(forearmR, xAxis, rad(1.2 * rightSwing));
+
+      // Tiny counter-twist keeps the chest from reading as a rigid mannequin without
+      // splitting the disconnected armour/face branches.
+      rotateBone.apply(spineRoot, yAxis, rad(0.35 * step));
+      rotateBone.apply(spineRoot, zAxis, rad(-0.18 * weightShift));
     },
   };
 }

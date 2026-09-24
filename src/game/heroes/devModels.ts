@@ -6,7 +6,11 @@ import { listHeroDefinitions } from './catalog';
 import { animateSeryn, SERYN_ATTACK_RELEASE_PROGRESS } from './seryn/animateSeryn';
 import { buildSeryn, type SerynRig } from './seryn/buildSeryn';
 import type { HeroId } from './types';
-import { ALDEN_RIGGED_IDLE_SECONDS, createAldenRiggedIdle } from './alden/animateAldenRigged';
+import {
+  ALDEN_RIGGED_IDLE_SECONDS,
+  createAldenRiggedIdle,
+  createAldenRiggedWalk,
+} from './alden/animateAldenRigged';
 import { findImportedObject } from './animation/coherentBoneMotion';
 
 export type ImportedHeroRig = Readonly<{
@@ -47,6 +51,7 @@ async function loadAldenRuntimeModel(): Promise<DevHeroModel> {
   root.userData.runtimeAsset = ALDEN_RUNTIME_MODEL_URL;
 
   const idle = createAldenRiggedIdle(root);
+  const walk = createAldenRiggedWalk(root);
   let attackProgress = 0;
   idle.reset();
 
@@ -55,19 +60,28 @@ async function loadAldenRuntimeModel(): Promise<DevHeroModel> {
     rig: { root, head },
     idleLoopSeconds: ALDEN_RIGGED_IDLE_SECONDS,
     animate: (elapsed, moving) => {
-      if (moving || attackProgress > 0) {
+      if (attackProgress > 0) {
         idle.reset();
+        walk.reset();
         return;
       }
-      idle.apply(elapsed);
+      if (moving) {
+        walk.apply(elapsed);
+      } else {
+        idle.apply(elapsed);
+      }
     },
     setAttackProgress: progress => {
       attackProgress = THREE.MathUtils.clamp(progress, 0, 1);
-      if (attackProgress > 0) idle.reset();
+      if (attackProgress > 0) {
+        idle.reset();
+        walk.reset();
+      }
     },
     resetAttack: () => {
       attackProgress = 0;
       idle.reset();
+      walk.reset();
     },
   };
 }
