@@ -6,3 +6,5 @@ dist/
 *.tsbuildinfo
 src-tauri/target/
 data/platform/
+*.blend1
+*.blend2
