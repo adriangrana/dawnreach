@@ -111,8 +111,18 @@ export default function HeroModelViewer() {
   }, [animation]);
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
+    let disposed = false;
+    let teardown: (() => void) | null = null;
+
+    const initialize = async () => {
+      const host = hostRef.current;
+      if (!host) return;
+
+      const model = await buildDevHeroModel(heroId);
+      if (disposed) {
+        disposeObject(model.rig.root);
+        return;
+      }
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x071019);
@@ -165,7 +175,6 @@ export default function HeroModelViewer() {
     }
     scene.add(grid);
 
-    const model = buildDevHeroModel(heroId);
     model.rig.root.position.set(0, 0.03, 0);
     model.rig.root.scale.setScalar(1.45);
     scene.add(model.rig.root);
@@ -273,7 +282,7 @@ export default function HeroModelViewer() {
     };
     runtime.frame = requestAnimationFrame(animateFrame);
 
-    return () => {
+    teardown = () => {
       cancelAnimationFrame(runtime.frame);
       resize.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
@@ -293,6 +302,16 @@ export default function HeroModelViewer() {
       renderer.dispose();
       try { renderer.forceContextLoss(); } catch { /* context may already be lost */ }
       renderer.domElement.remove();
+    };
+    };
+
+    void initialize().catch(error => {
+      console.error('[HeroModelViewer] Failed to load hero model', error);
+    });
+
+    return () => {
+      disposed = true;
+      teardown?.();
     };
   }, [heroId]);
 

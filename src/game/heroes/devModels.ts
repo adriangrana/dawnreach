@@ -1,15 +1,18 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { animateHumanoid, HUMANOID_DEFAULT_MOVE_SPEED } from '../characters/animateHumanoid';
 import type { HumanoidRig } from '../characters/humanoidRig';
-import { animateAlden } from './alden/animateAlden';
-import { buildAlden, type AldenRig } from './alden/buildAlden';
-import { createAldenMaterials } from './alden/materials';
 import { listHeroDefinitions } from './catalog';
 import { animateSeryn, SERYN_ATTACK_RELEASE_PROGRESS } from './seryn/animateSeryn';
 import { buildSeryn, type SerynRig } from './seryn/buildSeryn';
 import type { HeroId } from './types';
 
-export type DevHeroRig = HumanoidRig | AldenRig | SerynRig;
+export type ImportedHeroRig = Readonly<{
+  root: THREE.Group;
+  head: THREE.Object3D;
+}>;
+
+export type DevHeroRig = HumanoidRig | SerynRig | ImportedHeroRig;
 
 export type DevHeroModel = Readonly<{
   id: HeroId;
@@ -19,39 +22,38 @@ export type DevHeroModel = Readonly<{
   resetAttack(): void;
 }>;
 
-type Builder = () => DevHeroModel;
+type Builder = () => DevHeroModel | Promise<DevHeroModel>;
+
+const ALDEN_RUNTIME_MODEL_URL = new URL('./alden/model/alden_rigged_socket.glb', import.meta.url).href;
+const runtimeModelLoader = new GLTFLoader();
+
+async function loadAldenRuntimeModel(): Promise<DevHeroModel> {
+  const gltf = await runtimeModelLoader.loadAsync(ALDEN_RUNTIME_MODEL_URL);
+  const root = gltf.scene;
+  root.name = 'alden-runtime-model';
+
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
+
+  const head = root.getObjectByName('DEF-spine.006') ?? root;
+  const weaponSocket = root.getObjectByName('weapon_socket.R');
+  root.userData.weaponSocket = weaponSocket ?? null;
+  root.userData.runtimeAsset = ALDEN_RUNTIME_MODEL_URL;
+
+  return {
+    id: 'H001',
+    rig: { root, head },
+    animate: () => {},
+    setAttackProgress: () => {},
+    resetAttack: () => {},
+  };
+}
 
 const BUILDERS: Partial<Record<HeroId, Builder>> = {
-  H001: () => {
-    const rig = buildAlden(createAldenMaterials());
-    const swordRest = rig.sword.rotation.clone();
-    let attackWasActive = false;
-    return {
-      id: 'H001',
-      rig,
-      animate: (elapsed, moving, delta) => {
-        animateAlden(rig, elapsed, moving, delta, HUMANOID_DEFAULT_MOVE_SPEED);
-      },
-      setAttackProgress: progress => {
-        const active = progress > 0 && progress < 1;
-        if (active) {
-          const slash = Math.sin(progress * Math.PI);
-          rig.sword.rotation.set(
-            swordRest.x - slash * 0.95,
-            swordRest.y + slash * 0.12,
-            swordRest.z + slash * 0.34,
-          );
-        } else if (attackWasActive) {
-          rig.sword.rotation.copy(swordRest);
-        }
-        attackWasActive = active;
-      },
-      resetAttack: () => {
-        attackWasActive = false;
-        rig.sword.rotation.copy(swordRest);
-      },
-    };
-  },
+  H001: loadAldenRuntimeModel,
   H002: () => {
     const rig = buildSeryn();
     const previewArrow = rig.projectileArrowPrototype.clone(true);
@@ -118,8 +120,8 @@ export function listDevViewableHeroes() {
   return listHeroDefinitions().filter(hero => Boolean(BUILDERS[hero.id]));
 }
 
-export function buildDevHeroModel(heroId: HeroId): DevHeroModel {
+export async function buildDevHeroModel(heroId: HeroId): Promise<DevHeroModel> {
   const build = BUILDERS[heroId];
   if (!build) throw new Error(`No development model builder is registered for ${heroId}.`);
-  return build();
+  return await build();
 }
