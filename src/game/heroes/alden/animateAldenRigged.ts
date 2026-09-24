@@ -225,8 +225,6 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
   const rotateBone = createSpaceBoneRotationRuntime(space);
 
   const xAxis = new THREE.Vector3(1, 0, 0);
-  const yAxis = new THREE.Vector3(0, 1, 0);
-  const zAxis = new THREE.Vector3(0, 0, 1);
   const bodyRotation = new THREE.Quaternion();
   const bodyAngles = new THREE.Euler(0, 0, 0, 'XYZ');
   const rad = THREE.MathUtils.degToRad;
@@ -276,10 +274,6 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
       rotateBone.apply(forearmL, xAxis, rad(1.2 * leftSwing));
       rotateBone.apply(forearmR, xAxis, rad(1.2 * rightSwing));
 
-      // Tiny counter-twist keeps the chest from reading as a rigid mannequin without
-      // splitting the disconnected armour/face branches.
-      rotateBone.apply(spineRoot, yAxis, rad(0.35 * step));
-      rotateBone.apply(spineRoot, zAxis, rad(-0.18 * weightShift));
     },
   };
 }
