@@ -1,15 +1,37 @@
 import * as THREE from 'three';
+import { createTwoBoneLeg } from '../animation/twoBoneLeg';
+import { createBoneSpaceRotation } from '../animation/rotateBoneInSpace';
+import { createAldenCape } from './animateAldenCape';
 import { createCoherentBoneMotion, findImportedObject } from '../animation/coherentBoneMotion';
 
 export const ALDEN_RIGGED_IDLE_SECONDS = 4;
 export const ALDEN_RIGGED_BREATH_DEGREES = 0.5;
 export const ALDEN_RIGGED_SWAY_DEGREES = 0.2;
 
-// Heavy-armour walk: two steps per 1.2 second loop (~100 steps/min).
+// Two steps per second at base movement speed; bonuses change stride AND cadence.
 // Translation remains gameplay-owned; this is an in-place locomotion cycle.
-export const ALDEN_RIGGED_WALK_SECONDS = 1.2;
-export const ALDEN_RIGGED_WALK_HIP_DEGREES = 16;
-export const ALDEN_RIGGED_WALK_KNEE_DEGREES = 24;
+export const ALDEN_RIGGED_WALK_SECONDS = 1;
+export const ALDEN_RIGGED_WALK_STANCE = 0.6;
+export const ALDEN_RIGGED_WALK_STRIDE = 0.36;
+export const ALDEN_RIGGED_WALK_CLEARANCE = 0.055;
+export const ALDEN_RIGGED_WALK_STANCE_WIDTH = 0.32;
+
+/** Pass effective movement speed / unmodified movement speed (e.g. boots 1.25).
+ * Stride is reach-limited; cadence supplies the rest of the speed increase.
+ * This is animation input only and never changes movement stats.
+ */
+export function aldenWalkAtSpeed(speedMultiplier = 1) {
+  const speed = Number.isFinite(speedMultiplier) ? Math.max(0, speedMultiplier) : 0;
+  const strideScale = THREE.MathUtils.clamp(1 + 0.35 * (speed - 1), 0.6, 1.22);
+  return {
+    speed,
+    stride: ALDEN_RIGGED_WALK_STRIDE * strideScale,
+    clearance: ALDEN_RIGGED_WALK_CLEARANCE * THREE.MathUtils.clamp(1 + 0.15 * (speed - 1), 0.8, 1.15),
+    period: speed > 0 ? ALDEN_RIGGED_WALK_SECONDS * strideScale / speed : Infinity,
+    armDegrees: THREE.MathUtils.clamp(8 + 4 * (speed - 1), 4, 12),
+    effort: THREE.MathUtils.clamp(speed, 0.5, 2),
+  };
+}
 
 // Verified against alden-skin-audit.json, not inferred from Rigify conventions.
 // All 87 facial joints are siblings of the spine in this export. Even facial
@@ -114,6 +136,7 @@ export const ALDEN_IDLE_BRANCHES = [
 ] as const;
 
 const ALDEN_WALK_BODY_BRANCHES = [
+  'DEF-thigh.L', 'DEF-thigh.R', // hips share the pelvis placement before leg IK
   'DEF-spine', // pelvis/torso chain
   'DEF-pelvis.L', 'DEF-pelvis.R', // rigid waist/hip armour roots
   'DEF-breast.L', 'DEF-breast.R', // pectoral plates are disconnected roots
@@ -135,6 +158,7 @@ export function createAldenRiggedIdle(root: THREE.Object3D) {
   space.updateWorldMatrix(true, true);
   const pivot = space.worldToLocal(abdomen.getWorldPosition(new THREE.Vector3()));
   const motion = createCoherentBoneMotion(space, branches, pivot);
+  const cape = createAldenCape(root);
   const rotation = new THREE.Quaternion();
   const angles = new THREE.Euler(0, 0, 0, 'XYZ');
   return {
@@ -151,42 +175,29 @@ export function createAldenRiggedIdle(root: THREE.Object3D) {
         THREE.MathUtils.degToRad(ALDEN_RIGGED_SWAY_DEGREES) * Math.sin(phase),
       );
       motion.apply(rotation.setFromEuler(angles));
+      cape(phase, false);
     },
   };
 }
 
 
-type SpaceBoneRotationRuntime = Readonly<{
-  apply(bone: THREE.Object3D, axisInSpace: THREE.Vector3, radians: number): void;
-}>;
-
-function createSpaceBoneRotationRuntime(space: THREE.Object3D): SpaceBoneRotationRuntime {
-  const parentWorld = new THREE.Quaternion();
-  const inverseParentWorld = new THREE.Quaternion();
-  const spaceWorld = new THREE.Quaternion();
-  const inverseSpaceWorld = new THREE.Quaternion();
-  const spaceDelta = new THREE.Quaternion();
-  const worldDelta = new THREE.Quaternion();
-  const localDelta = new THREE.Quaternion();
-
+/** Model-space treadmill trajectory: constant backward support velocity and a
+ * smooth returning swing. Position and velocity agree at heel-strike/toe-off.
+ * A 60% support interval provides double support; both feet never fly together.
+ */
+export function sampleAldenWalkFoot(phase: number, speedMultiplier = 1) {
+  const cycle = ((phase % 1) + 1) % 1;
+  const gait = aldenWalkAtSpeed(speedMultiplier);
+  const stride = gait.stride;
+  const stance = ALDEN_RIGGED_WALK_STANCE;
+  if (cycle <= stance) return { z: stride * (0.5 - cycle / stance), lift: 0, supporting: true };
+  const swing = (cycle - stance) / (1 - stance);
+  const tangent = -stride * (1 - stance) / stance;
+  const smooth = swing * swing * (3 - 2 * swing);
   return {
-    apply(bone, axisInSpace, radians) {
-      if (!bone.parent || Math.abs(radians) < 1e-8) return;
-
-      // Apply a delta expressed in the imported rig's model space. This avoids relying
-      // on Rigify local bone axes, which are not meaningful after glTF name sanitising
-      // and export. Descendants follow through the actual skeleton hierarchy.
-      space.getWorldQuaternion(spaceWorld);
-      inverseSpaceWorld.copy(spaceWorld).invert();
-      bone.parent.getWorldQuaternion(parentWorld);
-      inverseParentWorld.copy(parentWorld).invert();
-
-      spaceDelta.setFromAxisAngle(axisInSpace, radians);
-      worldDelta.copy(spaceWorld).multiply(spaceDelta).multiply(inverseSpaceWorld);
-      localDelta.copy(inverseParentWorld).multiply(worldDelta).multiply(parentWorld);
-      bone.quaternion.premultiply(localDelta);
-      bone.updateWorldMatrix(false, true);
-    },
+    z: -stride * 0.5 + stride * smooth + tangent * swing * (1 - swing) * (1 - 2 * swing),
+    lift: gait.clearance * Math.sin(Math.PI * swing) ** 2,
+    supporting: false,
   };
 }
 
@@ -194,86 +205,74 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
   const space = findImportedObject(root, 'rig');
   const spineRoot = findImportedObject(root, 'DEF-spine');
   const bodyBranches = ALDEN_WALK_BODY_BRANCHES.map(name => findImportedObject(root, name));
-
-  // These roots were verified in docs/animation/alden-skin-audit.json. The unusual
-  // export has torso armour, face/mask, shoulders and arm roots as siblings under rig,
-  // so they must receive one coherent body transform before limb articulation.
   for (const branch of bodyBranches) {
     if (branch.parent !== space) throw new Error('Alden walk hierarchy changed; re-audit before animating');
   }
-
-  const thighL = findImportedObject(root, 'DEF-thigh.L');
-  const thighR = findImportedObject(root, 'DEF-thigh.R');
-  const shinL = findImportedObject(root, 'DEF-shin.L');
-  const shinR = findImportedObject(root, 'DEF-shin.R');
-  const footL = findImportedObject(root, 'DEF-foot.L');
-  const footR = findImportedObject(root, 'DEF-foot.R');
-  const toeL = findImportedObject(root, 'DEF-toe.L');
-  const toeR = findImportedObject(root, 'DEF-toe.R');
-  const upperArmL = findImportedObject(root, 'DEF-upper_arm.L');
-  const upperArmR = findImportedObject(root, 'DEF-upper_arm.R');
-  const forearmL = findImportedObject(root, 'DEF-forearm.L');
-  const forearmR = findImportedObject(root, 'DEF-forearm.R');
-
-  if (thighL.parent !== space || thighR.parent !== space) {
-    throw new Error('Alden thigh roots changed; re-audit before animating');
-  }
-
   space.updateWorldMatrix(true, true);
   const pivot = space.worldToLocal(spineRoot.getWorldPosition(new THREE.Vector3()));
   const bodyMotion = createCoherentBoneMotion(space, bodyBranches, pivot);
-  const rotateBone = createSpaceBoneRotationRuntime(space);
-
-  const xAxis = new THREE.Vector3(1, 0, 0);
+  const cape = createAldenCape(root);
+  const legs = (['L', 'R'] as const).map(side => createTwoBoneLeg(space,
+    findImportedObject(root, 'DEF-thigh.' + side),
+    findImportedObject(root, 'DEF-shin.' + side),
+    findImportedObject(root, 'DEF-foot.' + side)));
+  const arms = (['L', 'R'] as const).map(side => ({
+    upper: findImportedObject(root, 'DEF-upper_arm.' + side),
+    forearm: findImportedObject(root, 'DEF-forearm.' + side),
+  }));
+  const rotateBone = createBoneSpaceRotation(space);
+  const lateralAxis = new THREE.Vector3(1, 0, 0);
   const bodyRotation = new THREE.Quaternion();
   const bodyAngles = new THREE.Euler(0, 0, 0, 'XYZ');
+  const bodyOffset = new THREE.Vector3();
+  const target = new THREE.Vector3();
   const rad = THREE.MathUtils.degToRad;
-
+  let phase = 0, currentSpeed = 1;
+  const pose = (phase: number, speedMultiplier: number) => {
+      const gait = aldenWalkAtSpeed(speedMultiplier);
+      const angle = phase * Math.PI * 2;
+      // Establish one connected body motion before adding restrained arm swing.
+      // The cape now has dedicated joints; the arm roots can swing independently.
+      bodyAngles.set(rad(1.4 + 0.6 * (gait.effort - 1) + 0.3 * Math.cos(2 * angle)),
+        rad(-(1.8 + 0.3 * (gait.effort - 1)) * Math.cos(angle)), rad(-0.65 * Math.sin(angle)));
+      // A shallow bend supplies reach margin; the hips rise over the support leg.
+      // This is bone motion, never root motion or a gameplay speed change.
+      bodyOffset.set(0.018 * Math.sin(angle), -0.03 - 0.004 * Math.cos(2 * angle), 0);
+      bodyMotion.apply(bodyRotation.setFromEuler(bodyAngles), bodyOffset);
+      root.updateMatrixWorld(true);
+      for (let side = 0; side < legs.length; side++) {
+        const foot = sampleAldenWalkFoot(phase + side * 0.5, speedMultiplier);
+        const leg = legs[side];
+        target.copy(leg.restAnkle);
+        target.x = pivot.x + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH * 0.5;
+        target.z += foot.z;
+        target.y += foot.lift;
+        leg.solve(target);
+        const swing = Math.cos(angle + side * Math.PI);
+        rotateBone(arms[side].upper, lateralAxis, rad(gait.armDegrees * swing));
+        rotateBone(arms[side].forearm, lateralAxis, rad(-3 + 2 * swing));
+      }
+      cape(angle, true);
+  };
   return {
     reset: bodyMotion.reset,
-    apply(elapsed: number) {
-      const cycle = ((elapsed % ALDEN_RIGGED_WALK_SECONDS) + ALDEN_RIGGED_WALK_SECONDS) % ALDEN_RIGGED_WALK_SECONDS;
-      const phase = cycle * (2 * Math.PI / ALDEN_RIGGED_WALK_SECONDS);
-      const step = Math.sin(phase);
-      const weightShift = Math.cos(phase);
-      const leftSwing = step;
-      const rightSwing = -step;
-
-      // Small whole-body counter-rotation keeps the armour mass connected while the
-      // legs alternate. No root translation is authored here: gameplay owns movement.
-      bodyAngles.set(
-        rad(1.1 + 0.35 * Math.cos(phase * 2)),
-        rad(-1.15 * step),
-        rad(0.55 * weightShift),
-      );
-      bodyMotion.apply(bodyRotation.setFromEuler(bodyAngles));
-
-      // Legs: model-space X is the verified lateral hinge axis (Y up, Z depth).
-      // The first DEF thigh/shin/foot bones carry the dominant weights; their .001
-      // children are retained as exported deformation subdivisions and follow naturally.
-      const hipL = rad(ALDEN_RIGGED_WALK_HIP_DEGREES * leftSwing);
-      const hipR = rad(ALDEN_RIGGED_WALK_HIP_DEGREES * rightSwing);
-      const kneeL = rad(4 + ALDEN_RIGGED_WALK_KNEE_DEGREES * Math.max(0, leftSwing));
-      const kneeR = rad(4 + ALDEN_RIGGED_WALK_KNEE_DEGREES * Math.max(0, rightSwing));
-
-      rotateBone.apply(thighL, xAxis, hipL);
-      rotateBone.apply(shinL, xAxis, -kneeL);
-      rotateBone.apply(footL, xAxis, -hipL * 0.42 + kneeL * 0.38);
-      rotateBone.apply(toeL, xAxis, rad(5) * Math.max(0, -leftSwing));
-
-      rotateBone.apply(thighR, xAxis, hipR);
-      rotateBone.apply(shinR, xAxis, -kneeR);
-      rotateBone.apply(footR, xAxis, -hipR * 0.42 + kneeR * 0.38);
-      rotateBone.apply(toeR, xAxis, rad(5) * Math.max(0, -rightSwing));
-
-      // Alden is heavily armoured and will eventually carry a sword, so the arm swing
-      // stays intentionally restrained. This also avoids exaggerating the cape weights
-      // that the audit found on the upper-arm roots.
-      rotateBone.apply(upperArmL, xAxis, rad(-3.5 * leftSwing));
-      rotateBone.apply(upperArmR, xAxis, rad(-3.5 * rightSwing));
-      rotateBone.apply(forearmL, xAxis, rad(1.2 * leftSwing));
-      rotateBone.apply(forearmR, xAxis, rad(1.2 * rightSwing));
-
+    /** Deterministic pose inspection. Live playback must use advance to retain phase. */
+    apply(elapsed: number, speedMultiplier = 1) {
+      const gait = aldenWalkAtSpeed(speedMultiplier);
+      currentSpeed = gait.speed;
+      phase = Number.isFinite(gait.period) ? ((elapsed / gait.period % 1) + 1) % 1 : 0;
+      pose(phase, currentSpeed);
+    },
+    advance(delta: number, speedMultiplier = 1) {
+      const dt = THREE.MathUtils.clamp(delta, 0, 0.1);
+      const previousRate = 1 / aldenWalkAtSpeed(currentSpeed).period;
+      const targetSpeed = aldenWalkAtSpeed(speedMultiplier).speed;
+      // Smooth a boots/buff change without multiplying global elapsed by speed,
+      // which would teleport the feet to another point in the gait.
+      currentSpeed += (targetSpeed - currentSpeed) * (1 - Math.exp(-dt / 0.12));
+      const rate = 1 / aldenWalkAtSpeed(currentSpeed).period;
+      phase = (phase + dt * (previousRate + rate) * 0.5) % 1;
+      pose(phase, currentSpeed);
     },
   };
 }

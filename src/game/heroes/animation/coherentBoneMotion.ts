@@ -55,11 +55,13 @@ export function createCoherentBoneMotion(
   };
   return {
     reset,
-    apply(rotation: THREE.Quaternion) {
+    apply(rotation: THREE.Quaternion, translation?: THREE.Vector3) {
       reset();
       for (const binding of bindings) {
         const { object, pose, parentRotation, inverseParentRotation, positionInSpace, spaceToParent } = binding;
-        object.position.copy(positionInSpace).sub(pivot).applyQuaternion(rotation).add(pivot).applyMatrix4(spaceToParent);
+        object.position.copy(positionInSpace).sub(pivot).applyQuaternion(rotation).add(pivot);
+        if (translation) object.position.add(translation);
+        object.position.applyMatrix4(spaceToParent);
         object.quaternion.copy(inverseParentRotation).multiply(rotation).multiply(parentRotation).multiply(pose.quaternion);
       }
     },

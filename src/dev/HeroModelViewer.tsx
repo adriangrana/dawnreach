@@ -100,6 +100,11 @@ export default function HeroModelViewer() {
   const [idleLoopSeconds, setIdleLoopSeconds] = useState<number | null>(null);
   const [idlePreview, setIdlePreview] = useState<number | null>(null);
   const idlePreviewRef = useRef<number | null>(null);
+  const [walkLoopSeconds, setWalkLoopSeconds] = useState<number | null>(null);
+  const [walkPreview, setWalkPreview] = useState<number | null>(null);
+  const walkPreviewRef = useRef<number | null>(null);
+  const [walkSpeedMultiplier, setWalkSpeedMultiplier] = useState(1);
+  const walkSpeedRef = useRef(1);
   const [wireframe, setWireframeState] = useState(false);
   const [showBounds, setShowBounds] = useState(false);
   const [showAxes, setShowAxes] = useState(false);
@@ -127,6 +132,7 @@ export default function HeroModelViewer() {
         return;
       }
       setIdleLoopSeconds(model.idleLoopSeconds ?? null);
+      setWalkLoopSeconds(model.walkLoopSeconds ?? null);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x071019);
@@ -270,7 +276,10 @@ export default function HeroModelViewer() {
       runtime.elapsed += dt;
 
       const mode = animationRef.current;
-        if (idlePreviewRef.current !== null) {
+        if (walkPreviewRef.current !== null) {
+          model.resetAttack();
+          model.animate(walkPreviewRef.current, true, 0, walkSpeedRef.current);
+        } else if (idlePreviewRef.current !== null) {
           model.resetAttack();
           model.animate(idlePreviewRef.current, false, 0);
         } else if (attackPreviewRef.current !== null) {
@@ -286,7 +295,7 @@ export default function HeroModelViewer() {
           runtime.attackClock = 0;
           model.resetAttack();
         }
-        model.animate(runtime.elapsed, moving, dt);
+        model.animate(runtime.elapsed, moving, dt, walkSpeedRef.current);
       }
 
       camera.position.copy(cameraPosition(orbit));
@@ -375,6 +384,11 @@ export default function HeroModelViewer() {
   };
 
   const chooseHero = (nextId: HeroId) => {
+    walkSpeedRef.current = 1;
+    setWalkSpeedMultiplier(1);
+    walkPreviewRef.current = null;
+    setWalkPreview(null);
+    setWalkLoopSeconds(null);
     idlePreviewRef.current = null;
     setIdlePreview(null);
     setIdleLoopSeconds(null);
@@ -431,6 +445,8 @@ export default function HeroModelViewer() {
               setAttackPreview(null);
               idlePreviewRef.current = null;
               setIdlePreview(null);
+              walkPreviewRef.current = null;
+              setWalkPreview(null);
               setAnimation(mode);
             }}
             >{mode.toUpperCase()}</button>)}
@@ -443,6 +459,40 @@ export default function HeroModelViewer() {
                 const seconds = Number(event.target.value);
                 idlePreviewRef.current = seconds;
                 setIdlePreview(seconds);
+                walkPreviewRef.current = null;
+                setWalkPreview(null);
+                attackPreviewRef.current = null;
+                setAttackPreview(null);
+                setAnimation('paused');
+              }} />
+          </label>}
+          {walkLoopSeconds !== null && <label style={{ display: 'block', marginTop: 12 }}>
+            WALK SPEED · {Math.round(walkSpeedMultiplier * 100)}%
+            <input type="range" aria-label="Walk speed" min="0.5" max="2" step="0.05"
+              value={walkSpeedMultiplier} style={{ width: '100%' }}
+              onChange={event => {
+                const speed = Number(event.target.value);
+                const period = runtimeRef.current?.model.walkPeriodAtSpeed?.(speed) ?? walkLoopSeconds;
+                if (walkPreviewRef.current !== null) {
+                  const time = walkPreviewRef.current / walkLoopSeconds * period;
+                  walkPreviewRef.current = time;
+                  setWalkPreview(time);
+                }
+                walkSpeedRef.current = speed;
+                setWalkSpeedMultiplier(speed);
+                setWalkLoopSeconds(period);
+              }} />
+          </label>}
+          {walkLoopSeconds !== null && <label style={{ display: 'block', marginTop: 12 }}>
+            WALK POSE · {walkPreview === null ? `${walkLoopSeconds.toFixed(2)}s LOOP` : `${walkPreview.toFixed(2)}s`}
+            <input type="range" aria-label="Walk pose" min="0" max={walkLoopSeconds} step="0.01"
+              value={walkPreview ?? 0} style={{ width: '100%' }}
+              onChange={event => {
+                const seconds = Number(event.target.value);
+                walkPreviewRef.current = seconds;
+                setWalkPreview(seconds);
+                idlePreviewRef.current = null;
+                setIdlePreview(null);
                 attackPreviewRef.current = null;
                 setAttackPreview(null);
                 setAnimation('paused');
@@ -455,6 +505,8 @@ export default function HeroModelViewer() {
               onChange={event => {
                 idlePreviewRef.current = null;
                 setIdlePreview(null);
+                walkPreviewRef.current = null;
+                setWalkPreview(null);
                 const progress = Number(event.target.value) / 100;
                 attackPreviewRef.current = progress;
                 setAttackPreview(progress);

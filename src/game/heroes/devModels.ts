@@ -8,6 +8,8 @@ import { buildSeryn, type SerynRig } from './seryn/buildSeryn';
 import type { HeroId } from './types';
 import {
   ALDEN_RIGGED_IDLE_SECONDS,
+  ALDEN_RIGGED_WALK_SECONDS,
+  aldenWalkAtSpeed,
   createAldenRiggedIdle,
   createAldenRiggedWalk,
 } from './alden/animateAldenRigged';
@@ -24,7 +26,9 @@ export type DevHeroModel = Readonly<{
   id: HeroId;
   rig: DevHeroRig;
   idleLoopSeconds?: number;
-  animate(elapsed: number, moving: boolean, delta: number): void;
+  walkLoopSeconds?: number;
+  walkPeriodAtSpeed?(movementSpeedMultiplier: number): number;
+  animate(elapsed: number, moving: boolean, delta: number, movementSpeedMultiplier?: number): void;
   setAttackProgress(progress: number): void;
   resetAttack(): void;
 }>;
@@ -52,6 +56,11 @@ async function loadAldenRuntimeModel(): Promise<DevHeroModel> {
 
   const idle = createAldenRiggedIdle(root);
   const walk = createAldenRiggedWalk(root);
+  const blendBones: { bone: THREE.Bone; position: THREE.Vector3; quaternion: THREE.Quaternion }[] = [];
+  root.traverse(object => {
+    if (object instanceof THREE.Bone) blendBones.push({ bone: object, position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
+  });
+  let walkWeight = 0;
   let attackProgress = 0;
   idle.reset();
 
@@ -59,16 +68,38 @@ async function loadAldenRuntimeModel(): Promise<DevHeroModel> {
     id: 'H001',
     rig: { root, head },
     idleLoopSeconds: ALDEN_RIGGED_IDLE_SECONDS,
-    animate: (elapsed, moving) => {
+    walkLoopSeconds: ALDEN_RIGGED_WALK_SECONDS,
+    walkPeriodAtSpeed: multiplier => aldenWalkAtSpeed(multiplier).period,
+    animate: (elapsed, moving, delta, movementSpeedMultiplier = 1) => {
       if (attackProgress > 0) {
         idle.reset();
         walk.reset();
+        walkWeight = 0;
         return;
       }
-      if (moving) {
-        walk.apply(elapsed);
+      moving = moving && movementSpeedMultiplier > 0;
+      const targetWeight = moving ? 1 : 0;
+      // A zero-delta call is a deterministic Model Lab pose inspection.
+      walkWeight = delta <= 0 ? targetWeight : THREE.MathUtils.clamp(
+        walkWeight + (moving ? 1 : -1) * delta / 0.2, 0, 1,
+      );
+      if (walkWeight === 1) {
+        if (delta <= 0) walk.apply(elapsed, movementSpeedMultiplier);
+        else walk.advance(delta, movementSpeedMultiplier);
+      } else if (walkWeight === 0) {
+        idle.apply(elapsed);
       } else {
         idle.apply(elapsed);
+        for (const pose of blendBones) {
+          pose.position.copy(pose.bone.position);
+          pose.quaternion.copy(pose.bone.quaternion);
+        }
+        walk.advance(delta, moving ? movementSpeedMultiplier : 0);
+        const blend = walkWeight * walkWeight * (3 - 2 * walkWeight);
+        for (const pose of blendBones) {
+          pose.bone.position.lerp(pose.position, 1 - blend);
+          pose.bone.quaternion.slerp(pose.quaternion, 1 - blend);
+        }
       }
     },
     setAttackProgress: progress => {

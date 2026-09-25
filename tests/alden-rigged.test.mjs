@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { Matrix4, Vector3 } from 'three';
 import { loadSkinnedGlb } from '../scripts/assets/load-skinned-glb.mjs';
 
 const require = createRequire(import.meta.url);
-const { createAldenRiggedIdle, ALDEN_IDLE_BRANCHES } = require('../node_modules/.cache/alden-rigged-test/heroes/alden/animateAldenRigged.js');
+const {
+  createAldenRiggedIdle, ALDEN_IDLE_BRANCHES, createAldenRiggedWalk,
+  sampleAldenWalkFoot, aldenWalkAtSpeed, ALDEN_RIGGED_WALK_SECONDS, ALDEN_RIGGED_WALK_STANCE,
+  ALDEN_RIGGED_WALK_STRIDE, ALDEN_RIGGED_WALK_CLEARANCE, ALDEN_RIGGED_WALK_STANCE_WIDTH,
+} = require('../node_modules/.cache/alden-rigged-test/heroes/alden/animateAldenRigged.js');
 const { findImportedObject } = require('../node_modules/.cache/alden-rigged-test/heroes/animation/coherentBoneMotion.js');
 const asset = 'src/game/heroes/alden/model/alden_rigged_socket.glb';
 async function fixture() {
@@ -22,9 +28,85 @@ async function fixture() {
 }
 const maxDifference = (a, b) => a.reduce((max, value, i) => Math.max(max, Math.abs(value - b[i])), 0);
 
+test('cape asset surgery preserves the original geometry, materials, nodes and non-cloth skin', async () => {
+  const bytes = readFileSync(asset), length = bytes.readUInt32LE(12);
+  const json = JSON.parse(bytes.subarray(20, 20 + length));
+  const bin = bytes.subarray(28 + length);
+  const { original, changedVertices } = json.extras.dawnreachCapeRig;
+  const hash = data => createHash('sha256').update(data).digest('hex');
+  assert.equal(hash(bin.subarray(0, original.byteLength)), original.binaryHash);
+  const nodes = structuredClone(json.nodes.slice(0, original.nodes));
+  for (const node of nodes) if (node.children) node.children = node.children.filter(i => i < original.nodes);
+  assert.equal(hash(JSON.stringify({ materials: json.materials, textures: json.textures, images: json.images,
+    samplers: json.samplers, nodes, meshes: [original.mesh], skins: [original.skin] })), original.metadataHash);
+  const oldAttributes = original.mesh.primitives[0].attributes;
+  const attributes = json.meshes[0].primitives[0].attributes;
+  for (const key of Object.keys(oldAttributes).filter(k => !['JOINTS_0', 'WEIGHTS_0'].includes(k))) {
+    assert.equal(attributes[key], oldAttributes[key]);
+  }
+  const read = (accessorIndex, vertex, component) => {
+    const a = json.accessors[accessorIndex], v = json.bufferViews[a.bufferView];
+    const size = a.componentType === 5121 ? 1 : a.componentType === 5123 ? 2 : 4;
+    const offset = (v.byteOffset ?? 0) + (a.byteOffset ?? 0) + vertex * (v.byteStride ?? size * 4) + component * size;
+    return size === 1 ? bin.readUInt8(offset) : size === 2 ? bin.readUInt16LE(offset) : bin.readFloatLE(offset);
+  };
+  const { mesh } = await fixture();
+  const positions = mesh.geometry.attributes.position;
+  let changed = 0;
+  for (let i = 0; i < positions.count; i++) {
+    const differs = ['JOINTS_0', 'WEIGHTS_0'].some(key => [0,1,2,3].some(k => read(attributes[key], i, k) !== read(oldAttributes[key], i, k)));
+    if (differs) {
+      changed++;
+      assert.ok(positions.getY(i) < 0.78 && positions.getZ(i) < -0.01, 'only rear cloth below shoulder attachments may change');
+    }
+  }
+  assert.equal(changed, changedVertices);
+});
+
+test('speed bonuses increase stride, cadence and arms while preserving reachable feet and cape clearance', async t => {
+  const { scene, mesh } = await fixture();
+  const walk = createAldenRiggedWalk(scene);
+  const ankles = ['L','R'].map(side => findImportedObject(scene, 'DEF-foot.' + side));
+  const origins = ankles.map(b => b.getWorldPosition(new Vector3()));
+  const center = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3()).x;
+  const restGround = Math.min(...Array.from({ length: mesh.geometry.attributes.position.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()).y));
+  const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
+  const capeVertices = Array.from({ length: indices.count }, (_, i) => i).filter(i => [0,1,2,3].some(k => indices.getComponent(i,k) >= 161 && weights.getComponent(i,k) > 0));
+  let maxTargetError = 0, minCapeY = Infinity;
+  const profiles = [0.5,1,1.25,1.5,2].map(speed => aldenWalkAtSpeed(speed));
+  for (const gait of profiles) {
+    assert.ok(Math.abs(gait.stride / gait.period / (ALDEN_RIGGED_WALK_STRIDE / ALDEN_RIGGED_WALK_SECONDS) - gait.speed) < 1e-10);
+    for (let frame = 0; frame <= 40; frame++) {
+      const phase = frame / 40;
+      walk.apply(phase * gait.period, gait.speed);
+      scene.updateMatrixWorld(true);
+      for (let side = 0; side < 2; side++) {
+        const foot = sampleAldenWalkFoot(phase + side * 0.5, gait.speed);
+        const target = origins[side].clone().add(new Vector3(0, foot.lift, foot.z));
+        target.x = center + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2;
+        maxTargetError = Math.max(maxTargetError, ankles[side].getWorldPosition(new Vector3()).distanceTo(target));
+      }
+      for (const i of capeVertices) minCapeY = Math.min(minCapeY, mesh.getVertexPosition(i, new Vector3()).y);
+    }
+  }
+  assert.ok(profiles[2].stride > profiles[1].stride && profiles[2].period < profiles[1].period && profiles[2].armDegrees > profiles[1].armDegrees);
+  assert.ok(maxTargetError < 1e-5, 'speed bonuses must not overextend the knees');
+  assert.ok(minCapeY > restGround + 0.005, 'cape clears the floor at all preview speeds');
+  const pose = () => mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion]);
+  walk.apply(0.37, 1);
+  const before = pose();
+  walk.advance(0, 2);
+  assert.ok(maxDifference(before, pose()) < 1e-10, 'speed changes must preserve phase at zero elapsed time');
+  walk.advance(1e-6, 2);
+  assert.ok(maxDifference(before, pose()) < 0.0001, 'acceleration must be continuous');
+  for (let frame = 0; frame < 120; frame++) walk.advance(1 / 60, 2);
+  assert.ok(pose().every(Number.isFinite));
+  t.diagnostic(JSON.stringify({ profiles, maxTargetError, minCapeY }));
+});
+
 test('real GLB binding resolves sanitized names, disconnected branches and the untouched weapon socket', async () => {
   const { scene, mesh, animations, idle, sample } = await fixture();
-  assert.equal(mesh.skeleton.bones.length, 161);
+  assert.equal(mesh.skeleton.bones.length, 176);
   assert.equal(animations.length, 0);
   assert.equal(ALDEN_IDLE_BRANCHES.length, 95);
   assert.equal(findImportedObject(scene, 'DEF-spine.006').name, 'DEF-spine006');
@@ -60,16 +142,17 @@ test('four-second pose and velocity continuity, deterministic scrubbing, no accu
   assert.ok(maxDifference(leftVelocity, rightVelocity) < 1e-5);
 });
 
-test('sample every skinned vertex: planted boots, rigid head/chest/cape, bounded waist deformation', async t => {
+test('idle: planted boots, rigid head/chest and bounded motion of the hanging cape', async t => {
   const { scene, mesh, idle, sample } = await fixture();
   const positions = mesh.geometry.attributes.position;
+  sample(0); // Static gravity drape is the baseline; evaluate cyclic motion from it.
   const rest = Array.from({ length: positions.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()));
   const spine = findImportedObject(scene, 'DEF-spine.003');
   const inverseRestSpine = spine.matrixWorld.clone().invert();
   let maxBoot = 0, maxHeadError = 0, maxRigidError = 0, maxDisplacement = 0, maxChest = 0;
   let headCount = 0, bootCount = 0, maxEdgeStrain = 0, maxEdgeChange = 0, worstEdge = null;
   const affected = new Set();
-  for (const name of ALDEN_IDLE_BRANCHES) findImportedObject(scene, name).traverse(o => affected.add(o));
+  for (const name of ALDEN_IDLE_BRANCHES) findImportedObject(scene, name).traverse(o => { if (!o.name.startsWith('CAPE-')) affected.add(o); });
   const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
   const rigid = rest.map((_, i) => Array.from({ length: 4 }, (_, k) => weights.getComponent(i, k) <= 0 || affected.has(mesh.skeleton.bones[indices.getComponent(i, k)])).every(Boolean));
   const triangles = mesh.geometry.index.array;
@@ -124,4 +207,129 @@ test('model placement after capture does not change the local animation', async 
   scene.rotation.set(0.1, 0.8, -0.1);
   scene.scale.setScalar(1.45);
   assert.ok(maxDifference(expected, sample(2)) < 1e-12);
+});
+
+test('walk alternates support with smooth landings and constant stance speed', () => {
+  const epsilon = 1e-5;
+  for (const boundary of [0, ALDEN_RIGGED_WALK_STANCE, 1]) {
+    const a = sampleAldenWalkFoot(boundary - epsilon), b = sampleAldenWalkFoot(boundary), c = sampleAldenWalkFoot(boundary + epsilon);
+    for (const key of ['z', 'lift']) assert.ok(Math.abs((b[key] - a[key]) / epsilon - (c[key] - b[key]) / epsilon) < 0.003);
+  }
+  for (let phase = 0; phase < 1; phase += 0.01) {
+    assert.ok(sampleAldenWalkFoot(phase).supporting || sampleAldenWalkFoot(phase + 0.5).supporting, 'walk cannot have a flight phase');
+  }
+  for (const phase of [0.1, 0.3, 0.5]) {
+    const a = sampleAldenWalkFoot(phase), b = sampleAldenWalkFoot(phase + epsilon);
+    assert.equal(a.lift, 0);
+    assert.ok(Math.abs((b.z - a.z) / epsilon + ALDEN_RIGGED_WALK_STRIDE / ALDEN_RIGGED_WALK_STANCE) < 1e-9);
+  }
+});
+
+test('walk: narrow supports, grounded soles, forward knees, coherent head/chest and hanging cape', async t => {
+  const { scene, mesh } = await fixture();
+  const walk = createAldenRiggedWalk(scene);
+  const rest = Array.from({ length: mesh.geometry.attributes.position.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()));
+  const feet = ['L', 'R'].map(side => {
+    const ankle = findImportedObject(scene, `DEF-foot.${side}`);
+    const vertices = rest.flatMap((point, i) => point.y < -0.57 && point.z > 0 && (side === 'L' ? point.x > -0.433 : point.x < -0.433) ? [i] : []);
+    return { ankle, knee: findImportedObject(scene, `DEF-shin.${side}`), hip: findImportedObject(scene, `DEF-thigh.${side}`),
+      origin: ankle.getWorldPosition(new Vector3()), vertices, ground: Math.min(...vertices.map(i => rest[i].y)) };
+  });
+  const spine = findImportedObject(scene, 'DEF-spine.003');
+  const inverseRestSpine = spine.matrixWorld.clone().invert();
+  const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
+  const articulated = mesh.skeleton.bones.map(b => /^(CAPE-|DEF-(thigh|shin|foot|toe|upper_arm|forearm|hand|thumb|palm|f_))/.test(b.userData.name));
+  const rigid = rest.map((_, i) => [0, 1, 2, 3].every(k => weights.getComponent(i, k) === 0 || !articulated[indices.getComponent(i, k)]));
+  let maxContactError = 0, maxAnkleError = 0, maxRigidError = 0, maxVertexDisplacement = 0;
+  let minKneeForward = Infinity, maxLift = 0, maxEdgeChange = 0, worstWalkEdge = null;
+  let minCapeY = Infinity, maxCapeWidth = 0, maxCapeRear = -Infinity;
+  const centerX = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3()).x;
+  const capeVertex = rest.map((_, i) => [0,1,2,3].some(k => indices.getComponent(i,k) >= 161 && weights.getComponent(i,k) > 0));
+  const point = new Vector3(), delta = new Matrix4();
+  for (let frame = 0; frame <= 80; frame++) {
+    const phase = frame / 80;
+    walk.apply(phase * ALDEN_RIGGED_WALK_SECONDS);
+    scene.updateMatrixWorld(true);
+    delta.multiplyMatrices(spine.matrixWorld, inverseRestSpine);
+    const posed = rest.map((original, i) => {
+      const current = mesh.getVertexPosition(i, new Vector3());
+      assert.ok(current.toArray().every(Number.isFinite));
+      if (!capeVertex[i]) maxVertexDisplacement = Math.max(maxVertexDisplacement, current.distanceTo(original));
+      if (rigid[i]) maxRigidError = Math.max(maxRigidError, current.distanceTo(point.copy(original).applyMatrix4(delta)));
+      return current;
+    });
+    const capePoints = posed.filter((_, i) => capeVertex[i]);
+    minCapeY = Math.min(minCapeY, ...capePoints.map(v => v.y));
+    maxCapeWidth = Math.max(maxCapeWidth, Math.max(...capePoints.map(v => v.x)) - Math.min(...capePoints.map(v => v.x)));
+    maxCapeRear = Math.max(maxCapeRear, -Math.min(...capePoints.map(v => v.z)));
+    for (let side = 0; side < 2; side++) {
+      const leg = feet[side], foot = sampleAldenWalkFoot(phase + side * 0.5);
+      const lowest = Math.min(...leg.vertices.map(i => posed[i].y));
+      maxContactError = Math.max(maxContactError, Math.abs(lowest - leg.ground - foot.lift));
+      maxLift = Math.max(maxLift, lowest - leg.ground);
+      const hip = leg.hip.getWorldPosition(new Vector3()), knee = leg.knee.getWorldPosition(new Vector3()), ankle = leg.ankle.getWorldPosition(new Vector3());
+      const direction = ankle.clone().sub(hip).normalize();
+      const bend = knee.clone().sub(hip);
+      bend.addScaledVector(direction, -bend.dot(direction));
+      minKneeForward = Math.min(minKneeForward, bend.z);
+      const goal = leg.origin.clone().add(new Vector3(0, foot.lift, foot.z));
+      goal.x = centerX + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2;
+      maxAnkleError = Math.max(maxAnkleError, goal.distanceTo(ankle));
+    }
+    const triangles = mesh.geometry.index.array;
+    for (let edge = 0; edge < triangles.length; edge++) {
+      const a = triangles[edge], b = triangles[edge % 3 === 2 ? edge - 2 : edge + 1];
+      const change = Math.abs(posed[a].distanceTo(posed[b]) - rest[a].distanceTo(rest[b]));
+      if (change > maxEdgeChange) {
+        maxEdgeChange = change;
+        worstWalkEdge = { a, b, phase, restLength: rest[a].distanceTo(rest[b]), position: rest[a].toArray(),
+          influences: [a,b].map(i => [0,1,2,3].map(k => [mesh.skeleton.bones[indices.getComponent(i,k)].userData.name, weights.getComponent(i,k)])) };
+      }
+    }
+  }
+  t.diagnostic(JSON.stringify({ maxContactError, maxAnkleError, maxRigidError, maxVertexDisplacement, minKneeForward, maxLift, maxEdgeChange, worstWalkEdge, minCapeY, maxCapeWidth, maxCapeRear }));
+  assert.ok(maxContactError < 0.001, 'soles must follow their ground/clearance trajectory within 1mm');
+  assert.ok(maxAnkleError < 1e-5, 'leg targets must be reachable without stretching');
+  assert.ok(minKneeForward > 0.025, 'knees must never reverse or lock');
+  assert.ok(maxRigidError < 1e-6, 'head/pectoral vertices must share one rigid delta');
+  assert.ok(maxLift > ALDEN_RIGGED_WALK_CLEARANCE * 0.95);
+  assert.ok(maxVertexDisplacement < 0.25, 'no explosive body vertices');
+  assert.ok(minCapeY > Math.min(...feet.map(f => f.ground)) + 0.005, 'cape must clear the floor');
+  assert.ok(maxCapeWidth < 1.05 && maxCapeRear < 0.38, 'cape should hang close with clearance behind the legs');
+});
+
+test('walk loops without drift, resets exactly and survives model placement', async () => {
+  const { scene, mesh } = await fixture();
+  const rest = mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion, ...b.scale]);
+  const socket = findImportedObject(scene, 'weapon_socket.R');
+  const socketRest = socket.matrix.clone();
+  const parents = mesh.skeleton.bones.map(b => b.parent);
+  const attributes = ['position', 'skinIndex', 'skinWeight'].map(key => mesh.geometry.attributes[key].array.slice());
+  const walk = createAldenRiggedWalk(scene);
+  const pose = time => {
+    walk.apply(time);
+    return mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion, ...b.scale]);
+  };
+  for (const time of [0, 0.2, 0.7, 1.399]) assert.ok(maxDifference(pose(time), pose(time + ALDEN_RIGGED_WALK_SECONDS)) < 1e-9);
+  for (const boundary of [0, 0.1, 0.5, 0.6]) {
+    const time = boundary * ALDEN_RIGGED_WALK_SECONDS, epsilon = 1e-5;
+    const left = pose(time - epsilon), center = pose(time), right = pose(time + epsilon);
+    const before = center.map((v, i) => (v - left[i]) / epsilon);
+    const after = right.map((v, i) => (v - center[i]) / epsilon);
+    assert.ok(maxDifference(before, after) < 0.005, 'joint velocity must be continuous at support transitions');
+  }
+  const expected = pose(0.95);
+  for (let i = 0; i < 3000; i++) pose(i / 60);
+  assert.ok(maxDifference(expected, pose(0.95)) < 1e-9);
+  scene.position.set(10, 3, -4);
+  scene.rotation.set(0.1, 0.8, -0.1);
+  scene.scale.setScalar(1.45);
+  assert.ok(maxDifference(expected, pose(0.95)) < 1e-6);
+  assert.deepEqual(socket.matrix.elements, socketRest.elements);
+  assert.equal(socket.parent, findImportedObject(scene, 'DEF-hand.R'));
+  assert.ok(maxDifference(socket.matrixWorld.elements, new Matrix4().multiplyMatrices(socket.parent.matrixWorld, socketRest).elements) < 1e-9);
+  ['position', 'skinIndex', 'skinWeight'].forEach((key, i) => assert.deepEqual(mesh.geometry.attributes[key].array, attributes[i]));
+  mesh.skeleton.bones.forEach((b, i) => assert.equal(b.parent, parents[i]));
+  walk.reset();
+  assert.deepEqual(mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion, ...b.scale]), rest);
 });
