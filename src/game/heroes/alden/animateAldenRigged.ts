@@ -8,11 +8,11 @@ export const ALDEN_RIGGED_IDLE_SECONDS = 4;
 export const ALDEN_RIGGED_BREATH_DEGREES = 0.5;
 export const ALDEN_RIGGED_SWAY_DEGREES = 0.2;
 
-// Two steps per second at base movement speed; bonuses change stride AND cadence.
+// Longer, less hurried steps at base speed; bonuses change stride AND cadence.
 // Translation remains gameplay-owned; this is an in-place locomotion cycle.
-export const ALDEN_RIGGED_WALK_SECONDS = 1;
+export const ALDEN_RIGGED_WALK_SECONDS = 1.1;
 export const ALDEN_RIGGED_WALK_STANCE = 0.6;
-export const ALDEN_RIGGED_WALK_STRIDE = 0.36;
+export const ALDEN_RIGGED_WALK_STRIDE = 0.5;
 export const ALDEN_RIGGED_WALK_CLEARANCE = 0.055;
 export const ALDEN_RIGGED_WALK_STANCE_WIDTH = 0.32;
 
@@ -22,7 +22,7 @@ export const ALDEN_RIGGED_WALK_STANCE_WIDTH = 0.32;
  */
 export function aldenWalkAtSpeed(speedMultiplier = 1) {
   const speed = Number.isFinite(speedMultiplier) ? Math.max(0, speedMultiplier) : 0;
-  const strideScale = THREE.MathUtils.clamp(1 + 0.35 * (speed - 1), 0.6, 1.22);
+  const strideScale = THREE.MathUtils.clamp(1 + 0.25 * (speed - 1), 0.6, 1.16);
   return {
     speed,
     stride: ALDEN_RIGGED_WALK_STRIDE * strideScale,
@@ -225,7 +225,9 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
   const bodyRotation = new THREE.Quaternion();
   const bodyAngles = new THREE.Euler(0, 0, 0, 'XYZ');
   const bodyOffset = new THREE.Vector3();
-  const target = new THREE.Vector3();
+  const hipPosition = new THREE.Vector3();
+  const targets = legs.map(() => new THREE.Vector3());
+  const supportHeights = [0, 0];
   const rad = THREE.MathUtils.degToRad;
   let phase = 0, currentSpeed = 1;
   const pose = (phase: number, speedMultiplier: number) => {
@@ -235,19 +237,34 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
       // The cape now has dedicated joints; the arm roots can swing independently.
       bodyAngles.set(rad(1.4 + 0.6 * (gait.effort - 1) + 0.3 * Math.cos(2 * angle)),
         rad(-(1.8 + 0.3 * (gait.effort - 1)) * Math.cos(angle)), rad(-0.65 * Math.sin(angle)));
-      // A shallow bend supplies reach margin; the hips rise over the support leg.
-      // This is bone motion, never root motion or a gameplay speed change.
-      bodyOffset.set(0.018 * Math.sin(angle), -0.03 - 0.004 * Math.cos(2 * angle), 0);
-      bodyMotion.apply(bodyRotation.setFromEuler(bodyAngles), bodyOffset);
-      root.updateMatrixWorld(true);
+      bodyRotation.setFromEuler(bodyAngles);
+      bodyOffset.set(0.018 * Math.sin(angle), 0, 0);
       for (let side = 0; side < legs.length; side++) {
         const foot = sampleAldenWalkFoot(phase + side * 0.5, speedMultiplier);
         const leg = legs[side];
+        const target = targets[side];
         target.copy(leg.restAnkle);
         target.x = pivot.x + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH * 0.5;
-        target.z += foot.z;
+        // Center travel under the hip, not the rearward ankle in the bind pose.
+        // This gives a longer forward step without overextending the trailing leg.
+        target.z = leg.restHip.z + foot.z;
         target.y += foot.lift;
-        leg.solve(target);
+        hipPosition.copy(leg.restHip).sub(pivot).applyQuaternion(bodyRotation).add(pivot).add(bodyOffset);
+        // Near extension (about 8 degrees of knee flexion), never a locked leg.
+        // Let the planted leg raise the pelvis instead of holding a crouch.
+        const reach = leg.restLength * Math.cos(rad(4));
+        const horizontalSq = (hipPosition.x - target.x) ** 2 + (hipPosition.z - target.z) ** 2;
+        supportHeights[side] = target.y + Math.sqrt(Math.max(0, reach * reach - horizontalSq)) - hipPosition.y;
+      }
+      // Smooth minimum keeps BOTH targets reachable through double support.
+      // Small loading compression softens contact without shortening the step.
+      const [leftHeight, rightHeight] = supportHeights;
+      bodyOffset.y = (leftHeight + rightHeight - Math.hypot(leftHeight - rightHeight, 0.003)) * 0.5
+        - 0.003 * (1 - Math.cos(2 * angle));
+      bodyMotion.apply(bodyRotation, bodyOffset);
+      root.updateMatrixWorld(true);
+      for (let side = 0; side < legs.length; side++) {
+        legs[side].solve(targets[side]);
         const swing = Math.cos(angle + side * Math.PI);
         rotateBone(arms[side].upper, lateralAxis, rad(gait.armDegrees * swing));
         rotateBone(arms[side].forearm, lateralAxis, rad(-3 + 2 * swing));

@@ -26,6 +26,13 @@ cada pierna usa IK de dos segmentos con su plano de rodilla original, sin escala
 huesos. Cada pie apoya el 60 % del ciclo, con doble apoyo y retorno suave.
 Los pies conservan su orientación de reposo y elevan 5,5 cm a velocidad base.
 
+Revisión de la zancada: el recorrido longitudinal se centra bajo la cadera,
+en vez de alrededor del tobillo atrasado de la pose original. La pelvis ajusta
+su altura a la longitud de ambas piernas y al apoyo, permitiendo casi extender
+la rodilla adelantada al contactar. Un mínimo suave entre los límites de ambas
+piernas mantiene el doble apoyo continuo, con 6 mm de compresión adicional
+durante la carga. Se conserva una pequeña flexión para evitar bloquear la rodilla.
+
 La capa compartía pesos con espalda y brazos y no tenía articulaciones propias.
 Se añadieron 15 huesos en tres cadenas de cinco, ancladas a `DEF-spine.003`.
 La pose de caída y las pequeñas oscilaciones con desfase permiten balancear los
@@ -54,23 +61,24 @@ Idle conserva su ciclo exacto de **4 segundos**, respiración máxima de **0,5°
 y balanceo de **±0,2°**, con pies inmóviles. La capa tiene oscilaciones locales
 de hasta ±0,2° en pitch y ±0,08° en roll sobre su pose caída.
 
-Walk base dura **1 segundo** (dos pasos). En el rango validado 50–200 %:
+Walk base dura **1,1 segundos** (dos pasos). En el rango validado 50–200 %:
 
-- Zancada: 29,7–43,92 cm; elevación: 5,0875–6,325 cm.
+- Zancada: 43,75–58 cm (50 cm a velocidad base); elevación: 5,0875–6,325 cm.
 - Brazos: ±6–12° (±8° a velocidad base); antebrazos: −5 a −1°.
 - Torso: inclinación 0,8–2,3°, giro ±1,65–2,1°, balanceo ±0,65°.
-- Pelvis: desplazamiento lateral ±1,8 cm; vertical entre −3,4 y −2,6 cm.
+- Pelvis: desplazamiento lateral ±1,8 cm; altura resuelta por apoyo y alcance
+  de piernas, con rodilla adelantada entre 8,14 y 8,46° de flexión al contactar.
 - Capa: pose local por cadena `[-18, -3, 8, 15, 18]°`, plegado lateral
   de ±45° en las raíces externas y separación trasera de 4,5 cm.
   Oscilación máxima de walk ±1,4° en pitch y ±0,65° en roll.
 
 | Multiplicador | Ciclo | Zancada | Brazo |
 | --- | --- | --- | --- |
-| 0,50 | 1,65 s | 29,7 cm | ±6° |
-| 1,00 | 1,00 s | 36 cm | ±8° |
-| 1,25 | 0,87 s | 39,15 cm | ±9° |
-| 1,50 | 0,783333 s | 42,3 cm | ±10° |
-| 2,00 | 0,61 s | 43,92 cm | ±12° |
+| 0,50 | 1,925 s | 43,75 cm | ±6° |
+| 1,00 | 1,10 s | 50 cm | ±8° |
+| 1,25 | 0,935 s | 53,125 cm | ±9° |
+| 1,50 | 0,825 s | 56,25 cm | ±10° |
+| 2,00 | 0,638 s | 58 cm | ±12° |
 
 La zancada tiene un límite de alcance; la cadencia absorbe el resto del aumento.
 La fase se integra con delta y la velocidad se suaviza con constante de 0,12 s,
@@ -108,9 +116,9 @@ dependen de `neutral_bone`. El cambio autorizado de pesos se limita a la capa.
 - `npm test`: 130/130.
 - `npm run test:seryn`: 6/6.
 - `npm run test:alden-rigged`: 9/9, sobre el GLB real con GLTFLoader.
-- Contacto de suelas: error máximo 0,000000154 unidades del modelo.
+- Contacto de suelas: error máximo 0,000754 unidades del modelo (menos de 1 mm).
 - Alcance de tobillos entre 50–200 %: error máximo 0,000000128 unidades.
-- La capa mantiene más de 1 cm de separación del suelo en las fases muestreadas.
+- La capa mantiene más de 2 cm de separación del suelo en las fases muestreadas.
 - Continuidad de posición y velocidad, 12.000 muestras de idle y 3.000 de walk
   sin deriva, transformaciones de colocación, socket y buffers runtime intactos.
 - Comprobación binaria del asset original y pesos del cuerpo intactos.
@@ -120,6 +128,12 @@ detalle facial y wireframe; reproducción y poses de marcha a diferentes fases,
 incluida velocidad 200 %. Se verificaron piernas más juntas, alternancia de
 brazos, cabeza/pecho coherentes y capa caída. Cambio de héroe a Seryn verificado.
 Los controles Walk speed y Walk pose permiten repetir la revisión.
+
+Revisión posterior de extensión de rodilla: build y las 9 pruebas del GLB
+repetidos; se añadió comprobación del ángulo real entre muslo y tibia al contacto
+para ambos lados y velocidades 50, 100, 125, 150 y 200 %. Los resultados 130/130
+y 6/6 anteriores corresponden a la entrega del rig de capa; esta revisión sólo
+modifica la marcha del GLB y la información de reposo expuesta por su IK.
 
 ## Archivos del cambio
 

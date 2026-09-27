@@ -33,7 +33,9 @@ export function createTwoBoneLeg(
     bone.updateWorldMatrix(false, true);
   };
   return {
+    restHip,
     restAnkle,
+    restLength: restHip.distanceTo(restKnee) + restKnee.distanceTo(restAnkle),
     solve(targetInSpace: THREE.Vector3) {
       hip.getWorldPosition(hipPosition);
       knee.getWorldPosition(kneePosition);

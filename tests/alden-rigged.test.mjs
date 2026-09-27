@@ -67,12 +67,16 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
   const { scene, mesh } = await fixture();
   const walk = createAldenRiggedWalk(scene);
   const ankles = ['L','R'].map(side => findImportedObject(scene, 'DEF-foot.' + side));
+  const knees = ['L','R'].map(side => findImportedObject(scene, 'DEF-shin.' + side));
+  const hips = ['L','R'].map(side => findImportedObject(scene, 'DEF-thigh.' + side));
   const origins = ankles.map(b => b.getWorldPosition(new Vector3()));
+  origins.forEach((origin, side) => { origin.z = findImportedObject(scene, 'DEF-thigh.' + ['L','R'][side]).getWorldPosition(new Vector3()).z; });
   const center = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3()).x;
   const restGround = Math.min(...Array.from({ length: mesh.geometry.attributes.position.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()).y));
   const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
   const capeVertices = Array.from({ length: indices.count }, (_, i) => i).filter(i => [0,1,2,3].some(k => indices.getComponent(i,k) >= 161 && weights.getComponent(i,k) > 0));
   let maxTargetError = 0, minCapeY = Infinity;
+  let minContactFlexion = Infinity, maxContactFlexion = 0;
   const profiles = [0.5,1,1.25,1.5,2].map(speed => aldenWalkAtSpeed(speed));
   for (const gait of profiles) {
     assert.ok(Math.abs(gait.stride / gait.period / (ALDEN_RIGGED_WALK_STRIDE / ALDEN_RIGGED_WALK_SECONDS) - gait.speed) < 1e-10);
@@ -85,11 +89,21 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
         const target = origins[side].clone().add(new Vector3(0, foot.lift, foot.z));
         target.x = center + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2;
         maxTargetError = Math.max(maxTargetError, ankles[side].getWorldPosition(new Vector3()).distanceTo(target));
+        if ((frame === 0 || frame === 40) && side === 0 || frame === 20 && side === 1) {
+          const knee = knees[side].getWorldPosition(new Vector3());
+          const upper = knee.clone().sub(hips[side].getWorldPosition(new Vector3())).normalize();
+          const lower = ankles[side].getWorldPosition(new Vector3()).sub(knee).normalize();
+          const flexion = Math.acos(Math.min(1, Math.max(-1, upper.dot(lower)))) * 180 / Math.PI;
+          minContactFlexion = Math.min(minContactFlexion, flexion);
+          maxContactFlexion = Math.max(maxContactFlexion, flexion);
+        }
       }
       for (const i of capeVertices) minCapeY = Math.min(minCapeY, mesh.getVertexPosition(i, new Vector3()).y);
     }
   }
   assert.ok(profiles[2].stride > profiles[1].stride && profiles[2].period < profiles[1].period && profiles[2].armDegrees > profiles[1].armDegrees);
+  t.diagnostic(JSON.stringify({ maxTargetError, minCapeY, minContactFlexion, maxContactFlexion }));
+  assert.ok(minContactFlexion > 5 && maxContactFlexion < 12, 'the leading knee must nearly extend at contact without locking');
   assert.ok(maxTargetError < 1e-5, 'speed bonuses must not overextend the knees');
   assert.ok(minCapeY > restGround + 0.005, 'cape clears the floor at all preview speeds');
   const pose = () => mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion]);
@@ -235,6 +249,7 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
     return { ankle, knee: findImportedObject(scene, `DEF-shin.${side}`), hip: findImportedObject(scene, `DEF-thigh.${side}`),
       origin: ankle.getWorldPosition(new Vector3()), vertices, ground: Math.min(...vertices.map(i => rest[i].y)) };
   });
+  feet.forEach(leg => { leg.origin.z = leg.hip.getWorldPosition(new Vector3()).z; });
   const spine = findImportedObject(scene, 'DEF-spine.003');
   const inverseRestSpine = spine.matrixWorld.clone().invert();
   const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
@@ -293,7 +308,7 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
   assert.ok(minKneeForward > 0.025, 'knees must never reverse or lock');
   assert.ok(maxRigidError < 1e-6, 'head/pectoral vertices must share one rigid delta');
   assert.ok(maxLift > ALDEN_RIGGED_WALK_CLEARANCE * 0.95);
-  assert.ok(maxVertexDisplacement < 0.25, 'no explosive body vertices');
+  assert.ok(maxVertexDisplacement < ALDEN_RIGGED_WALK_STRIDE / 2 + 0.15, 'no body vertices beyond the wider step envelope');
   assert.ok(minCapeY > Math.min(...feet.map(f => f.ground)) + 0.005, 'cape must clear the floor');
   assert.ok(maxCapeWidth < 1.05 && maxCapeRear < 0.38, 'cape should hang close with clearance behind the legs');
 });
