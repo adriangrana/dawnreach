@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 /** Position IK through a deform chain, including fixed subdivision joints.
- * The authored knee plane is preserved; feet retain their rest orientation in
- * model space. Call after restoring the pose and placing the hip each frame.
+ * The authored knee plane is preserved. Foot pitch is an optional model-space
+ * rotation over the rest orientation. Restore the pose before each solve.
  */
 export function createTwoBoneLeg(
   space: THREE.Object3D,
@@ -23,6 +23,7 @@ export function createTwoBoneLeg(
   const target = new THREE.Vector3(), direction = new THREE.Vector3(), bend = new THREE.Vector3(), desiredKnee = new THREE.Vector3();
   const from = new THREE.Vector3(), to = new THREE.Vector3();
   const delta = new THREE.Quaternion(), parentRotation = new THREE.Quaternion(), worldRotation = new THREE.Quaternion();
+  const footRotation = new THREE.Quaternion(), lateralAxis = new THREE.Vector3(1, 0, 0);
   const aim = (bone: THREE.Object3D, origin: THREE.Vector3, end: THREE.Vector3, goal: THREE.Vector3) => {
     from.copy(end).sub(origin).normalize();
     to.copy(goal).sub(origin).normalize();
@@ -36,7 +37,11 @@ export function createTwoBoneLeg(
     restHip,
     restAnkle,
     restLength: restHip.distanceTo(restKnee) + restKnee.distanceTo(restAnkle),
-    solve(targetInSpace: THREE.Vector3) {
+    reachAtFlexion(radians: number) {
+      const upper = restHip.distanceTo(restKnee), lower = restKnee.distanceTo(restAnkle);
+      return Math.sqrt(upper * upper + lower * lower + 2 * upper * lower * Math.cos(radians));
+    },
+    solve(targetInSpace: THREE.Vector3, footPitch = 0) {
       hip.getWorldPosition(hipPosition);
       knee.getWorldPosition(kneePosition);
       ankle.getWorldPosition(anklePosition);
@@ -57,7 +62,8 @@ export function createTwoBoneLeg(
       knee.getWorldPosition(kneePosition);
       ankle.getWorldPosition(anklePosition);
       aim(knee, kneePosition, anklePosition, target);
-      space.getWorldQuaternion(worldRotation).multiply(restFootRotation);
+      footRotation.setFromAxisAngle(lateralAxis, footPitch).multiply(restFootRotation);
+      space.getWorldQuaternion(worldRotation).multiply(footRotation);
       ankle.parent!.getWorldQuaternion(parentRotation).invert();
       ankle.quaternion.copy(parentRotation).multiply(worldRotation).normalize();
       ankle.updateWorldMatrix(false, true);

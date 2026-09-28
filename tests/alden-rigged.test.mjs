@@ -69,13 +69,12 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
   const ankles = ['L','R'].map(side => findImportedObject(scene, 'DEF-foot.' + side));
   const knees = ['L','R'].map(side => findImportedObject(scene, 'DEF-shin.' + side));
   const hips = ['L','R'].map(side => findImportedObject(scene, 'DEF-thigh.' + side));
-  const origins = ankles.map(b => b.getWorldPosition(new Vector3()));
-  origins.forEach((origin, side) => { origin.z = findImportedObject(scene, 'DEF-thigh.' + ['L','R'][side]).getWorldPosition(new Vector3()).z; });
-  const center = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3()).x;
+  const lengths = hips.map((hip, side) => [hip.getWorldPosition(new Vector3()).distanceTo(knees[side].getWorldPosition(new Vector3())),
+    knees[side].getWorldPosition(new Vector3()).distanceTo(ankles[side].getWorldPosition(new Vector3()))]);
   const restGround = Math.min(...Array.from({ length: mesh.geometry.attributes.position.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()).y));
   const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
   const capeVertices = Array.from({ length: indices.count }, (_, i) => i).filter(i => [0,1,2,3].some(k => indices.getComponent(i,k) >= 161 && weights.getComponent(i,k) > 0));
-  let maxTargetError = 0, minCapeY = Infinity;
+  let maxLengthError = 0, minCapeY = Infinity;
   let minContactFlexion = Infinity, maxContactFlexion = 0;
   const profiles = [0.5,1,1.25,1.5,2].map(speed => aldenWalkAtSpeed(speed));
   for (const gait of profiles) {
@@ -85,10 +84,8 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
       walk.apply(phase * gait.period, gait.speed);
       scene.updateMatrixWorld(true);
       for (let side = 0; side < 2; side++) {
-        const foot = sampleAldenWalkFoot(phase + side * 0.5, gait.speed);
-        const target = origins[side].clone().add(new Vector3(0, foot.lift, foot.z));
-        target.x = center + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2;
-        maxTargetError = Math.max(maxTargetError, ankles[side].getWorldPosition(new Vector3()).distanceTo(target));
+        const hip = hips[side].getWorldPosition(new Vector3()), knee = knees[side].getWorldPosition(new Vector3()), ankle = ankles[side].getWorldPosition(new Vector3());
+        maxLengthError = Math.max(maxLengthError, Math.abs(hip.distanceTo(knee) - lengths[side][0]), Math.abs(knee.distanceTo(ankle) - lengths[side][1]));
         if ((frame === 0 || frame === 40) && side === 0 || frame === 20 && side === 1) {
           const knee = knees[side].getWorldPosition(new Vector3());
           const upper = knee.clone().sub(hips[side].getWorldPosition(new Vector3())).normalize();
@@ -102,9 +99,9 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
     }
   }
   assert.ok(profiles[2].stride > profiles[1].stride && profiles[2].period < profiles[1].period && profiles[2].armDegrees > profiles[1].armDegrees);
-  t.diagnostic(JSON.stringify({ maxTargetError, minCapeY, minContactFlexion, maxContactFlexion }));
-  assert.ok(minContactFlexion > 5 && maxContactFlexion < 12, 'the leading knee must nearly extend at contact without locking');
-  assert.ok(maxTargetError < 1e-5, 'speed bonuses must not overextend the knees');
+  t.diagnostic(JSON.stringify({ maxLengthError, minCapeY, minContactFlexion, maxContactFlexion }));
+  assert.ok(minContactFlexion > 0 && maxContactFlexion < 5, 'the leading knee must nearly extend at contact without locking');
+  assert.ok(maxLengthError < 1e-6, 'speed bonuses must preserve thigh and shin lengths');
   assert.ok(minCapeY > restGround + 0.005, 'cape clears the floor at all preview speeds');
   const pose = () => mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion]);
   walk.apply(0.37, 1);
@@ -115,7 +112,40 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
   assert.ok(maxDifference(before, pose()) < 0.0001, 'acceleration must be continuous');
   for (let frame = 0; frame < 120; frame++) walk.advance(1 / 60, 2);
   assert.ok(pose().every(Number.isFinite));
-  t.diagnostic(JSON.stringify({ profiles, maxTargetError, minCapeY }));
+  t.diagnostic(JSON.stringify({ profiles, maxLengthError, minCapeY }));
+});
+
+test('trailing knees flex once through toe-off without rebounds or pauses, at every preview speed', async t => {
+  const { scene } = await fixture();
+  const walk = createAldenRiggedWalk(scene);
+  let worstReversal = 0, worstStep = 0;
+  for (const speed of [0.5, 1, 1.25, 1.5, 2]) for (const [side, offset] of [['L', 0], ['R', 0.5]]) {
+    const bones = ['thigh', 'shin', 'foot'].map(name => findImportedObject(scene, `DEF-${name}.${side}`));
+    const flexAt = phase => {
+      walk.apply((phase + offset) * aldenWalkAtSpeed(speed).period, speed);
+      scene.updateMatrixWorld(true);
+      const [hip, knee, ankle] = bones.map(b => b.getWorldPosition(new Vector3()));
+      return knee.clone().sub(hip).angleTo(ankle.clone().sub(knee)) * 180 / Math.PI;
+    };
+    for (const [phase, min, max] of [[0, 0, 5], [.1, 15, 20], [.3, 0, 5], [.4, 0, 5], [.6, 35, 41], [.73, 55, 65], [.87, 20, 30]]) {
+      const angle = flexAt(phase);
+      assert.ok(angle >= min && angle <= max, `${side} ${speed} phase ${phase}: ${angle} degrees`);
+    }
+    for (const [start, end, sign] of [[.4, .73, 1], [.73, 1, -1]]) {
+      let previous = flexAt(start);
+      for (let frame = Math.round(start * 1000) + 1; frame <= Math.round(end * 1000); frame++) {
+        const current = flexAt(frame / 1000), delta = current - previous;
+        worstReversal = Math.max(worstReversal, -delta * sign);
+        worstStep = Math.max(worstStep, Math.abs(delta));
+        assert.ok(delta * sign >= -0.01, `${side} ${speed}: knee reverses at ${frame / 1000} (${delta} degrees)`);
+        assert.ok(Math.abs(delta) < 0.7, 'no knee pop between adjacent samples');
+        previous = current;
+      }
+    }
+    for (const phase of [.5, .6]) assert.ok(flexAt(phase + .001) - flexAt(phase - .001) > .15,
+      'flexion must continue through pre-swing and toe-off instead of stopping at landmarks');
+  }
+  t.diagnostic(JSON.stringify({ worstReversal, worstStep }));
 });
 
 test('real GLB binding resolves sanitized names, disconnected branches and the untouched weapon socket', async () => {
@@ -255,7 +285,9 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
   const indices = mesh.geometry.attributes.skinIndex, weights = mesh.geometry.attributes.skinWeight;
   const articulated = mesh.skeleton.bones.map(b => /^(CAPE-|DEF-(thigh|shin|foot|toe|upper_arm|forearm|hand|thumb|palm|f_))/.test(b.userData.name));
   const rigid = rest.map((_, i) => [0, 1, 2, 3].every(k => weights.getComponent(i, k) === 0 || !articulated[indices.getComponent(i, k)]));
-  let maxContactError = 0, maxAnkleError = 0, maxRigidError = 0, maxVertexDisplacement = 0;
+  let maxContactError = 0, maxLateralError = 0, maxRigidError = 0, maxVertexDisplacement = 0;
+  let minClearance = Infinity, minTorsoForward = Infinity;
+  let worstContact = null;
   let minKneeForward = Infinity, maxLift = 0, maxEdgeChange = 0, worstWalkEdge = null;
   let minCapeY = Infinity, maxCapeWidth = 0, maxCapeRear = -Infinity;
   const centerX = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3()).x;
@@ -265,6 +297,8 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
     const phase = frame / 80;
     walk.apply(phase * ALDEN_RIGGED_WALK_SECONDS);
     scene.updateMatrixWorld(true);
+    const pelvis = findImportedObject(scene, 'DEF-spine').getWorldPosition(new Vector3());
+    minTorsoForward = Math.min(minTorsoForward, findImportedObject(scene, 'DEF-spine.006').getWorldPosition(new Vector3()).z - pelvis.z);
     delta.multiplyMatrices(spine.matrixWorld, inverseRestSpine);
     const posed = rest.map((original, i) => {
       const current = mesh.getVertexPosition(i, new Vector3());
@@ -280,16 +314,18 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
     for (let side = 0; side < 2; side++) {
       const leg = feet[side], foot = sampleAldenWalkFoot(phase + side * 0.5);
       const lowest = Math.min(...leg.vertices.map(i => posed[i].y));
-      maxContactError = Math.max(maxContactError, Math.abs(lowest - leg.ground - foot.lift));
+      if (foot.supporting && Math.abs(lowest - leg.ground) > maxContactError) {
+        maxContactError = Math.abs(lowest - leg.ground);
+        worstContact = { phase, side, lowest, ground: leg.ground };
+      }
+      minClearance = Math.min(minClearance, lowest - leg.ground);
       maxLift = Math.max(maxLift, lowest - leg.ground);
       const hip = leg.hip.getWorldPosition(new Vector3()), knee = leg.knee.getWorldPosition(new Vector3()), ankle = leg.ankle.getWorldPosition(new Vector3());
       const direction = ankle.clone().sub(hip).normalize();
       const bend = knee.clone().sub(hip);
       bend.addScaledVector(direction, -bend.dot(direction));
       minKneeForward = Math.min(minKneeForward, bend.z);
-      const goal = leg.origin.clone().add(new Vector3(0, foot.lift, foot.z));
-      goal.x = centerX + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2;
-      maxAnkleError = Math.max(maxAnkleError, goal.distanceTo(ankle));
+      maxLateralError = Math.max(maxLateralError, Math.abs(ankle.x - (centerX + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH / 2)));
     }
     const triangles = mesh.geometry.index.array;
     for (let edge = 0; edge < triangles.length; edge++) {
@@ -302,13 +338,15 @@ test('walk: narrow supports, grounded soles, forward knees, coherent head/chest 
       }
     }
   }
-  t.diagnostic(JSON.stringify({ maxContactError, maxAnkleError, maxRigidError, maxVertexDisplacement, minKneeForward, maxLift, maxEdgeChange, worstWalkEdge, minCapeY, maxCapeWidth, maxCapeRear }));
-  assert.ok(maxContactError < 0.001, 'soles must follow their ground/clearance trajectory within 1mm');
-  assert.ok(maxAnkleError < 1e-5, 'leg targets must be reachable without stretching');
-  assert.ok(minKneeForward > 0.025, 'knees must never reverse or lock');
+  t.diagnostic(JSON.stringify({ maxContactError, worstContact, maxLateralError, minClearance, minTorsoForward, maxRigidError, maxVertexDisplacement, minKneeForward, maxLift, maxEdgeChange, worstWalkEdge, minCapeY, maxCapeWidth, maxCapeRear }));
+  assert.ok(maxContactError < 0.001, 'heel/sole/toe contact must stay grounded within 1mm');
+  assert.ok(minClearance > -0.001 && maxLift < 0.2, 'boots cannot penetrate the ground or jump excessively');
+  assert.ok(maxLateralError < 1e-5, 'ankles must preserve the narrow stance');
+  assert.ok(minKneeForward > 0.008, 'nearly extended knees must still bend forward, never reverse');
+  assert.ok(minTorsoForward > 0.05, 'the torso must not lean behind the pelvis');
   assert.ok(maxRigidError < 1e-6, 'head/pectoral vertices must share one rigid delta');
   assert.ok(maxLift > ALDEN_RIGGED_WALK_CLEARANCE * 0.95);
-  assert.ok(maxVertexDisplacement < ALDEN_RIGGED_WALK_STRIDE / 2 + 0.15, 'no body vertices beyond the wider step envelope');
+  assert.ok(maxVertexDisplacement < ALDEN_RIGGED_WALK_STRIDE / 2 + 0.2, 'no body vertices beyond the stride and boot-roll envelope');
   assert.ok(minCapeY > Math.min(...feet.map(f => f.ground)) + 0.005, 'cape must clear the floor');
   assert.ok(maxCapeWidth < 1.05 && maxCapeRear < 0.38, 'cape should hang close with clearance behind the legs');
 });
@@ -326,7 +364,7 @@ test('walk loops without drift, resets exactly and survives model placement', as
     return mesh.skeleton.bones.flatMap(b => [...b.position, ...b.quaternion, ...b.scale]);
   };
   for (const time of [0, 0.2, 0.7, 1.399]) assert.ok(maxDifference(pose(time), pose(time + ALDEN_RIGGED_WALK_SECONDS)) < 1e-9);
-  for (const boundary of [0, 0.1, 0.5, 0.6]) {
+  for (const boundary of [0, 0.1, 0.3, 0.4, 0.5, 0.6, 0.73, 0.87]) {
     const time = boundary * ALDEN_RIGGED_WALK_SECONDS, epsilon = 1e-5;
     const left = pose(time - epsilon), center = pose(time), right = pose(time + epsilon);
     const before = center.map((v, i) => (v - left[i]) / epsilon);

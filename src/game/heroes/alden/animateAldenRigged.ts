@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createTwoBoneLeg } from '../animation/twoBoneLeg';
 import { createBoneSpaceRotation } from '../animation/rotateBoneInSpace';
 import { createAldenCape } from './animateAldenCape';
+import { createAldenFootContact } from './aldenFootContact';
+import { sampleAldenGaitPhase } from './aldenWalkPhases';
 import { createCoherentBoneMotion, findImportedObject } from '../animation/coherentBoneMotion';
 
 export const ALDEN_RIGGED_IDLE_SECONDS = 4;
@@ -12,7 +14,7 @@ export const ALDEN_RIGGED_SWAY_DEGREES = 0.2;
 // Translation remains gameplay-owned; this is an in-place locomotion cycle.
 export const ALDEN_RIGGED_WALK_SECONDS = 1.1;
 export const ALDEN_RIGGED_WALK_STANCE = 0.6;
-export const ALDEN_RIGGED_WALK_STRIDE = 0.5;
+export const ALDEN_RIGGED_WALK_STRIDE = 0.85;
 export const ALDEN_RIGGED_WALK_CLEARANCE = 0.055;
 export const ALDEN_RIGGED_WALK_STANCE_WIDTH = 0.32;
 
@@ -22,7 +24,7 @@ export const ALDEN_RIGGED_WALK_STANCE_WIDTH = 0.32;
  */
 export function aldenWalkAtSpeed(speedMultiplier = 1) {
   const speed = Number.isFinite(speedMultiplier) ? Math.max(0, speedMultiplier) : 0;
-  const strideScale = THREE.MathUtils.clamp(1 + 0.25 * (speed - 1), 0.6, 1.16);
+  const strideScale = THREE.MathUtils.clamp(1 + 0.1 * (speed - 1), 0.7, 1.08);
   return {
     speed,
     stride: ALDEN_RIGGED_WALK_STRIDE * strideScale,
@@ -216,6 +218,7 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
     findImportedObject(root, 'DEF-thigh.' + side),
     findImportedObject(root, 'DEF-shin.' + side),
     findImportedObject(root, 'DEF-foot.' + side)));
+  const contacts = legs.map((leg, side) => createAldenFootContact(root, side === 0 ? 'L' : 'R', leg.restAnkle));
   const arms = (['L', 'R'] as const).map(side => ({
     upper: findImportedObject(root, 'DEF-upper_arm.' + side),
     forearm: findImportedObject(root, 'DEF-forearm.' + side),
@@ -227,49 +230,94 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
   const bodyOffset = new THREE.Vector3();
   const hipPosition = new THREE.Vector3();
   const targets = legs.map(() => new THREE.Vector3());
-  const supportHeights = [0, 0];
   const rad = THREE.MathUtils.degToRad;
+  const smooth = (a: number, b: number, value: number) => THREE.MathUtils.smoothstep(value, a, b);
+  const ankleAt = (phase: number, speed: number, side: number, target: THREE.Vector3) => {
+    const gait = aldenWalkAtSpeed(speed), foot = sampleAldenWalkFoot(phase, speed);
+    const joint = sampleAldenGaitPhase(phase), contact = contacts[side].sample(joint.pitch);
+    target.set(pivot.x + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH * 0.5,
+      contact.y, legs[side].restHip.z + gait.stride * 0.05 + foot.z + contact.z);
+    return { ...joint, ...foot, footPitch: contact.pitch };
+  };
+  const landmarkTarget = new THREE.Vector3();
+  const landmarkHip = new THREE.Vector3();
+  const landmarkRotation = new THREE.Quaternion();
+  const landmarkAngles = new THREE.Euler(0, 0, 0, 'XYZ');
+  const bodyAt = (cycle: number, speed: number, angles: THREE.Euler) => {
+    const effort = aldenWalkAtSpeed(speed).effort, angle = cycle * Math.PI * 2;
+    return angles.set(rad(10 + 0.6 * (effort - 1)),
+      rad(-(1.8 + 0.3 * (effort - 1)) * Math.cos(angle)), rad(-0.65 * Math.sin(angle)));
+  };
+  const pelvisAtLandmark = (phase: number, speed: number, side: number) => {
+    const joint = ankleAt(phase, speed, side, landmarkTarget), leg = legs[side];
+    const reach = leg.reachAtFlexion(rad(joint.knee));
+    landmarkRotation.setFromEuler(bodyAt(phase - side * 0.5, speed, landmarkAngles));
+    landmarkHip.copy(leg.restHip).sub(pivot).applyQuaternion(landmarkRotation).add(pivot);
+    landmarkHip.x += 0.012 * Math.sin((phase + side * 0.5) * Math.PI * 2);
+    const horizontalSq = (landmarkHip.x - landmarkTarget.x) ** 2 + (landmarkHip.z - landmarkTarget.z) ** 2;
+    return landmarkTarget.y + Math.sqrt(Math.max(0, reach * reach - horizontalSq)) - landmarkHip.y;
+  };
+  const pelvisHeight = (half: number, speed: number, side: number) => {
+    if (half <= 0.4) return pelvisAtLandmark(half, speed, side);
+    // Transfer weight to the NEXT CONTACT, never to the airborne foot's
+    // hypothetical grounded position. That produces a spurious pelvis dip.
+    const a = pelvisAtLandmark(0.4, speed, side), b = pelvisAtLandmark(0, speed, 1 - side);
+    const e = 0.0000001;
+    const da = (pelvisAtLandmark(0.4 + e, speed, side) - pelvisAtLandmark(0.4 - e, speed, side)) / (2 * e);
+    const db = (pelvisAtLandmark(e, speed, 1 - side) - pelvisAtLandmark(-e, speed, 1 - side)) / (2 * e);
+    const t = (half - 0.4) / 0.1, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * a + (t3 - 2 * t2 + t) * da * 0.1
+      + (-2 * t3 + 3 * t2) * b + (t3 - t2) * db * 0.1;
+  };
   let phase = 0, currentSpeed = 1;
   const pose = (phase: number, speedMultiplier: number) => {
       const gait = aldenWalkAtSpeed(speedMultiplier);
       const angle = phase * Math.PI * 2;
       // Establish one connected body motion before adding restrained arm swing.
       // The cape now has dedicated joints; the arm roots can swing independently.
-      bodyAngles.set(rad(1.4 + 0.6 * (gait.effort - 1) + 0.3 * Math.cos(2 * angle)),
-        rad(-(1.8 + 0.3 * (gait.effort - 1)) * Math.cos(angle)), rad(-0.65 * Math.sin(angle)));
+      // The imported torso leans back in its rest pose; bring its mass above
+      // the pelvis before adding the small locomotion motion.
+      bodyAt(phase, speedMultiplier, bodyAngles);
       bodyRotation.setFromEuler(bodyAngles);
-      bodyOffset.set(0.018 * Math.sin(angle), 0, 0);
+      const half = ((phase % 0.5) + 0.5) % 0.5;
+      const supportingSide = phase < 0.5 ? 0 : 1;
+      const height = pelvisHeight(half, speedMultiplier, supportingSide);
+      bodyOffset.set(0.012 * Math.sin(angle), height, 0);
       for (let side = 0; side < legs.length; side++) {
-        const foot = sampleAldenWalkFoot(phase + side * 0.5, speedMultiplier);
+        const foot = ankleAt(phase + side * 0.5, speedMultiplier, side, targets[side]);
         const leg = legs[side];
         const target = targets[side];
-        target.copy(leg.restAnkle);
-        target.x = pivot.x + (side === 0 ? 1 : -1) * ALDEN_RIGGED_WALK_STANCE_WIDTH * 0.5;
-        // Center travel under the hip, not the rearward ankle in the bind pose.
-        // This gives a longer forward step without overextending the trailing leg.
-        target.z = leg.restHip.z + foot.z;
-        target.y += foot.lift;
         hipPosition.copy(leg.restHip).sub(pivot).applyQuaternion(bodyRotation).add(pivot).add(bodyOffset);
-        // Near extension (about 8 degrees of knee flexion), never a locked leg.
-        // Let the planted leg raise the pelvis instead of holding a crouch.
-        const reach = leg.restLength * Math.cos(rad(4));
-        const horizontalSq = (hipPosition.x - target.x) ** 2 + (hipPosition.z - target.z) ** 2;
-        supportHeights[side] = target.y + Math.sqrt(Math.max(0, reach * reach - horizontalSq)) - hipPosition.y;
+        const kneeReach = leg.reachAtFlexion(rad(foot.knee));
+        if (foot.cycle > 0.4 && foot.cycle < 0.73) {
+          // Let the trailing leg shorten continuously as weight leaves it.
+          // Solving its rearward reach avoids a second knee extension caused
+          // by independently forcing a fixed ankle path and a heel roll.
+          const dy = hipPosition.y - target.y - foot.lift;
+          const rear = hipPosition.z - Math.sqrt(Math.max(0,
+            kneeReach * kneeReach - dy * dy - (hipPosition.x - target.x) ** 2));
+          target.z = THREE.MathUtils.lerp(rear, target.z, smooth(0.6, 0.73, foot.cycle));
+        }
+        if (!foot.supporting) {
+          const minimumClearance = foot.lift * 0.25;
+          const horizontalSq = (hipPosition.x - target.x) ** 2 + (hipPosition.z - target.z) ** 2;
+          const kneeHeight = hipPosition.y - Math.sqrt(Math.max(0, kneeReach * kneeReach - horizontalSq));
+          // Both clearances and their derivatives meet the ground at each end.
+          // An unbounded soft maximum would leave a residual lift at contact.
+          target.y += Math.max(minimumClearance, kneeHeight - target.y);
+        }
       }
-      // Smooth minimum keeps BOTH targets reachable through double support.
-      // Small loading compression softens contact without shortening the step.
-      const [leftHeight, rightHeight] = supportHeights;
-      bodyOffset.y = (leftHeight + rightHeight - Math.hypot(leftHeight - rightHeight, 0.003)) * 0.5
-        - 0.003 * (1 - Math.cos(2 * angle));
       bodyMotion.apply(bodyRotation, bodyOffset);
       root.updateMatrixWorld(true);
       for (let side = 0; side < legs.length; side++) {
-        legs[side].solve(targets[side]);
+        const foot = sampleAldenGaitPhase(phase + side * 0.5);
+        legs[side].solve(targets[side], rad(foot.pitch));
         const swing = Math.cos(angle + side * Math.PI);
         rotateBone(arms[side].upper, lateralAxis, rad(gait.armDegrees * swing));
         rotateBone(arms[side].forearm, lateralAxis, rad(-3 + 2 * swing));
       }
-      cape(angle, true);
+      // Keep the cloth hanging as the chest leans into the walk.
+      cape(angle, true, bodyAngles.x - rad(2));
   };
   return {
     reset: bodyMotion.reset,

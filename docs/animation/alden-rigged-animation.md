@@ -24,14 +24,25 @@ La marcha anterior separaba los tobillos unos 53 cm, penetraba el suelo unos
 2,6 cm y apenas elevaba el pie libre. Ahora la separación objetivo es 32 cm;
 cada pierna usa IK de dos segmentos con su plano de rodilla original, sin escalar
 huesos. Cada pie apoya el 60 % del ciclo, con doble apoyo y retorno suave.
-Los pies conservan su orientación de reposo y elevan 5,5 cm a velocidad base.
+Las botas giran desde el talón hasta la punta. Una tabla de su silueta real
+determina la altura de contacto, incluyendo los vértices del talón que conservan
+algo de peso de la espinilla. No se alteran pesos ni vértices durante la marcha.
 
-Revisión de la zancada: el recorrido longitudinal se centra bajo la cadera,
-en vez de alrededor del tobillo atrasado de la pose original. La pelvis ajusta
-su altura a la longitud de ambas piernas y al apoyo, permitiendo casi extender
-la rodilla adelantada al contactar. Un mínimo suave entre los límites de ambas
-piernas mantiene el doble apoyo continuo, con 6 mm de compresión adicional
-durante la carga. Se conserva una pequeña flexión para evitar bloquear la rodilla.
+La revisión del 28 de septiembre elimina el doble rebote antes del despegue.
+La interpolación anterior usaba la posición hipotética del pie libre en el suelo
+para transferir el peso: bajaba la pelvis y volvía a doblar la rodilla trasera.
+Ahora la transferencia enlaza con la altura del siguiente contacto y conserva
+su velocidad. La pierna trasera ajusta su alcance longitudinal mientras se acorta;
+el pie libre resuelve su altura desde la flexión, sin tirar de la pelvis.
+La trayectoria final incluye esa corrección y el giro de la bota: no es un bloqueo
+perfecto del pie en coordenadas del mundo. La calibración de avance queda pendiente
+de integrar el GLB en el juego.
+
+Los hitos de flexión son 3° al contacto, 18° al amortiguar, 3° en apoyo medio y
+terminal, 20° en preoscilación, 38° al despegar, 60° en oscilación inicial y 25°
+en oscilación media. Interpolación cúbica monótona evita invertir el movimiento
+o detenerlo en cada hito intermedio. Son objetivos de rodilla sobre este rig;
+el pitch de la suela no equivale al ángulo anatómico del tobillo.
 
 La capa compartía pesos con espalda y brazos y no tenía articulaciones propias.
 Se añadieron 15 huesos en tres cadenas de cinco, ancladas a `DEF-spine.003`.
@@ -63,22 +74,26 @@ de hasta ±0,2° en pitch y ±0,08° en roll sobre su pose caída.
 
 Walk base dura **1,1 segundos** (dos pasos). En el rango validado 50–200 %:
 
-- Zancada: 43,75–58 cm (50 cm a velocidad base); elevación: 5,0875–6,325 cm.
+- Recorrido longitudinal nominal: 80,75–91,8 cm (85 cm a velocidad base).
+  El giro de la bota y el alcance de la pierna ajustan la trayectoria final.
+  La elevación real máxima de la suela a velocidad base es aproximadamente 13 cm.
 - Brazos: ±6–12° (±8° a velocidad base); antebrazos: −5 a −1°.
-- Torso: inclinación 0,8–2,3°, giro ±1,65–2,1°, balanceo ±0,65°.
-- Pelvis: desplazamiento lateral ±1,8 cm; altura resuelta por apoyo y alcance
-  de piernas, con rodilla adelantada entre 8,14 y 8,46° de flexión al contactar.
+- Torso: corrección de la inclinación de reposo 9,7–10,6°, giro ±1,65–2,1°,
+  balanceo ±0,65°. La cabeza queda por delante de la pelvis, sin echarse atrás.
+- Pelvis: desplazamiento lateral ±1,2 cm; altura resuelta desde el apoyo,
+  con rodilla adelantada a 3° de flexión al contactar.
 - Capa: pose local por cadena `[-18, -3, 8, 15, 18]°`, plegado lateral
   de ±45° en las raíces externas y separación trasera de 4,5 cm.
   Oscilación máxima de walk ±1,4° en pitch y ±0,65° en roll.
+  La raíz compensa la inclinación del torso para conservar la caída de la tela.
 
 | Multiplicador | Ciclo | Zancada | Brazo |
 | --- | --- | --- | --- |
-| 0,50 | 1,925 s | 43,75 cm | ±6° |
-| 1,00 | 1,10 s | 50 cm | ±8° |
-| 1,25 | 0,935 s | 53,125 cm | ±9° |
-| 1,50 | 0,825 s | 56,25 cm | ±10° |
-| 2,00 | 0,638 s | 58 cm | ±12° |
+| 0,50 | 2,09 s | 80,75 cm | ±6° |
+| 1,00 | 1,10 s | 85 cm | ±8° |
+| 1,25 | 0,902 s | 87,125 cm | ±9° |
+| 1,50 | 0,77 s | 89,25 cm | ±10° |
+| 2,00 | 0,594 s | 91,8 cm | ±12° |
 
 La zancada tiene un límite de alcance; la cadencia absorbe el resto del aumento.
 La fase se integra con delta y la velocidad se suaviza con constante de 0,12 s,
@@ -113,12 +128,13 @@ dependen de `neutral_bone`. El cambio autorizado de pesos se limita a la capa.
 ## Validación local
 
 - `npm run build`: correcto; aviso de Vite por tamaño de chunks.
-- `npm test`: 130/130.
-- `npm run test:seryn`: 6/6.
-- `npm run test:alden-rigged`: 9/9, sobre el GLB real con GLTFLoader.
-- Contacto de suelas: error máximo 0,000754 unidades del modelo (menos de 1 mm).
-- Alcance de tobillos entre 50–200 %: error máximo 0,000000128 unidades.
-- La capa mantiene más de 2 cm de separación del suelo en las fases muestreadas.
+- `npm run test:alden-rigged`: 10/10, sobre el GLB real con GLTFLoader.
+- Contacto de suelas: error máximo 0,000985 unidades del modelo (menos de 1 mm).
+- Longitud de muslo y espinilla entre 50–200 %: error máximo 0,000000086 unidades.
+- Ambas rodillas: ninguna inversión de flexión entre apoyo terminal y pico de
+  balanceo, ni en la extensión posterior; muestreo cada 0,001 ciclos a 50, 100,
+  125, 150 y 200 %. Tampoco se detienen en los hitos de preoscilación y despegue.
+- La capa mantiene más de 5 cm de separación del suelo en las fases muestreadas.
 - Continuidad de posición y velocidad, 12.000 muestras de idle y 3.000 de walk
   sin deriva, transformaciones de colocación, socket y buffers runtime intactos.
 - Comprobación binaria del asset original y pesos del cuerpo intactos.
@@ -129,15 +145,16 @@ incluida velocidad 200 %. Se verificaron piernas más juntas, alternancia de
 brazos, cabeza/pecho coherentes y capa caída. Cambio de héroe a Seryn verificado.
 Los controles Walk speed y Walk pose permiten repetir la revisión.
 
-Revisión posterior de extensión de rodilla: build y las 9 pruebas del GLB
-repetidos; se añadió comprobación del ángulo real entre muslo y tibia al contacto
-para ambos lados y velocidades 50, 100, 125, 150 y 200 %. Los resultados 130/130
-y 6/6 anteriores corresponden a la entrega del rig de capa; esta revisión sólo
-modifica la marcha del GLB y la información de reposo expuesta por su IK.
+Las 130 pruebas generales y las 6 de Seryn pasaron en la entrega anterior del
+rig de capa; no se repitieron en esta revisión de la marcha del GLB. El asset
+permanece intacto en esta revisión; se modifican únicamente los controladores,
+sus pruebas y esta documentación.
 
 ## Archivos del cambio
 
 - `src/game/heroes/alden/animateAldenRigged.ts`: trayectoria, IK, torso, brazos y velocidad.
+- `src/game/heroes/alden/aldenWalkPhases.ts`: hitos y curvas monótonas de marcha.
+- `src/game/heroes/alden/aldenFootContact.ts`: silueta de contacto de las botas.
 - `src/game/heroes/alden/animateAldenCape.ts`: pose caída y oscilación de capa.
 - `src/game/heroes/alden/model/alden_rigged_socket.glb`: rig y pesos de capa.
 - `src/game/heroes/animation/twoBoneLeg.ts`: resolución de piernas.
