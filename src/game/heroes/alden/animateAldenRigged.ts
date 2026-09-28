@@ -184,7 +184,11 @@ export function createAldenRiggedIdle(root: THREE.Object3D) {
 
 
 /** Model-space treadmill trajectory: constant backward support velocity and a
- * smooth returning swing. Position and velocity agree at heel-strike/toe-off.
+ * strictly forward returning swing. The old endpoint-tangent correction matched
+ * stance velocity mathematically, but because stance velocity is rearward it
+ * forced the airborne foot to overshoot behind toe-off, advance, overshoot near
+ * contact, then recoil again. A quintic smootherstep keeps the entire return
+ * monotonic while still easing naturally at both swing endpoints.
  * A 60% support interval provides double support; both feet never fly together.
  */
 export function sampleAldenWalkFoot(phase: number, speedMultiplier = 1) {
@@ -194,10 +198,9 @@ export function sampleAldenWalkFoot(phase: number, speedMultiplier = 1) {
   const stance = ALDEN_RIGGED_WALK_STANCE;
   if (cycle <= stance) return { z: stride * (0.5 - cycle / stance), lift: 0, supporting: true };
   const swing = (cycle - stance) / (1 - stance);
-  const tangent = -stride * (1 - stance) / stance;
-  const smooth = swing * swing * (3 - 2 * swing);
+  const smooth = swing * swing * swing * (swing * (swing * 6 - 15) + 10);
   return {
-    z: -stride * 0.5 + stride * smooth + tangent * swing * (1 - swing) * (1 - 2 * swing),
+    z: -stride * 0.5 + stride * smooth,
     lift: gait.clearance * Math.sin(Math.PI * swing) ** 2,
     supporting: false,
   };
@@ -289,14 +292,19 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
         const target = targets[side];
         hipPosition.copy(leg.restHip).sub(pivot).applyQuaternion(bodyRotation).add(pivot).add(bodyOffset);
         const kneeReach = leg.reachAtFlexion(rad(foot.knee));
-        if (foot.cycle > 0.4 && foot.cycle < 0.73) {
-          // Let the trailing leg shorten continuously as weight leaves it.
-          // Solving its rearward reach avoids a second knee extension caused
-          // by independently forcing a fixed ankle path and a heel roll.
+        if (foot.cycle > 0.4 && foot.cycle <= ALDEN_RIGGED_WALK_STANCE) {
+          // During terminal stance, shorten the trailing leg without allowing the
+          // reach correction to leak into the airborne return. Blend fully back to
+          // the authored ankle trajectory by toe-off, so swing starts from one
+          // position and then advances continuously toward the next contact.
           const dy = hipPosition.y - target.y - foot.lift;
           const rear = hipPosition.z - Math.sqrt(Math.max(0,
             kneeReach * kneeReach - dy * dy - (hipPosition.x - target.x) ** 2));
-          target.z = THREE.MathUtils.lerp(rear, target.z, smooth(0.6, 0.73, foot.cycle));
+          target.z = THREE.MathUtils.lerp(
+            rear,
+            target.z,
+            smooth(0.4, ALDEN_RIGGED_WALK_STANCE, foot.cycle),
+          );
         }
         if (!foot.supporting) {
           const minimumClearance = foot.lift * 0.25;

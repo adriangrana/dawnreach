@@ -63,6 +63,21 @@ test('cape asset surgery preserves the original geometry, materials, nodes and n
   assert.equal(changed, changedVertices);
 });
 
+test('airborne foot return is monotonic with no rear-forward-rear recoil', () => {
+  for (const speed of [0.5, 1, 1.25, 1.5, 2]) {
+    const samples = 400;
+    let previous = sampleAldenWalkFoot(ALDEN_RIGGED_WALK_STANCE + 1e-6, speed).z;
+    for (let i = 1; i <= samples; i++) {
+      const phase = ALDEN_RIGGED_WALK_STANCE
+        + (1 - ALDEN_RIGGED_WALK_STANCE) * i / samples;
+      const current = sampleAldenWalkFoot(phase, speed).z;
+      assert.ok(current >= previous - 1e-10,
+        `speed ${speed}: swing reverses longitudinally at phase ${phase} (${previous} -> ${current})`);
+      previous = current;
+    }
+  }
+});
+
 test('speed bonuses increase stride, cadence and arms while preserving reachable feet and cape clearance', async t => {
   const { scene, mesh } = await fixture();
   const walk = createAldenRiggedWalk(scene);
