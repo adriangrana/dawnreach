@@ -196,7 +196,26 @@ export function sampleAldenWalkFoot(phase: number, speedMultiplier = 1) {
   const gait = aldenWalkAtSpeed(speedMultiplier);
   const stride = gait.stride;
   const stance = ALDEN_RIGGED_WALK_STANCE;
-  if (cycle <= stance) return { z: stride * (0.5 - cycle / stance), lift: 0, supporting: true };
+  if (cycle <= stance) {
+    // Keep the planted foot moving rearward through most of support, then ease its
+    // longitudinal velocity to zero over the final 10% of the cycle. Swing starts
+    // at zero velocity too, so the knee no longer receives a sharp velocity change
+    // exactly at toe-off.
+    const easeStart = stance - 0.1;
+    if (cycle <= easeStart) {
+      return { z: stride * (0.5 - cycle / stance), lift: 0, supporting: true };
+    }
+    const span = stance - easeStart;
+    const t = (cycle - easeStart) / span;
+    const t2 = t * t, t3 = t2 * t;
+    const startZ = stride * (0.5 - easeStart / stance);
+    const endZ = -stride * 0.5;
+    const startSlope = -stride / stance;
+    const z = (2 * t3 - 3 * t2 + 1) * startZ
+      + (t3 - 2 * t2 + t) * span * startSlope
+      + (-2 * t3 + 3 * t2) * endZ;
+    return { z, lift: 0, supporting: true };
+  }
   const swing = (cycle - stance) / (1 - stance);
   const smooth = swing * swing * swing * (swing * (swing * 6 - 15) + 10);
   return {
@@ -310,9 +329,16 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
           const minimumClearance = foot.lift * 0.25;
           const horizontalSq = (hipPosition.x - target.x) ** 2 + (hipPosition.z - target.z) ** 2;
           const kneeHeight = hipPosition.y - Math.sqrt(Math.max(0, kneeReach * kneeReach - horizontalSq));
-          // Both clearances and their derivatives meet the ground at each end.
-          // An unbounded soft maximum would leave a residual lift at contact.
-          target.y += Math.max(minimumClearance, kneeHeight - target.y);
+          // The reach correction used to switch on in one frame at toe-off. Even
+          // when the knee angle stayed monotonic, that instantaneous Y correction
+          // produced a visible little knee "tick". Fade it in during initial swing.
+          const reachClearance = Math.max(0, kneeHeight - target.y);
+          const swingReachBlend = smooth(
+            ALDEN_RIGGED_WALK_STANCE,
+            ALDEN_RIGGED_WALK_STANCE + 0.06,
+            foot.cycle,
+          );
+          target.y += Math.max(minimumClearance, reachClearance * swingReachBlend);
         }
       }
       bodyMotion.apply(bodyRotation, bodyOffset);

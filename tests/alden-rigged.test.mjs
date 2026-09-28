@@ -63,6 +63,28 @@ test('cape asset surgery preserves the original geometry, materials, nodes and n
   assert.equal(changed, changedVertices);
 });
 
+test('toe-off joins stance and swing without a knee-driving velocity step', () => {
+  for (const speed of [0.5, 1, 1.25, 1.5, 2]) {
+    const boundary = ALDEN_RIGGED_WALK_STANCE;
+    const epsilon = 1e-4;
+    const before2 = sampleAldenWalkFoot(boundary - epsilon * 2, speed).z;
+    const before = sampleAldenWalkFoot(boundary - epsilon, speed).z;
+    const at = sampleAldenWalkFoot(boundary, speed).z;
+    const after = sampleAldenWalkFoot(boundary + epsilon, speed).z;
+    const after2 = sampleAldenWalkFoot(boundary + epsilon * 2, speed).z;
+    const leftVelocity = (at - before) / epsilon;
+    const rightVelocity = (after - at) / epsilon;
+    assert.ok(Math.abs(leftVelocity) < 0.02,
+      `speed ${speed}: stance still has a sharp rearward velocity at toe-off (${leftVelocity})`);
+    assert.ok(Math.abs(rightVelocity) < 0.02,
+      `speed ${speed}: swing starts with a sharp velocity at toe-off (${rightVelocity})`);
+    assert.ok(before2 >= before - 1e-10 && before >= at - 1e-10,
+      `speed ${speed}: terminal stance must keep moving rearward monotonically`);
+    assert.ok(after >= at - 1e-10 && after2 >= after - 1e-10,
+      `speed ${speed}: initial swing must move forward monotonically`);
+  }
+});
+
 test('airborne foot return is monotonic with no rear-forward-rear recoil', () => {
   for (const speed of [0.5, 1, 1.25, 1.5, 2]) {
     const samples = 400;
