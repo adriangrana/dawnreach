@@ -13,6 +13,7 @@ const {
   ALDEN_RIGGED_WALK_STRIDE, ALDEN_RIGGED_WALK_CLEARANCE, ALDEN_RIGGED_WALK_STANCE_WIDTH,
 } = require('../node_modules/.cache/alden-rigged-test/heroes/alden/animateAldenRigged.js');
 const { findImportedObject } = require('../node_modules/.cache/alden-rigged-test/heroes/animation/coherentBoneMotion.js');
+const { sampleAldenGaitPhase } = require('../node_modules/.cache/alden-rigged-test/heroes/alden/aldenWalkPhases.js');
 const asset = 'src/game/heroes/alden/model/alden_rigged_socket.glb';
 async function fixture() {
   const { scene, animations } = await loadSkinnedGlb(asset);
@@ -82,6 +83,29 @@ test('toe-off joins stance and swing without a knee-driving velocity step', () =
       `speed ${speed}: terminal stance must keep moving rearward monotonically`);
     assert.ok(after >= at - 1e-10 && after2 >= after - 1e-10,
       `speed ${speed}: initial swing must move forward monotonically`);
+  }
+});
+
+test('gait knee and boot pitch have no hidden acceleration knots during swing', () => {
+  const epsilon = 1e-4;
+  const sampleSecondDerivative = (phase, key, side) => {
+    const a = sampleAldenGaitPhase(phase + (side === 'left' ? -2 * epsilon : 0))[key];
+    const b = sampleAldenGaitPhase(phase + (side === 'left' ? -epsilon : epsilon))[key];
+    const c = sampleAldenGaitPhase(phase + (side === 'left' ? 0 : 2 * epsilon))[key];
+    return (c - 2 * b + a) / (epsilon * epsilon);
+  };
+  // These were the old internal Hermite knots that produced a visible robotic tick.
+  for (const phase of [0.5, 0.6]) {
+    const kneeLeft = sampleSecondDerivative(phase, 'knee', 'left');
+    const kneeRight = sampleSecondDerivative(phase, 'knee', 'right');
+    assert.ok(Math.abs(kneeLeft - kneeRight) < 50,
+      `knee acceleration discontinuity at ${phase}: ${kneeLeft} vs ${kneeRight}`);
+  }
+  for (const phase of [0.6, 0.87]) {
+    const pitchLeft = sampleSecondDerivative(phase, 'pitch', 'left');
+    const pitchRight = sampleSecondDerivative(phase, 'pitch', 'right');
+    assert.ok(Math.abs(pitchLeft - pitchRight) < 50,
+      `boot pitch acceleration discontinuity at ${phase}: ${pitchLeft} vs ${pitchRight}`);
   }
 });
 

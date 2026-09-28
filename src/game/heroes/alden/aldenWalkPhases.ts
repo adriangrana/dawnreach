@@ -14,27 +14,53 @@ export const ALDEN_WALK_PHASES = [
   { phase: 1, name: 'Terminal swing / contact', knee: 3, pitch: -25 },
 ] as const;
 
-// Monotone Hermite tangents keep flexing through pre-swing and toe-off.
-// Zeroing the velocity at every landmark makes a smooth curve still hesitate.
-function tangent(index: number, channel: 'knee' | 'pitch') {
-  if (index === 0 || index === ALDEN_WALK_PHASES.length - 1) return 0;
-  const a = ALDEN_WALK_PHASES[index - 1], b = ALDEN_WALK_PHASES[index], c = ALDEN_WALK_PHASES[index + 1];
-  const h0 = b.phase - a.phase, h1 = c.phase - b.phase;
-  const d0 = (b[channel] - a[channel]) / h0, d1 = (c[channel] - b[channel]) / h1;
-  if (d0 * d1 <= 0) return 0;
-  const w0 = 2 * h1 + h0, w1 = h1 + 2 * h0;
-  return (w0 + w1) / (w0 / d0 + w1 / d1);
+// The first walk used a monotone cubic Hermite spline through every landmark.
+// Position and first derivative were continuous, but acceleration changed abruptly
+// at 0.5/0.6/0.73. On Alden's long rigid greaves that C1-only curve reads as a
+// visible knee "tick" even though the foot itself no longer recoils.
+//
+// Use C2 quintic easing for the actual runtime channels. The artist landmarks above
+// remain documentation/reference values; runtime motion is shaped by broad gait
+// phases rather than forcing the knee through every intermediate key.
+function smootherstep01(value: number) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
-const tangents = ALDEN_WALK_PHASES.map((_, i) => ({ knee: tangent(i, 'knee'), pitch: tangent(i, 'pitch') }));
+
+function easeBetween(phase: number, start: number, end: number, from: number, to: number) {
+  if (phase <= start) return from;
+  if (phase >= end) return to;
+  return from + (to - from) * smootherstep01((phase - start) / (end - start));
+}
+
+function sampleKnee(cycle: number) {
+  // Loading response: absorb the contact and return to a nearly straight support leg.
+  if (cycle < 0.1) return easeBetween(cycle, 0, 0.1, 3, 18);
+  if (cycle < 0.3) return easeBetween(cycle, 0.1, 0.3, 18, 3);
+  if (cycle < 0.4) return 3;
+
+  // One uninterrupted flexion arc from terminal stance to the swing peak.
+  // Removing the old 0.5 and 0.6 spline knots eliminates the robotic knee tick.
+  if (cycle < 0.73) return easeBetween(cycle, 0.4, 0.73, 3, 60);
+
+  // Extend continuously toward the next heel contact.
+  return easeBetween(cycle, 0.73, 1, 60, 3);
+}
+
+function samplePitch(cycle: number) {
+  // Heel contact -> flat support.
+  if (cycle < 0.1) return easeBetween(cycle, 0, 0.1, -25, 0);
+  if (cycle < 0.4) return 0;
+
+  // Smooth toe roll and release; every boundary has zero velocity/acceleration.
+  if (cycle < 0.6) return easeBetween(cycle, 0.4, 0.6, 0, 16);
+  if (cycle < 0.87) return easeBetween(cycle, 0.6, 0.87, 16, 0);
+
+  // Prepare the boot for the next heel contact without a last-frame snap.
+  return easeBetween(cycle, 0.87, 1, 0, -25);
+}
 
 export function sampleAldenGaitPhase(phase: number) {
   const cycle = ((phase % 1) + 1) % 1;
-  const index = ALDEN_WALK_PHASES.findIndex((key, i) => i > 0 && cycle <= key.phase);
-  const a = ALDEN_WALK_PHASES[index - 1], b = ALDEN_WALK_PHASES[index];
-  const t = (cycle - a.phase) / (b.phase - a.phase);
-  const t2 = t * t, t3 = t2 * t, span = b.phase - a.phase;
-  const sample = (channel: 'knee' | 'pitch') =>
-    (2 * t3 - 3 * t2 + 1) * a[channel] + (t3 - 2 * t2 + t) * span * tangents[index - 1][channel]
-    + (-2 * t3 + 3 * t2) * b[channel] + (t3 - t2) * span * tangents[index][channel];
-  return { cycle, knee: sample('knee'), pitch: sample('pitch') };
+  return { cycle, knee: sampleKnee(cycle), pitch: samplePitch(cycle) };
 }
