@@ -176,6 +176,29 @@ test('speed bonuses increase stride, cadence and arms while preserving reachable
   t.diagnostic(JSON.stringify({ profiles, maxLengthError, minCapeY }));
 });
 
+test('weight transfer does not create a knee velocity kick at heel contact or toe-off', async () => {
+  const { scene } = await fixture();
+  const walk = createAldenRiggedWalk(scene);
+  const knees = ['L', 'R'].map(side => findImportedObject(scene, 'DEF-shin.' + side));
+  const sampleKnee = (phase, side) => {
+    walk.apply(phase * ALDEN_RIGGED_WALK_SECONDS);
+    scene.updateMatrixWorld(true);
+    return knees[side].getWorldPosition(new Vector3());
+  };
+  const epsilon = 1e-3;
+  for (const boundary of [0, 0.5, 0.6]) {
+    for (let side = 0; side < 2; side++) {
+      const before = sampleKnee(boundary - epsilon, side);
+      const center = sampleKnee(boundary, side);
+      const after = sampleKnee(boundary + epsilon, side);
+      const leftVelocity = center.clone().sub(before).multiplyScalar(1 / epsilon);
+      const rightVelocity = after.clone().sub(center).multiplyScalar(1 / epsilon);
+      assert.ok(leftVelocity.distanceTo(rightVelocity) < 0.08,
+        `side ${side} knee velocity kick at phase ${boundary}: ${leftVelocity.distanceTo(rightVelocity)}`);
+    }
+  }
+});
+
 test('trailing knees flex once through toe-off without rebounds or pauses, at every preview speed', async t => {
   const { scene } = await fixture();
   const walk = createAldenRiggedWalk(scene);

@@ -279,17 +279,35 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
     const horizontalSq = (landmarkHip.x - landmarkTarget.x) ** 2 + (landmarkHip.z - landmarkTarget.z) ** 2;
     return landmarkTarget.y + Math.sqrt(Math.max(0, reach * reach - horizontalSq)) - landmarkHip.y;
   };
-  const pelvisHeight = (half: number, speed: number, side: number) => {
-    if (half <= 0.4) return pelvisAtLandmark(half, speed, side);
-    // Transfer weight to the NEXT CONTACT, never to the airborne foot's
-    // hypothetical grounded position. That produces a spurious pelvis dip.
-    const a = pelvisAtLandmark(0.4, speed, side), b = pelvisAtLandmark(0, speed, 1 - side);
-    const e = 0.0000001;
-    const da = (pelvisAtLandmark(0.4 + e, speed, side) - pelvisAtLandmark(0.4 - e, speed, side)) / (2 * e);
-    const db = (pelvisAtLandmark(e, speed, 1 - side) - pelvisAtLandmark(-e, speed, 1 - side)) / (2 * e);
-    const t = (half - 0.4) / 0.1, t2 = t * t, t3 = t2 * t;
-    return (2 * t3 - 3 * t2 + 1) * a + (t3 - 2 * t2 + t) * da * 0.1
-      + (-2 * t3 + 3 * t2) * b + (t3 - t2) * db * 0.1;
+  const smoother01 = (value: number) => {
+    const t = THREE.MathUtils.clamp(value, 0, 1);
+    return t * t * t * (t * (t * 6 - 15) + 10);
+  };
+  const supportLoad = (cycle: number) => {
+    const c = ((cycle % 1) + 1) % 1;
+    // Weight is transferred during real double support: the incoming foot accepts
+    // load after heel contact while the trailing foot releases it toward toe-off.
+    // Quintic ramps keep position, velocity and acceleration continuous.
+    if (c <= 0.1) return smoother01(c / 0.1);
+    if (c <= 0.5) return 1;
+    if (c <= ALDEN_RIGGED_WALK_STANCE) {
+      return 1 - smoother01((c - 0.5) / (ALDEN_RIGGED_WALK_STANCE - 0.5));
+    }
+    return 0;
+  };
+  const pelvisHeight = (phase: number, speed: number) => {
+    let weightedHeight = 0;
+    let totalWeight = 0;
+    for (let side = 0; side < legs.length; side++) {
+      const cycle = ((phase + side * 0.5) % 1 + 1) % 1;
+      const weight = supportLoad(cycle);
+      if (weight <= 1e-8) continue;
+      weightedHeight += pelvisAtLandmark(cycle, speed, side) * weight;
+      totalWeight += weight;
+    }
+    // There is always at least one support foot, but keep a deterministic fallback
+    // for malformed future gait timings.
+    return totalWeight > 1e-8 ? weightedHeight / totalWeight : pelvisAtLandmark(0, speed, 0);
   };
   let phase = 0, currentSpeed = 1;
   const pose = (phase: number, speedMultiplier: number) => {
@@ -301,9 +319,7 @@ export function createAldenRiggedWalk(root: THREE.Object3D) {
       // the pelvis before adding the small locomotion motion.
       bodyAt(phase, speedMultiplier, bodyAngles);
       bodyRotation.setFromEuler(bodyAngles);
-      const half = ((phase % 0.5) + 0.5) % 0.5;
-      const supportingSide = phase < 0.5 ? 0 : 1;
-      const height = pelvisHeight(half, speedMultiplier, supportingSide);
+      const height = pelvisHeight(phase, speedMultiplier);
       bodyOffset.set(0.012 * Math.sin(angle), height, 0);
       for (let side = 0; side < legs.length; side++) {
         const foot = ankleAt(phase + side * 0.5, speedMultiplier, side, targets[side]);
